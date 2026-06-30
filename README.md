@@ -48,6 +48,7 @@ native target Go ships.
 | Navigation   | `Menu`, `MenuBar`, `MenuItem`, `Dialog`, `MessageDialog`           |
 | Chrome       | `Toolbar`, `Statusbar`                                             |
 | Composite    | `FileChooser`, `ColorChooser`, `Calendar`                          |
+| Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
 
 ### Earlier releases
 
