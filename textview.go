@@ -22,6 +22,13 @@ type TextView struct {
 	CursorCol  int
 	Focused    bool
 	OnChange   func()
+
+	// Selection is the (start, end) range the host paints highlighted
+	// + range-deletes via DeleteSelection / cut+paste via
+	// CopySelection / CutSelection / Paste. An empty selection (Start
+	// == End) means "no selection"; HasSelection() is the convenience
+	// predicate.
+	Selection Selection
 }
 
 // NewTextView builds a TextView pre-loaded with initial text (split

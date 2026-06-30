@@ -30,7 +30,7 @@ caller's buffer.
 
 ## Status
 
-**v0.3 — 28 widgets, ~6k LoC, 100% statement coverage.** Pure Go,
+**v0.4 — 34 widgets, ~7.5k LoC, 100% statement coverage.** Pure Go,
 no CGO, stdlib only. Builds for `GOOS=js GOARCH=wasm` and every
 native target Go ships.
 
@@ -39,16 +39,20 @@ native target Go ships.
 | Base         | `Widget`, `Base`, `Rect`, `Event`, `Theme`, `RGBA`                 |
 | Text         | bitmap 5x7 font (60+ glyphs), `DrawText`, `TextWidth`, `Label`     |
 | Action       | `Button`, `ToggleButton`, `CheckButton`, `RadioButton` + `Group`   |
-| Input        | `Entry`, `TextView` (multi-line), `SpinButton`, `Scale`            |
+| Input        | `Entry`, `TextView` + `Selection` model, `SpinButton`, `Scale`     |
 | Selection    | `ListBox`, `TreeView`, `DropDown`                                  |
 | Layout       | `HBox`, `VBox`, `Grid`, `Frame`, `Stack`, `Paned`, `Expander`      |
 | Tabs         | `Notebook`                                                         |
 | Scroll       | `ScrollView`                                                       |
 | Feedback     | `ProgressBar`, `LevelBar`, `Spinner`, `Image`, `Tooltip`           |
 | Navigation   | `Menu`, `MenuBar`, `MenuItem`, `Dialog`, `MessageDialog`           |
+| Chrome       | `Toolbar`, `Statusbar`                                             |
+| Composite    | `FileChooser`, `ColorChooser`, `Calendar`                          |
 
 ### Earlier releases
 
+- **v0.3** — 28 widgets. TextView (multi-line editor), Menu/MenuBar,
+  Dialog/MessageDialog, Tooltip, DropDown, TreeView.
 - **v0.2** — 22 widgets. Layout containers (HBox/VBox/Grid/Frame),
   scroll (ScrollView/ListBox), input (Entry/Check/Radio/Toggle),
   structural (Stack/Notebook/Paned/Expander), feedback
@@ -56,16 +60,16 @@ native target Go ships.
 - **v0.1** — scaffolding. Widget interface, Theme value, Button +
   Label, primitive event dispatch.
 
-### Next (v0.4 sketch)
+### Next (v0.5 sketch)
 
-- `Toolbar` + `Statusbar` (visual chrome that Notebook + MenuBar
-  can compose with)
-- `FileChooser` widget on top of TreeView (with `sharedvfs` bridge)
-- `Calendar` + `DateEntry` (rare but stock GTK)
-- `ColorChooser` + `FontChooser`
-- `Selection` model for TextView (range ops + clipboard)
-- `Refactor clients/dock` to consume the toolkit (proof-of-concept +
-  validates the API at scale)
+- A `clients/showcase` wasmbox app that exercises every widget in
+  one window — both as a smoke test + as a live API reference.
+- `Toolbar` icon glyph helpers (built-in pixel-art icons mirroring
+  GTK stock icons).
+- `FontChooser` (mirror of ColorChooser).
+- `Notification` toast (transient, auto-dismissing Tooltip cousin).
+- IME / `EventComposition` so multi-keystroke input methods feed
+  TextView correctly.
 
 ## Architecture
 
