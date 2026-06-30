@@ -30,15 +30,42 @@ caller's buffer.
 
 ## Status
 
-v0.1 — scaffolding. Widget interface, Theme value, Button + Label
-implementations, primitive event dispatch. Tests at 100%, CI gated.
+**v0.3 — 28 widgets, ~6k LoC, 100% statement coverage.** Pure Go,
+no CGO, stdlib only. Builds for `GOOS=js GOARCH=wasm` and every
+native target Go ships.
 
-Next:
-- TextInput + cursor model
-- ScrollView + ListBox
-- HBox / VBox layout
-- Splitter (for the editor's gutter / panel split)
-- Themes ported from clients/dock/internal/theme
+| Family       | Widgets                                                            |
+| ------------ | ------------------------------------------------------------------ |
+| Base         | `Widget`, `Base`, `Rect`, `Event`, `Theme`, `RGBA`                 |
+| Text         | bitmap 5x7 font (60+ glyphs), `DrawText`, `TextWidth`, `Label`     |
+| Action       | `Button`, `ToggleButton`, `CheckButton`, `RadioButton` + `Group`   |
+| Input        | `Entry`, `TextView` (multi-line), `SpinButton`, `Scale`            |
+| Selection    | `ListBox`, `TreeView`, `DropDown`                                  |
+| Layout       | `HBox`, `VBox`, `Grid`, `Frame`, `Stack`, `Paned`, `Expander`      |
+| Tabs         | `Notebook`                                                         |
+| Scroll       | `ScrollView`                                                       |
+| Feedback     | `ProgressBar`, `LevelBar`, `Spinner`, `Image`, `Tooltip`           |
+| Navigation   | `Menu`, `MenuBar`, `MenuItem`, `Dialog`, `MessageDialog`           |
+
+### Earlier releases
+
+- **v0.2** — 22 widgets. Layout containers (HBox/VBox/Grid/Frame),
+  scroll (ScrollView/ListBox), input (Entry/Check/Radio/Toggle),
+  structural (Stack/Notebook/Paned/Expander), feedback
+  (ProgressBar/LevelBar/Scale/SpinButton/Image/Spinner), bitmap font.
+- **v0.1** — scaffolding. Widget interface, Theme value, Button +
+  Label, primitive event dispatch.
+
+### Next (v0.4 sketch)
+
+- `Toolbar` + `Statusbar` (visual chrome that Notebook + MenuBar
+  can compose with)
+- `FileChooser` widget on top of TreeView (with `sharedvfs` bridge)
+- `Calendar` + `DateEntry` (rare but stock GTK)
+- `ColorChooser` + `FontChooser`
+- `Selection` model for TextView (range ops + clipboard)
+- `Refactor clients/dock` to consume the toolkit (proof-of-concept +
+  validates the API at scale)
 
 ## Architecture
 
