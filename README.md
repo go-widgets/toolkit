@@ -1,21 +1,30 @@
-# wasmdesk/toolkit
+# go-widgets/toolkit
 
-Pure-Go widget toolkit for [wasmdesk](https://github.com/wasmdesk) native
-apps. Draws into an RGBA byte buffer (the SAB-backed framebuffer wasmbox
-clients write to) and dispatches mouse / keyboard events. No JS deps,
-no DOM, no canvas — all rendering is per-pixel composition into the
-caller's buffer.
+Pure-Go widget toolkit that renders into an RGBA byte buffer. Zero
+JS / DOM / canvas dependency — every widget composes pixels into a
+caller-supplied `[]byte`, so the toolkit runs identically in
+`GOOS=js GOARCH=wasm` (browser SharedArrayBuffer clients), on any
+native target Go ships (native canvas backends, image files), or
+in headless tests (screenshot-hash regressions).
+
+Originally lived at `github.com/wasmdesk/toolkit` — moved to
+`github.com/go-widgets/toolkit` so non-wasmdesk projects can consume
+it without pulling in the wasmdesk story. Its first + reference
+consumer is still [wasmdesk/wasmbox](https://github.com/wasmdesk/wasmbox)
+(compositor + Calculator + Notepad + Showcase clients).
 
 ## Goals
 
-- **One toolkit per app**: clients/{terminal,files,dock,code,...}
-  stop reinventing buttons, scrollbars, text fields. They import
-  `github.com/wasmdesk/toolkit` and compose.
+- **One toolkit per app**: consumers stop reinventing buttons,
+  scrollbars, text fields. They import
+  `github.com/go-widgets/toolkit` and compose.
 - **Coherent theming**: a single `Theme` value cascades through every
   widget — change a colour at the top, see it everywhere.
-- **Pure Go + CGO=0**: same constraints as the rest of the wasmdesk
-  ecosystem. Builds for `GOOS=js GOARCH=wasm` and every native target
-  the test suite runs on.
+  `LoadGTKTheme(css)` parses libadwaita / GTK3 `@define-color`
+  declarations into a `Theme`, so any GTK-desktop palette (Adwaita,
+  Juno, WhiteSur, Solarized …) drives the widget ink colours.
+- **Pure Go + CGO=0**: no C toolchain, no shared libraries. Builds
+  for every Go target including `GOOS=js GOARCH=wasm`.
 - **A11y-ready scaffolding**: widgets carry a `Role` + `Label` so a
   future a11y bridge can publish them to screen readers without
   rewriting every widget.
