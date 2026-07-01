@@ -1007,11 +1007,11 @@ func TestMenuBarAutoSizeWidths(t *testing.T) {
 	bar := NewMenuBar()
 	bar.Names = []string{"A", "Long Menu Name"}
 	// Short name uses the min width.
-	if got := bar.nameWidth(0); got != MenuBarItemW {
+	if got := bar.NameWidth(0); got != MenuBarItemW {
 		t.Fatalf("nameWidth(0) = %d, want MenuBarItemW=%d", got, MenuBarItemW)
 	}
 	// Long name auto-sizes to TextWidth + 2×pad.
-	wLong := bar.nameWidth(1)
+	wLong := bar.NameWidth(1)
 	if wLong <= MenuBarItemW {
 		t.Fatalf("nameWidth(1) should exceed MenuBarItemW; got %d", wLong)
 	}
@@ -1019,17 +1019,17 @@ func TestMenuBarAutoSizeWidths(t *testing.T) {
 		t.Fatalf("nameWidth(1) = %d, want %d (text + 2*pad)", wLong, got)
 	}
 	// Out-of-range index: fall back to MenuBarItemW.
-	if got := bar.nameWidth(99); got != MenuBarItemW {
+	if got := bar.NameWidth(99); got != MenuBarItemW {
 		t.Fatalf("nameWidth(99) OOR fallback want MenuBarItemW; got %d", got)
 	}
-	if got := bar.nameWidth(-1); got != MenuBarItemW {
+	if got := bar.NameWidth(-1); got != MenuBarItemW {
 		t.Fatalf("nameWidth(-1) OOR fallback want MenuBarItemW; got %d", got)
 	}
 	// nameOriginX cumulates.
-	if got := bar.nameOriginX(1); got != MenuBarItemW {
+	if got := bar.NameOriginX(1); got != MenuBarItemW {
 		t.Fatalf("nameOriginX(1) should be MenuBarItemW; got %d", got)
 	}
-	if got := bar.nameOriginX(0); got != 0 {
+	if got := bar.NameOriginX(0); got != 0 {
 		t.Fatalf("nameOriginX(0) = %d, want 0", got)
 	}
 }
@@ -1050,7 +1050,7 @@ func TestMenuBarAutoSizeClickHitTest(t *testing.T) {
 		t.Fatalf("click on Long: active=%d, want 1", bar.Active)
 	}
 	// Click on "B" (index 2) — offset is MenuBarItemW + nameWidth(1).
-	bar.OnEvent(Event{Kind: EventClick, X: MenuBarItemW + bar.nameWidth(1) + 5, Y: 5})
+	bar.OnEvent(Event{Kind: EventClick, X: MenuBarItemW + bar.NameWidth(1) + 5, Y: 5})
 	if bar.Active != 2 {
 		t.Fatalf("click on B: active=%d, want 2", bar.Active)
 	}

@@ -176,9 +176,11 @@ func (b *MenuBar) AddMenu(name string, m *Menu) {
 	b.Menus = append(b.Menus, m)
 }
 
-// nameWidth returns the pixel width of the i-th top-level name after
+// NameWidth returns the pixel width of the i-th top-level name after
 // the auto-size rule: max(MenuBarItemW, TextWidth(name) + 2*pad).
-func (b *MenuBar) nameWidth(i int) int {
+// Exposed so hosts that render their own popover under a clicked
+// name know how wide the "click zone" was.
+func (b *MenuBar) NameWidth(i int) int {
 	if i < 0 || i >= len(b.Names) {
 		return MenuBarItemW
 	}
@@ -189,12 +191,14 @@ func (b *MenuBar) nameWidth(i int) int {
 	return w
 }
 
-// nameOriginX returns the X offset of the i-th top-level name within
-// the bar (cumulative sum of nameWidth up to i, exclusive).
-func (b *MenuBar) nameOriginX(i int) int {
+// NameOriginX returns the X offset of the i-th top-level name within
+// the bar (cumulative sum of NameWidth up to i, exclusive). Same
+// motivation as NameWidth: a host that positions a popover under a
+// clicked name reads this to align on the correct column.
+func (b *MenuBar) NameOriginX(i int) int {
 	x := 0
 	for k := 0; k < i && k < len(b.Names); k++ {
-		x += b.nameWidth(k)
+		x += b.NameWidth(k)
 	}
 	return x
 }
@@ -204,8 +208,8 @@ func (b *MenuBar) Draw(surface []byte, surfaceW int, theme *Theme) {
 	r := b.Bounds()
 	fillRect(surface, surfaceW, r.X, r.Y, r.W, MenuBarH, theme.SurfaceAlt)
 	for i, name := range b.Names {
-		iw := b.nameWidth(i)
-		ix := r.X + b.nameOriginX(i)
+		iw := b.NameWidth(i)
+		ix := r.X + b.NameOriginX(i)
 		ink := theme.OnSurface
 		if i == b.Active {
 			fillRect(surface, surfaceW, ix, r.Y, iw, MenuBarH, theme.Accent)
@@ -236,7 +240,7 @@ func (b *MenuBar) OnEvent(ev Event) {
 		idx := -1
 		cx := 0
 		for i := range b.Names {
-			w := b.nameWidth(i)
+			w := b.NameWidth(i)
 			if ev.X >= cx && ev.X < cx+w {
 				idx = i
 				break
