@@ -9,7 +9,7 @@ package toolkit
 // character), an optional Icon (drawn as an RGBA blit when non-empty),
 // an OnClick callback + a Disabled flag.
 //
-// Toolbar is the chrome bar that sits below a MenuBar; it composes
+// Toolbar is the icon-strip that sits below a MenuBar; it composes
 // cleanly with both Notebook + Statusbar so a "stock GTK" window can
 // be assembled out of MenuBar + Toolbar + Notebook + Statusbar.
 type Toolbar struct {

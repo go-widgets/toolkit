@@ -5,7 +5,7 @@
 package toolkit
 
 // Notification is a transient toast — an auto-dismissing banner that
-// slides in over the app's normal chrome, holds for a few ticks, then
+// slides in over the app's normal frame, holds for a few ticks, then
 // hides itself. Cousin of Tooltip (both are informational overlays)
 // but with three key differences:
 //   1. Notification is time-bounded (Tick decrements Life; hides at 0).

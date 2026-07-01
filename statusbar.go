@@ -12,7 +12,7 @@ package toolkit
 //
 // Statusbar is the natural pairing for MenuBar + Toolbar above and a
 // document area in the middle — together they assemble the "stock
-// GTK" window chrome.
+// GTK" window frame.
 type Statusbar struct {
 	Base
 	Segments []string

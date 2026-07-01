@@ -49,7 +49,7 @@ coverage.** Pure Go, no CGO, stdlib only. Builds for
 | Scroll       | `ScrollView`                                                       |
 | Feedback     | `ProgressBar`, `LevelBar`, `Spinner`, `Image`, `Tooltip`, `Notification` |
 | Navigation   | `Menu` + `MenuItem.Shortcut`, `MenuBar` + `Alt+letter`, `Dialog`, `MessageDialog` |
-| Chrome       | `Toolbar`, `Statusbar`, 10 stock `DrawIcon*` helpers               |
+| Bars         | `Toolbar`, `Statusbar`, 10 stock `DrawIcon*` helpers               |
 | Composite    | `FileChooser`, `ColorChooser`, `Calendar`                          |
 | Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
 

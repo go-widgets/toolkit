@@ -87,7 +87,7 @@ func (h *HBox) SetBounds(r Rect) {
 
 // Draw paints every child in append order. Children render directly
 // into the surface using their own Bounds; the HBox itself draws no
-// chrome (it's a pure layout container).
+// background or border (it's a pure layout container).
 func (h *HBox) Draw(surface []byte, surfaceW int, theme *Theme) {
 	for _, c := range h.children {
 		c.Draw(surface, surfaceW, theme)

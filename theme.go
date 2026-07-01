@@ -37,10 +37,9 @@ type Theme struct {
 	// Extra holds @define-color entries from GTK-source themes that don't
 	// map to one of the canonical fields above (headerbar_bg_color,
 	// success_color, ...). Populated by LoadGTKTheme; nil for code-built
-	// themes. The compositor / a host app can look up custom colors here
-	// when wiring window-chrome theming (Niveau B subsumption of
-	// wasmaqua) without growing this struct for every GTK color name in
-	// the wild.
+	// themes. A host that needs a custom colour (e.g. for its window-
+	// decoration painter) looks it up here without growing this struct
+	// for every GTK colour name in the wild.
 	Extra map[string]RGBA
 }
 

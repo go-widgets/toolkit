@@ -18,8 +18,8 @@ import (
 // convention and a theme that defines both intends the GTK4 name as
 // canonical. Unknown @define-color declarations are kept in the returned
 // Theme's Extra map so themes that ship custom color names (e.g.
-// "headerbar_bg_color" for chrome work) can still be looked up by the
-// compositor when wiring Niveau-B window-chrome theming.
+// "headerbar_bg_color" for a window-decoration painter) can still be
+// looked up by a host without growing the canonical Theme struct.
 //
 // Anything beyond @define-color (selectors, properties, gradients, image
 // references) is ignored — the toolkit is a flat-paint compositor that
