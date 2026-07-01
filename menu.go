@@ -283,6 +283,43 @@ func (b *MenuBar) OnEvent(ev Event) {
 	}
 }
 
+// HandleShortcut walks every menu's items and fires the Action of the
+// first item whose Shortcut equals code (case-sensitive; the host is
+// expected to normalise Ctrl+N vs Cmd+N before calling). Returns true
+// if an item fired, false if no match. Menu ordering + item ordering
+// give a deterministic priority — first match wins.
+//
+// Skipped: separators, disabled items (nil Action). A matching item
+// with a submenu still fires its Action (if any); the submenu is not
+// opened by a shortcut.
+//
+// Typical usage from a wasmbox client's Go main:
+//
+//	case "keydown":
+//	    code := formatShortcut(ev)   // host builds "Ctrl+N" etc.
+//	    if state.menuBar.HandleShortcut(code) { render(); return }
+//	    state.editor.OnEvent(...)    // fallthrough: forward to focus
+func (b *MenuBar) HandleShortcut(code string) bool {
+	if code == "" {
+		return false
+	}
+	for _, m := range b.Menus {
+		if m == nil {
+			continue
+		}
+		for _, it := range m.Items {
+			if it.Separator || it.Action == nil {
+				continue
+			}
+			if it.Shortcut == code {
+				it.Action()
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // Mnemonic returns the first letter of the i-th menu name (upper-case,
 // or 0 if the index is out of range / the name is empty). Useful for a
 // host that wants to draw "_F_ile"-style underlines under the mnemonic

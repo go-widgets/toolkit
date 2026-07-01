@@ -1062,3 +1062,59 @@ func TestMenuBarAutoSizeClickHitTest(t *testing.T) {
 	// Draw exercises the auto-size render path.
 	bar.Draw(makeSurface(400, MenuBarH), 400, DefaultLight())
 }
+
+// --- v0.6 polish: MenuBar.HandleShortcut dispatcher ----------------------
+
+func TestMenuBarHandleShortcut(t *testing.T) {
+	fired := ""
+	saved := ""
+	bar := NewMenuBar()
+	bar.Names = []string{"File", "Edit"}
+	bar.Menus = []*Menu{
+		NewMenu([]MenuItem{
+			{Label: "New", Shortcut: "Ctrl+N", Action: func() { fired = "new" }},
+			{Separator: true},
+			{Label: "Save", Shortcut: "Ctrl+S", Action: func() { saved = "yes" }},
+			// Disabled item with a shortcut (no Action) — must be skipped.
+			{Label: "Save As…", Shortcut: "Ctrl+Shift+S"},
+		}),
+		NewMenu([]MenuItem{
+			{Label: "Cut", Shortcut: "Ctrl+X", Action: func() { fired = "cut" }},
+		}),
+		nil, // nil menu slot — must be skipped, not crash
+	}
+
+	// Happy path: Ctrl+N fires New.
+	if !bar.HandleShortcut("Ctrl+N") {
+		t.Fatal("Ctrl+N should return true (matched)")
+	}
+	if fired != "new" {
+		t.Fatalf("Ctrl+N fired %q, want 'new'", fired)
+	}
+	// Ctrl+S fires Save (across two menus, matches in-order).
+	if !bar.HandleShortcut("Ctrl+S") {
+		t.Fatal("Ctrl+S should return true")
+	}
+	if saved != "yes" {
+		t.Fatalf("Ctrl+S saved %q, want yes", saved)
+	}
+	// Ctrl+X fires Cut (matches in menu 1).
+	if !bar.HandleShortcut("Ctrl+X") {
+		t.Fatal("Ctrl+X should return true")
+	}
+	if fired != "cut" {
+		t.Fatalf("Ctrl+X fired %q, want cut", fired)
+	}
+	// Ctrl+Shift+S: matches a disabled entry → NO fire (returns false).
+	if bar.HandleShortcut("Ctrl+Shift+S") {
+		t.Fatal("Ctrl+Shift+S on disabled entry should return false")
+	}
+	// Unknown code → false.
+	if bar.HandleShortcut("Ctrl+Q") {
+		t.Fatal("unknown shortcut should return false")
+	}
+	// Empty code → false (guard).
+	if bar.HandleShortcut("") {
+		t.Fatal("empty shortcut should return false")
+	}
+}
