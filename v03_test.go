@@ -824,3 +824,179 @@ func TestMenuBarMnemonic(t *testing.T) {
 		t.Fatalf("Mnemonic(99) out-of-range should be 0")
 	}
 }
+
+// --- v0.5: Notification --------------------------------------------------
+
+func TestNotificationShowHideTick(t *testing.T) {
+	n := NewNotification("hi")
+	if n.Visible {
+		t.Fatal("fresh Notification must be hidden")
+	}
+	n.SetBounds(Rect{X: 10, Y: 10, W: 0, H: 0})
+	n.Show("Saved!")
+	if !n.Visible {
+		t.Fatal("Show must set Visible=true")
+	}
+	if n.Text != "Saved!" {
+		t.Fatalf("Text after Show: %q", n.Text)
+	}
+	if n.Life != NotificationLife {
+		t.Fatalf("Life after Show: %d", n.Life)
+	}
+	// Bounds auto-widened to text.
+	if b := n.Bounds(); b.W < TextWidth("Saved!") {
+		t.Fatalf("Show should widen bounds to text; got W=%d", b.W)
+	}
+	// Draw exercises the paint path.
+	n.Draw(makeSurface(200, 60), 200, DefaultLight())
+	// Tick down to zero.
+	for i := 0; i < NotificationLife+1; i++ {
+		n.Tick()
+	}
+	if n.Visible {
+		t.Fatal("Tick past Life must auto-hide")
+	}
+}
+
+func TestNotificationTickOnHiddenNoOp(t *testing.T) {
+	n := NewNotification("x")
+	// Not visible → Tick is a no-op (Life stays put).
+	before := n.Life
+	n.Tick()
+	if n.Life != before {
+		t.Fatal("Tick on hidden Notification should not decrement Life")
+	}
+}
+
+func TestNotificationHide(t *testing.T) {
+	n := NewNotification("x")
+	n.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 30})
+	n.Show("here")
+	n.Hide()
+	if n.Visible || n.Life != 0 {
+		t.Fatalf("Hide must zero both: visible=%v life=%d", n.Visible, n.Life)
+	}
+}
+
+func TestNotificationDrawHiddenNoOp(t *testing.T) {
+	n := NewNotification("x") // hidden
+	n.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 30})
+	surf := makeSurface(100, 30) // pre-filled with sentinel bytes
+	before := make([]byte, len(surf))
+	copy(before, surf)
+	n.Draw(surf, 100, DefaultLight())
+	for i := range surf {
+		if surf[i] != before[i] {
+			t.Fatalf("Draw on hidden Notification touched byte %d: %d → %d", i, before[i], surf[i])
+		}
+	}
+}
+
+// --- v0.5: Icon glyph helpers -------------------------------------------
+
+func TestIconsPaintWithoutPanic(t *testing.T) {
+	// Every icon function paints into a fresh 24x24 buffer + at least
+	// one non-zero pixel results. The exact bitmap is not asserted (an
+	// icon tweak shouldn't break the test); the point is "the function
+	// covers its target rect + doesn't panic".
+	fns := []func([]byte, int, Rect, RGBA){
+		DrawIconNew, DrawIconOpen, DrawIconSave, DrawIconCut,
+		DrawIconCopy, DrawIconPaste, DrawIconUndo, DrawIconRedo,
+		DrawIconSearch, DrawIconSettings,
+	}
+	for _, fn := range fns {
+		surf := makeSurface(24, 24) // sentinel-filled
+		before := make([]byte, len(surf))
+		copy(before, surf)
+		fn(surf, 24, Rect{X: 0, Y: 0, W: 24, H: 24}, RGB(0, 0, 0))
+		any := false
+		for i := range surf {
+			if surf[i] != before[i] {
+				any = true
+				break
+			}
+		}
+		if !any {
+			t.Fatal("icon fn painted nothing (buffer unchanged)")
+		}
+	}
+}
+
+func TestIconInsetFloorAndScale(t *testing.T) {
+	// Small rect: inset floors to 2.
+	if got := iconInset(Rect{W: 8, H: 8}); got != 2 {
+		t.Fatalf("iconInset(8x8) = %d, want 2 (floor)", got)
+	}
+	// Large rect: inset scales by d/8.
+	if got := iconInset(Rect{W: 64, H: 64}); got != 8 {
+		t.Fatalf("iconInset(64x64) = %d, want 8 (d/8)", got)
+	}
+	// Non-square: uses the smaller dim.
+	if got := iconInset(Rect{W: 100, H: 24}); got != 3 {
+		t.Fatalf("iconInset(100x24) = %d, want 3 (min dim / 8)", got)
+	}
+}
+
+func TestIconSearchNonSquareRect(t *testing.T) {
+	// Exercise the "h smaller than w" branch of DrawIconSearch.
+	surf := makeSurface(40, 20)
+	DrawIconSearch(surf, 40, Rect{X: 0, Y: 0, W: 40, H: 20}, RGB(0, 0, 0))
+}
+
+// --- v0.5: EventComposition on TextView ---------------------------------
+
+func TestTextViewCompositionStartUpdateEnd(t *testing.T) {
+	tv := NewTextView("abc")
+	tv.CursorCol = 3
+	// Start: preview becomes visible; Lines untouched.
+	tv.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
+	if tv.Composition != "^" {
+		t.Fatalf("start: Composition=%q", tv.Composition)
+	}
+	if tv.Text() != "abc" {
+		t.Fatalf("start must not touch buffer, got %q", tv.Text())
+	}
+	// Update: preview refreshed.
+	tv.OnEvent(Event{Kind: EventCompositionUpdate, Code: "ê"})
+	if tv.Composition != "ê" {
+		t.Fatalf("update: Composition=%q", tv.Composition)
+	}
+	if tv.Text() != "abc" {
+		t.Fatalf("update must not touch buffer, got %q", tv.Text())
+	}
+	// End (cancel path): preview cleared, buffer unchanged.
+	tv.OnEvent(Event{Kind: EventCompositionEnd, Code: ""})
+	if tv.Composition != "" {
+		t.Fatalf("end: Composition should clear, got %q", tv.Composition)
+	}
+	if tv.Text() != "abc" {
+		t.Fatal("end (cancel) must not touch buffer")
+	}
+}
+
+func TestTextViewCompositionCommitViaEventChar(t *testing.T) {
+	tv := NewTextView("abc")
+	tv.CursorCol = 3
+	// Preview.
+	tv.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
+	// Host now commits by delivering EventChar with the composed rune.
+	tv.OnEvent(Event{Kind: EventChar, Code: "ê"})
+	if tv.Composition != "" {
+		t.Fatal("EventChar must clear the composition preview")
+	}
+	if tv.Text() != "abcê" {
+		t.Fatalf("commit: Text()=%q", tv.Text())
+	}
+}
+
+func TestTextViewCompositionDrawPreview(t *testing.T) {
+	// Draw with a non-empty composition + focus → the preview render
+	// path fires. No pixel-level assertion — the point is the branch
+	// gets covered.
+	tv := NewTextView("hi")
+	tv.CursorCol = 2
+	tv.Focused = true
+	tv.Composition = "^"
+	tv.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 40})
+	tv.Draw(makeSurface(120, 40), 120, DefaultLight())
+}

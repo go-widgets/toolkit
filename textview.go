@@ -29,6 +29,16 @@ type TextView struct {
 	// == End) means "no selection"; HasSelection() is the convenience
 	// predicate.
 	Selection Selection
+
+	// Composition holds the in-progress IME preview string (dead-key
+	// output, CJK candidate, …). Non-empty while an IME composition
+	// is active; cleared on EventCompositionEnd. The Draw method
+	// paints it in a muted colour at the cursor position — the
+	// preview is NOT part of the buffer until the host commits via
+	// EventChar. Widgets that read Lines/Text() see only committed
+	// text, so downstream logic (search, syntax, autosave) never
+	// operates on half-formed input.
+	Composition string
 }
 
 // NewTextView builds a TextView pre-loaded with initial text (split
@@ -79,6 +89,15 @@ func (t *TextView) Draw(surface []byte, surfaceW int, theme *Theme) {
 		cx := r.X + 4 + t.CursorCol*GlyphAdvance
 		cy := r.Y + 4 + t.CursorLine*lineH
 		fillRect(surface, surfaceW, cx, cy-1, 1, GlyphHeight+2, theme.OnSurface)
+		// IME composition preview: render the pending string in the
+		// muted SurfaceAlt tone starting at the cursor, so the user
+		// sees dead-key / CJK candidates without them entering the
+		// buffer. Underlined by a 1-px SurfaceAlt strip beneath.
+		if t.Composition != "" {
+			cw := TextWidth(t.Composition)
+			DrawText(surface, surfaceW, cx, cy, t.Composition, theme.SurfaceAlt)
+			fillRect(surface, surfaceW, cx, cy+GlyphHeight, cw, 1, theme.SurfaceAlt)
+		}
 	}
 }
 
@@ -90,7 +109,21 @@ func (t *TextView) OnEvent(ev Event) {
 	case EventKeyDown:
 		t.handleKey(ev.Code)
 	case EventChar:
+		// If an IME composition was in flight, the incoming char is
+		// the commit result — clear the preview BEFORE inserting so
+		// the buffer + display stay consistent.
+		t.Composition = ""
 		t.insertText(ev.Code)
+	case EventCompositionStart, EventCompositionUpdate:
+		// Preview only — do NOT touch Lines. Repaint responsibility
+		// lies with the host, who typically calls the widget's Draw
+		// method after each composition event.
+		t.Composition = ev.Code
+	case EventCompositionEnd:
+		// Cancel / commit-without-follow-up: drop the preview. When
+		// the host follows up with EventChar (commit path), the
+		// EventChar arm above will re-clear + insert.
+		t.Composition = ""
 	}
 }
 

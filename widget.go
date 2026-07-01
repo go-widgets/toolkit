@@ -53,6 +53,22 @@ const (
 	// EventChar fires for printable character input (post-IME).
 	// Code carries the character as a one-rune string.
 	EventChar
+	// EventCompositionStart fires when an IME composition begins
+	// (typically a dead-key press or a CJK IME popup opening). Widgets
+	// that echo text (Entry / TextView) should render Code as the
+	// "in-progress" preview string, underlined or ghosted, WITHOUT
+	// committing it to their buffer. The host is responsible for
+	// resolving the composition via EventCompositionUpdate ticks and
+	// finally an EventChar (post-commit).
+	EventCompositionStart
+	// EventCompositionUpdate refreshes the preview string mid-flow.
+	// Code carries the current, un-committed composed text.
+	EventCompositionUpdate
+	// EventCompositionEnd fires when the composition is either
+	// committed (host follows up with EventChar carrying the same
+	// text) or cancelled (host does NOT send an EventChar and the
+	// widget discards the preview).
+	EventCompositionEnd
 )
 
 // Event is one input event delivered to a widget. The parent container

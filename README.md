@@ -30,28 +30,31 @@ caller's buffer.
 
 ## Status
 
-**v0.4 — 34 widgets, ~7.5k LoC, 100% statement coverage.** Pure Go,
-no CGO, stdlib only. Builds for `GOOS=js GOARCH=wasm` and every
-native target Go ships.
+**v0.5 — 35 widgets + 10 stock icons, ~8k LoC, 100% statement
+coverage.** Pure Go, no CGO, stdlib only. Builds for
+`GOOS=js GOARCH=wasm` and every native target Go ships.
 
 | Family       | Widgets                                                            |
 | ------------ | ------------------------------------------------------------------ |
-| Base         | `Widget`, `Base`, `Rect`, `Event`, `Theme`, `RGBA`                 |
+| Base         | `Widget`, `Base`, `Rect`, `Event` (+ IME composition), `Theme`, `RGBA` |
 | Text         | bitmap 5x7 font (60+ glyphs), `DrawText`, `TextWidth`, `Label`     |
 | Action       | `Button`, `ToggleButton`, `CheckButton`, `RadioButton` + `Group`   |
-| Input        | `Entry`, `TextView` + `Selection` model, `SpinButton`, `Scale`     |
+| Input        | `Entry`, `TextView` + `Selection` + IME preview, `SpinButton`, `Scale` |
 | Selection    | `ListBox`, `TreeView`, `DropDown`                                  |
 | Layout       | `HBox`, `VBox`, `Grid`, `Frame`, `Stack`, `Paned`, `Expander`      |
 | Tabs         | `Notebook`                                                         |
 | Scroll       | `ScrollView`                                                       |
-| Feedback     | `ProgressBar`, `LevelBar`, `Spinner`, `Image`, `Tooltip`           |
-| Navigation   | `Menu`, `MenuBar`, `MenuItem`, `Dialog`, `MessageDialog`           |
-| Chrome       | `Toolbar`, `Statusbar`                                             |
+| Feedback     | `ProgressBar`, `LevelBar`, `Spinner`, `Image`, `Tooltip`, `Notification` |
+| Navigation   | `Menu` + `MenuItem.Shortcut`, `MenuBar` + `Alt+letter`, `Dialog`, `MessageDialog` |
+| Chrome       | `Toolbar`, `Statusbar`, 10 stock `DrawIcon*` helpers               |
 | Composite    | `FileChooser`, `ColorChooser`, `Calendar`                          |
 | Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
 
 ### Earlier releases
 
+- **v0.4** — 34 widgets. Toolbar / Statusbar, FileChooser /
+  ColorChooser / Calendar, Selection model on TextView,
+  `LoadGTKTheme(css)`.
 - **v0.3** — 28 widgets. TextView (multi-line editor), Menu/MenuBar,
   Dialog/MessageDialog, Tooltip, DropDown, TreeView.
 - **v0.2** — 22 widgets. Layout containers (HBox/VBox/Grid/Frame),
@@ -61,16 +64,18 @@ native target Go ships.
 - **v0.1** — scaffolding. Widget interface, Theme value, Button +
   Label, primitive event dispatch.
 
-### Next (v0.5 sketch)
+### Next (v0.6 sketch)
 
-- A `clients/showcase` wasmbox app that exercises every widget in
-  one window — both as a smoke test + as a live API reference.
-- `Toolbar` icon glyph helpers (built-in pixel-art icons mirroring
-  GTK stock icons).
-- `FontChooser` (mirror of ColorChooser).
-- `Notification` toast (transient, auto-dismissing Tooltip cousin).
-- IME / `EventComposition` so multi-keystroke input methods feed
-  TextView correctly.
+- `FontChooser` — deferred from v0.5 until the toolkit gains a
+  real "font family" concept (currently one bitmap font only).
+- `MenuItem.Shortcut` accelerator dispatch — right now the string
+  is a purely visual hint; a `MenuBar.HandleShortcut(code)` helper
+  would route the key event to the matching item's Action.
+- Drag-and-drop `Event` kinds + a `DragSource` / `DropTarget`
+  interface pair (TreeView + ListBox re-ordering as the first
+  driver).
+- Right-click context menu helper (spawn a Menu at a
+  worker-relative coord, dismiss on outside click).
 
 ## Architecture
 
