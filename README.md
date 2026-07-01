@@ -7,12 +7,6 @@ caller-supplied `[]byte`, so the toolkit runs identically in
 native target Go ships (native canvas backends, image files), or
 in headless tests (screenshot-hash regressions).
 
-Originally lived at `github.com/wasmdesk/toolkit` — moved to
-`github.com/go-widgets/toolkit` so non-wasmdesk projects can consume
-it without pulling in the wasmdesk story. Its first + reference
-consumer is still [wasmdesk/wasmbox](https://github.com/wasmdesk/wasmbox)
-(compositor + Calculator + Notepad + Showcase clients).
-
 ## Goals
 
 - **One toolkit per app**: consumers stop reinventing buttons,
@@ -31,8 +25,8 @@ consumer is still [wasmdesk/wasmbox](https://github.com/wasmdesk/wasmbox)
 
 ## Non-goals
 
-- **Not a CodeMirror replacement.** Complex web-grade editors stay
-  embedded via wasmbox's `dom_window` protocol (an iframe overlay).
+- **Not a CodeMirror replacement.** Complex web-grade editors are
+  best embedded via an iframe overlay at the host level.
 - **Not GTK.** No CSS engine, no SVG renderer, no full BiDi/IME. A
   light primitive set: Button, Label, TextInput, ListBox, ScrollView,
   HBox, VBox, Splitter, TabBar, MenuBar. Around 5-10k LoC.
