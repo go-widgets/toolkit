@@ -744,3 +744,83 @@ func TestTreeViewDrawExpandedHierarchy(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	tv.Draw(makeSurface(200, 100), 200, DefaultLight())
 }
+
+// --- v0.5: MenuItem.Shortcut + MenuBar Alt+letter -----------------------
+
+func TestMenuItemShortcutHintPainted(t *testing.T) {
+	// A shortcut hint on a row exercises the "right-aligned hint" branch
+	// in Menu.Draw. Also exercise the hovered-row inverse ink path.
+	m := NewMenu([]MenuItem{
+		{Label: "New", Action: func() {}, Shortcut: "Ctrl+N"},
+	})
+	m.SetBounds(Rect{X: 0, Y: 0, W: 160, H: MenuRowH + 4})
+	m.Draw(makeSurface(160, 60), 160, DefaultLight())
+	m.Hover = 0
+	m.Draw(makeSurface(160, 60), 160, DefaultLight())
+}
+
+func TestMenuBarAltLetter(t *testing.T) {
+	bar := NewMenuBar()
+	bar.Names = []string{"File", "Edit", "View"}
+	bar.Menus = []*Menu{NewMenu(nil), NewMenu(nil), NewMenu(nil)}
+	bar.SetBounds(Rect{X: 0, Y: 0, W: 200, H: MenuBarH})
+
+	// Alt+F opens File (index 0).
+	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+F"})
+	if bar.Active != 0 {
+		t.Fatalf("Alt+F active=%d, want 0", bar.Active)
+	}
+	// Alt+e (lower-case) opens Edit (case-insensitive match).
+	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+e"})
+	if bar.Active != 1 {
+		t.Fatalf("Alt+e active=%d, want 1", bar.Active)
+	}
+	// Escape closes.
+	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
+	if bar.Active != -1 {
+		t.Fatalf("Escape active=%d, want -1", bar.Active)
+	}
+	// Alt+X (no match) leaves things alone.
+	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+X"})
+	if bar.Active != -1 {
+		t.Fatalf("Alt+X (miss) should not open a menu; got %d", bar.Active)
+	}
+	// Malformed Code (not "Alt+X") is dropped.
+	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+N"})
+	if bar.Active != -1 {
+		t.Fatalf("non-Alt code should not open; got %d", bar.Active)
+	}
+	// Empty name in Names is skipped (defensive branch).
+	bar.Names = []string{"", "File"}
+	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+F"})
+	if bar.Active != 1 {
+		t.Fatalf("Alt+F should skip empty name; got active=%d", bar.Active)
+	}
+	// Lower-case first letter in Names (case-insensitive match on that side too).
+	bar.Names = []string{"file"}
+	bar.Active = -1
+	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+F"})
+	if bar.Active != 0 {
+		t.Fatalf("Alt+F should match lower-case 'file'; got active=%d", bar.Active)
+	}
+}
+
+func TestMenuBarMnemonic(t *testing.T) {
+	bar := NewMenuBar()
+	bar.Names = []string{"File", "edit", ""}
+	if bar.Mnemonic(0) != 'F' {
+		t.Fatalf("Mnemonic(0) = %c want F", bar.Mnemonic(0))
+	}
+	if bar.Mnemonic(1) != 'E' {
+		t.Fatalf("Mnemonic(1) = %c want E (case-insensitive)", bar.Mnemonic(1))
+	}
+	if bar.Mnemonic(2) != 0 {
+		t.Fatalf("Mnemonic(2) empty name should be 0")
+	}
+	if bar.Mnemonic(-1) != 0 {
+		t.Fatalf("Mnemonic(-1) out-of-range should be 0")
+	}
+	if bar.Mnemonic(99) != 0 {
+		t.Fatalf("Mnemonic(99) out-of-range should be 0")
+	}
+}

@@ -11,11 +11,18 @@ package toolkit
 //
 // Separator items render as a thin SurfaceAlt line + are not
 // clickable. They have empty Label + nil Action.
+//
+// Shortcut is a hint string ("Ctrl+N", "Cmd+O", …) drawn right-aligned
+// on the row in the muted SurfaceAlt tone. Purely visual: the host
+// app is responsible for actually wiring the key combo to the
+// item's Action (there is no cross-platform "Ctrl vs Cmd" logic in
+// the toolkit — different apps route keys through different SDKs).
 type MenuItem struct {
 	Label     string
 	Action    func()
 	Submenu   *Menu
 	Separator bool
+	Shortcut  string
 }
 
 // Menu is a vertical popover-style list of MenuItems. Used by the
@@ -69,6 +76,18 @@ func (m *Menu) Draw(surface []byte, surfaceW int, theme *Theme) {
 			for t := 0; t < 4; t++ {
 				fillRect(surface, surfaceW, cx-2+t, cy-t, 1, 1+2*t, ink)
 			}
+		} else if it.Shortcut != "" {
+			// Right-align the shortcut hint in a muted tone. Skipped when
+			// the row has a Submenu (the chevron already occupies the
+			// right edge). Muted ink follows the row's active/inactive
+			// state so a hovered row's shortcut inverts too.
+			sw := TextWidth(it.Shortcut)
+			sx := r.X + r.W - 8 - sw
+			shortcutInk := theme.SurfaceAlt
+			if i == m.Hover && it.Action != nil {
+				shortcutInk = theme.Background
+			}
+			DrawText(surface, surfaceW, sx, textY, it.Shortcut, shortcutInk)
 		}
 		y += MenuRowH
 	}
@@ -167,20 +186,73 @@ func (b *MenuBar) Draw(surface []byte, surfaceW int, theme *Theme) {
 }
 
 // OnEvent: a click on a name toggles its menu (Active = idx or -1).
+// Also honours mnemonic keyboard shortcuts on EventKeyDown when the
+// Code carries an "Alt+X" hint (X = one of the top-level names'
+// first letter, case-insensitive) — matches the GNOME/Windows
+// menu-bar Alt+letter convention. The host is responsible for
+// formatting the key event's Code as "Alt+F" etc. before forwarding.
 func (b *MenuBar) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
-		return
+	switch ev.Kind {
+	case EventClick:
+		if ev.Y >= MenuBarH {
+			return
+		}
+		idx := ev.X / MenuBarItemW
+		if idx < 0 || idx >= len(b.Names) {
+			return
+		}
+		if b.Active == idx {
+			b.Active = -1
+		} else {
+			b.Active = idx
+		}
+	case EventKeyDown:
+		// Mnemonic: "Alt+X" opens the FIRST menu whose Name starts with
+		// X (case-insensitive). Escape closes the open menu. Any other
+		// Code is ignored.
+		if ev.Code == "Escape" {
+			b.Active = -1
+			return
+		}
+		const prefix = "Alt+"
+		if len(ev.Code) != len(prefix)+1 || ev.Code[:len(prefix)] != prefix {
+			return
+		}
+		want := ev.Code[len(prefix)]
+		if want >= 'a' && want <= 'z' {
+			want = want - 'a' + 'A'
+		}
+		for i, name := range b.Names {
+			if name == "" {
+				continue
+			}
+			first := name[0]
+			if first >= 'a' && first <= 'z' {
+				first = first - 'a' + 'A'
+			}
+			if first == want {
+				b.Active = i
+				return
+			}
+		}
 	}
-	if ev.Y >= MenuBarH {
-		return
+}
+
+// Mnemonic returns the first letter of the i-th menu name (upper-case,
+// or 0 if the index is out of range / the name is empty). Useful for a
+// host that wants to draw "_F_ile"-style underlines under the mnemonic
+// character.
+func (b *MenuBar) Mnemonic(i int) byte {
+	if i < 0 || i >= len(b.Names) {
+		return 0
 	}
-	idx := ev.X / MenuBarItemW
-	if idx < 0 || idx >= len(b.Names) {
-		return
+	n := b.Names[i]
+	if n == "" {
+		return 0
 	}
-	if b.Active == idx {
-		b.Active = -1
-	} else {
-		b.Active = idx
+	c := n[0]
+	if c >= 'a' && c <= 'z' {
+		c = c - 'a' + 'A'
 	}
+	return c
 }
