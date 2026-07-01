@@ -155,8 +155,17 @@ type MenuBar struct {
 // MenuBarH is the pixel height of the bar strip.
 const MenuBarH = 22
 
-// MenuBarItemW is the pixel width allocated per top-level name.
+// MenuBarItemW is the DEFAULT (minimum) pixel width allocated per
+// top-level name. Names whose TextWidth exceeds this bound scale up
+// (with 2×MenuBarItemPadX horizontal padding on each side); shorter
+// names take exactly this width so the bar looks stable across
+// varying label lengths.
 const MenuBarItemW = 60
+
+// MenuBarItemPadX is the horizontal padding around a top-level name
+// when its natural width exceeds MenuBarItemW — i.e. the extra
+// breathing room beyond the raw glyph run.
+const MenuBarItemPadX = 8
 
 // NewMenuBar builds a MenuBar (Active = -1).
 func NewMenuBar() *MenuBar { return &MenuBar{Active: -1} }
@@ -167,19 +176,43 @@ func (b *MenuBar) AddMenu(name string, m *Menu) {
 	b.Menus = append(b.Menus, m)
 }
 
+// nameWidth returns the pixel width of the i-th top-level name after
+// the auto-size rule: max(MenuBarItemW, TextWidth(name) + 2*pad).
+func (b *MenuBar) nameWidth(i int) int {
+	if i < 0 || i >= len(b.Names) {
+		return MenuBarItemW
+	}
+	w := TextWidth(b.Names[i]) + 2*MenuBarItemPadX
+	if w < MenuBarItemW {
+		return MenuBarItemW
+	}
+	return w
+}
+
+// nameOriginX returns the X offset of the i-th top-level name within
+// the bar (cumulative sum of nameWidth up to i, exclusive).
+func (b *MenuBar) nameOriginX(i int) int {
+	x := 0
+	for k := 0; k < i && k < len(b.Names); k++ {
+		x += b.nameWidth(k)
+	}
+	return x
+}
+
 // Draw paints the bar + every name + a highlight on the Active name.
 func (b *MenuBar) Draw(surface []byte, surfaceW int, theme *Theme) {
 	r := b.Bounds()
 	fillRect(surface, surfaceW, r.X, r.Y, r.W, MenuBarH, theme.SurfaceAlt)
 	for i, name := range b.Names {
-		ix := r.X + i*MenuBarItemW
+		iw := b.nameWidth(i)
+		ix := r.X + b.nameOriginX(i)
 		ink := theme.OnSurface
 		if i == b.Active {
-			fillRect(surface, surfaceW, ix, r.Y, MenuBarItemW, MenuBarH, theme.Accent)
+			fillRect(surface, surfaceW, ix, r.Y, iw, MenuBarH, theme.Accent)
 			ink = theme.Background
 		}
 		tw := TextWidth(name)
-		textX := ix + (MenuBarItemW-tw)/2
+		textX := ix + (iw-tw)/2
 		textY := r.Y + (MenuBarH-GlyphHeight)/2
 		DrawText(surface, surfaceW, textX, textY, name, ink)
 	}
@@ -197,8 +230,20 @@ func (b *MenuBar) OnEvent(ev Event) {
 		if ev.Y >= MenuBarH {
 			return
 		}
-		idx := ev.X / MenuBarItemW
-		if idx < 0 || idx >= len(b.Names) {
+		// Auto-sized widths: walk the names + find whichever cell
+		// contains ev.X. The old fixed-width formula (ev.X /
+		// MenuBarItemW) breaks when names are wider than the default.
+		idx := -1
+		cx := 0
+		for i := range b.Names {
+			w := b.nameWidth(i)
+			if ev.X >= cx && ev.X < cx+w {
+				idx = i
+				break
+			}
+			cx += w
+		}
+		if idx < 0 {
 			return
 		}
 		if b.Active == idx {

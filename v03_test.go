@@ -1000,3 +1000,65 @@ func TestTextViewCompositionDrawPreview(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 40})
 	tv.Draw(makeSurface(120, 40), 120, DefaultLight())
 }
+
+// --- v0.6 polish: MenuBar auto-size ---------------------------------------
+
+func TestMenuBarAutoSizeWidths(t *testing.T) {
+	bar := NewMenuBar()
+	bar.Names = []string{"A", "Long Menu Name"}
+	// Short name uses the min width.
+	if got := bar.nameWidth(0); got != MenuBarItemW {
+		t.Fatalf("nameWidth(0) = %d, want MenuBarItemW=%d", got, MenuBarItemW)
+	}
+	// Long name auto-sizes to TextWidth + 2×pad.
+	wLong := bar.nameWidth(1)
+	if wLong <= MenuBarItemW {
+		t.Fatalf("nameWidth(1) should exceed MenuBarItemW; got %d", wLong)
+	}
+	if got := TextWidth("Long Menu Name") + 2*MenuBarItemPadX; got != wLong {
+		t.Fatalf("nameWidth(1) = %d, want %d (text + 2*pad)", wLong, got)
+	}
+	// Out-of-range index: fall back to MenuBarItemW.
+	if got := bar.nameWidth(99); got != MenuBarItemW {
+		t.Fatalf("nameWidth(99) OOR fallback want MenuBarItemW; got %d", got)
+	}
+	if got := bar.nameWidth(-1); got != MenuBarItemW {
+		t.Fatalf("nameWidth(-1) OOR fallback want MenuBarItemW; got %d", got)
+	}
+	// nameOriginX cumulates.
+	if got := bar.nameOriginX(1); got != MenuBarItemW {
+		t.Fatalf("nameOriginX(1) should be MenuBarItemW; got %d", got)
+	}
+	if got := bar.nameOriginX(0); got != 0 {
+		t.Fatalf("nameOriginX(0) = %d, want 0", got)
+	}
+}
+
+func TestMenuBarAutoSizeClickHitTest(t *testing.T) {
+	bar := NewMenuBar()
+	bar.Names = []string{"A", "Long Menu Name", "B"}
+	bar.Menus = []*Menu{NewMenu(nil), NewMenu(nil), NewMenu(nil)}
+	bar.SetBounds(Rect{X: 0, Y: 0, W: 400, H: MenuBarH})
+	// Click on "A" (index 0) at x=10, y=5.
+	bar.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if bar.Active != 0 {
+		t.Fatalf("click on A: active=%d, want 0", bar.Active)
+	}
+	// Click on "Long Menu Name" (index 1) at x=MenuBarItemW+5.
+	bar.OnEvent(Event{Kind: EventClick, X: MenuBarItemW + 5, Y: 5})
+	if bar.Active != 1 {
+		t.Fatalf("click on Long: active=%d, want 1", bar.Active)
+	}
+	// Click on "B" (index 2) — offset is MenuBarItemW + nameWidth(1).
+	bar.OnEvent(Event{Kind: EventClick, X: MenuBarItemW + bar.nameWidth(1) + 5, Y: 5})
+	if bar.Active != 2 {
+		t.Fatalf("click on B: active=%d, want 2", bar.Active)
+	}
+	// Click past the last name: no-op, Active stays.
+	bar.OnEvent(Event{Kind: EventClick, X: 9999, Y: 5})
+	if bar.Active != 2 {
+		t.Fatalf("click past last: active=%d, want 2 (unchanged)", bar.Active)
+	}
+	// Draw exercises the auto-size render path.
+	bar.Draw(makeSurface(400, MenuBarH), 400, DefaultLight())
+}
