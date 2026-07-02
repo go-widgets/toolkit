@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Toolbar is a horizontal strip of square icon-buttons + optional
 // separators. Each entry has a Label (used as the fallback glyph
 // character), an optional Icon (drawn as an RGBA blit when non-empty),
@@ -46,7 +48,7 @@ func NewToolbar(items []ToolbarItem) *Toolbar {
 }
 
 // Draw paints the toolbar strip.
-func (t *Toolbar) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (t *Toolbar) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	bw := t.ButtonW
 	if bw <= 0 {
@@ -56,12 +58,12 @@ func (t *Toolbar) Draw(surface []byte, surfaceW int, theme *Theme) {
 	if bh <= 0 {
 		bh = ToolbarButtonH
 	}
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Surface)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	x := r.X
 	for i, it := range t.Items {
 		if it.Separator {
 			midX := x + ToolbarSepW/2
-			fillRect(surface, surfaceW, midX, r.Y+3, 1, bh-6, theme.Border)
+			fillRect(p, midX, r.Y+3, 1, bh-6, theme.Border)
 			x += ToolbarSepW
 			continue
 		}
@@ -72,10 +74,10 @@ func (t *Toolbar) Draw(surface []byte, surfaceW int, theme *Theme) {
 		case i == t.pressIdx:
 			bg = theme.Accent
 		}
-		fillRect(surface, surfaceW, x, r.Y, bw, bh, bg)
-		strokeRect(surface, surfaceW, x, r.Y, bw, bh, theme.Border)
+		fillRect(p, x, r.Y, bw, bh, bg)
+		strokeRect(p, x, r.Y, bw, bh, theme.Border)
 		if len(it.Icon) >= 4*bw*bh {
-			blitRGBA(surface, surfaceW, x, r.Y, bw, bh, it.Icon)
+			blitRGBA(p, x, r.Y, bw, bh, it.Icon)
 		} else {
 			label := it.Label
 			if label == "" {
@@ -90,7 +92,7 @@ func (t *Toolbar) Draw(surface []byte, surfaceW int, theme *Theme) {
 			} else if i == t.pressIdx {
 				ink = theme.Background
 			}
-			DrawText(surface, surfaceW, tx, ty, ch, ink)
+			DrawText(p, tx, ty, ch, ink)
 		}
 		x += bw
 	}
@@ -144,16 +146,16 @@ func (t *Toolbar) hitTest(x, y int) int {
 	return -1
 }
 
-// blitRGBA copies src (a w*h RGBA buffer) into surface at (x, y).
-func blitRGBA(surface []byte, surfaceW int, x, y, w, h int, src []byte) {
+// blitRGBA copies src (a w*h RGBA buffer) into the Painter at (x, y).
+func blitRGBA(p painter.Painter, x, y, w, h int, src []byte) {
 	for j := 0; j < h; j++ {
 		for i := 0; i < w; i++ {
 			soff := (j*w + i) * 4
 			if soff+3 >= len(src) {
 				return
 			}
-			ink := RGBA{src[soff], src[soff+1], src[soff+2], src[soff+3]}
-			putPixel(surface, surfaceW, x+i, y+j, ink)
+			ink := RGBA{R: src[soff], G: src[soff+1], B: src[soff+2], A: src[soff+3]}
+			putPixel(p, x+i, y+j, ink)
 		}
 	}
 }

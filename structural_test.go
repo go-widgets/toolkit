@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
 
 // ---- recordingWidget -----------------------------------------------------
 
@@ -16,7 +20,7 @@ type recordingWidget struct {
 	events []Event
 }
 
-func (r *recordingWidget) Draw(_ []byte, _ int, _ *Theme) { r.draws++ }
+func (r *recordingWidget) Draw(_ painter.Painter, _ *Theme) { r.draws++ }
 func (r *recordingWidget) OnEvent(ev Event)               { r.events = append(r.events, ev) }
 
 // --- Stack ---------------------------------------------------------------
@@ -60,12 +64,12 @@ func TestStackDrawAndEventGoToVisibleOnly(t *testing.T) {
 	s.AddPage("a", a)
 	s.AddPage("b", b)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
-	s.Draw(make([]byte, 100*100*4), 100, DefaultLight())
+	s.Draw(newP(make([]byte, 100*100*4), 100), DefaultLight())
 	if a.draws != 1 || b.draws != 0 {
 		t.Fatalf("draws after first Draw: a=%d b=%d", a.draws, b.draws)
 	}
 	s.SetVisible("b")
-	s.Draw(make([]byte, 100*100*4), 100, DefaultLight())
+	s.Draw(newP(make([]byte, 100*100*4), 100), DefaultLight())
 	if a.draws != 1 || b.draws != 1 {
 		t.Fatalf("draws after switch: a=%d b=%d", a.draws, b.draws)
 	}
@@ -78,7 +82,7 @@ func TestStackDrawAndEventGoToVisibleOnly(t *testing.T) {
 func TestStackDrawWithNoPagesNoOp(t *testing.T) {
 	s := NewStack()
 	s.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
-	s.Draw(make([]byte, 10*10*4), 10, DefaultLight())
+	s.Draw(newP(make([]byte, 10*10*4), 10), DefaultLight())
 	s.OnEvent(Event{Kind: EventClick})
 }
 
@@ -91,7 +95,7 @@ func TestNotebookAddTabAndDraw(t *testing.T) {
 	n.AddTab("A", a)
 	n.AddTab("B", b)
 	n.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
-	n.Draw(make([]byte, 200*80*4), 200, DefaultLight())
+	n.Draw(newP(make([]byte, 200*80*4), 200), DefaultLight())
 	if a.draws != 1 {
 		t.Fatalf("active page drawn %d times, want 1", a.draws)
 	}
@@ -146,7 +150,7 @@ func TestNotebookNilPageDrawNoPanic(t *testing.T) {
 	n := NewNotebook()
 	n.AddTab("X", nil)
 	n.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
-	n.Draw(make([]byte, 200*80*4), 200, DefaultLight())
+	n.Draw(newP(make([]byte, 200*80*4), 200), DefaultLight())
 }
 
 func TestNotebookNilPageEventNoPanic(t *testing.T) {
@@ -160,7 +164,7 @@ func TestNotebookEmptyDrawAndEvent(t *testing.T) {
 	n := NewNotebook()
 	n.Active = 5 // out of range to exercise Draw/OnEvent guards
 	n.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
-	n.Draw(make([]byte, 200*80*4), 200, DefaultLight())
+	n.Draw(newP(make([]byte, 200*80*4), 200), DefaultLight())
 	n.OnEvent(Event{Kind: EventClick, X: 50, Y: 50})
 }
 
@@ -248,7 +252,7 @@ func TestPanedDrawHorizontal(t *testing.T) {
 	p := NewHPaned(&recordingWidget{}, &recordingWidget{})
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 30})
 	buf := makeSurface(w, h)
-	p.Draw(buf, w, theme)
+	p.Draw(newP(buf, w), theme)
 	// Handle at x=30..36 painted in SurfaceAlt.
 	if pixelAt(buf, w, 32, 15) != theme.SurfaceAlt {
 		t.Fatalf("horizontal handle = %+v", pixelAt(buf, w, 32, 15))
@@ -261,7 +265,7 @@ func TestPanedDrawVertical(t *testing.T) {
 	p := NewVPaned(&recordingWidget{}, &recordingWidget{})
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 60})
 	buf := makeSurface(w, h)
-	p.Draw(buf, w, theme)
+	p.Draw(newP(buf, w), theme)
 	// Handle at y=30..36 painted in SurfaceAlt.
 	if pixelAt(buf, w, 30, 32) != theme.SurfaceAlt {
 		t.Fatalf("vertical handle = %+v", pixelAt(buf, w, 30, 32))
@@ -271,7 +275,7 @@ func TestPanedDrawVertical(t *testing.T) {
 func TestPanedDrawNilChildrenNoPanic(t *testing.T) {
 	p := NewHPaned(nil, nil)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 30})
-	p.Draw(make([]byte, 60*30*4), 60, DefaultLight())
+	p.Draw(newP(make([]byte, 60*30*4), 60), DefaultLight())
 }
 
 func TestPanedEventRoutingHorizontal(t *testing.T) {
@@ -396,7 +400,7 @@ func TestExpanderNilContentNoPanic(t *testing.T) {
 	e := NewExpander("S", nil)
 	e.Expanded = true
 	e.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	e.Draw(make([]byte, 200*100*4), 200, DefaultLight())
+	e.Draw(newP(make([]byte, 200*100*4), 200), DefaultLight())
 	e.OnEvent(Event{Kind: EventClick, X: 5, Y: 50})
 }
 
@@ -421,12 +425,12 @@ func TestExpanderDrawCollapsedAndExpanded(t *testing.T) {
 	body := &recordingWidget{}
 	e := NewExpander("S", body)
 	e.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	e.Draw(makeSurface(w, h), w, theme)
+	e.Draw(newP(makeSurface(w, h), w), theme)
 	if body.draws != 0 {
 		t.Fatal("collapsed Draw must not render body")
 	}
 	e.Expanded = true
-	e.Draw(makeSurface(w, h), w, theme)
+	e.Draw(newP(makeSurface(w, h), w), theme)
 	if body.draws != 1 {
 		t.Fatal("expanded Draw must render body")
 	}

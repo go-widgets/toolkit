@@ -31,7 +31,7 @@ func TestProgressBarDrawHalfFill(t *testing.T) {
 	p.SetFraction(0.5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 16})
 	buf := makeSurface(w, h)
-	p.Draw(buf, w, theme)
+	p.Draw(newP(buf, w), theme)
 	// Left third should be Accent, right third should be SurfaceAlt.
 	if pixelAt(buf, w, 10, 8) != theme.Accent {
 		t.Fatalf("left third = %+v, want Accent", pixelAt(buf, w, 10, 8))
@@ -48,9 +48,9 @@ func TestProgressBarDrawClampInDraw(t *testing.T) {
 	theme := DefaultLight()
 	p := &ProgressBar{Fraction: -1}
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 16})
-	p.Draw(makeSurface(w, h), w, theme)
+	p.Draw(newP(makeSurface(w, h), w), theme)
 	p.Fraction = 2
-	p.Draw(makeSurface(w, h), w, theme)
+	p.Draw(newP(makeSurface(w, h), w), theme)
 }
 
 func TestProgressBarDrawWithLabel(t *testing.T) {
@@ -60,7 +60,7 @@ func TestProgressBarDrawWithLabel(t *testing.T) {
 	p.SetFraction(0.5)
 	p.Label = "50%"
 	p.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
-	p.Draw(makeSurface(w, h), w, theme)
+	p.Draw(newP(makeSurface(w, h), w), theme)
 }
 
 // --- LevelBar ------------------------------------------------------------
@@ -79,7 +79,7 @@ func TestLevelBarDraw(t *testing.T) {
 	l.Value = 3
 	l.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 10})
 	buf := makeSurface(w, h)
-	l.Draw(buf, w, theme)
+	l.Draw(newP(buf, w), theme)
 	// First cell (idx 0) should be Accent (Value=3 > 0).
 	if pixelAt(buf, w, 2, 5) != theme.Accent {
 		t.Fatalf("cell 0 = %+v, want Accent", pixelAt(buf, w, 2, 5))
@@ -89,7 +89,7 @@ func TestLevelBarDraw(t *testing.T) {
 func TestLevelBarDrawMaxZeroNoOp(t *testing.T) {
 	l := &LevelBar{Max: 0}
 	l.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 10})
-	l.Draw(makeSurface(64, 12), 64, DefaultLight())
+	l.Draw(newP(makeSurface(64, 12), 64), DefaultLight())
 }
 
 func TestLevelBarTinyCellWidth(t *testing.T) {
@@ -97,7 +97,7 @@ func TestLevelBarTinyCellWidth(t *testing.T) {
 	l := NewLevelBar(20)
 	l.Value = 10
 	l.SetBounds(Rect{X: 0, Y: 0, W: 5, H: 10})
-	l.Draw(makeSurface(64, 12), 64, DefaultLight())
+	l.Draw(newP(makeSurface(64, 12), 64), DefaultLight())
 }
 
 // --- Scale ---------------------------------------------------------------
@@ -170,7 +170,7 @@ func TestScaleZeroWidthOrDegenerateRangeNoOp(t *testing.T) {
 func TestScaleDrawDegenerateRange(t *testing.T) {
 	s := NewScale(5, 5, 5)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
-	s.Draw(makeSurface(100, 20), 100, DefaultLight())
+	s.Draw(newP(makeSurface(100, 20), 100), DefaultLight())
 }
 
 func TestScaleDrawNormal(t *testing.T) {
@@ -179,7 +179,7 @@ func TestScaleDrawNormal(t *testing.T) {
 	s := NewScale(0, 100, 50)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
 	buf := makeSurface(w, h)
-	s.Draw(buf, w, theme)
+	s.Draw(newP(buf, w), theme)
 	// Thumb at x = 45 (half of 100-10), Accent fill.
 	if pixelAt(buf, w, 48, 10) != theme.Accent {
 		t.Fatalf("thumb pixel = %+v, want Accent", pixelAt(buf, w, 48, 10))
@@ -263,7 +263,7 @@ func TestSpinButtonDraw(t *testing.T) {
 	theme := DefaultLight()
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
-	s.Draw(makeSurface(w, h), w, theme)
+	s.Draw(newP(makeSurface(w, h), w), theme)
 }
 
 // --- Image ---------------------------------------------------------------
@@ -278,8 +278,8 @@ func TestImageDrawIdentityBlit(t *testing.T) {
 	img := NewImage(src, 8, 8)
 	img.SetBounds(Rect{X: 2, Y: 2, W: 8, H: 8})
 	buf := makeSurface(W, W)
-	img.Draw(buf, W, DefaultLight())
-	if pixelAt(buf, W, 5, 5) != (RGBA{0xFF, 0, 0, 0xFF}) {
+	img.Draw(newP(buf, W), DefaultLight())
+	if pixelAt(buf, W, 5, 5) != (RGBA{R: 0xFF, G: 0, B: 0, A: 0xFF}) {
 		t.Fatalf("blitted pixel = %+v", pixelAt(buf, W, 5, 5))
 	}
 }
@@ -294,8 +294,8 @@ func TestImageDrawScaledBlit(t *testing.T) {
 	img := NewImage(src, 4, 4)
 	img.SetBounds(Rect{X: 0, Y: 0, W: 16, H: 16})
 	buf := makeSurface(W, W)
-	img.Draw(buf, W, DefaultLight())
-	if pixelAt(buf, W, 8, 8) != (RGBA{0, 0, 0xFF, 0xFF}) {
+	img.Draw(newP(buf, W), DefaultLight())
+	if pixelAt(buf, W, 8, 8) != (RGBA{R: 0, G: 0, B: 0xFF, A: 0xFF}) {
 		t.Fatalf("scaled pixel = %+v", pixelAt(buf, W, 8, 8))
 	}
 }
@@ -303,20 +303,20 @@ func TestImageDrawScaledBlit(t *testing.T) {
 func TestImageDrawEmptySourceNoOp(t *testing.T) {
 	img := &Image{Pixels: nil, W: 0, H: 0}
 	img.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
-	img.Draw(makeSurface(16, 16), 16, DefaultLight())
+	img.Draw(newP(makeSurface(16, 16), 16), DefaultLight())
 }
 
 func TestImageDrawShortPixelsNoOp(t *testing.T) {
 	img := &Image{Pixels: make([]byte, 3), W: 4, H: 4} // way too short
 	img.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
-	img.Draw(makeSurface(16, 16), 16, DefaultLight())
+	img.Draw(newP(makeSurface(16, 16), 16), DefaultLight())
 }
 
 func TestImageDrawClipsOffSurface(t *testing.T) {
 	src := make([]byte, 4*4*4)
 	img := NewImage(src, 4, 4)
 	img.SetBounds(Rect{X: -2, Y: -2, W: 4, H: 4}) // partially off-surface
-	img.Draw(makeSurface(8, 8), 8, DefaultLight())
+	img.Draw(newP(makeSurface(8, 8), 8), DefaultLight())
 }
 
 func TestImageDrawTruncatedSurface(t *testing.T) {
@@ -330,7 +330,7 @@ func TestImageDrawTruncatedSurface(t *testing.T) {
 	// Buffer big enough for surfaceW=16 stride but only 2 rows of data
 	// so the third row trips the per-pixel guard.
 	buf := make([]byte, 16*2*4+4)
-	img.Draw(buf, 16, DefaultLight())
+	img.Draw(newP(buf, 16), DefaultLight())
 }
 
 // --- Spinner -------------------------------------------------------------
@@ -349,9 +349,9 @@ func TestSpinnerInactiveDoesNotDraw(t *testing.T) {
 	s := NewSpinner()
 	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 20})
 	buf := makeSurface(32, 32)
-	s.Draw(buf, 32, DefaultLight())
+	s.Draw(newP(buf, 32), DefaultLight())
 	// Sentinel intact -> nothing painted.
-	if pixelAt(buf, 32, 10, 10) != (RGBA{0xC8, 0xC8, 0xC8, 0xFF}) {
+	if pixelAt(buf, 32, 10, 10) != (RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}) {
 		t.Fatal("inactive spinner painted")
 	}
 }
@@ -363,7 +363,7 @@ func TestSpinnerActivePaintsHand(t *testing.T) {
 	s.Phase = 0 // 0 radians -> hand points to the right (+x).
 	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 20})
 	buf := makeSurface(32, 32)
-	s.Draw(buf, 32, theme)
+	s.Draw(newP(buf, 32), theme)
 	// Some pixel along the +x ray from centre (10,10) should be Accent.
 	found := false
 	for dx := 1; dx < 5; dx++ {
@@ -381,7 +381,7 @@ func TestSpinnerZeroBoundsNoCrash(t *testing.T) {
 	s := NewSpinner()
 	s.Active = true
 	s.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 0})
-	s.Draw(makeSurface(16, 16), 16, DefaultLight())
+	s.Draw(newP(makeSurface(16, 16), 16), DefaultLight())
 }
 
 func TestSpinnerSmallerHeightRadius(t *testing.T) {
@@ -389,7 +389,7 @@ func TestSpinnerSmallerHeightRadius(t *testing.T) {
 	s := NewSpinner()
 	s.Active = true
 	s.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 10})
-	s.Draw(makeSurface(64, 16), 64, DefaultLight())
+	s.Draw(newP(makeSurface(64, 16), 64), DefaultLight())
 }
 
 func TestSpinnerSubPixelStepsClamp(t *testing.T) {
@@ -397,5 +397,5 @@ func TestSpinnerSubPixelStepsClamp(t *testing.T) {
 	s := NewSpinner()
 	s.Active = true
 	s.SetBounds(Rect{X: 0, Y: 0, W: 4, H: 4})
-	s.Draw(makeSurface(8, 8), 8, DefaultLight())
+	s.Draw(newP(makeSurface(8, 8), 8), DefaultLight())
 }

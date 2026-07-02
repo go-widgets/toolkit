@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // FileChooser is a directory-tree + file-list + path-entry composite.
 // It does NO I/O — the host hands it a virtual root (a TreeNode tree
 // representing directories) + a func that lists files in a given
@@ -99,14 +101,14 @@ func (f *FileChooser) SetBounds(r Rect) {
 }
 
 // Draw paints the composite.
-func (f *FileChooser) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (f *FileChooser) Draw(p painter.Painter, theme *Theme) {
 	r := f.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Background)
-	f.tree.Draw(surface, surfaceW, theme)
-	f.list.Draw(surface, surfaceW, theme)
-	f.pathEntry.Draw(surface, surfaceW, theme)
-	f.openButton.Draw(surface, surfaceW, theme)
-	f.cancelButton.Draw(surface, surfaceW, theme)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Background)
+	f.tree.Draw(p, theme)
+	f.list.Draw(p, theme)
+	f.pathEntry.Draw(p, theme)
+	f.openButton.Draw(p, theme)
+	f.cancelButton.Draw(p, theme)
 }
 
 // OnEvent dispatches to the child widgets based on which one the event

@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Bitmap font + text-drawing helper. The 5x7 glyph table below is
 // copied verbatim from wasmdesk/wasmbox's dock scene (see
 // clients/dock/internal/scene/scene.go, `font5x7` map) and extended to
@@ -122,18 +124,25 @@ var font5x7 = map[byte][5]byte{
 // len(text) alone -- this matches the dock's textWidth helper.
 func TextWidth(text string) int { return GlyphAdvance * len(text) }
 
-// DrawText paints text into surface left-to-right starting at (x, y)
-// in widget-local pixel coordinates; surfaceW is the surface's row
-// stride in pixels. Each glyph is rendered into a 5x7 cell whose
+// DrawText paints text left-to-right starting at (x, y) in widget-
+// local coordinates. Each glyph is rendered into a 5x7 cell whose
 // origin is (x + k*GlyphAdvance, y) for the k-th rune. Unknown
-// characters render as a blank but still advance the cursor so column
-// alignment is preserved.
+// characters render as a blank but still advance the cursor so
+// column alignment is preserved.
+//
+// On a *painter.PixelPainter (the WUI + GUI back-end path) DrawText
+// uses toolkit's own 60+ glyph 5x7 bitmap font by writing one pixel
+// per lit bit. On any other painter (a *painter.CellPainter for a
+// TUI, an SvgPainter for vector output) DrawText delegates to the
+// painter's own Text primitive — a CellPainter maps one rune per
+// cell + gets terminal-native text, an SvgPainter emits <text>.
 //
 // Pixels are written as opaque ink (alpha forced to 0xFF unless the
 // caller's ink already carries an alpha) with per-pixel clipping so
-// glyphs that overflow the surface degrade gracefully.
-func DrawText(surface []byte, surfaceW int, x, y int, text string, ink RGBA) {
-	if surfaceW <= 0 || len(surface) < 4 {
+// glyphs that overflow the painter degrade gracefully.
+func DrawText(p painter.Painter, x, y int, text string, ink RGBA) {
+	if _, isPixel := p.(*painter.PixelPainter); !isPixel {
+		p.Text(x, y, text, ink)
 		return
 	}
 	for k := 0; k < len(text); k++ {
@@ -148,25 +157,16 @@ func DrawText(surface []byte, surfaceW int, x, y int, text string, ink RGBA) {
 				if cb&(1<<row) == 0 {
 					continue
 				}
-				putPixel(surface, surfaceW, gx+col, y+row, ink)
+				p.PutPixel(gx+col, y+row, ink)
 			}
 		}
 	}
 }
 
-// putPixel writes one ink pixel at (px, py) into surface. Out-of-
-// bounds writes are dropped (so DrawText can render glyphs that
-// partially overflow without panicking).
-func putPixel(surface []byte, surfaceW int, px, py int, ink RGBA) {
-	if px < 0 || py < 0 || px >= surfaceW {
-		return
-	}
-	off := (py*surfaceW + px) * 4
-	if off < 0 || off+3 >= len(surface) {
-		return
-	}
-	surface[off+0] = ink.R
-	surface[off+1] = ink.G
-	surface[off+2] = ink.B
-	surface[off+3] = ink.A
+// putPixel writes one ink pixel at (px, py) via the Painter p.
+// Retained as a package-internal shim so DrawText and the handful
+// of pixel-precise widgets (Calendar's day-dot, Spinner's frame)
+// read as short function calls rather than direct interface calls.
+func putPixel(p painter.Painter, px, py int, ink RGBA) {
+	p.PutPixel(px, py, ink)
 }

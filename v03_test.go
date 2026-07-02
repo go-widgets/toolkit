@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
 
 // --- TextView ------------------------------------------------------------
 
@@ -212,14 +216,14 @@ func TestTextViewDrawFocusedAndUnfocused(t *testing.T) {
 	v.Focused = true
 	v.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	buf := makeSurface(w, h)
-	v.Draw(buf, w, theme)
+	v.Draw(newP(buf, w), theme)
 	// Focused border at top-left = Accent.
 	if pixelAt(buf, w, 0, 0) != theme.Accent {
 		t.Fatalf("focused border = %+v, want Accent", pixelAt(buf, w, 0, 0))
 	}
 	v.Focused = false
 	buf2 := makeSurface(w, h)
-	v.Draw(buf2, w, theme)
+	v.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 0, 0) != theme.Border {
 		t.Fatalf("unfocused border = %+v, want Border", pixelAt(buf2, w, 0, 0))
 	}
@@ -309,7 +313,7 @@ func TestMenuDrawsHoveredSubmenuSeparator(t *testing.T) {
 	})
 	m.Hover = 0
 	m.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 70})
-	m.Draw(makeSurface(w, h), w, theme)
+	m.Draw(newP(makeSurface(w, h), w), theme)
 }
 
 func TestMenuBarClickToggles(t *testing.T) {
@@ -365,7 +369,7 @@ func TestMenuBarDrawHighlightsActive(t *testing.T) {
 	b.AddMenu("Edit", NewMenu(nil))
 	b.Active = 0
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: MenuBarH})
-	b.Draw(makeSurface(w, h), w, theme)
+	b.Draw(newP(makeSurface(w, h), w), theme)
 }
 
 // --- Dialog --------------------------------------------------------------
@@ -397,14 +401,14 @@ func TestDialogClickFallsThroughToContent(t *testing.T) {
 func TestDialogNilContentNoPanic(t *testing.T) {
 	d := NewDialog("X", nil)
 	d.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
-	d.Draw(makeSurface(400, 300), 400, DefaultLight())
+	d.Draw(newP(makeSurface(400, 300), 400), DefaultLight())
 	d.OnEvent(Event{Kind: EventClick, X: 50, Y: 50})
 }
 
 func TestDialogDraw(t *testing.T) {
 	d := NewDialog("Title", NewLabel("body"), NewButton("OK", nil))
 	d.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
-	d.Draw(makeSurface(400, 300), 400, DefaultLight())
+	d.Draw(newP(makeSurface(400, 300), 400), DefaultLight())
 }
 
 func TestNewMessageDialogShape(t *testing.T) {
@@ -435,8 +439,8 @@ func TestTooltipShowAndHide(t *testing.T) {
 func TestTooltipDrawWhenHiddenNoOp(t *testing.T) {
 	tt := NewTooltip("Hi")
 	buf := makeSurface(64, 64)
-	tt.Draw(buf, 64, DefaultLight())
-	if pixelAt(buf, 64, 10, 10) != (RGBA{0xC8, 0xC8, 0xC8, 0xFF}) {
+	tt.Draw(newP(buf, 64), DefaultLight())
+	if pixelAt(buf, 64, 10, 10) != (RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}) {
 		t.Fatal("hidden tooltip painted")
 	}
 }
@@ -447,7 +451,7 @@ func TestTooltipDrawVisible(t *testing.T) {
 	tt := NewTooltip("Hello")
 	tt.Show(Rect{X: 10, Y: 10, W: 40, H: 20})
 	buf := makeSurface(w, h)
-	tt.Draw(buf, w, theme)
+	tt.Draw(newP(buf, w), theme)
 	// Bubble background = OnSurface ink colour.
 	if pixelAt(buf, w, 20, 35) != theme.OnSurface {
 		t.Fatalf("bubble fill = %+v, want OnSurface", pixelAt(buf, w, 20, 35))
@@ -551,7 +555,7 @@ func TestDropDownPopoverBoundsClampsRows(t *testing.T) {
 func TestDropDownDraw(t *testing.T) {
 	d := NewDropDown([]string{"a", "b"}, 0)
 	d.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 24})
-	d.Draw(makeSurface(120, 32), 120, DefaultLight())
+	d.Draw(newP(makeSurface(120, 32), 120), DefaultLight())
 }
 
 // --- TreeView ------------------------------------------------------------
@@ -621,7 +625,7 @@ func TestTreeViewIgnoresNonClick(t *testing.T) {
 func TestTreeViewNilRoot(t *testing.T) {
 	tv := NewTreeView(nil)
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	tv.Draw(makeSurface(200, 100), 200, DefaultLight())
+	tv.Draw(newP(makeSurface(200, 100), 200), DefaultLight())
 	tv.OnEvent(Event{Kind: EventClick, X: 50, Y: 5})
 }
 
@@ -637,7 +641,7 @@ func TestTreeViewZeroRowHeightFallback(t *testing.T) {
 	tv := NewTreeView(root)
 	tv.RowHeight = 0
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	tv.Draw(makeSurface(200, 100), 200, DefaultLight())
+	tv.Draw(newP(makeSurface(200, 100), 200), DefaultLight())
 	tv.OnEvent(Event{Kind: EventClick, X: 80, Y: 5})
 }
 
@@ -647,7 +651,7 @@ func TestTreeViewDrawCollapsedChevron(t *testing.T) {
 		Children: []*TreeNode{{Label: "child"}}}
 	tv := NewTreeView(root)
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	tv.Draw(makeSurface(200, 100), 200, DefaultLight())
+	tv.Draw(newP(makeSurface(200, 100), 200), DefaultLight())
 }
 
 // --- Extra branch coverage for TextView ---------------------------------
@@ -742,7 +746,7 @@ func TestTreeViewDrawExpandedHierarchy(t *testing.T) {
 	tv := NewTreeView(root)
 	tv.Selected = root
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	tv.Draw(makeSurface(200, 100), 200, DefaultLight())
+	tv.Draw(newP(makeSurface(200, 100), 200), DefaultLight())
 }
 
 // --- v0.5: MenuItem.Shortcut + MenuBar Alt+letter -----------------------
@@ -754,9 +758,9 @@ func TestMenuItemShortcutHintPainted(t *testing.T) {
 		{Label: "New", Action: func() {}, Shortcut: "Ctrl+N"},
 	})
 	m.SetBounds(Rect{X: 0, Y: 0, W: 160, H: MenuRowH + 4})
-	m.Draw(makeSurface(160, 60), 160, DefaultLight())
+	m.Draw(newP(makeSurface(160, 60), 160), DefaultLight())
 	m.Hover = 0
-	m.Draw(makeSurface(160, 60), 160, DefaultLight())
+	m.Draw(newP(makeSurface(160, 60), 160), DefaultLight())
 }
 
 func TestMenuBarAltLetter(t *testing.T) {
@@ -848,7 +852,7 @@ func TestNotificationShowHideTick(t *testing.T) {
 		t.Fatalf("Show should widen bounds to text; got W=%d", b.W)
 	}
 	// Draw exercises the paint path.
-	n.Draw(makeSurface(200, 60), 200, DefaultLight())
+	n.Draw(newP(makeSurface(200, 60), 200), DefaultLight())
 	// Tick down to zero.
 	for i := 0; i < NotificationLife+1; i++ {
 		n.Tick()
@@ -884,7 +888,7 @@ func TestNotificationDrawHiddenNoOp(t *testing.T) {
 	surf := makeSurface(100, 30) // pre-filled with sentinel bytes
 	before := make([]byte, len(surf))
 	copy(before, surf)
-	n.Draw(surf, 100, DefaultLight())
+	n.Draw(newP(surf, 100), DefaultLight())
 	for i := range surf {
 		if surf[i] != before[i] {
 			t.Fatalf("Draw on hidden Notification touched byte %d: %d → %d", i, before[i], surf[i])
@@ -899,7 +903,7 @@ func TestIconsPaintWithoutPanic(t *testing.T) {
 	// one non-zero pixel results. The exact bitmap is not asserted (an
 	// icon tweak shouldn't break the test); the point is "the function
 	// covers its target rect + doesn't panic".
-	fns := []func([]byte, int, Rect, RGBA){
+	fns := []func(painter.Painter, Rect, RGBA){
 		DrawIconNew, DrawIconOpen, DrawIconSave, DrawIconCut,
 		DrawIconCopy, DrawIconPaste, DrawIconUndo, DrawIconRedo,
 		DrawIconSearch, DrawIconSettings,
@@ -908,7 +912,7 @@ func TestIconsPaintWithoutPanic(t *testing.T) {
 		surf := makeSurface(24, 24) // sentinel-filled
 		before := make([]byte, len(surf))
 		copy(before, surf)
-		fn(surf, 24, Rect{X: 0, Y: 0, W: 24, H: 24}, RGB(0, 0, 0))
+		fn(newP(surf, 24), Rect{X: 0, Y: 0, W: 24, H: 24}, RGB(0, 0, 0))
 		any := false
 		for i := range surf {
 			if surf[i] != before[i] {
@@ -940,7 +944,7 @@ func TestIconInsetFloorAndScale(t *testing.T) {
 func TestIconSearchNonSquareRect(t *testing.T) {
 	// Exercise the "h smaller than w" branch of DrawIconSearch.
 	surf := makeSurface(40, 20)
-	DrawIconSearch(surf, 40, Rect{X: 0, Y: 0, W: 40, H: 20}, RGB(0, 0, 0))
+	DrawIconSearch(newP(surf, 40), Rect{X: 0, Y: 0, W: 40, H: 20}, RGB(0, 0, 0))
 }
 
 // --- v0.5: EventComposition on TextView ---------------------------------
@@ -998,7 +1002,7 @@ func TestTextViewCompositionDrawPreview(t *testing.T) {
 	tv.Focused = true
 	tv.Composition = "^"
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 40})
-	tv.Draw(makeSurface(120, 40), 120, DefaultLight())
+	tv.Draw(newP(makeSurface(120, 40), 120), DefaultLight())
 }
 
 // --- v0.6 polish: MenuBar auto-size ---------------------------------------
@@ -1060,7 +1064,7 @@ func TestMenuBarAutoSizeClickHitTest(t *testing.T) {
 		t.Fatalf("click past last: active=%d, want 2 (unchanged)", bar.Active)
 	}
 	// Draw exercises the auto-size render path.
-	bar.Draw(makeSurface(400, MenuBarH), 400, DefaultLight())
+	bar.Draw(newP(makeSurface(400, MenuBarH), 400), DefaultLight())
 }
 
 // --- v0.6 polish: MenuBar.HandleShortcut dispatcher ----------------------

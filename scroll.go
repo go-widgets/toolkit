@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // ScrollView is a viewport over a child widget whose content may be
 // larger than the visible area. The child's own Bounds is logical
 // (= content size); ScrollView paints the child clipped to its own
@@ -74,7 +76,7 @@ func (s *ScrollView) Scroll(dx, dy int) {
 
 // Draw paints the child clipped to the viewport, then the scrollbar
 // track + thumb on the right edge.
-func (s *ScrollView) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	// Child viewport excludes the scrollbar column on the right.
 	if s.Child != nil {
@@ -85,12 +87,12 @@ func (s *ScrollView) Draw(surface []byte, surfaceW int, theme *Theme) {
 			W: cb.W,
 			H: cb.H,
 		})
-		s.Child.Draw(surface, surfaceW, theme)
+		s.Child.Draw(p, theme)
 		s.Child.SetBounds(cb)
 	}
 	// Scrollbar track.
 	trackX := r.X + r.W - scrollbarWidth
-	fillRect(surface, surfaceW, trackX, r.Y, scrollbarWidth, r.H, theme.SurfaceAlt)
+	fillRect(p, trackX, r.Y, scrollbarWidth, r.H, theme.SurfaceAlt)
 	// Thumb sized to viewport/content ratio, positioned by OffsetY.
 	if s.contentH > r.H && r.H > 0 {
 		thumbH := r.H * r.H / s.contentH
@@ -101,7 +103,7 @@ func (s *ScrollView) Draw(surface []byte, surfaceW int, theme *Theme) {
 		if s.contentH-r.H > 0 {
 			thumbY += s.OffsetY * (r.H - thumbH) / (s.contentH - r.H)
 		}
-		fillRect(surface, surfaceW, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
+		fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
 	}
 }
 

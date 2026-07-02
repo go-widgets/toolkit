@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Paned orientations.
 const (
 	PanedHorizontal = 0 // First left, Second right
@@ -102,18 +104,18 @@ func (p *Paned) layout() {
 }
 
 // Draw paints both children + the handle.
-func (p *Paned) Draw(surface []byte, surfaceW int, theme *Theme) {
-	if p.First != nil {
-		p.First.Draw(surface, surfaceW, theme)
+func (pd *Paned) Draw(p painter.Painter, theme *Theme) {
+	if pd.First != nil {
+		pd.First.Draw(p, theme)
 	}
-	if p.Second != nil {
-		p.Second.Draw(surface, surfaceW, theme)
+	if pd.Second != nil {
+		pd.Second.Draw(p, theme)
 	}
-	r := p.Bounds()
-	if p.Orientation == PanedHorizontal {
-		fillRect(surface, surfaceW, r.X+p.Position, r.Y, PanedHandleW, r.H, theme.SurfaceAlt)
+	r := pd.Bounds()
+	if pd.Orientation == PanedHorizontal {
+		fillRect(p, r.X+pd.Position, r.Y, PanedHandleW, r.H, theme.SurfaceAlt)
 	} else {
-		fillRect(surface, surfaceW, r.X, r.Y+p.Position, r.W, PanedHandleW, theme.SurfaceAlt)
+		fillRect(p, r.X, r.Y+pd.Position, r.W, PanedHandleW, theme.SurfaceAlt)
 	}
 }
 

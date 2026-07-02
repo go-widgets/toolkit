@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // RadioButton is a circular toggle paired with a label. RadioButtons
 // are typically grouped via RadioGroup so exactly one in the group is
 // Checked at any time. A standalone RadioButton (not added to a
@@ -32,16 +34,16 @@ func NewRadioButton(label string) *RadioButton {
 // box with a 1-pixel inset on every side, painted as a stroked
 // rectangle (approximate to avoid bringing in trig). When Checked,
 // a smaller Accent-filled rect sits inside as the radio dot.
-func (r *RadioButton) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (r *RadioButton) Draw(p painter.Painter, theme *Theme) {
 	b := r.Bounds()
 	boxY := b.Y + (b.H-radioBoxSize)/2
-	fillRect(surface, surfaceW, b.X, boxY, radioBoxSize, radioBoxSize, theme.Surface)
-	strokeRect(surface, surfaceW, b.X, boxY, radioBoxSize, radioBoxSize, theme.Border)
+	fillRect(p, b.X, boxY, radioBoxSize, radioBoxSize, theme.Surface)
+	strokeRect(p, b.X, boxY, radioBoxSize, radioBoxSize, theme.Border)
 	if r.Checked {
-		fillRect(surface, surfaceW, b.X+3, boxY+3, radioBoxSize-6, radioBoxSize-6, theme.Accent)
+		fillRect(p, b.X+3, boxY+3, radioBoxSize-6, radioBoxSize-6, theme.Accent)
 	}
 	textY := b.Y + (b.H-GlyphHeight)/2
-	DrawText(surface, surfaceW, b.X+radioBoxSize+4, textY, r.Label, theme.OnBackground)
+	DrawText(p, b.X+radioBoxSize+4, textY, r.Label, theme.OnBackground)
 }
 
 // OnEvent: on click, route through the group (if any) so siblings

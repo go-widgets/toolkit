@@ -40,9 +40,16 @@ in headless tests (screenshot-hash regressions).
 
 ## Status
 
-**v0.5 — 35 widgets + 10 stock icons, ~8k LoC, 100% statement
-coverage.** Pure Go, no CGO, stdlib only. Builds for
-`GOOS=js GOARCH=wasm` and every native target Go ships.
+**v0.6 — Painter back-end abstraction.** Every widget's `Draw` now
+takes a [`painter.Painter`](https://github.com/go-widgets/painter)
+instead of a fixed `[]byte` + stride pair, so the same widget code
+renders into a pixel buffer (WUI browser canvas, GUI native window,
+image file), a terminal cell grid (TUI), or an SVG stream. See
+"v0.6 breaking change" below for the migration path.
+
+35 widgets + 10 stock icons, ~8k LoC, 100% statement coverage.
+Pure Go, no CGO, stdlib only. Builds for `GOOS=js GOARCH=wasm` and
+every native target Go ships.
 
 | Family       | Widgets                                                            |
 | ------------ | ------------------------------------------------------------------ |
@@ -60,8 +67,51 @@ coverage.** Pure Go, no CGO, stdlib only. Builds for
 | Composite    | `FileChooser`, `ColorChooser`, `Calendar`                          |
 | Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
 
+### v0.6 breaking change
+
+`Widget.Draw` signature moved from
+
+```go
+Draw(surface []byte, surfaceW int, theme *Theme)
+```
+
+to
+
+```go
+Draw(p painter.Painter, theme *Theme)
+```
+
+where [`painter.Painter`](https://github.com/go-widgets/painter) is
+a 5-primitive interface (`FillRect`, `StrokeRect`, `PutPixel`,
+`Text`, `Size`). Existing callers that had a `[]byte` + width
+migrate one line:
+
+```go
+// before v0.6:
+wg.Draw(surface, w, theme)
+
+// v0.6+:
+p := painter.NewPixelPainter(surface, w, h)
+wg.Draw(p, theme)
+```
+
+The `[]byte` is still writable + owned by the caller — the
+`PixelPainter` just wraps it so the primitives translate to writes.
+All other widget APIs (`Bounds`, `SetBounds`, `HitTest`, `OnEvent`,
+`NewButton`, …) are unchanged.
+
+`toolkit.Rect` + `toolkit.RGBA` became type aliases of
+`painter.Rect` + `painter.RGBA`, so cross-package assignments work
+transparently.
+
+The 10 `DrawIcon*` helpers also lost their `(surface, surfaceW)`
+prefix; new signature is `DrawIconX(p painter.Painter, r Rect, ink RGBA)`.
+
 ### Earlier releases
 
+- **v0.5** — Toolbar / Statusbar / FileChooser / ColorChooser /
+  Calendar, Selection on TextView, `LoadGTKTheme(css)`, 10 stock
+  icon helpers.
 - **v0.4** — 34 widgets. Toolbar / Statusbar, FileChooser /
   ColorChooser / Calendar, Selection model on TextView,
   `LoadGTKTheme(css)`.

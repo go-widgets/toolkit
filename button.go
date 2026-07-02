@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Button is a clickable rectangle with a centred label. Paints a
 // 1-pixel border in Theme.Border on a Theme.Surface body; hovered /
 // pressed states cycle through SurfaceAlt + Accent so the user sees
@@ -38,7 +40,7 @@ func (b *Button) SetPressed(v bool) { b.pressed = v }
 
 // Draw paints the button into surface. Surface is the row-major RGBA
 // framebuffer of width surfaceW; theme supplies the palette.
-func (b *Button) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	face := theme.Surface
 	if b.pressed {
@@ -46,8 +48,8 @@ func (b *Button) Draw(surface []byte, surfaceW int, theme *Theme) {
 	} else if b.hovered {
 		face = theme.SurfaceAlt
 	}
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, face)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, r.H, face)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	// Label rendering is a TODO until the font package lands. For now
 	// the button is a solid styled rectangle; downstream callers can
 	// also draw their own label into b.Bounds() after Draw if they

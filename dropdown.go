@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // DropDown is a one-of-N selector that shows the current choice in a
 // button-like rectangle. Clicking opens a popover ListBox of all
 // Options just below the widget; selecting one closes the popover +
@@ -43,17 +45,17 @@ func (d *DropDown) Current() string {
 // Draw paints the closed widget. The popover, when Open, is the
 // host app's responsibility (host can render a ListBox on top using
 // PopoverBounds).
-func (d *DropDown) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (d *DropDown) Draw(p painter.Painter, theme *Theme) {
 	r := d.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	textY := r.Y + (r.H-GlyphHeight)/2
-	DrawText(surface, surfaceW, r.X+6, textY, d.Current(), theme.OnSurface)
+	DrawText(p, r.X+6, textY, d.Current(), theme.OnSurface)
 	// ▼ chevron on the right edge to signal a drop-down.
 	cx := r.X + r.W - 10
 	cy := r.Y + r.H/2
 	for t := 0; t < 4; t++ {
-		fillRect(surface, surfaceW, cx-t, cy-1+t, 1+2*t, 1, theme.OnSurface)
+		fillRect(p, cx-t, cy-1+t, 1+2*t, 1, theme.OnSurface)
 	}
 }
 

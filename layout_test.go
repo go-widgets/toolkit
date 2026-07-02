@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
 
 // spyWidget is a minimal Widget implementation for layout tests: it
 // records the last Bounds it was assigned + the last Event it
@@ -17,9 +21,9 @@ type spyWidget struct {
 	evCount   int
 }
 
-func (s *spyWidget) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (s *spyWidget) Draw(p painter.Painter, theme *Theme) {
 	s.drawCount++
-	_, _, _ = surface, surfaceW, theme
+	_, _ = p, theme
 }
 
 func (s *spyWidget) OnEvent(ev Event) {
@@ -138,7 +142,7 @@ func TestHBoxDrawFansOut(t *testing.T) {
 	h.Append(c1)
 	h.Append(c2)
 	h.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
-	h.Draw(nil, 0, DefaultLight())
+	h.Draw(newP(nil, 0), DefaultLight())
 	if c1.drawCount != 1 || c2.drawCount != 1 {
 		t.Fatalf("each child should be drawn once; got %d/%d", c1.drawCount, c2.drawCount)
 	}
@@ -242,7 +246,7 @@ func TestVBoxDrawFansOut(t *testing.T) {
 	c := &spyWidget{}
 	v.Append(c)
 	v.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
-	v.Draw(nil, 0, DefaultLight())
+	v.Draw(newP(nil, 0), DefaultLight())
 	if c.drawCount != 1 {
 		t.Fatalf("child should be drawn once; got %d", c.drawCount)
 	}
@@ -330,7 +334,7 @@ func TestGridDrawFansOut(t *testing.T) {
 	c := &spyWidget{}
 	g.Attach(c, 0, 0)
 	g.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
-	g.Draw(nil, 0, DefaultLight())
+	g.Draw(newP(nil, 0), DefaultLight())
 	if c.drawCount != 1 {
 		t.Fatalf("child not drawn; count = %d", c.drawCount)
 	}
@@ -345,7 +349,7 @@ func TestFrameDrawBorderAtCorners(t *testing.T) {
 	f := NewFrame(child)
 	f.SetBounds(Rect{X: 4, Y: 4, W: 20, H: 20})
 	buf := makeSurface(w, h)
-	f.Draw(buf, w, theme)
+	f.Draw(newP(buf, w), theme)
 
 	// All four corners painted in Theme.Border.
 	corners := [][2]int{{4, 4}, {23, 4}, {4, 23}, {23, 23}}
@@ -398,7 +402,7 @@ func TestFrameNilChildSetBoundsAndDrawSafe(t *testing.T) {
 	f := NewFrame(nil)
 	f.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
 	buf := makeSurface(16, 16)
-	f.Draw(buf, 16, DefaultLight()) // must not panic
+	f.Draw(newP(buf, 16), DefaultLight()) // must not panic
 	// Border still painted at top-left.
 	if got := pixelAt(buf, 16, 0, 0); got != DefaultLight().Border {
 		t.Fatalf("border should still paint without child; got %+v", got)

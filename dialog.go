@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Dialog is a modal overlay: a centred Surface card with an optional
 // Title bar, a Content widget filling the body, and an action-button
 // strip at the bottom. The compositor draws a semi-darkened backdrop
@@ -59,23 +61,23 @@ func (d *Dialog) SetBounds(r Rect) {
 }
 
 // Draw paints card + title + content + buttons.
-func (d *Dialog) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 	r := d.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Background)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Background)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	// Title bar.
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, DialogTitleH, theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y, r.W, DialogTitleH, theme.SurfaceAlt)
 	titleY := r.Y + (DialogTitleH-GlyphHeight)/2
-	DrawText(surface, surfaceW, r.X+8, titleY, d.Title, theme.OnSurface)
+	DrawText(p, r.X+8, titleY, d.Title, theme.OnSurface)
 	// Content.
 	if d.Content != nil {
-		d.Content.Draw(surface, surfaceW, theme)
+		d.Content.Draw(p, theme)
 	}
 	// Action strip.
 	stripY := r.Y + r.H - DialogButtonStripH
-	fillRect(surface, surfaceW, r.X, stripY, r.W, DialogButtonStripH, theme.SurfaceAlt)
+	fillRect(p, r.X, stripY, r.W, DialogButtonStripH, theme.SurfaceAlt)
 	for _, b := range d.Buttons {
-		b.Draw(surface, surfaceW, theme)
+		b.Draw(p, theme)
 	}
 }
 

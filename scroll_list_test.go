@@ -50,7 +50,7 @@ func TestScrollViewDrawPaintsScrollbarTrack(t *testing.T) {
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 40})
 	sv.SetContentSize(40, 200) // tall content -> scrollbar visible
 	buf := makeSurface(w, h)
-	sv.Draw(buf, w, theme)
+	sv.Draw(newP(buf, w), theme)
 	// Track pixel at right edge of bounds, below the thumb. With
 	// contentH=200 + viewH=40 + OffsetY=0, thumbH=8 covering [0,8);
 	// any row past 10 lands on bare track.
@@ -64,7 +64,7 @@ func TestScrollViewDrawWithNilChildNoCrash(t *testing.T) {
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 20})
 	sv.SetContentSize(20, 100)
 	buf := makeSurface(32, 32)
-	sv.Draw(buf, 32, DefaultLight())
+	sv.Draw(newP(buf, 32), DefaultLight())
 }
 
 func TestScrollViewDrawThumbPositionFollowsOffset(t *testing.T) {
@@ -75,7 +75,7 @@ func TestScrollViewDrawThumbPositionFollowsOffset(t *testing.T) {
 	sv.SetContentSize(24, 200)
 	sv.Scroll(0, 100)
 	buf := makeSurface(w, h)
-	sv.Draw(buf, w, theme)
+	sv.Draw(newP(buf, w), theme)
 	// Somewhere in the middle of the track should be Accent (thumb).
 	found := false
 	for y := 0; y < 40; y++ {
@@ -96,7 +96,7 @@ func TestScrollViewDrawThumbMinSize(t *testing.T) {
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 24, H: 16})
 	sv.SetContentSize(24, 1_000_000) // huge -> thumb min 8 px
 	buf := makeSurface(w, h)
-	sv.Draw(buf, w, theme)
+	sv.Draw(newP(buf, w), theme)
 }
 
 func TestScrollViewHitTest(t *testing.T) {
@@ -117,7 +117,7 @@ func TestScrollViewDrawZeroHeightThumbBranch(t *testing.T) {
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 24, H: 0}) // r.H == 0
 	sv.SetContentSize(24, 200)
 	buf := makeSurface(w, h)
-	sv.Draw(buf, w, theme)
+	sv.Draw(newP(buf, w), theme)
 	// Just must not panic; covers the r.H > 0 guard.
 }
 
@@ -186,7 +186,7 @@ func TestListBoxDrawSelectedAndUnselected(t *testing.T) {
 	l.Selected = 1
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 40})
 	buf := makeSurface(w, h)
-	l.Draw(buf, w, theme)
+	l.Draw(newP(buf, w), theme)
 	// Row 0 painted in Surface.
 	if pixelAt(buf, w, 25, 5) != theme.Surface {
 		t.Fatalf("row 0 bg = %+v, want Surface", pixelAt(buf, w, 25, 5))

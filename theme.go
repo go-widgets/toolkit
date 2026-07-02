@@ -4,14 +4,18 @@
 
 package toolkit
 
-// RGBA is a 32-bit colour value packed as bytes (Red, Green, Blue,
-// Alpha). Alpha is honoured by the rasterizer when supplied, but the
-// stock widgets all paint opaque pixels (A=0xFF) for simplicity.
-type RGBA struct{ R, G, B, A uint8 }
+import "github.com/go-widgets/painter"
 
-// RGB constructs an opaque colour with A=0xFF. Used in theme literals
-// so the alpha plumbing isn't visible at the call site.
-func RGB(r, g, b uint8) RGBA { return RGBA{r, g, b, 0xFF} }
+// RGBA is a 32-bit colour value packed as bytes (Red, Green, Blue,
+// Alpha). Alias of painter.RGBA so widgets emit values that flow
+// unchanged through any Painter back-end (pixel buffer, cell grid,
+// SVG stream). Alpha is honoured by the pixel rasteriser; the stock
+// widgets all paint opaque pixels (A=0xFF).
+type RGBA = painter.RGBA
+
+// RGB constructs an opaque colour with A=0xFF. Kept as a package-
+// level helper so theme literals don't have to import painter.
+func RGB(r, g, b uint8) RGBA { return painter.RGB(r, g, b) }
 
 // Theme bundles every visual constant a widget needs to render itself.
 // One Theme value cascades through every widget in an app, so swapping

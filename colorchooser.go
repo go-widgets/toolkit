@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // ColorChooser is a 3-channel R/G/B picker with a live preview. Each
 // channel is rendered as a horizontal track with a 1-pixel knob the
 // user drags to change the value. The OnChange callback fires with
@@ -37,34 +39,34 @@ func NewColorChooser(initial RGBA) *ColorChooser {
 }
 
 // Draw paints the 3 sliders + preview swatch + hex label.
-func (c *ColorChooser) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 
 	// 3 channel tracks.
 	channelW := r.W - 2*ColorChooserPadX
 	for i, ch := range [3]string{"R", "G", "B"} {
 		y := r.Y + ColorChooserChannelPadY + i*ColorChooserChannelH
 		labelX := r.X + 2
-		DrawText(surface, surfaceW, labelX, y+(ColorChooserChannelH-GlyphHeight)/2, ch, theme.OnSurface)
+		DrawText(p, labelX, y+(ColorChooserChannelH-GlyphHeight)/2, ch, theme.OnSurface)
 		trackX := r.X + ColorChooserPadX + 12
 		trackY := y + ColorChooserChannelH/2 - 2
 		trackW := channelW - 12
-		fillRect(surface, surfaceW, trackX, trackY, trackW, 4, theme.SurfaceAlt)
-		strokeRect(surface, surfaceW, trackX, trackY, trackW, 4, theme.Border)
+		fillRect(p, trackX, trackY, trackW, 4, theme.SurfaceAlt)
+		strokeRect(p, trackX, trackY, trackW, 4, theme.Border)
 		v := int(c.channel(i))
 		knobX := trackX + v*trackW/255
-		fillRect(surface, surfaceW, knobX-1, trackY-3, 3, 10, theme.Accent)
+		fillRect(p, knobX-1, trackY-3, 3, 10, theme.Accent)
 	}
 	// Preview swatch in the right margin (centred on the chooser body).
 	previewX := r.X + r.W - 48
 	previewY := r.Y + 8
-	fillRect(surface, surfaceW, previewX, previewY, 40, ColorChooserPreviewH, c.Color)
-	strokeRect(surface, surfaceW, previewX, previewY, 40, ColorChooserPreviewH, theme.Border)
+	fillRect(p, previewX, previewY, 40, ColorChooserPreviewH, c.Color)
+	strokeRect(p, previewX, previewY, 40, ColorChooserPreviewH, theme.Border)
 	// Hex string under the swatch.
 	hex := c.Hex()
-	DrawText(surface, surfaceW, previewX, previewY+ColorChooserPreviewH+2, hex, theme.OnSurface)
+	DrawText(p, previewX, previewY+ColorChooserPreviewH+2, hex, theme.OnSurface)
 }
 
 // OnEvent handles clicks on the 3 tracks to move the channel knob.
@@ -159,7 +161,7 @@ func (c *ColorChooser) SetHex(s string) {
 	if !ok1 || !ok2 || !ok3 {
 		return
 	}
-	c.Color = RGBA{r, g, b, 0xFF}
+	c.Color = RGBA{R: r, G: g, B: b, A: 0xFF}
 	if c.OnChange != nil {
 		c.OnChange(c.Color)
 	}

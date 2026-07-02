@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Calendar renders a month grid (Mon..Sun columns, up to 6 rows) for
 // a given (Year, Month). The currently-selected day is highlighted;
 // click on a day-cell selects it + fires OnSelect with the absolute
@@ -122,20 +124,20 @@ func WeekdayOfFirst(year, month int) int {
 }
 
 // Draw paints header (Y M) + weekday row + day grid.
-func (c *Calendar) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	// Header: month / year.
 	hdr := monthName(c.Month) + " " + itoa(c.Year)
 	hx := r.X + (r.W-TextWidth(hdr))/2
 	hy := r.Y + (CalendarHeaderH-GlyphHeight)/2
-	DrawText(surface, surfaceW, hx, hy, hdr, theme.OnSurface)
+	DrawText(p, hx, hy, hdr, theme.OnSurface)
 	// Weekday row.
 	weekdayY := r.Y + CalendarHeaderH
 	for i, label := range weekdayLabels {
 		cx := r.X + i*CalendarCellW + (CalendarCellW-TextWidth(label))/2
-		DrawText(surface, surfaceW, cx, weekdayY+2, label, theme.OnSurface)
+		DrawText(p, cx, weekdayY+2, label, theme.OnSurface)
 	}
 	// Day grid.
 	first := WeekdayOfFirst(c.Year, c.Month)
@@ -156,9 +158,9 @@ func (c *Calendar) Draw(surface []byte, surfaceW int, theme *Theme) {
 		} else if isToday {
 			bg = theme.SurfaceAlt
 		}
-		fillRect(surface, surfaceW, cx, cy, CalendarCellW, CalendarCellH, bg)
+		fillRect(p, cx, cy, CalendarCellW, CalendarCellH, bg)
 		txt := itoa(d)
-		DrawText(surface, surfaceW, cx+(CalendarCellW-TextWidth(txt))/2, cy+(CalendarCellH-GlyphHeight)/2, txt, ink)
+		DrawText(p, cx+(CalendarCellW-TextWidth(txt))/2, cy+(CalendarCellH-GlyphHeight)/2, txt, ink)
 	}
 }
 

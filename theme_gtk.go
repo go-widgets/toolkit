@@ -156,7 +156,7 @@ func parseGTKDefineColors(css string) map[string]RGBA {
 func parseCSSColor(s string) (RGBA, bool) {
 	s = strings.TrimSpace(s)
 	if s == "transparent" {
-		return RGBA{0, 0, 0, 0}, true
+		return RGBA{R: 0, G: 0, B: 0, A: 0}, true
 	}
 	if strings.HasPrefix(s, "#") {
 		return parseHexColor(s[1:])
@@ -177,7 +177,7 @@ func parseHexColor(h string) (RGBA, bool) {
 		if !ok1 || !ok2 || !ok3 {
 			return RGBA{}, false
 		}
-		return RGBA{r<<4 | r, g<<4 | g, b<<4 | b, 0xFF}, true
+		return RGBA{R: r<<4 | r, G: g<<4 | g, B: b<<4 | b, A: 0xFF}, true
 	case 6:
 		r, ok1 := hex2(h[0], h[1])
 		g, ok2 := hex2(h[2], h[3])
@@ -185,7 +185,7 @@ func parseHexColor(h string) (RGBA, bool) {
 		if !ok1 || !ok2 || !ok3 {
 			return RGBA{}, false
 		}
-		return RGBA{r, g, b, 0xFF}, true
+		return RGBA{R: r, G: g, B: b, A: 0xFF}, true
 	case 8:
 		r, ok1 := hex2(h[0], h[1])
 		g, ok2 := hex2(h[2], h[3])
@@ -194,7 +194,7 @@ func parseHexColor(h string) (RGBA, bool) {
 		if !ok1 || !ok2 || !ok3 || !ok4 {
 			return RGBA{}, false
 		}
-		return RGBA{r, g, b, a}, true
+		return RGBA{R: r, G: g, B: b, A: a}, true
 	}
 	return RGBA{}, false
 }
@@ -223,7 +223,7 @@ func parseRGBFunc(s string) (RGBA, bool) {
 	if len(parts) >= 4 {
 		a = parseAlpha(parts[3])
 	}
-	return RGBA{r, g, b, a}, true
+	return RGBA{R: r, G: g, B: b, A: a}, true
 }
 
 // parseByteOrPct parses "128" (0-255) or "50%" (0-100%).

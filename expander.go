@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Expander is a header row that toggles a content area's visibility.
 // The header is ExpanderHeaderH px tall, shows a chevron + label;
 // clicking the header flips Expanded + fires OnExpand.
@@ -29,10 +31,10 @@ func NewExpander(label string, content Widget) *Expander {
 
 // Draw paints the header (chevron + label) + the content widget
 // when Expanded.
-func (e *Expander) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (e *Expander) Draw(p painter.Painter, theme *Theme) {
 	r := e.Bounds()
 	// Header background.
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, ExpanderHeaderH, theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y, r.W, ExpanderHeaderH, theme.SurfaceAlt)
 	// Chevron: small triangle in Theme.OnSurface. Collapsed → right-
 	// pointing (▶), expanded → down-pointing (▼). 5-px tall.
 	cx := r.X + 6
@@ -40,20 +42,20 @@ func (e *Expander) Draw(surface []byte, surfaceW int, theme *Theme) {
 	if e.Expanded {
 		// ▼ : flat top, point at bottom.
 		for t := 0; t < 5; t++ {
-			fillRect(surface, surfaceW, cx-t, cy-2+t, 1+2*t, 1, theme.OnSurface)
+			fillRect(p, cx-t, cy-2+t, 1+2*t, 1, theme.OnSurface)
 		}
 	} else {
 		// ▶ : flat left, point at right.
 		for t := 0; t < 5; t++ {
-			fillRect(surface, surfaceW, cx-2+t, cy-t, 1, 1+2*t, theme.OnSurface)
+			fillRect(p, cx-2+t, cy-t, 1, 1+2*t, theme.OnSurface)
 		}
 	}
 	textY := r.Y + (ExpanderHeaderH-GlyphHeight)/2
-	DrawText(surface, surfaceW, r.X+16, textY, e.Label, theme.OnSurface)
+	DrawText(p, r.X+16, textY, e.Label, theme.OnSurface)
 	if e.Expanded && e.Content != nil {
 		body := Rect{X: r.X, Y: r.Y + ExpanderHeaderH, W: r.W, H: r.H - ExpanderHeaderH}
 		e.Content.SetBounds(body)
-		e.Content.Draw(surface, surfaceW, theme)
+		e.Content.Draw(p, theme)
 	}
 }
 

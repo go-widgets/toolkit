@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Statusbar is a thin horizontal strip at the bottom of a window that
 // shows N text segments (e.g. "Line 12, Col 4" + "UTF-8" + "Plain
 // text" in an editor). Segments paint left-to-right with a 1-pixel
@@ -48,10 +50,10 @@ func (s *Statusbar) SetSegment(i int, text string) {
 }
 
 // Draw paints the strip + every segment.
-func (s *Statusbar) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (s *Statusbar) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	min := s.SegmentMinW
 	if min <= 0 {
 		min = StatusbarSegmentMinW
@@ -69,9 +71,9 @@ func (s *Statusbar) Draw(surface []byte, surfaceW int, theme *Theme) {
 			}
 		}
 		ty := r.Y + (r.H-GlyphHeight)/2
-		DrawText(surface, surfaceW, x+StatusbarPadX, ty, seg, theme.OnSurface)
+		DrawText(p, x+StatusbarPadX, ty, seg, theme.OnSurface)
 		if i < n-1 {
-			fillRect(surface, surfaceW, x+w-1, r.Y+2, 1, r.H-4, theme.Border)
+			fillRect(p, x+w-1, r.Y+2, 1, r.H-4, theme.Border)
 		}
 		x += w
 	}

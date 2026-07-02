@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Notification is a transient toast — an auto-dismissing banner that
 // slides in over the app's normal frame, holds for a few ticks, then
 // hides itself. Cousin of Tooltip (both are informational overlays)
@@ -86,12 +88,12 @@ func (n *Notification) Tick() {
 // Draw paints the toast when Visible. Filled Accent panel with a
 // 1-px Border stroke, Text in the Background ink (inverted for
 // contrast). Nothing drawn when hidden.
-func (n *Notification) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (n *Notification) Draw(p painter.Painter, theme *Theme) {
 	if !n.Visible {
 		return
 	}
 	r := n.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Accent)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
-	DrawText(surface, surfaceW, r.X+NotificationPadX, r.Y+NotificationPadY, n.Text, theme.Background)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Accent)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	DrawText(p, r.X+NotificationPadX, r.Y+NotificationPadY, n.Text, theme.Background)
 }

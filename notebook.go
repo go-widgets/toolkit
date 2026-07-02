@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // NotebookTab is one entry in a Notebook. Label is the human title
 // painted on the tab; Page is the widget shown when the tab is
 // active.
@@ -38,25 +40,25 @@ func (n *Notebook) AddTab(label string, page Widget) {
 }
 
 // Draw paints the strip + the active page.
-func (n *Notebook) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
 	r := n.Bounds()
 	// Strip background.
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, NotebookTabStripH, theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y, r.W, NotebookTabStripH, theme.SurfaceAlt)
 	for i, tab := range n.Tabs {
 		tx := r.X + i*NotebookTabWidth
 		fill := theme.SurfaceAlt
 		if i == n.Active {
 			fill = theme.Surface
 		}
-		fillRect(surface, surfaceW, tx, r.Y, NotebookTabWidth, NotebookTabStripH, fill)
+		fillRect(p, tx, r.Y, NotebookTabWidth, NotebookTabStripH, fill)
 		// Label centred in the tab.
 		tw := TextWidth(tab.Label)
 		textX := tx + (NotebookTabWidth-tw)/2
 		textY := r.Y + (NotebookTabStripH-GlyphHeight)/2
-		DrawText(surface, surfaceW, textX, textY, tab.Label, theme.OnSurface)
+		DrawText(p, textX, textY, tab.Label, theme.OnSurface)
 		if i == n.Active {
 			// Accent underline so the active tab reads as selected.
-			fillRect(surface, surfaceW, tx, r.Y+NotebookTabStripH-2, NotebookTabWidth, 2, theme.Accent)
+			fillRect(p, tx, r.Y+NotebookTabStripH-2, NotebookTabWidth, 2, theme.Accent)
 		}
 	}
 	// Active page in the body area.
@@ -65,7 +67,7 @@ func (n *Notebook) Draw(surface []byte, surfaceW int, theme *Theme) {
 		if page != nil {
 			body := Rect{X: r.X, Y: r.Y + NotebookTabStripH, W: r.W, H: r.H - NotebookTabStripH}
 			page.SetBounds(body)
-			page.Draw(surface, surfaceW, theme)
+			page.Draw(p, theme)
 		}
 	}
 }

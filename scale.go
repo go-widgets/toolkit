@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Scale is a horizontal slider over a continuous Min..Max range.
 // Click on the track jumps the thumb to that x-position + fires
 // OnChange. The 4-px track sits across the vertical midpoint in
@@ -39,10 +41,10 @@ func (s *Scale) SetValue(v float64) {
 }
 
 // Draw paints the track + the thumb.
-func (s *Scale) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	trackY := r.Y + (r.H-4)/2
-	fillRect(surface, surfaceW, r.X, trackY, r.W, 4, theme.SurfaceAlt)
+	fillRect(p, r.X, trackY, r.W, 4, theme.SurfaceAlt)
 	// Position the thumb. When Max == Min, sit at the left.
 	var pos float64
 	if s.Max > s.Min {
@@ -50,7 +52,7 @@ func (s *Scale) Draw(surface []byte, surfaceW int, theme *Theme) {
 	}
 	tx := r.X + int(pos*float64(r.W-scaleThumbSize))
 	ty := r.Y + (r.H-scaleThumbSize)/2
-	fillRect(surface, surfaceW, tx, ty, scaleThumbSize, scaleThumbSize, theme.Accent)
+	fillRect(p, tx, ty, scaleThumbSize, scaleThumbSize, theme.Accent)
 }
 
 // OnEvent: click jumps the thumb to the clicked x-position +

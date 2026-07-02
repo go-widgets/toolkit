@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Entry is a single-line text input. Receives focus on click, edits
 // Text via EventKeyDown (Backspace, ArrowLeft/Right, Home, End,
 // Enter) + EventChar (printable runes). A 1-pixel vertical cursor
@@ -29,19 +31,19 @@ func NewEntry(initial string) *Entry {
 
 // Draw paints the border, fill, text + (when Focused) a 1-px cursor
 // stroke at the cursor's pixel position.
-func (e *Entry) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	r := e.Bounds()
 	border := theme.Border
 	if e.Focused {
 		border = theme.Accent
 	}
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, border)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+	strokeRect(p, r.X, r.Y, r.W, r.H, border)
 	textY := r.Y + (r.H-GlyphHeight)/2
-	DrawText(surface, surfaceW, r.X+4, textY, e.Text, theme.OnSurface)
+	DrawText(p, r.X+4, textY, e.Text, theme.OnSurface)
 	if e.Focused {
 		cx := r.X + 4 + e.Cursor*GlyphAdvance
-		fillRect(surface, surfaceW, cx, textY-1, 1, GlyphHeight+2, theme.OnSurface)
+		fillRect(p, cx, textY-1, 1, GlyphHeight+2, theme.OnSurface)
 	}
 }
 

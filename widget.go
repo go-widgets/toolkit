@@ -21,20 +21,14 @@
 //     hit-testing + offset adjustment).
 package toolkit
 
-// Rect is an axis-aligned rectangle in pixel coordinates. X/Y is the
-// top-left corner; W/H are width/height. Used to position widgets
-// within their parent surface + as the bounding-box for hit-testing.
-type Rect struct {
-	X, Y, W, H int
-}
+import "github.com/go-widgets/painter"
 
-// Contains reports whether (px, py) falls inside the rectangle. The
-// right + bottom edges are EXCLUSIVE so a w*h rect covers exactly
-// w*h pixels (matches every other half-open rectangle in this
-// package).
-func (r Rect) Contains(px, py int) bool {
-	return px >= r.X && px < r.X+r.W && py >= r.Y && py < r.Y+r.H
-}
+// Rect is an axis-aligned rectangle in pixel coordinates. X/Y is the
+// top-left corner; W/H are width/height. Aliased to painter.Rect so
+// widgets can render on any painter.Painter (PixelPainter for a
+// pixel buffer, CellPainter for a terminal grid) without a type
+// conversion. Contains() is inherited from painter.Rect.
+type Rect = painter.Rect
 
 // EventKind enumerates the input event types a widget can receive.
 // The wasmbox compositor routes DOM events through this enum so
@@ -93,10 +87,12 @@ type Widget interface {
 	// layout to position children.
 	SetBounds(r Rect)
 
-	// Draw paints the widget into surface using the supplied theme.
-	// surfaceW is the row stride in pixels (== framebuffer width).
-	// Widgets MUST NOT draw outside their Bounds() rectangle.
-	Draw(surface []byte, surfaceW int, theme *Theme)
+	// Draw paints the widget onto the Painter using the supplied
+	// theme. The Painter's back-end decides whether the primitives
+	// land as pixels (browser canvas, native window, image file) or
+	// cells (terminal grid). Widgets MUST NOT draw outside their
+	// Bounds() rectangle.
+	Draw(p painter.Painter, theme *Theme)
 
 	// HitTest reports whether (px, py) (in surface coordinates) falls
 	// on a sensitive part of the widget. Most widgets just return
@@ -121,7 +117,7 @@ func (b *Base) Bounds() Rect              { return b.rect }
 func (b *Base) SetBounds(r Rect)          { b.rect = r }
 func (b *Base) HitTest(px, py int) bool   { return b.rect.Contains(px, py) }
 func (b *Base) OnEvent(ev Event) { _ = ev /* no-op default; widgets override */ }
-func (b *Base) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (b *Base) Draw(p painter.Painter, theme *Theme) {
 	// no-op default; concrete widgets override Draw.
-	_, _, _ = surface, surfaceW, theme
+	_, _ = p, theme
 }

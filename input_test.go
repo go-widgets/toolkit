@@ -138,7 +138,7 @@ func TestEntryDrawFocusedShowsCursor(t *testing.T) {
 	e.Focused = true
 	e.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(w, h)
-	e.Draw(buf, w, theme)
+	e.Draw(newP(buf, w), theme)
 	// Border in Accent (focused).
 	if pixelAt(buf, w, 0, 0) != theme.Accent {
 		t.Fatalf("focused top-left border = %+v, want Accent", pixelAt(buf, w, 0, 0))
@@ -151,7 +151,7 @@ func TestEntryDrawUnfocused(t *testing.T) {
 	e := NewEntry("ab")
 	e.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(w, h)
-	e.Draw(buf, w, theme)
+	e.Draw(newP(buf, w), theme)
 	if pixelAt(buf, w, 0, 0) != theme.Border {
 		t.Fatalf("unfocused top-left border = %+v, want Border", pixelAt(buf, w, 0, 0))
 	}
@@ -192,7 +192,7 @@ func TestCheckButtonDrawCheckedAndUnchecked(t *testing.T) {
 	c := NewCheckButton("OK", true)
 	c.SetBounds(Rect{X: 2, Y: 4, W: 70, H: 16})
 	buf := makeSurface(w, h)
-	c.Draw(buf, w, theme)
+	c.Draw(newP(buf, w), theme)
 	// Centre of the box (which is at x=2..14, y=6..18 with box centred
 	// vertically inside H=16). Checked → Accent fill at (5, 10).
 	if pixelAt(buf, w, 5, 10) != theme.Accent {
@@ -200,7 +200,7 @@ func TestCheckButtonDrawCheckedAndUnchecked(t *testing.T) {
 	}
 	c.Checked = false
 	buf2 := makeSurface(w, h)
-	c.Draw(buf2, w, theme)
+	c.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 5, 10) != theme.Surface {
 		t.Fatalf("unchecked box fill = %+v, want Surface", pixelAt(buf2, w, 5, 10))
 	}
@@ -278,14 +278,14 @@ func TestRadioButtonDrawCheckedAndUnchecked(t *testing.T) {
 	r.Checked = true
 	r.SetBounds(Rect{X: 2, Y: 4, W: 70, H: 16})
 	buf := makeSurface(w, h)
-	r.Draw(buf, w, theme)
+	r.Draw(newP(buf, w), theme)
 	// Inner Accent dot at the centre.
 	if pixelAt(buf, w, 8, 10) != theme.Accent {
 		t.Fatalf("checked radio dot = %+v, want Accent", pixelAt(buf, w, 8, 10))
 	}
 	r.Checked = false
 	buf2 := makeSurface(w, h)
-	r.Draw(buf2, w, theme)
+	r.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 8, 10) != theme.Surface {
 		t.Fatalf("unchecked radio interior = %+v, want Surface", pixelAt(buf2, w, 8, 10))
 	}
@@ -326,7 +326,7 @@ func TestToggleButtonDrawPressedAndUnpressed(t *testing.T) {
 	tb := NewToggleButton("X", true)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(w, h)
-	tb.Draw(buf, w, theme)
+	tb.Draw(newP(buf, w), theme)
 	// Pick a pixel far from the centred label glyph (which is around
 	// x=27..32 for the 5-px "X") so the face fill is the only thing
 	// reaching the sample.
@@ -335,7 +335,7 @@ func TestToggleButtonDrawPressedAndUnpressed(t *testing.T) {
 	}
 	tb.Pressed = false
 	buf2 := makeSurface(w, h)
-	tb.Draw(buf2, w, theme)
+	tb.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 5, 10) != theme.Surface {
 		t.Fatalf("unpressed face = %+v, want Surface", pixelAt(buf2, w, 5, 10))
 	}

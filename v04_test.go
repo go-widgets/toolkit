@@ -77,13 +77,13 @@ func TestToolbarDrawIcon(t *testing.T) {
 	})
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 200, H: ToolbarButtonH})
 	tb.OnEvent(Event{Kind: EventClick, X: 12, Y: 10}) // press visual state
-	tb.Draw(v04Surface(), v04SurfW, DefaultLight())
+	tb.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
 }
 
 func TestToolbarZeroDimensionsFallback(t *testing.T) {
 	tb := &Toolbar{Items: []ToolbarItem{{Label: "A"}}, pressIdx: -1}
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 24, H: 24})
-	tb.Draw(v04Surface(), v04SurfW, DefaultLight())
+	tb.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
 	if tb.hitTest(0, 0) != 0 {
 		t.Fatal("zero-W/H toolbar should still hit-test via fallback constants")
 	}
@@ -103,7 +103,7 @@ func TestToolbarNilOnClick(t *testing.T) {
 
 func TestBlitRGBASrcTooShort(t *testing.T) {
 	src := []byte{0xFF, 0xFF, 0xFF, 0xFF} // 1 px when caller asks for 2x2
-	blitRGBA(v04Surface(), v04SurfW, 0, 0, 2, 2, src)
+	blitRGBA(newP(v04Surface(), v04SurfW), 0, 0, 2, 2, src)
 }
 
 // --- Statusbar -----------------------------------------------------------
@@ -111,7 +111,7 @@ func TestBlitRGBASrcTooShort(t *testing.T) {
 func TestStatusbarDrawAndSet(t *testing.T) {
 	sb := NewStatusbar([]string{"A", "B"})
 	sb.SetBounds(Rect{X: 0, Y: 0, W: 200, H: StatusbarH})
-	sb.Draw(v04Surface(), v04SurfW, DefaultLight())
+	sb.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
 	sb.SetSegment(0, "Updated")
 	sb.SetSegment(3, "Grown") // grows past end
 	if len(sb.Segments) != 4 {
@@ -129,13 +129,13 @@ func TestStatusbarDrawAndSet(t *testing.T) {
 func TestStatusbarZeroMinFallback(t *testing.T) {
 	sb := &Statusbar{Segments: []string{"a", "b"}}
 	sb.SetBounds(Rect{X: 0, Y: 0, W: 200, H: StatusbarH})
-	sb.Draw(v04Surface(), v04SurfW, DefaultLight())
+	sb.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
 }
 
 func TestStatusbarSingleSegment(t *testing.T) {
 	sb := NewStatusbar([]string{"only"})
 	sb.SetBounds(Rect{X: 0, Y: 0, W: 200, H: StatusbarH})
-	sb.Draw(v04Surface(), v04SurfW, DefaultLight()) // last-segment-fills branch
+	sb.Draw(newP(v04Surface(), v04SurfW), DefaultLight()) // last-segment-fills branch
 }
 
 // --- FileChooser ---------------------------------------------------------
@@ -153,7 +153,7 @@ func TestFileChooserOpenAndCancel(t *testing.T) {
 	fc.OnAccept = func(p string) { opened = p }
 	fc.OnCancel = func() { cancelled = "yes" }
 	fc.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
-	fc.Draw(v04Surface(), v04SurfW, DefaultLight())
+	fc.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
 
 	// Click on the tree's first row (root): selects it + fills the list.
 	treeR := fc.tree.Bounds()
@@ -247,7 +247,7 @@ func TestCalendarDraw(t *testing.T) {
 	c := NewCalendar(2026, 6, 30)
 	c.SetToday(2026, 6, 30)
 	c.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
-	c.Draw(v04Surface(), v04SurfW, DefaultLight())
+	c.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
 }
 
 func TestCalendarClampMonth(t *testing.T) {
@@ -383,20 +383,20 @@ func TestItoa(t *testing.T) {
 // --- ColorChooser --------------------------------------------------------
 
 func TestColorChooserDraw(t *testing.T) {
-	cc := NewColorChooser(RGBA{0x10, 0x20, 0x30, 0xFF})
+	cc := NewColorChooser(RGBA{R: 0x10, G: 0x20, B: 0x30, A: 0xFF})
 	cc.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	cc.Draw(v04Surface(), v04SurfW, DefaultLight())
+	cc.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
 }
 
 func TestColorChooserNewForcesAlpha(t *testing.T) {
-	cc := NewColorChooser(RGBA{0, 0, 0, 0})
+	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0})
 	if cc.Color.A != 0xFF {
 		t.Fatalf("alpha must be forced to 0xFF, got %d", cc.Color.A)
 	}
 }
 
 func TestColorChooserClick(t *testing.T) {
-	cc := NewColorChooser(RGBA{0, 0, 0, 0xFF})
+	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	got := uint8(0)
 	cc.OnChange = func(c RGBA) { got = c.R }
 	cc.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
@@ -424,7 +424,7 @@ func TestColorChooserClick(t *testing.T) {
 }
 
 func TestColorChooserClickOutsideBounds(t *testing.T) {
-	cc := NewColorChooser(RGBA{0, 0, 0, 0xFF})
+	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	cc.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	cc.OnEvent(Event{Kind: EventClick, X: -1, Y: -1}) // out of bounds
 	cc.OnEvent(Event{Kind: EventClick, X: 999, Y: 999})
@@ -434,13 +434,13 @@ func TestColorChooserClickOutsideBounds(t *testing.T) {
 }
 
 func TestColorChooserNilOnChange(t *testing.T) {
-	cc := NewColorChooser(RGBA{0, 0, 0, 0xFF})
+	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	cc.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	cc.OnEvent(Event{Kind: EventClick, X: 100, Y: ColorChooserChannelPadY + 2})
 }
 
 func TestColorChooserChannelGetterDefault(t *testing.T) {
-	cc := NewColorChooser(RGBA{0x12, 0x34, 0x56, 0xFF})
+	cc := NewColorChooser(RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xFF})
 	if cc.channel(0) != 0x12 || cc.channel(1) != 0x34 || cc.channel(2) != 0x56 {
 		t.Fatalf("channel getter wrong: %v", cc.Color)
 	}
@@ -451,14 +451,14 @@ func TestColorChooserChannelGetterDefault(t *testing.T) {
 }
 
 func TestColorChooserHex(t *testing.T) {
-	cc := NewColorChooser(RGBA{0xAB, 0xCD, 0xEF, 0xFF})
+	cc := NewColorChooser(RGBA{R: 0xAB, G: 0xCD, B: 0xEF, A: 0xFF})
 	if got := cc.Hex(); got != "#ABCDEF" {
 		t.Fatalf("Hex want #ABCDEF got %q", got)
 	}
 }
 
 func TestColorChooserSetHex(t *testing.T) {
-	cc := NewColorChooser(RGBA{0, 0, 0, 0xFF})
+	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	got := RGBA{}
 	cc.OnChange = func(c RGBA) { got = c }
 	cc.SetHex("#102030")
@@ -484,7 +484,7 @@ func TestColorChooserSetHex(t *testing.T) {
 }
 
 func TestColorChooserSetHexNilOnChange(t *testing.T) {
-	cc := NewColorChooser(RGBA{0, 0, 0, 0xFF})
+	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	cc.SetHex("#FF0000")
 }
 
@@ -650,11 +650,11 @@ func TestCalendarTodayPillNonSelected(t *testing.T) {
 	c := NewCalendar(2026, 6, 1)
 	c.SetToday(2026, 6, 30)
 	c.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
-	c.Draw(v04Surface(), v04SurfW, DefaultLight())
+	c.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
 }
 
 func TestColorChooserSetHexLengthMismatch(t *testing.T) {
-	cc := NewColorChooser(RGBA{0, 0, 0, 0xFF})
+	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	cc.SetHex("ABCDE") // len 5 -> rejected
 	if cc.Color.R != 0 {
 		t.Fatal("malformed SetHex must not mutate")
@@ -682,7 +682,7 @@ func TestToolbarPressedInkBranch(t *testing.T) {
 	tb := NewToolbar([]ToolbarItem{{Label: "A", OnClick: func() {}}})
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 24, H: 24})
 	tb.OnEvent(Event{Kind: EventClick, X: 12, Y: 10})
-	tb.Draw(v04Surface(), v04SurfW, DefaultLight())
+	tb.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
 	if tb.pressIdx != 0 {
 		t.Fatal("pressIdx should be 0 after click")
 	}

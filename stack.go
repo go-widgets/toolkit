@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Stack holds N named pages (Widgets) but shows only ONE at a time --
 // the page named by Visible. Use AddPage / SetVisible to navigate.
 // Events route to the visible page only.
@@ -49,10 +51,10 @@ func (s *Stack) SetBounds(r Rect) {
 }
 
 // Draw paints only the visible page.
-func (s *Stack) Draw(surface []byte, surfaceW int, theme *Theme) {
-	if p, ok := s.Pages[s.Visible]; ok {
-		p.SetBounds(s.Bounds())
-		p.Draw(surface, surfaceW, theme)
+func (s *Stack) Draw(p painter.Painter, theme *Theme) {
+	if page, ok := s.Pages[s.Visible]; ok {
+		page.SetBounds(s.Bounds())
+		page.Draw(p, theme)
 	}
 }
 

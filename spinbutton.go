@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 import "strconv"
 
 // SpinButton is an integer input with `+` and `−` buttons on the
@@ -46,23 +48,23 @@ func (s *SpinButton) SetValue(v int) {
 
 // Draw paints the body (with the value text) + the two stacked
 // buttons on the right.
-func (s *SpinButton) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	// Value text in the left portion.
 	text := strconv.Itoa(s.Value)
 	textY := r.Y + (r.H-GlyphHeight)/2
-	DrawText(surface, surfaceW, r.X+4, textY, text, theme.OnSurface)
+	DrawText(p, r.X+4, textY, text, theme.OnSurface)
 	// Two buttons on the right, vertically stacked.
 	btnX := r.X + r.W - spinButtonW
 	half := r.H / 2
-	fillRect(surface, surfaceW, btnX, r.Y, spinButtonW, half, theme.SurfaceAlt)
-	fillRect(surface, surfaceW, btnX, r.Y+half, spinButtonW, r.H-half, theme.SurfaceAlt)
-	strokeRect(surface, surfaceW, btnX, r.Y, spinButtonW, half, theme.Border)
-	strokeRect(surface, surfaceW, btnX, r.Y+half, spinButtonW, r.H-half, theme.Border)
-	DrawText(surface, surfaceW, btnX+5, r.Y+(half-GlyphHeight)/2, "+", theme.OnSurface)
-	DrawText(surface, surfaceW, btnX+5, r.Y+half+(r.H-half-GlyphHeight)/2, "-", theme.OnSurface)
+	fillRect(p, btnX, r.Y, spinButtonW, half, theme.SurfaceAlt)
+	fillRect(p, btnX, r.Y+half, spinButtonW, r.H-half, theme.SurfaceAlt)
+	strokeRect(p, btnX, r.Y, spinButtonW, half, theme.Border)
+	strokeRect(p, btnX, r.Y+half, spinButtonW, r.H-half, theme.Border)
+	DrawText(p, btnX+5, r.Y+(half-GlyphHeight)/2, "+", theme.OnSurface)
+	DrawText(p, btnX+5, r.Y+half+(r.H-half-GlyphHeight)/2, "-", theme.OnSurface)
 }
 
 // OnEvent: click on the upper-right button increments; click on the

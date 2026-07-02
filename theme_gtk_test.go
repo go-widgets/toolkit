@@ -26,23 +26,23 @@ func TestLoadGTKThemeAdwaita(t *testing.T) {
 	if err != nil {
 		t.Fatalf("unexpected err: %v", err)
 	}
-	if th.Background != (RGBA{0xFA, 0xFA, 0xFA, 0xFF}) {
+	if th.Background != (RGBA{R: 0xFA, G: 0xFA, B: 0xFA, A: 0xFF}) {
 		t.Fatalf("Background wrong: %+v", th.Background)
 	}
 	if th.OnBackground.R != 26 {
 		t.Fatalf("OnBackground.R want 26 got %d", th.OnBackground.R)
 	}
-	if th.Surface != (RGBA{0xFF, 0xFF, 0xFF, 0xFF}) {
+	if th.Surface != (RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}) {
 		t.Fatalf("Surface wrong: %+v", th.Surface)
 	}
-	if th.Accent != (RGBA{0x35, 0x84, 0xE4, 0xFF}) {
+	if th.Accent != (RGBA{R: 0x35, G: 0x84, B: 0xE4, A: 0xFF}) {
 		t.Fatalf("Accent wrong: %+v", th.Accent)
 	}
 	// Border = rgba: alpha 0.15 ≈ 0.15 * 255 = 38.
 	if th.Border.A == 0xFF {
 		t.Fatalf("Border alpha should be < 0xFF got %d", th.Border.A)
 	}
-	if th.SurfaceAlt != (RGBA{0xF0, 0xF0, 0xF0, 0xFF}) {
+	if th.SurfaceAlt != (RGBA{R: 0xF0, G: 0xF0, B: 0xF0, A: 0xFF}) {
 		t.Fatalf("SurfaceAlt wrong: %+v", th.SurfaceAlt)
 	}
 	// Extra holds the unmapped custom names.
@@ -69,7 +69,7 @@ func TestLoadGTKThemeGTK3Fallback(t *testing.T) {
 	if th.Background.R != 0x11 || th.OnBackground.R != 0xEE {
 		t.Fatalf("GTK3 fallback wrong: %+v / %+v", th.Background, th.OnBackground)
 	}
-	if th.Accent != (RGBA{0xFF, 0, 0, 0xFF}) {
+	if th.Accent != (RGBA{R: 0xFF, G: 0, B: 0, A: 0xFF}) {
 		t.Fatal("Accent should pick theme_selected_bg_color")
 	}
 }
@@ -119,7 +119,7 @@ func TestLoadGTKThemeAlias(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if th.Background != (RGBA{0x11, 0x22, 0x33, 0xFF}) {
+	if th.Background != (RGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xFF}) {
 		t.Fatalf("alias resolution failed: %+v", th.Background)
 	}
 }
@@ -135,7 +135,7 @@ func TestLoadGTKThemeAliasChain(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if th.Background != (RGBA{0xAB, 0xCD, 0xEF, 0xFF}) {
+	if th.Background != (RGBA{R: 0xAB, G: 0xCD, B: 0xEF, A: 0xFF}) {
 		t.Fatalf("alias chain resolution failed: %+v", th.Background)
 	}
 }
@@ -187,7 +187,7 @@ func TestLoadGTKThemeMalformedDeclarations(t *testing.T) {
 
 func TestParseCSSColorTransparent(t *testing.T) {
 	c, ok := parseCSSColor("transparent")
-	if !ok || c != (RGBA{0, 0, 0, 0}) {
+	if !ok || c != (RGBA{R: 0, G: 0, B: 0, A: 0}) {
 		t.Fatalf("transparent wrong: %+v ok=%v", c, ok)
 	}
 }
@@ -197,10 +197,10 @@ func TestParseHexColor(t *testing.T) {
 		in   string
 		want RGBA
 	}{
-		{"FFF", RGBA{0xFF, 0xFF, 0xFF, 0xFF}},
-		{"abc", RGBA{0xAA, 0xBB, 0xCC, 0xFF}},
-		{"123456", RGBA{0x12, 0x34, 0x56, 0xFF}},
-		{"12345678", RGBA{0x12, 0x34, 0x56, 0x78}},
+		{"FFF", RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}},
+		{"abc", RGBA{R: 0xAA, G: 0xBB, B: 0xCC, A: 0xFF}},
+		{"123456", RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xFF}},
+		{"12345678", RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0x78}},
 	}
 	for _, c := range cases {
 		got, ok := parseHexColor(c.in)
@@ -234,7 +234,7 @@ func TestParseHexColor(t *testing.T) {
 
 func TestParseRGBFunc(t *testing.T) {
 	c, ok := parseCSSColor("rgb(255, 0, 0)")
-	if !ok || c != (RGBA{255, 0, 0, 0xFF}) {
+	if !ok || c != (RGBA{R: 255, G: 0, B: 0, A: 0xFF}) {
 		t.Fatalf("rgb red: %+v ok=%v", c, ok)
 	}
 	c, ok = parseCSSColor("rgba(0, 128, 255, 0.5)")

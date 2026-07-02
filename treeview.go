@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // TreeNode is one entry in a TreeView. Children are nested arbitrarily
 // deep; Expanded controls whether the children are rendered.
 type TreeNode struct {
@@ -75,7 +77,7 @@ func (t *TreeView) walkTree(n *TreeNode, depth int) {
 }
 
 // Draw paints every visible row.
-func (t *TreeView) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 	t.flatten()
 	r := t.Bounds()
 	rh := t.RowHeight
@@ -90,7 +92,7 @@ func (t *TreeView) Draw(surface []byte, surfaceW int, theme *Theme) {
 			bg = theme.Accent
 			ink = theme.Background
 		}
-		fillRect(surface, surfaceW, r.X, y, r.W, rh, bg)
+		fillRect(p, r.X, y, r.W, rh, bg)
 		indent := r.X + row.depth*TreeIndentW
 		// Chevron if the node has children: ▶ collapsed, ▼ expanded.
 		if len(row.node.Children) > 0 {
@@ -98,16 +100,16 @@ func (t *TreeView) Draw(surface []byte, surfaceW int, theme *Theme) {
 			cy := y + rh/2
 			if row.node.Expanded {
 				for q := 0; q < 4; q++ {
-					fillRect(surface, surfaceW, cx-q, cy-1+q, 1+2*q, 1, ink)
+					fillRect(p, cx-q, cy-1+q, 1+2*q, 1, ink)
 				}
 			} else {
 				for q := 0; q < 4; q++ {
-					fillRect(surface, surfaceW, cx-1+q, cy-q, 1, 1+2*q, ink)
+					fillRect(p, cx-1+q, cy-q, 1, 1+2*q, ink)
 				}
 			}
 		}
 		textY := y + (rh-GlyphHeight)/2
-		DrawText(surface, surfaceW, indent+TreeChevronW, textY, row.node.Label, ink)
+		DrawText(p, indent+TreeChevronW, textY, row.node.Label, ink)
 	}
 }
 

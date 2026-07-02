@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Tooltip is a small text bubble shown near the cursor when the user
 // hovers over a target widget. The host app drives Visible + Anchor
 // (typically toggled by a mouse-enter/leave handler with a 500 ms
@@ -45,12 +47,12 @@ func (t *Tooltip) Show(anchor Rect) {
 func (t *Tooltip) Hide() { t.Visible = false }
 
 // Draw paints the bubble when Visible.
-func (t *Tooltip) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (t *Tooltip) Draw(p painter.Painter, theme *Theme) {
 	if !t.Visible {
 		return
 	}
 	r := t.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.OnSurface)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
-	DrawText(surface, surfaceW, r.X+TooltipPadX, r.Y+TooltipPadY, t.Text, theme.Background)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.OnSurface)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	DrawText(p, r.X+TooltipPadX, r.Y+TooltipPadY, t.Text, theme.Background)
 }

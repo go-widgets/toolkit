@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // ProgressBar is a horizontal bar with a filled portion proportional
 // to Fraction in [0,1]. An optional Label is centred over the bar in
 // Theme.OnSurface ink.
@@ -29,10 +31,10 @@ func (p *ProgressBar) SetFraction(f float64) {
 }
 
 // Draw paints border + track + fill + optional centered label.
-func (p *ProgressBar) Draw(surface []byte, surfaceW int, theme *Theme) {
-	r := p.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
-	f := p.Fraction
+func (pb *ProgressBar) Draw(p painter.Painter, theme *Theme) {
+	r := pb.Bounds()
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
+	f := pb.Fraction
 	if f < 0 {
 		f = 0
 	}
@@ -41,14 +43,14 @@ func (p *ProgressBar) Draw(surface []byte, surfaceW int, theme *Theme) {
 	}
 	fillW := int(float64(r.W) * f)
 	if fillW > 0 {
-		fillRect(surface, surfaceW, r.X, r.Y, fillW, r.H, theme.Accent)
+		fillRect(p, r.X, r.Y, fillW, r.H, theme.Accent)
 	}
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
-	if p.Label != "" {
-		tw := TextWidth(p.Label)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	if pb.Label != "" {
+		tw := TextWidth(pb.Label)
 		tx := r.X + (r.W-tw)/2
 		ty := r.Y + (r.H-GlyphHeight)/2
-		DrawText(surface, surfaceW, tx, ty, p.Label, theme.OnSurface)
+		DrawText(p, tx, ty, pb.Label, theme.OnSurface)
 	}
 }
 
@@ -71,7 +73,7 @@ func NewLevelBar(max int) *LevelBar {
 
 // Draw paints Max cells with a 1-px gap; the first Value cells use
 // Theme.Accent, the rest Theme.SurfaceAlt.
-func (l *LevelBar) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (l *LevelBar) Draw(p painter.Painter, theme *Theme) {
 	r := l.Bounds()
 	if l.Max < 1 {
 		return
@@ -86,7 +88,7 @@ func (l *LevelBar) Draw(surface []byte, surfaceW int, theme *Theme) {
 			fill = theme.Accent
 		}
 		x := r.X + i*(cellW+1)
-		fillRect(surface, surfaceW, x, r.Y, cellW, r.H, fill)
+		fillRect(p, x, r.Y, cellW, r.H, fill)
 	}
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 }

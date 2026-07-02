@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // CheckButton is a square checkbox + a label. Click toggles Checked
 // + fires OnToggle. Visual: 12 x 12 px box (left-aligned), Theme.Border
 // outline, Theme.Surface fill, Theme.Accent fill + two diagonal
@@ -27,28 +29,28 @@ func NewCheckButton(label string, checked bool) *CheckButton {
 }
 
 // Draw paints the box + checkmark + label.
-func (c *CheckButton) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()
 	boxY := r.Y + (r.H-checkBoxSize)/2
 	fill := theme.Surface
 	if c.Checked {
 		fill = theme.Accent
 	}
-	fillRect(surface, surfaceW, r.X, boxY, checkBoxSize, checkBoxSize, fill)
-	strokeRect(surface, surfaceW, r.X, boxY, checkBoxSize, checkBoxSize, theme.Border)
+	fillRect(p, r.X, boxY, checkBoxSize, checkBoxSize, fill)
+	strokeRect(p, r.X, boxY, checkBoxSize, checkBoxSize, theme.Border)
 	if c.Checked {
 		// Two-segment checkmark "✓" in Theme.Background, approximated as
 		// short diagonal strokes inside the box.
 		for t := 0; t < 4; t++ {
-			fillRect(surface, surfaceW, r.X+3+t, boxY+6+t, 1, 1, theme.Background)
+			fillRect(p, r.X+3+t, boxY+6+t, 1, 1, theme.Background)
 		}
 		for t := 0; t < 6; t++ {
-			fillRect(surface, surfaceW, r.X+6+t, boxY+9-t, 1, 1, theme.Background)
+			fillRect(p, r.X+6+t, boxY+9-t, 1, 1, theme.Background)
 		}
 	}
 	// Label to the right of the box, vertically centred on glyph row.
 	textY := r.Y + (r.H-GlyphHeight)/2
-	DrawText(surface, surfaceW, r.X+checkBoxSize+4, textY, c.Label, theme.OnBackground)
+	DrawText(p, r.X+checkBoxSize+4, textY, c.Label, theme.OnBackground)
 }
 
 // OnEvent flips Checked + fires OnToggle on click.

@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // ToggleButton is a Button with a sticky on/off state. Click flips
 // Pressed + fires OnToggle. Pressed = Theme.Accent face, unpressed =
 // Theme.Surface; the label is rendered centered in the button.
@@ -21,18 +23,18 @@ func NewToggleButton(label string, pressed bool) *ToggleButton {
 }
 
 // Draw paints the face + border + centred label.
-func (t *ToggleButton) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	face := theme.Surface
 	if t.Pressed {
 		face = theme.Accent
 	}
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, face)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, r.H, face)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	tw := TextWidth(t.Label)
 	tx := r.X + (r.W-tw)/2
 	ty := r.Y + (r.H-GlyphHeight)/2
-	DrawText(surface, surfaceW, tx, ty, t.Label, theme.OnSurface)
+	DrawText(p, tx, ty, t.Label, theme.OnSurface)
 }
 
 // OnEvent: click flips Pressed + fires OnToggle.

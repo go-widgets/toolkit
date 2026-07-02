@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // ListBox is a vertical list of selectable string rows. Click on a
 // row selects it + fires OnActivate.
 //
@@ -34,7 +36,7 @@ func NewListBox(items []string) *ListBox {
 // outside the bounds (because the list is longer than the viewport)
 // are still drawn but clipped per-pixel by the raster helpers; wrap
 // a ScrollView around the ListBox for proper scrollable behaviour.
-func (l *ListBox) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 	r := l.Bounds()
 	for i, item := range l.Items {
 		y := r.Y + i*l.RowHeight
@@ -44,10 +46,10 @@ func (l *ListBox) Draw(surface []byte, surfaceW int, theme *Theme) {
 			bg = theme.Accent
 			ink = theme.Background
 		}
-		fillRect(surface, surfaceW, r.X, y, r.W, l.RowHeight, bg)
+		fillRect(p, r.X, y, r.W, l.RowHeight, bg)
 		// Vertically centre the 7-px glyph inside the row.
 		textY := y + (l.RowHeight-GlyphHeight)/2
-		DrawText(surface, surfaceW, r.X+4, textY, item, ink)
+		DrawText(p, r.X+4, textY, item, ink)
 	}
 }
 

@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // Label is a passive widget that displays a string in the theme's
 // OnSurface colour. v0 paints a solid coloured rectangle as a glyph
 // placeholder; once the font package lands, the rectangle will be
@@ -29,10 +31,10 @@ func (l *Label) HitTest(_, _ int) bool { return false }
 // the OnSurface colour so the widget is at least visible; v1 will
 // replace this with bitmap-font rendering once the font package
 // stabilises.
-func (l *Label) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (l *Label) Draw(p painter.Painter, theme *Theme) {
 	r := l.Bounds()
 	// 1-pixel-tall ink line at the vertical midpoint -- enough to
 	// confirm the widget rendered + leaves room for font glyphs on
 	// either side later.
-	fillRect(surface, surfaceW, r.X, r.Y+r.H/2, r.W, 1, theme.OnSurface)
+	fillRect(p, r.X, r.Y+r.H/2, r.W, 1, theme.OnSurface)
 }

@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
 
 // --- constants -----------------------------------------------------------
 
@@ -41,7 +45,7 @@ func glyphTouchesAnyPixel(t *testing.T, ch byte) bool {
 	const w, h = 16, GlyphHeight + 2
 	buf := makeSurface(w, h)
 	ink := RGB(0x10, 0x20, 0x30)
-	DrawText(buf, w, 1, 1, string([]byte{ch}), ink)
+	DrawText(newP(buf, w), 1, 1, string([]byte{ch}), ink)
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
 			if pixelAt(buf, w, x, y) == ink {
@@ -76,10 +80,10 @@ func TestEveryGlyphPaintsAtLeastOnePixel(t *testing.T) {
 	// blanks, but the spec calls it out).
 	const w, h = GlyphAdvance + 2, GlyphHeight + 2
 	buf := makeSurface(w, h)
-	DrawText(buf, w, 0, 0, " ", RGB(1, 2, 3))
+	DrawText(newP(buf, w), 0, 0, " ", RGB(1, 2, 3))
 	for y := 0; y < h; y++ {
 		for x := 0; x < w; x++ {
-			if pixelAt(buf, w, x, y) == (RGBA{1, 2, 3, 0xFF}) {
+			if pixelAt(buf, w, x, y) == (RGBA{R: 1, G: 2, B: 3, A: 0xFF}) {
 				t.Fatalf("space painted pixel at (%d,%d)", x, y)
 			}
 		}
@@ -94,7 +98,7 @@ func TestDrawTextAdvancesByGlyphAdvance(t *testing.T) {
 	ink := RGB(0xFF, 0x00, 0xAA)
 	// "II" — 'I' lights up only its column 2 (bits[2] = 0x7F), so we
 	// can pinpoint exactly which columns must be inked.
-	DrawText(buf, w, 0, 0, "II", ink)
+	DrawText(newP(buf, w), 0, 0, "II", ink)
 	if pixelAt(buf, w, 2, 3) != ink {
 		t.Fatalf("first I middle column not inked: %+v", pixelAt(buf, w, 2, 3))
 	}
@@ -103,7 +107,7 @@ func TestDrawTextAdvancesByGlyphAdvance(t *testing.T) {
 			GlyphAdvance+2, pixelAt(buf, w, GlyphAdvance+2, 3))
 	}
 	// The single-pixel gap between the two glyphs must remain sentinel.
-	if pixelAt(buf, w, 5, 3) != (RGBA{0xC8, 0xC8, 0xC8, 0xFF}) {
+	if pixelAt(buf, w, 5, 3) != (RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}) {
 		t.Fatalf("inter-glyph gap was inked: %+v", pixelAt(buf, w, 5, 3))
 	}
 }
@@ -116,7 +120,7 @@ func TestDrawTextUnknownCharRendersBlankButAdvances(t *testing.T) {
 	ink := RGB(0xAB, 0xCD, 0xEF)
 	// '~' is not in the table; 'I' is. After "~I" the I should still
 	// land at x = GlyphAdvance + 2 (column 2 of the second slot).
-	DrawText(buf, w, 0, 0, "~I", ink)
+	DrawText(newP(buf, w), 0, 0, "~I", ink)
 	// Nothing inked in the first slot.
 	for x := 0; x < GlyphAdvance; x++ {
 		for y := 0; y < GlyphHeight; y++ {
@@ -140,44 +144,59 @@ func TestDrawTextClipsOOB(t *testing.T) {
 
 	// Negative x: leftmost columns fall off the left.
 	buf := makeSurface(w, h)
-	DrawText(buf, w, -3, 0, "A", ink)
+	DrawText(newP(buf, w), -3, 0, "A", ink)
 
 	// Negative y: top rows fall off the top.
 	buf = makeSurface(w, h)
-	DrawText(buf, w, 0, -3, "A", ink)
+	DrawText(newP(buf, w), 0, -3, "A", ink)
 
 	// Past right edge: rightmost columns fall off the right.
 	buf = makeSurface(w, h)
-	DrawText(buf, w, w-1, 0, "A", ink)
+	DrawText(newP(buf, w), w-1, 0, "A", ink)
 
 	// Past bottom edge: bottom rows fall off the bottom (triggers
 	// the off+3 >= len(surface) guard in putPixel).
 	buf = makeSurface(w, h)
-	DrawText(buf, w, 0, h-1, "A", ink)
+	DrawText(newP(buf, w), 0, h-1, "A", ink)
 
 	// Fully off-surface to the right + below.
 	buf = makeSurface(w, h)
-	DrawText(buf, w, w+5, h+5, "A", ink)
+	DrawText(newP(buf, w), w+5, h+5, "A", ink)
 }
 
-// Defensive guards: empty / unusable surfaces must short-circuit
-// without panicking.
+// Defensive guards: painters wrapping unusable surfaces must short-
+// circuit without panicking.
 func TestDrawTextGuardsAgainstEmptySurface(t *testing.T) {
-	// Nil surface.
-	DrawText(nil, 16, 0, 0, "A", RGB(1, 2, 3))
-	// Surface too small for one pixel.
-	DrawText(make([]byte, 3), 16, 0, 0, "A", RGB(1, 2, 3))
-	// surfaceW <= 0.
-	DrawText(make([]byte, 64), 0, 0, 0, "A", RGB(1, 2, 3))
-	DrawText(make([]byte, 64), -4, 0, 0, "A", RGB(1, 2, 3))
+	// Nil buffer.
+	DrawText(newP(nil, 16), 0, 0, "A", RGB(1, 2, 3))
+	// Buffer too small for one pixel.
+	DrawText(newP(make([]byte, 3), 16), 0, 0, "A", RGB(1, 2, 3))
+	// Width <= 0.
+	DrawText(newP(make([]byte, 64), 0), 0, 0, "A", RGB(1, 2, 3))
+	DrawText(newP(make([]byte, 64), -4), 0, 0, "A", RGB(1, 2, 3))
+}
+
+// On a non-Pixel painter (a CellPainter for a TUI, an SvgPainter for
+// vector output) DrawText delegates to the painter's own Text
+// primitive instead of writing bitmap pixels. Prove it by rendering
+// into a CellPainter and reading the runes back.
+func TestDrawTextDelegatesOnNonPixelPainter(t *testing.T) {
+	cp := painter.NewCellPainter(10, 2)
+	DrawText(cp, 2, 0, "OK", RGB(0xFF, 0xFF, 0xFF))
+	if cp.Cells[0*10+2].Rune != 'O' {
+		t.Fatalf("first cell rune = %q, want 'O'", cp.Cells[0*10+2].Rune)
+	}
+	if cp.Cells[0*10+3].Rune != 'K' {
+		t.Fatalf("second cell rune = %q, want 'K'", cp.Cells[0*10+3].Rune)
+	}
 }
 
 // Empty string is a no-op: must not panic + must not paint anything.
 func TestDrawTextEmptyString(t *testing.T) {
 	const w, h = 16, 8
 	buf := makeSurface(w, h)
-	DrawText(buf, w, 4, 4, "", RGB(1, 2, 3))
-	if pixelAt(buf, w, 4, 4) != (RGBA{0xC8, 0xC8, 0xC8, 0xFF}) {
+	DrawText(newP(buf, w), 4, 4, "", RGB(1, 2, 3))
+	if pixelAt(buf, w, 4, 4) != (RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}) {
 		t.Fatal("empty string should paint nothing")
 	}
 }
@@ -187,7 +206,7 @@ func TestDrawTextHonoursInkAlpha(t *testing.T) {
 	const w, h = 16, 8
 	buf := makeSurface(w, h)
 	ink := RGBA{R: 0x10, G: 0x20, B: 0x30, A: 0x80}
-	DrawText(buf, w, 0, 0, "I", ink)
+	DrawText(newP(buf, w), 0, 0, "I", ink)
 	if got := pixelAt(buf, w, 2, 3); got.A != 0x80 {
 		t.Fatalf("alpha = %d, want 0x80 (got pixel %+v)", got.A, got)
 	}

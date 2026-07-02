@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // MenuItem is one row in a Menu. Label is the human text; Action is
 // the callback fired on click. A nil Action turns the row into a
 // disabled (greyed-out) entry; a non-empty Submenu lets it open a
@@ -46,20 +48,20 @@ func NewMenu(items []MenuItem) *Menu { return &Menu{Items: items, Hover: -1} }
 
 // Draw paints the menu's body + every row + a hover highlight on the
 // currently-hovered row.
-func (m *Menu) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 	r := m.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	y := r.Y + 2
 	for i, it := range m.Items {
 		if it.Separator {
 			sep := y + MenuSeparatorH/2
-			fillRect(surface, surfaceW, r.X+4, sep, r.W-8, 1, theme.SurfaceAlt)
+			fillRect(p, r.X+4, sep, r.W-8, 1, theme.SurfaceAlt)
 			y += MenuSeparatorH
 			continue
 		}
 		if i == m.Hover && it.Action != nil {
-			fillRect(surface, surfaceW, r.X+1, y, r.W-2, MenuRowH, theme.Accent)
+			fillRect(p, r.X+1, y, r.W-2, MenuRowH, theme.Accent)
 		}
 		ink := theme.OnSurface
 		if it.Action == nil && !it.Separator {
@@ -68,13 +70,13 @@ func (m *Menu) Draw(surface []byte, surfaceW int, theme *Theme) {
 			ink = theme.Background // hovered row: invert ink
 		}
 		textY := y + (MenuRowH-GlyphHeight)/2
-		DrawText(surface, surfaceW, r.X+8, textY, it.Label, ink)
+		DrawText(p, r.X+8, textY, it.Label, ink)
 		if it.Submenu != nil {
 			// ▶ chevron on the right edge to signal a nested menu.
 			cx := r.X + r.W - 8
 			cy := y + MenuRowH/2
 			for t := 0; t < 4; t++ {
-				fillRect(surface, surfaceW, cx-2+t, cy-t, 1, 1+2*t, ink)
+				fillRect(p, cx-2+t, cy-t, 1, 1+2*t, ink)
 			}
 		} else if it.Shortcut != "" {
 			// Right-align the shortcut hint in a muted tone. Skipped when
@@ -87,7 +89,7 @@ func (m *Menu) Draw(surface []byte, surfaceW int, theme *Theme) {
 			if i == m.Hover && it.Action != nil {
 				shortcutInk = theme.Background
 			}
-			DrawText(surface, surfaceW, sx, textY, it.Shortcut, shortcutInk)
+			DrawText(p, sx, textY, it.Shortcut, shortcutInk)
 		}
 		y += MenuRowH
 	}
@@ -204,21 +206,21 @@ func (b *MenuBar) NameOriginX(i int) int {
 }
 
 // Draw paints the bar + every name + a highlight on the Active name.
-func (b *MenuBar) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (b *MenuBar) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
-	fillRect(surface, surfaceW, r.X, r.Y, r.W, MenuBarH, theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y, r.W, MenuBarH, theme.SurfaceAlt)
 	for i, name := range b.Names {
 		iw := b.NameWidth(i)
 		ix := r.X + b.NameOriginX(i)
 		ink := theme.OnSurface
 		if i == b.Active {
-			fillRect(surface, surfaceW, ix, r.Y, iw, MenuBarH, theme.Accent)
+			fillRect(p, ix, r.Y, iw, MenuBarH, theme.Accent)
 			ink = theme.Background
 		}
 		tw := TextWidth(name)
 		textX := ix + (iw-tw)/2
 		textY := r.Y + (MenuBarH-GlyphHeight)/2
-		DrawText(surface, surfaceW, textX, textY, name, ink)
+		DrawText(p, textX, textY, name, ink)
 	}
 }
 

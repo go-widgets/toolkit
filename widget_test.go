@@ -4,7 +4,21 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
+
+// newP wraps buf into a PixelPainter for tests. Height is derived
+// from the buffer length so tests keep passing (buf, w) as before
+// the toolkit's Widget.Draw migrated to a Painter argument.
+func newP(buf []byte, w int) *painter.PixelPainter {
+	if w <= 0 {
+		return painter.NewPixelPainter(buf, w, 0)
+	}
+	return painter.NewPixelPainter(buf, w, len(buf)/(4*w))
+}
 
 // makeSurface allocates a w*h RGBA byte slice and pre-fills it with
 // a sentinel non-theme colour so tests can detect "this pixel was
@@ -19,7 +33,7 @@ func makeSurface(w, h int) []byte {
 
 func pixelAt(buf []byte, w, x, y int) RGBA {
 	o := (y*w + x) * 4
-	return RGBA{buf[o], buf[o+1], buf[o+2], buf[o+3]}
+	return RGBA{R: buf[o], G: buf[o+1], B: buf[o+2], A: buf[o+3]}
 }
 
 // --- Rect.Contains -------------------------------------------------------
@@ -61,7 +75,7 @@ func TestBaseDefaults(t *testing.T) {
 	}
 	// Default OnEvent + Draw are no-ops; just verify they don't panic.
 	(&b).OnEvent(Event{Kind: EventClick})
-	(&b).Draw(nil, 0, nil)
+	(&b).Draw(newP(nil, 0), nil)
 }
 
 // --- Themes --------------------------------------------------------------
@@ -89,7 +103,7 @@ func TestRGBHasOpaqueAlpha(t *testing.T) {
 func TestFillRectPaintsInBoundsOnly(t *testing.T) {
 	const w, h = 16, 16
 	buf := makeSurface(w, h)
-	fillRect(buf, w, 4, 4, 6, 6, RGB(0x10, 0x20, 0x30))
+	fillRect(newP(buf, w), 4, 4, 6, 6, RGB(0x10, 0x20, 0x30))
 	if got := pixelAt(buf, w, 5, 5); got.R != 0x10 || got.G != 0x20 {
 		t.Fatalf("interior pixel = %+v, want filled", got)
 	}
@@ -103,7 +117,7 @@ func TestFillRectClipsOOB(t *testing.T) {
 	buf := makeSurface(w, h)
 	// Rectangle that overflows on every side; must not panic + must
 	// only paint the in-bounds slice.
-	fillRect(buf, w, -3, -3, 20, 20, RGB(0xAA, 0xBB, 0xCC))
+	fillRect(newP(buf, w), -3, -3, 20, 20, RGB(0xAA, 0xBB, 0xCC))
 	if got := pixelAt(buf, w, 0, 0); got.R != 0xAA {
 		t.Fatalf("(0,0) should be painted, got %+v", got)
 	}
@@ -119,15 +133,15 @@ func TestFillRectTruncatedSurface(t *testing.T) {
 	// rows 0 + 1, so the row-1 pixels past offset len will trip the
 	// per-pixel guard rather than panicking.
 	buf := make([]byte, w*4+8)
-	fillRect(buf, w, 0, 0, w, 2, RGB(1, 2, 3))
+	fillRect(newP(buf, w), 0, 0, w, 2, RGB(1, 2, 3))
 }
 
 func TestFillRectZeroSizeNoOp(t *testing.T) {
 	const w, h = 4, 4
 	buf := makeSurface(w, h)
-	fillRect(buf, w, 1, 1, 0, 5, RGB(1, 2, 3))
-	fillRect(buf, w, 1, 1, 5, 0, RGB(1, 2, 3))
-	if pixelAt(buf, w, 1, 1) != (RGBA{0xC8, 0xC8, 0xC8, 0xFF}) {
+	fillRect(newP(buf, w), 1, 1, 0, 5, RGB(1, 2, 3))
+	fillRect(newP(buf, w), 1, 1, 5, 0, RGB(1, 2, 3))
+	if pixelAt(buf, w, 1, 1) != (RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}) {
 		t.Fatal("zero-width/height fill should not paint anything")
 	}
 }
@@ -135,7 +149,7 @@ func TestFillRectZeroSizeNoOp(t *testing.T) {
 func TestStrokeRectPaintsBorderOnly(t *testing.T) {
 	const w, h = 12, 12
 	buf := makeSurface(w, h)
-	strokeRect(buf, w, 2, 2, 6, 6, RGB(0x11, 0x22, 0x33))
+	strokeRect(newP(buf, w), 2, 2, 6, 6, RGB(0x11, 0x22, 0x33))
 	// Border pixel painted.
 	if got := pixelAt(buf, w, 2, 2); got.R != 0x11 {
 		t.Fatalf("top-left border = %+v, want painted", got)
@@ -149,9 +163,9 @@ func TestStrokeRectPaintsBorderOnly(t *testing.T) {
 func TestStrokeRectZeroSizeNoOp(t *testing.T) {
 	const w, h = 4, 4
 	buf := makeSurface(w, h)
-	strokeRect(buf, w, 1, 1, 0, 5, RGB(1, 2, 3))
-	strokeRect(buf, w, 1, 1, 5, 0, RGB(1, 2, 3))
-	if pixelAt(buf, w, 1, 1) != (RGBA{0xC8, 0xC8, 0xC8, 0xFF}) {
+	strokeRect(newP(buf, w), 1, 1, 0, 5, RGB(1, 2, 3))
+	strokeRect(newP(buf, w), 1, 1, 5, 0, RGB(1, 2, 3))
+	if pixelAt(buf, w, 1, 1) != (RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}) {
 		t.Fatal("zero-dimension stroke should not paint anything")
 	}
 }
@@ -189,21 +203,21 @@ func TestButtonDrawStates(t *testing.T) {
 	b.SetBounds(Rect{X: 2, Y: 2, W: 20, H: 10})
 	// Rest state: Surface fill.
 	rest := makeSurface(w, h)
-	b.Draw(rest, w, theme)
+	b.Draw(newP(rest, w), theme)
 	if pixelAt(rest, w, 10, 6) != theme.Surface {
 		t.Fatalf("rest face = %+v, want Surface", pixelAt(rest, w, 10, 6))
 	}
 	// Hover: SurfaceAlt fill.
 	hov := makeSurface(w, h)
 	b.SetHovered(true)
-	b.Draw(hov, w, theme)
+	b.Draw(newP(hov, w), theme)
 	if pixelAt(hov, w, 10, 6) != theme.SurfaceAlt {
 		t.Fatalf("hover face = %+v, want SurfaceAlt", pixelAt(hov, w, 10, 6))
 	}
 	// Press: Accent fill.
 	prs := makeSurface(w, h)
 	b.SetPressed(true)
-	b.Draw(prs, w, theme)
+	b.Draw(newP(prs, w), theme)
 	if pixelAt(prs, w, 10, 6) != theme.Accent {
 		t.Fatalf("press face = %+v, want Accent", pixelAt(prs, w, 10, 6))
 	}
@@ -229,14 +243,14 @@ func TestLabelDrawPaintsInkLine(t *testing.T) {
 	l := NewLabel("hi")
 	l.SetBounds(Rect{X: 2, Y: 4, W: 20, H: 8})
 	buf := makeSurface(w, h)
-	l.Draw(buf, w, theme)
+	l.Draw(newP(buf, w), theme)
 	// Midpoint horizontal line painted in OnSurface.
 	midY := 4 + 8/2
 	if pixelAt(buf, w, 10, midY) != theme.OnSurface {
 		t.Fatalf("ink line missing at midpoint: %+v", pixelAt(buf, w, 10, midY))
 	}
 	// Above/below the line still sentinel.
-	if pixelAt(buf, w, 10, 4) != (RGBA{0xC8, 0xC8, 0xC8, 0xFF}) {
+	if pixelAt(buf, w, 10, 4) != (RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}) {
 		t.Fatal("non-line row should not be inked")
 	}
 }

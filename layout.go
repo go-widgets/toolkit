@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 // defaultSpacing is the inter-child gap (in pixels) HBox + VBox apply
 // when their Spacing field is left at its zero value. Picked to match
 // the 4-pixel rhythm the rest of the toolkit uses (Frame.Padding, the
@@ -88,9 +90,9 @@ func (h *HBox) SetBounds(r Rect) {
 // Draw paints every child in append order. Children render directly
 // into the surface using their own Bounds; the HBox itself draws no
 // background or border (it's a pure layout container).
-func (h *HBox) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (h *HBox) Draw(p painter.Painter, theme *Theme) {
 	for _, c := range h.children {
-		c.Draw(surface, surfaceW, theme)
+		c.Draw(p, theme)
 	}
 }
 
@@ -153,9 +155,9 @@ func (v *VBox) SetBounds(r Rect) {
 }
 
 // Draw paints every child in append order.
-func (v *VBox) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (v *VBox) Draw(p painter.Painter, theme *Theme) {
 	for _, c := range v.children {
-		c.Draw(surface, surfaceW, theme)
+		c.Draw(p, theme)
 	}
 }
 
@@ -245,9 +247,9 @@ func (g *Grid) SetBounds(r Rect) {
 }
 
 // Draw paints every attached child in attach order.
-func (g *Grid) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (g *Grid) Draw(p painter.Painter, theme *Theme) {
 	for _, c := range g.children {
-		c.w.Draw(surface, surfaceW, theme)
+		c.w.Draw(p, theme)
 	}
 }
 
@@ -311,11 +313,11 @@ func (f *Frame) SetBounds(r Rect) {
 }
 
 // Draw paints the 1-pixel border then the child (if any).
-func (f *Frame) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (f *Frame) Draw(p painter.Painter, theme *Theme) {
 	r := f.Bounds()
-	strokeRect(surface, surfaceW, r.X, r.Y, r.W, r.H, theme.Border)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	if f.child != nil {
-		f.child.Draw(surface, surfaceW, theme)
+		f.child.Draw(p, theme)
 	}
 }
 

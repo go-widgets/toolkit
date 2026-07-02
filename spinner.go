@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/painter"
+
 import "math"
 
 // Spinner is an indeterminate loading indicator. When Active, Draw
@@ -30,7 +32,7 @@ func (s *Spinner) Tick(deltaSeconds float64) {
 // Draw paints the rotating hand when Active. Hand length = 40% of
 // the smaller of (W, H); painted as a thin radial line of single
 // pixels from centre outward.
-func (s *Spinner) Draw(surface []byte, surfaceW int, theme *Theme) {
+func (s *Spinner) Draw(p painter.Painter, theme *Theme) {
 	if !s.Active {
 		return
 	}
@@ -56,6 +58,6 @@ func (s *Spinner) Draw(surface []byte, surfaceW int, theme *Theme) {
 		f := float64(t) / float64(steps) * radius
 		px := int(cx + dx*f)
 		py := int(cy + dy*f)
-		fillRect(surface, surfaceW, px, py, 1, 1, theme.Accent)
+		fillRect(p, px, py, 1, 1, theme.Accent)
 	}
 }
