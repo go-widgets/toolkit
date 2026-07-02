@@ -1,5 +1,12 @@
 # go-widgets/toolkit
 
+[![CI](https://github.com/go-widgets/toolkit/actions/workflows/ci.yml/badge.svg)](https://github.com/go-widgets/toolkit/actions/workflows/ci.yml)
+[![release](https://img.shields.io/github/v/release/go-widgets/toolkit?display_name=tag&sort=semver&color=0d9488)](https://github.com/go-widgets/toolkit/releases)
+[![pkg.go.dev](https://img.shields.io/badge/pkg.go.dev-toolkit-007d9c?logo=go&logoColor=white)](https://pkg.go.dev/github.com/go-widgets/toolkit)
+![coverage](https://img.shields.io/badge/coverage-100%25-1a7f37)
+![go](https://img.shields.io/badge/Go-1.26.4%2B-00ADD8?logo=go&logoColor=white)
+[![license](https://img.shields.io/badge/license-BSD--3--Clause-blue)](./LICENSE)
+
 Pure-Go widget toolkit that renders into an RGBA byte buffer. Zero
 JS / DOM / canvas dependency — every widget composes pixels into a
 caller-supplied `[]byte`, so the toolkit runs identically in
@@ -69,20 +76,31 @@ coverage.** Pure Go, no CGO, stdlib only. Builds for
 
 ### Next (v0.6 sketch)
 
-- `FontChooser` — deferred from v0.5 until the toolkit gains a
-  real "font family" concept (currently one bitmap font only).
-- `MenuItem.Shortcut` accelerator dispatch — right now the string
-  is a purely visual hint; a `MenuBar.HandleShortcut(code)` helper
-  would route the key event to the matching item's Action.
-- Drag-and-drop `Event` kinds + a `DragSource` / `DropTarget`
-  interface pair (TreeView + ListBox re-ordering as the first
-  driver).
-- Right-click context menu helper (spawn a Menu at a
-  worker-relative coord, dismiss on outside click).
+- **Font family plumbing** — the toolkit ships one 5×7 bitmap font
+  today. v0.6 introduces `Font` (an interface with `GlyphAdvance`,
+  `GlyphHeight`, `Draw`) so a caller can plug a larger bitmap or
+  a hand-rasterised TrueType at boot. Unblocks `FontChooser` (v0.5
+  deferral) + retina-size Label rendering.
+- **Drag-and-drop event kinds** — `EventDragStart` / `EventDragMove`
+  / `EventDrop`, plus a `DragSource` / `DropTarget` interface pair.
+  Landing drivers: TreeView + ListBox row re-ordering.
+- **Context menu helper** — one-line `ShowContextMenu(x, y, *Menu,
+  *Popover)` that spawns a Menu at worker-relative coords + auto-
+  dismisses on outside-click. Every real app needs this; hosts
+  currently reinvent it.
+- **Popover widget** — first-class overlay type (the MenuBar's
+  own popover is currently host-side; formalising it unlocks
+  Tooltip-as-popover, DatePicker overlays, autocomplete lists).
+- **Overlay layout container** — z-ordered stacking above a
+  primary child, so a widget can layer feedback (Progress overlay,
+  Notification stack) without the host arranging screen positions.
+- **A11y bridge** — `Role` + `Label` fields on widgets already;
+  wire a `A11yPublisher` interface a host can plug (WAI-ARIA
+  wrapping on wasm, TTY-cell metadata on tui, ...).
 
 ## Architecture
 
-```
+```text
 +----------------------+
 | Theme                |  Palette + metrics + font ref
 +----------------------+
