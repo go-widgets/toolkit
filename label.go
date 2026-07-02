@@ -6,10 +6,10 @@ package toolkit
 
 import "github.com/go-widgets/painter"
 
-// Label is a passive widget that displays a string in the theme's
-// OnSurface colour. v0 paints a solid coloured rectangle as a glyph
-// placeholder; once the font package lands, the rectangle will be
-// replaced with actual character bitmaps.
+// Label is a passive widget that displays Text in the theme's
+// OnSurface colour, drawn with the toolkit's 5x7 bitmap font. Left-
+// aligned inside Bounds, vertically centred if Bounds.H exceeds
+// GlyphHeight.
 //
 // Label is non-interactive: HitTest returns false so clicks pass
 // through to the widget beneath. Apps that want a clickable label
@@ -27,14 +27,14 @@ func NewLabel(text string) *Label { return &Label{Text: text} }
 // receive events.
 func (l *Label) HitTest(_, _ int) bool { return false }
 
-// Draw paints the label into surface. v0 = a thin underline stub in
-// the OnSurface colour so the widget is at least visible; v1 will
-// replace this with bitmap-font rendering once the font package
-// stabilises.
+// Draw paints the Label's text with the toolkit's bitmap font. If
+// Bounds.H > GlyphHeight the text is vertically centred; otherwise
+// it lands at Bounds.Y.
 func (l *Label) Draw(p painter.Painter, theme *Theme) {
 	r := l.Bounds()
-	// 1-pixel-tall ink line at the vertical midpoint -- enough to
-	// confirm the widget rendered + leaves room for font glyphs on
-	// either side later.
-	fillRect(p, r.X, r.Y+r.H/2, r.W, 1, theme.OnSurface)
+	ty := r.Y
+	if r.H > GlyphHeight {
+		ty += (r.H - GlyphHeight) / 2
+	}
+	DrawText(p, r.X, ty, l.Text, theme.OnSurface)
 }

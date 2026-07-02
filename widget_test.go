@@ -237,20 +237,44 @@ func TestLabelHitTestIsNever(t *testing.T) {
 	}
 }
 
-func TestLabelDrawPaintsInkLine(t *testing.T) {
-	const w, h = 32, 16
+// Label draws its Text via the bitmap font. Verify at least one ink
+// pixel lands inside the Bounds when Bounds is tall enough to
+// vertically-centre a glyph row.
+func TestLabelDrawPaintsBitmapText(t *testing.T) {
+	const w, h = 64, 24
 	theme := DefaultLight()
-	l := NewLabel("hi")
-	l.SetBounds(Rect{X: 2, Y: 4, W: 20, H: 8})
+	l := NewLabel("HI")
+	l.SetBounds(Rect{X: 2, Y: 4, W: 40, H: 16})
 	buf := makeSurface(w, h)
 	l.Draw(newP(buf, w), theme)
-	// Midpoint horizontal line painted in OnSurface.
-	midY := 4 + 8/2
-	if pixelAt(buf, w, 10, midY) != theme.OnSurface {
-		t.Fatalf("ink line missing at midpoint: %+v", pixelAt(buf, w, 10, midY))
+	// Some pixel inside the Label's bounds must have been inked in
+	// OnSurface (i.e. differ from the 0xC8 sentinel).
+	painted := 0
+	for y := l.Bounds().Y; y < l.Bounds().Y+l.Bounds().H; y++ {
+		for x := l.Bounds().X; x < l.Bounds().X+l.Bounds().W; x++ {
+			if pixelAt(buf, w, x, y) == theme.OnSurface {
+				painted++
+			}
+		}
 	}
-	// Above/below the line still sentinel.
-	if pixelAt(buf, w, 10, 4) != (RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}) {
-		t.Fatal("non-line row should not be inked")
+	if painted == 0 {
+		t.Fatal("Label with tall Bounds painted 0 ink pixels — expected bitmap glyphs")
+	}
+}
+
+// When Bounds.H <= GlyphHeight the label paints at Bounds.Y (the
+// centring branch is skipped). Cover that branch separately.
+func TestLabelDrawTightBoundsSkipsCentring(t *testing.T) {
+	const w, h = 32, 12
+	theme := DefaultLight()
+	l := NewLabel("A")
+	l.SetBounds(Rect{X: 2, Y: 2, W: 20, H: GlyphHeight})
+	buf := makeSurface(w, h)
+	l.Draw(newP(buf, w), theme)
+	// 'A' column 0 has bits[0]=0x7E (rows 1..6 lit). At tight Bounds
+	// with H == GlyphHeight, ty stays at Bounds.Y = 2. Row 1 relative
+	// to Bounds.Y is (2 + 1) = 3.
+	if pixelAt(buf, w, 2, 3) != theme.OnSurface {
+		t.Fatalf("expected ink at (2,3) with tight bounds; got %+v", pixelAt(buf, w, 2, 3))
 	}
 }
