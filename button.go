@@ -38,22 +38,30 @@ func NewButton(label string, onClick func()) *Button {
 func (b *Button) SetHovered(v bool) { b.hovered = v }
 func (b *Button) SetPressed(v bool) { b.pressed = v }
 
-// Draw paints the button into surface. Surface is the row-major RGBA
-// framebuffer of width surfaceW; theme supplies the palette.
+// Draw paints the button through p using theme's palette. Face
+// cycles through Surface / SurfaceAlt (hovered) / Accent (pressed);
+// the Label is centred in the body using the toolkit's 5x7 bitmap
+// font. When the button is pressed the ink swaps to the theme's
+// Background so the label stays legible against the Accent face.
 func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	face := theme.Surface
-	if b.pressed {
+	ink := theme.OnSurface
+	switch {
+	case b.pressed:
 		face = theme.Accent
-	} else if b.hovered {
+		ink = theme.Background
+	case b.hovered:
 		face = theme.SurfaceAlt
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	// Label rendering is a TODO until the font package lands. For now
-	// the button is a solid styled rectangle; downstream callers can
-	// also draw their own label into b.Bounds() after Draw if they
-	// have a font ready.
+	if b.Label != "" {
+		tw := TextWidth(b.Label)
+		tx := r.X + (r.W-tw)/2
+		ty := r.Y + (r.H-GlyphHeight)/2
+		DrawText(p, tx, ty, b.Label, ink)
+	}
 }
 
 // OnEvent dispatches click events to the OnClick callback. Other
