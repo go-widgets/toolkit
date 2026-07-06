@@ -180,9 +180,17 @@ func TestScaleDrawNormal(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
-	// Thumb at x = 45 (half of 100-10), Accent fill.
-	if pixelAt(buf, w, 48, 10) != theme.Accent {
-		t.Fatalf("thumb pixel = %+v, want Accent", pixelAt(buf, w, 48, 10))
+	// Thumb centre (x=45..55) is the white circular knob.
+	if pixelAt(buf, w, 50, 10) != theme.Surface {
+		t.Fatalf("thumb centre = %+v, want Surface (white knob)", pixelAt(buf, w, 50, 10))
+	}
+	// The track left of the thumb is the Accent fill.
+	if pixelAt(buf, w, 10, 10) != theme.Accent {
+		t.Fatalf("filled track = %+v, want Accent", pixelAt(buf, w, 10, 10))
+	}
+	// The track right of the thumb is the unfilled SurfaceAlt.
+	if pixelAt(buf, w, 90, 10) != theme.SurfaceAlt {
+		t.Fatalf("unfilled track = %+v, want SurfaceAlt", pixelAt(buf, w, 90, 10))
 	}
 }
 

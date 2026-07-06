@@ -19,7 +19,7 @@ type Scale struct {
 }
 
 // scaleThumbSize is the pixel side length of the thumb.
-const scaleThumbSize = 10
+const scaleThumbSize = 16
 
 // NewScale builds a Scale spanning [min, max] with the given initial
 // value. Min == Max is allowed but renders a non-interactive track.
@@ -40,19 +40,27 @@ func (s *Scale) SetValue(v float64) {
 	s.Value = v
 }
 
-// Draw paints the track + the thumb.
+// Draw paints a macOS-style slider: a rounded track whose filled portion (up
+// to the thumb) is Accent and whose remainder is SurfaceAlt, with a circular
+// white thumb -- matching the Switch's pill track + circular knob.
 func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
-	trackY := r.Y + (r.H-4)/2
-	fillRect(p, r.X, trackY, r.W, 4, theme.SurfaceAlt)
+	const trackH = 4
+	trackY := r.Y + (r.H-trackH)/2
+	trackR := trackH / 2
+	// Full (unfilled) track first, then the Accent fill up to the thumb centre.
+	fillRoundRect(p, r.X, trackY, r.W, trackH, trackR, theme.SurfaceAlt)
 	// Position the thumb. When Max == Min, sit at the left.
 	var pos float64
 	if s.Max > s.Min {
 		pos = (s.Value - s.Min) / (s.Max - s.Min)
 	}
 	tx := r.X + int(pos*float64(r.W-scaleThumbSize))
+	fillRoundRect(p, r.X, trackY, tx+scaleThumbSize/2-r.X, trackH, trackR, theme.Accent)
+	// Circular white thumb + border (same shape as the Switch knob).
 	ty := r.Y + (r.H-scaleThumbSize)/2
-	fillRect(p, tx, ty, scaleThumbSize, scaleThumbSize, theme.Accent)
+	fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
+	strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
 }
 
 // OnEvent: click jumps the thumb to the clicked x-position +
