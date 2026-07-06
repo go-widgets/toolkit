@@ -95,16 +95,21 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, r.X, y, r.W, rh, bg)
 		indent := r.X + row.depth*TreeIndentW
 		// Chevron if the node has children: ▶ collapsed, ▼ expanded.
+		// The wide base sits away from the pointing direction: for ▼
+		// the widest row is at the top (y = cy-1) narrowing to the tip
+		// at the bottom (y = cy+2); for ▶ the tallest column is on
+		// the left (x = cx-1) narrowing to the tip on the right (x =
+		// cx+2).
 		if len(row.node.Children) > 0 {
 			cx := indent + 4
 			cy := y + rh/2
 			if row.node.Expanded {
 				for q := 0; q < 4; q++ {
-					fillRect(p, cx-q, cy-1+q, 1+2*q, 1, ink)
+					fillRect(p, cx-q, cy+2-q, 1+2*q, 1, ink)
 				}
 			} else {
 				for q := 0; q < 4; q++ {
-					fillRect(p, cx-1+q, cy-q, 1, 1+2*q, ink)
+					fillRect(p, cx+2-q, cy-q, 1, 1+2*q, ink)
 				}
 			}
 		}

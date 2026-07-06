@@ -40,14 +40,18 @@ func (e *Expander) Draw(p painter.Painter, theme *Theme) {
 	cx := r.X + 6
 	cy := r.Y + ExpanderHeaderH/2
 	if e.Expanded {
-		// ▼ : flat top, point at bottom.
+		// ▼ : flat top (widest row), point at bottom (narrow tip).
+		// At t=0 the 1-pixel tip lands at cy+2; at t=4 the 9-pixel
+		// base lands at cy-2.
 		for t := 0; t < 5; t++ {
-			fillRect(p, cx-t, cy-2+t, 1+2*t, 1, theme.OnSurface)
+			fillRect(p, cx-t, cy+2-t, 1+2*t, 1, theme.OnSurface)
 		}
 	} else {
-		// ▶ : flat left, point at right.
+		// ▶ : flat left (tallest column), point at right (narrow tip).
+		// At t=0 the 1-pixel tip lands at cx+2; at t=4 the 9-pixel
+		// base lands at cx-2.
 		for t := 0; t < 5; t++ {
-			fillRect(p, cx-2+t, cy-t, 1, 1+2*t, theme.OnSurface)
+			fillRect(p, cx+2-t, cy-t, 1, 1+2*t, theme.OnSurface)
 		}
 	}
 	textY := r.Y + (ExpanderHeaderH-GlyphHeight)/2

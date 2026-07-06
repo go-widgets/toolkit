@@ -73,10 +73,12 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 		DrawText(p, r.X+8, textY, it.Label, ink)
 		if it.Submenu != nil {
 			// ▶ chevron on the right edge to signal a nested menu.
+			// Flat left (tallest column, x = cx-1), point on right
+			// (1-pixel tip, x = cx+2).
 			cx := r.X + r.W - 8
 			cy := y + MenuRowH/2
 			for t := 0; t < 4; t++ {
-				fillRect(p, cx-2+t, cy-t, 1, 1+2*t, ink)
+				fillRect(p, cx+2-t, cy-t, 1, 1+2*t, ink)
 			}
 		} else if it.Shortcut != "" {
 			// Right-align the shortcut hint in a muted tone. Skipped when
