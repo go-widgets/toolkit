@@ -63,6 +63,16 @@ const (
 	// text) or cancelled (host does NOT send an EventChar and the
 	// widget discards the preview).
 	EventCompositionEnd
+	// EventMouseDrag fires when the mouse moves while a button is
+	// still pressed. X/Y carry the current widget-local position.
+	// The initial button press was already dispatched as EventClick,
+	// so a widget that wants drag semantics remembers "am I being
+	// dragged" from the EventClick and consults it on drag ticks.
+	EventMouseDrag
+	// EventMouseUp fires when the button is released. Widgets that
+	// track drag state clear it here. X/Y carry the release
+	// position (widget-local).
+	EventMouseUp
 )
 
 // Event is one input event delivered to a widget. The parent container

@@ -78,6 +78,34 @@ func TestBaseDefaults(t *testing.T) {
 	(&b).Draw(newP(nil, 0), nil)
 }
 
+// TestEventKindValuesAreDistinct pins the enum ordering so adding a
+// new value in the middle of the list won't silently renumber the
+// tail — downstream code (e.g. tui's mouse parser) hard-references
+// EventMouseDrag / EventMouseUp by name and would keep compiling
+// but dispatch to the wrong widgets if the values shifted.
+func TestEventKindValuesAreDistinct(t *testing.T) {
+	seen := map[EventKind]string{}
+	for _, kv := range []struct {
+		k    EventKind
+		name string
+	}{
+		{EventClick, "EventClick"},
+		{EventKeyDown, "EventKeyDown"},
+		{EventKeyUp, "EventKeyUp"},
+		{EventChar, "EventChar"},
+		{EventCompositionStart, "EventCompositionStart"},
+		{EventCompositionUpdate, "EventCompositionUpdate"},
+		{EventCompositionEnd, "EventCompositionEnd"},
+		{EventMouseDrag, "EventMouseDrag"},
+		{EventMouseUp, "EventMouseUp"},
+	} {
+		if prior, ok := seen[kv.k]; ok {
+			t.Fatalf("%s collides with %s (both = %d)", kv.name, prior, kv.k)
+		}
+		seen[kv.k] = kv.name
+	}
+}
+
 // --- Themes --------------------------------------------------------------
 
 func TestDefaultLightDarkAreDistinct(t *testing.T) {
