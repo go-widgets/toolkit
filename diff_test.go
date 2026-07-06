@@ -131,9 +131,10 @@ func TestDiffDrawMixedKinds(t *testing.T) {
 }
 
 // Prefix glyphs must land: '+', '-', ' ' at the leftmost text
-// position. The prefix is drawn in theme.OnSurface, so at least one
-// OnSurface pixel must live in the prefix column for the '+' and '-'
-// rows.
+// position. As of v0.9.2 the Added row uses diffAddedInk (dark green)
+// and the Removed row uses diffRemovedInk (dark red) so the text
+// stays readable on the fixed light-green / light-red row fills in
+// dark themes too.
 func TestDiffDrawPaintsPrefixGlyphs(t *testing.T) {
 	const w, h = 80, 40
 	theme := DefaultLight()
@@ -144,20 +145,28 @@ func TestDiffDrawPaintsPrefixGlyphs(t *testing.T) {
 	d.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 40})
 	buf := makeSurface(w, h)
 	d.Draw(newP(buf, w), theme)
-	// Prefix column starts at DiffPadX, glyph is 5 wide.
-	for i, want := range []string{"+ prefix", "- prefix"} {
+	// Prefix column starts at DiffPadX, glyph is 5 wide. Ink per row
+	// matches Draw's per-Kind ink selection.
+	wants := []struct {
+		label string
+		ink   RGBA
+	}{
+		{"+ prefix", diffAddedInk},
+		{"- prefix", diffRemovedInk},
+	}
+	for i, w2 := range wants {
 		y0 := DiffPadY + i*DiffLineH
 		found := false
 		for y := y0; y < y0+GlyphHeight && !found; y++ {
 			for x := DiffPadX; x < DiffPadX+5; x++ {
-				if pixelAt(buf, w, x, y) == theme.OnSurface {
+				if pixelAt(buf, w, x, y) == w2.ink {
 					found = true
 					break
 				}
 			}
 		}
 		if !found {
-			t.Fatalf("%s glyph not painted at row %d", want, i)
+			t.Fatalf("%s glyph not painted at row %d", w2.label, i)
 		}
 	}
 }

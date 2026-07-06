@@ -31,3 +31,25 @@ func strokeRect(p painter.Painter, x, y, w, h int, c RGBA) {
 	}
 	p.StrokeRect(painter.Rect{X: x, Y: y, W: w, H: h}, c, 1)
 }
+
+// dimInk returns a mid-tone RGBA that reads as a "dim label" against
+// theme.Surface in ANY theme. It's a 60/40 blend of OnSurface and
+// Surface — enough contrast against Surface to stay readable, less
+// weight than OnSurface itself so it forms a visual hierarchy.
+//
+// Widgets that need a subordinate/muted text tone (HeaderBar
+// Subtitle, ActionRow Subtitle, Stat Title, Timeline event Detail,
+// …) should use this instead of theme.Border. The old convention
+// of using theme.Border for dim text was fine in the default light
+// palette where Border is a mid-grey visible on white Surface, but
+// broke in dark themes where Border is deliberately close to
+// Surface (compact border strokes look better with low contrast).
+func dimInk(theme *Theme) RGBA {
+	on, sf := theme.OnSurface, theme.Surface
+	return RGBA{
+		R: uint8((3*int(on.R) + 2*int(sf.R)) / 5),
+		G: uint8((3*int(on.G) + 2*int(sf.G)) / 5),
+		B: uint8((3*int(on.B) + 2*int(sf.B)) / 5),
+		A: 255,
+	}
+}

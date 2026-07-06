@@ -86,7 +86,7 @@ func statChangeInk(trend StatTrend, theme *Theme) RGBA {
 	case StatDown:
 		return RGBA{R: 190, G: 60, B: 60, A: 255}
 	default: // StatFlat (also any out-of-range Trend values)
-		return theme.Border
+		return dimInk(theme)
 	}
 }
 
@@ -106,7 +106,7 @@ func (s *Stat) Draw(p painter.Painter, theme *Theme) {
 
 	titleX := r.X + StatPadX
 	titleY := r.Y + StatPadY
-	DrawText(p, titleX, titleY, s.Title, theme.Border)
+	DrawText(p, titleX, titleY, s.Title, dimInk(theme))
 
 	valueY := titleY + GlyphHeight + StatTitleGap
 	DrawText(p, titleX, valueY, s.Value, theme.OnSurface)

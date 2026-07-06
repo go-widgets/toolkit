@@ -120,5 +120,5 @@ func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
 	sw := TextWidth(h.Subtitle)
 	sx := titleX0 + (titleW-sw)/2
 	sy := ty + GlyphHeight + HeaderBarSubtitleGap
-	DrawText(p, sx, sy, h.Subtitle, theme.Border)
+	DrawText(p, sx, sy, h.Subtitle, dimInk(theme))
 }

@@ -131,7 +131,7 @@ func (tl *Timeline) Draw(p painter.Painter, theme *Theme) {
 		DrawText(p, textX, y, ev.Title, theme.OnSurface)
 		blockH := TimelineEventH
 		if ev.Detail != "" {
-			DrawText(p, textX, y+GlyphHeight+TimelineDetailGap, ev.Detail, theme.Border)
+			DrawText(p, textX, y+GlyphHeight+TimelineDetailGap, ev.Detail, dimInk(theme))
 			blockH += TimelineDetailGap + GlyphHeight
 		}
 		y += blockH

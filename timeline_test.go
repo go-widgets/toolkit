@@ -177,18 +177,19 @@ func TestTimelineDrawEveryKindWithAndWithoutDetail(t *testing.T) {
 		}
 		blockH := TimelineEventH
 		if ev.Detail != "" {
-			// Detail row should carry Border ink somewhere.
+			// Detail row should carry dim ink (dimInk helper) somewhere.
 			detailY := y + GlyphHeight + TimelineDetailGap
 			inked := 0
+			wantDim := dimInk(theme)
 			for dy := detailY; dy < detailY+GlyphHeight; dy++ {
 				for dx := TimelinePadX + TimelineMarkerW; dx < w; dx++ {
-					if pixelAt(buf, w, dx, dy) == theme.Border {
+					if pixelAt(buf, w, dx, dy) == wantDim {
 						inked++
 					}
 				}
 			}
 			if inked == 0 {
-				t.Fatalf("event %d Detail row painted 0 Border ink pixels", i)
+				t.Fatalf("event %d Detail row painted 0 dim ink pixels", i)
 			}
 			blockH += TimelineDetailGap + GlyphHeight
 		}
@@ -208,12 +209,13 @@ func TestTimelineDrawEmptyDetailSkipsSecondRow(t *testing.T) {
 	tl.Draw(newP(buf, w), theme)
 	detailY := TimelinePadY + GlyphHeight + TimelineDetailGap
 	textX := TimelinePadX + TimelineMarkerW
-	// Border ink appears on the rail line — restrict the scan to the
-	// text column so a stray rail pixel doesn't fail the assertion.
+	// Dim ink is used by Detail text. Rail line uses theme.Border so
+	// restrict the scan to the text column past the rail.
+	wantDim := dimInk(theme)
 	for y := detailY; y < detailY+GlyphHeight; y++ {
 		for x := textX; x < w; x++ {
-			if pixelAt(buf, w, x, y) == theme.Border {
-				t.Fatalf("empty Detail painted Border ink at (%d,%d)", x, y)
+			if pixelAt(buf, w, x, y) == wantDim {
+				t.Fatalf("empty Detail painted dim ink at (%d,%d)", x, y)
 			}
 		}
 	}

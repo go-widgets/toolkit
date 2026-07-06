@@ -43,12 +43,13 @@ func TestStatChangeInkKindsAreDistinct(t *testing.T) {
 	}
 }
 
-// StatFlat defers to Theme.Border so an app that swaps its border
-// palette gets a matching change row for free.
-func TestStatChangeInkFlatIsBorder(t *testing.T) {
+// StatFlat defers to the shared dimInk helper so the "flat" change
+// row reads as a subordinate label in any theme, matching Stat.Title,
+// HeaderBar.Subtitle, ActionRow.Subtitle + Timeline event.Detail.
+func TestStatChangeInkFlatIsDim(t *testing.T) {
 	theme := DefaultLight()
-	if got := statChangeInk(StatFlat, theme); got != theme.Border {
-		t.Fatalf("StatFlat ink = %+v, want theme.Border %+v", got, theme.Border)
+	if got := statChangeInk(StatFlat, theme); got != dimInk(theme) {
+		t.Fatalf("StatFlat ink = %+v, want dimInk(theme) %+v", got, dimInk(theme))
 	}
 }
 
@@ -64,11 +65,11 @@ func TestStatChangeInkUpDownAreFixed(t *testing.T) {
 	}
 }
 
-// Out-of-range StatTrend falls back to Flat (Theme.Border).
+// Out-of-range StatTrend falls back to Flat (dimInk).
 func TestStatChangeInkDefaultBranch(t *testing.T) {
 	theme := DefaultLight()
-	if got := statChangeInk(StatTrend(999), theme); got != theme.Border {
-		t.Fatalf("default-arm ink = %+v, want theme.Border %+v", got, theme.Border)
+	if got := statChangeInk(StatTrend(999), theme); got != dimInk(theme) {
+		t.Fatalf("default-arm ink = %+v, want dimInk %+v", got, dimInk(theme))
 	}
 }
 
@@ -94,10 +95,12 @@ func TestStatDrawAllFieldsUp(t *testing.T) {
 	if got := pixelAt(buf, w, w-1, h-1); got != theme.Border {
 		t.Fatalf("bottom-right corner = %+v, want Border %+v", got, theme.Border)
 	}
-	// Title row painted in Border ink. 'U' column 0 has bit 0 lit (row
-	// 0 set), so pixel (StatPadX, StatPadY) is Border.
-	if got := pixelAt(buf, w, StatPadX, StatPadY); got != theme.Border {
-		t.Fatalf("title ink = %+v, want Border %+v", got, theme.Border)
+	// Title row painted in the shared dim-label ink (dimInk). 'U'
+	// column 0 has bit 0 lit (row 0 set), so pixel (StatPadX,
+	// StatPadY) is dimInk(theme).
+	wantDim := dimInk(theme)
+	if got := pixelAt(buf, w, StatPadX, StatPadY); got != wantDim {
+		t.Fatalf("title ink = %+v, want dimInk %+v", got, wantDim)
 	}
 	// Value row painted in OnSurface ink. '1' at column 0 has bits[0]=0x00,
 	// but bits[1]=0x42 (row 1 lit) — so scan the value row for an OnSurface
@@ -140,8 +143,10 @@ func TestStatDrawChangeDownRed(t *testing.T) {
 	}
 }
 
-// StatFlat trend paints the change row in Theme.Border (dim).
-func TestStatDrawChangeFlatBorder(t *testing.T) {
+// StatFlat trend paints the change row in dimInk (shared dim-label
+// ink helper), so the "flat" indicator matches the visual weight of
+// Stat.Title / HeaderBar.Subtitle / ActionRow.Subtitle in any theme.
+func TestStatDrawChangeFlatDim(t *testing.T) {
 	const w, h = 120, 60
 	theme := DefaultLight()
 	s := &Stat{Title: "T", Value: "V", Change: "-1", Trend: StatFlat}
@@ -149,9 +154,10 @@ func TestStatDrawChangeFlatBorder(t *testing.T) {
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
 	changeY := StatPadY + GlyphHeight + StatTitleGap + GlyphHeight + StatValueGap
+	wantDim := dimInk(theme)
 	// '-' col 0 bits[0]=0x08 -> row 3 lit.
-	if got := pixelAt(buf, w, StatPadX, changeY+3); got != theme.Border {
-		t.Fatalf("StatFlat change ink = %+v, want Border %+v", got, theme.Border)
+	if got := pixelAt(buf, w, StatPadX, changeY+3); got != wantDim {
+		t.Fatalf("StatFlat change ink = %+v, want dimInk %+v", got, wantDim)
 	}
 }
 
@@ -210,7 +216,8 @@ func TestStatDrawValueBoldDoubleDraw(t *testing.T) {
 }
 
 // Dark theme: swapping Theme colours flips the ink for Title
-// (Border) + Value (OnSurface) without changing the widget code.
+// (dimInk, computed from OnSurface + Surface) + Value (OnSurface)
+// without changing the widget code. Corner stroke stays Border.
 func TestStatDrawDarkTheme(t *testing.T) {
 	const w, h = 120, 60
 	theme := DefaultDark()
@@ -218,15 +225,17 @@ func TestStatDrawDarkTheme(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
-	// Corner is dark theme's Border.
+	// Corner is dark theme's Border stroke.
 	if got := pixelAt(buf, w, 0, 0); got != theme.Border {
 		t.Fatalf("dark corner = %+v, want dark Border %+v", got, theme.Border)
 	}
 	// Title 'T' column 2 = 0x7F (all seven rows lit), so at
-	// (StatPadX + 2 (col-2 offset within the first glyph), StatPadY)
-	// the pixel is Border ink.
-	if got := pixelAt(buf, w, StatPadX+2, StatPadY); got != theme.Border {
-		t.Fatalf("dark title ink = %+v, want dark Border %+v", got, theme.Border)
+	// (StatPadX + 2, StatPadY) the pixel is dimInk(theme) —
+	// readable against Surface where theme.Border would be nearly
+	// invisible.
+	wantDim := dimInk(theme)
+	if got := pixelAt(buf, w, StatPadX+2, StatPadY); got != wantDim {
+		t.Fatalf("dark title ink = %+v, want dimInk %+v", got, wantDim)
 	}
 }
 

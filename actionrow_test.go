@@ -113,12 +113,12 @@ func TestActionRowDrawWithSubtitle(t *testing.T) {
 	buf := makeSurface(w, h)
 	a.Draw(newP(buf, w), theme)
 
-	// Subtitle ink is drawn in Border tone below the title.
+	// Subtitle ink is drawn in dimInk tone below the title.
 	sy := ActionRowPadY + GlyphHeight + ActionRowSubtitleGap
 	found := false
 	for y := sy; y < sy+GlyphHeight && !found; y++ {
 		for x := ActionRowPadX; x < ActionRowPadX+TextWidth("sub") && !found; x++ {
-			if pixelAt(buf, w, x, y) == theme.Border {
+			if pixelAt(buf, w, x, y) == dimInk(theme) {
 				found = true
 			}
 		}

@@ -63,6 +63,19 @@ var diffAddedFill = RGBA{R: 200, G: 240, B: 200, A: 255}
 // diffRemovedFill is the row tint painted behind DiffRemoved lines.
 var diffRemovedFill = RGBA{R: 245, G: 210, B: 210, A: 255}
 
+// diffAddedInk / diffRemovedInk are the FIXED text tones used on
+// the (also fixed) Added/Removed row backgrounds. Fixed because the
+// row backgrounds themselves are theme-independent (a diff view is
+// a semantic display — the "added lines are green" convention is
+// stronger than any per-theme adaptation), so pairing them with
+// theme.OnSurface (light in dark themes) would sit unreadable light
+// text on a light row. A dark ink pairs correctly with the light
+// backgrounds in both light AND dark themes.
+var (
+	diffAddedInk   = RGBA{R: 20, G: 60, B: 20, A: 255}
+	diffRemovedInk = RGBA{R: 90, G: 20, B: 20, A: 255}
+)
+
 // NewDiff builds a Diff view over the supplied lines. A nil slice is
 // normalised to a zero-length slice so Draw never has to nil-guard.
 func NewDiff(lines []DiffLine) *Diff {
@@ -80,18 +93,21 @@ func (d *Diff) Draw(p painter.Painter, theme *Theme) {
 	for i, line := range d.Lines {
 		y := r.Y + DiffPadY + i*DiffLineH
 		fill := theme.Surface
+		ink := theme.OnSurface
 		prefix := " "
 		switch line.Kind {
 		case DiffAdded:
 			fill = diffAddedFill
+			ink = diffAddedInk
 			prefix = "+"
 		case DiffRemoved:
 			fill = diffRemovedFill
+			ink = diffRemovedInk
 			prefix = "-"
 		}
 		fillRect(p, r.X+1, y, r.W-2, DiffLineH, fill)
-		DrawText(p, r.X+DiffPadX, y, prefix, theme.OnSurface)
-		DrawText(p, r.X+DiffPadX+GlyphAdvance, y, line.Text, theme.OnSurface)
+		DrawText(p, r.X+DiffPadX, y, prefix, ink)
+		DrawText(p, r.X+DiffPadX+GlyphAdvance, y, line.Text, ink)
 	}
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 }

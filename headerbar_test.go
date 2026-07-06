@@ -153,13 +153,13 @@ func TestHeaderBarSubtitleShiftsTitleUp(t *testing.T) {
 	sub := false
 	for y := 20; y < HeaderBarHeight-2 && !sub; y++ {
 		for x := 4; x < w-4 && !sub; x++ {
-			if pixelAt(buf2, w, x, y) == theme.Border {
+			if pixelAt(buf2, w, x, y) == dimInk(theme) {
 				sub = true
 			}
 		}
 	}
 	if !sub {
-		t.Fatal("no Border-tone subtitle ink found in the bar's interior")
+		t.Fatal("no dim-tone subtitle ink found in the bar's interior")
 	}
 }
 
@@ -174,12 +174,12 @@ func TestHeaderBarSubtitleWithoutTitle(t *testing.T) {
 	buf := makeSurface(w, HeaderBarHeight)
 	h.Draw(newP(buf, w), theme)
 
-	// Subtitle ink appears inside the bar (Border tone, off the
+	// Subtitle ink appears inside the bar (dim tone, off the
 	// outer stroke).
 	sub := false
 	for y := 20; y < HeaderBarHeight-2 && !sub; y++ {
 		for x := 4; x < w-4 && !sub; x++ {
-			if pixelAt(buf, w, x, y) == theme.Border {
+			if pixelAt(buf, w, x, y) == dimInk(theme) {
 				sub = true
 			}
 		}
