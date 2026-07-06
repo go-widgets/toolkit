@@ -37,8 +37,8 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	if e.Focused {
 		border = theme.Accent
 	}
-	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(p, r.X, r.Y, r.W, r.H, border)
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Surface)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
 	textY := r.Y + (r.H-GlyphHeight)/2
 	DrawText(p, r.X+4, textY, e.Text, theme.OnSurface)
 	if e.Focused {

@@ -222,8 +222,8 @@ func TestButtonDrawStates(t *testing.T) {
 		t.Fatalf("press face = %+v, want Accent", pixelAt(prs, w, 10, 6))
 	}
 	// Border drawn at corner in every state.
-	if pixelAt(prs, w, 2, 2) != theme.Border {
-		t.Fatalf("top-left corner border = %+v, want Border", pixelAt(prs, w, 2, 2))
+	if pixelAt(prs, w, 10, 2) != theme.Border {
+		t.Fatalf("top-edge border = %+v, want Border", pixelAt(prs, w, 10, 2))
 	}
 }
 

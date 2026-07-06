@@ -45,16 +45,17 @@ func (s *Switch) Draw(p painter.Painter, theme *Theme) {
 	if s.On {
 		track = theme.Accent
 	}
-	fillRect(p, r.X, r.Y, r.W, r.H, track)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	// Fully-rounded pill track + circular knob -- the iOS/macOS switch shape.
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, r.H/2, track)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, r.H/2, theme.Border)
 	knobH := r.H - 2*switchPad
 	knobW := knobH
 	knobX := r.X + switchPad
 	if s.On {
 		knobX = r.X + r.W - knobW - switchPad
 	}
-	fillRect(p, knobX, r.Y+switchPad, knobW, knobH, theme.Surface)
-	strokeRect(p, knobX, r.Y+switchPad, knobW, knobH, theme.Border)
+	fillRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, theme.Surface)
+	strokeRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, theme.Border)
 }
 
 // OnEvent flips On + fires OnToggle on click. All other event kinds

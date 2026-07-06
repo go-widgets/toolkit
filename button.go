@@ -24,6 +24,10 @@ type Button struct {
 	pressed bool
 }
 
+// buttonRadius is the corner radius for the button + text-entry body, giving
+// the WhiteSur / macOS soft-rectangle look.
+const buttonRadius = 6
+
 // NewButton constructs a Button with the given label + click handler.
 // Handler may be nil (a no-op button is still rendered).
 func NewButton(label string, onClick func()) *Button {
@@ -54,8 +58,8 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	case b.hovered:
 		face = theme.SurfaceAlt
 	}
-	fillRect(p, r.X, r.Y, r.W, r.H, face)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Border)
 	if b.Label != "" {
 		tw := TextWidth(b.Label)
 		tx := r.X + (r.W-tw)/2
