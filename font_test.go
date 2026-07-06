@@ -64,7 +64,7 @@ func TestEveryGlyphPaintsAtLeastOnePixel(t *testing.T) {
 		"0123456789",
 		"ABCDEFGHIJKLMNOPQRSTUVWXYZ",
 		"abcdefghijklmnopqrstuvwxyz",
-		".,:-_/?!()<>+*=#",
+		".,:-_/?!()<>+*=#%",
 	}
 	for _, g := range groups {
 		for i := 0; i < len(g); i++ {
