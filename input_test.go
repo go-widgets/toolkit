@@ -140,8 +140,8 @@ func TestEntryDrawFocusedShowsCursor(t *testing.T) {
 	buf := makeSurface(w, h)
 	e.Draw(newP(buf, w), theme)
 	// Border in Accent (focused).
-	if pixelAt(buf, w, 0, 0) != theme.Accent {
-		t.Fatalf("focused top-left border = %+v, want Accent", pixelAt(buf, w, 0, 0))
+	if pixelAt(buf, w, 30, 0) != theme.Accent {
+		t.Fatalf("focused top-edge border = %+v, want Accent", pixelAt(buf, w, 30, 0))
 	}
 }
 
@@ -152,8 +152,8 @@ func TestEntryDrawUnfocused(t *testing.T) {
 	e.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(w, h)
 	e.Draw(newP(buf, w), theme)
-	if pixelAt(buf, w, 0, 0) != theme.Border {
-		t.Fatalf("unfocused top-left border = %+v, want Border", pixelAt(buf, w, 0, 0))
+	if pixelAt(buf, w, 30, 0) != theme.Border {
+		t.Fatalf("unfocused top-edge border = %+v, want Border", pixelAt(buf, w, 30, 0))
 	}
 }
 

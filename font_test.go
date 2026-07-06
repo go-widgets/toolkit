@@ -201,13 +201,22 @@ func TestDrawTextEmptyString(t *testing.T) {
 	}
 }
 
-// Ink alpha is honoured (DrawText writes ink.A, not a hard-coded 0xFF).
+// Ink alpha is honoured: a semi-transparent ink is composited toward the
+// destination (the painter alpha-blends), so it lands lighter than the opaque
+// ink over the 0xC8 sentinel background.
 func TestDrawTextHonoursInkAlpha(t *testing.T) {
 	const w, h = 16, 8
-	buf := makeSurface(w, h)
-	ink := RGBA{R: 0x10, G: 0x20, B: 0x30, A: 0x80}
-	DrawText(newP(buf, w), 0, 0, "I", ink)
-	if got := pixelAt(buf, w, 2, 3); got.A != 0x80 {
-		t.Fatalf("alpha = %d, want 0x80 (got pixel %+v)", got.A, got)
+	// Opaque ink writes verbatim.
+	full := makeSurface(w, h)
+	DrawText(newP(full, w), 0, 0, "I", RGBA{R: 0x10, G: 0x20, B: 0x30, A: 0xFF})
+	if got := pixelAt(full, w, 2, 3); got != (RGBA{R: 0x10, G: 0x20, B: 0x30, A: 0xFF}) {
+		t.Fatalf("opaque ink pixel = %+v, want the ink verbatim", got)
+	}
+	// Half-alpha ink blends toward the 0xC8 background: strictly between the
+	// ink (0x10) and the background (0xC8).
+	half := makeSurface(w, h)
+	DrawText(newP(half, w), 0, 0, "I", RGBA{R: 0x10, G: 0x20, B: 0x30, A: 0x80})
+	if got := pixelAt(half, w, 2, 3); !(got.R > 0x10 && got.R < 0xC8) {
+		t.Fatalf("half-alpha ink R = %d, want strictly between 0x10 and 0xC8 (blended)", got.R)
 	}
 }

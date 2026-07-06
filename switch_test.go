@@ -79,8 +79,8 @@ func TestSwitchDrawOnAndOff(t *testing.T) {
 	}
 
 	// Border pixel at top-left corner drawn in both states.
-	if pixelAt(off, w, 2, 2) != theme.Border {
-		t.Fatalf("off corner border = %+v, want Border", pixelAt(off, w, 2, 2))
+	if pixelAt(off, w, 16, 2) != theme.Border {
+		t.Fatalf("off top-edge border = %+v, want Border", pixelAt(off, w, 16, 2))
 	}
 }
 

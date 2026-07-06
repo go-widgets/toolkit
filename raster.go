@@ -32,6 +32,25 @@ func strokeRect(p painter.Painter, x, y, w, h int, c RGBA) {
 	p.StrokeRect(painter.Rect{X: x, Y: y, W: w, H: h}, c, 1)
 }
 
+// fillRoundRect fills (x, y, w, h) with c, corners rounded to radius, through
+// the Painter (anti-aliased on pixel back-ends; square on a cell grid). The
+// naming mirrors fillRect so a widget's Draw reads as
+// `fillRoundRect(p, r.X, r.Y, r.W, r.H, radius, colour)`.
+func fillRoundRect(p painter.Painter, x, y, w, h, radius int, c RGBA) {
+	if w <= 0 || h <= 0 {
+		return
+	}
+	p.FillRoundRect(painter.Rect{X: x, Y: y, W: w, H: h}, radius, c)
+}
+
+// strokeRoundRect paints a 1-pixel rounded border on (x, y, w, h) with c.
+func strokeRoundRect(p painter.Painter, x, y, w, h, radius int, c RGBA) {
+	if w <= 0 || h <= 0 {
+		return
+	}
+	p.StrokeRoundRect(painter.Rect{X: x, Y: y, W: w, H: h}, radius, c, 1)
+}
+
 // dimInk returns a mid-tone RGBA that reads as a "dim label" against
 // theme.Surface in ANY theme. It's a 60/40 blend of OnSurface and
 // Surface — enough contrast against Surface to stay readable, less
