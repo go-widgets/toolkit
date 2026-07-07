@@ -19,14 +19,41 @@ type Button struct {
 	Base
 	Label   string
 	OnClick func()
+	Style   ButtonStyle // resting appearance; default is ButtonDefault
 
 	hovered bool
 	pressed bool
 }
 
+// ButtonStyle selects a button's resting fill, giving a layout visual hierarchy
+// (macOS "prominent"/default/secondary buttons). Hover + press still override
+// the fill on top of the style.
+type ButtonStyle int
+
+const (
+	// ButtonDefault is a Surface-faced button (the plain look).
+	ButtonDefault ButtonStyle = iota
+	// ButtonProminent is filled with Accent + accent-foreground text -- the
+	// primary/default action (e.g. a calculator's operator keys, "OK").
+	ButtonProminent
+	// ButtonSecondary is filled with SurfaceAlt -- a muted grey key that sits
+	// between Default and Prominent (e.g. a calculator's C / +/- / % keys).
+	ButtonSecondary
+)
+
 // buttonRadius is the corner radius for the button + text-entry body, giving
 // the WhiteSur / macOS soft-rectangle look.
 const buttonRadius = 6
+
+// accentFg returns the ink to draw on an Accent fill: the theme's
+// accent_fg_color when present (GTK/WhiteSur themes set it to white), else a
+// safe white fallback.
+func accentFg(theme *Theme) RGBA {
+	if c, ok := theme.Extra["accent_fg_color"]; ok {
+		return c
+	}
+	return RGB(0xFF, 0xFF, 0xFF)
+}
 
 // NewButton constructs a Button with the given label + click handler.
 // Handler may be nil (a no-op button is still rendered).
@@ -49,8 +76,16 @@ func (b *Button) SetPressed(v bool) { b.pressed = v }
 // Background so the label stays legible against the Accent face.
 func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
+	// Resting face/ink from the style.
 	face := theme.Surface
 	ink := theme.OnSurface
+	switch b.Style {
+	case ButtonProminent:
+		face, ink = theme.Accent, accentFg(theme)
+	case ButtonSecondary:
+		face = theme.SurfaceAlt
+	}
+	// Interaction states override the resting fill.
 	switch {
 	case b.pressed:
 		face = theme.Accent
