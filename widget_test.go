@@ -224,6 +224,42 @@ func TestButtonIgnoresNonClick(t *testing.T) {
 	}
 }
 
+func TestButtonStyles(t *testing.T) {
+	const w, h = 40, 16
+	theme := DefaultLight()
+	// Prominent: Accent resting fill.
+	prom := NewButton("P", nil)
+	prom.Style = ButtonProminent
+	prom.SetBounds(Rect{X: 2, Y: 2, W: 30, H: 10})
+	pb := makeSurface(w, h)
+	prom.Draw(newP(pb, w), theme)
+	if pixelAt(pb, w, 25, 6) != theme.Accent {
+		t.Fatalf("prominent face = %+v, want Accent", pixelAt(pb, w, 25, 6))
+	}
+	// Secondary: SurfaceAlt resting fill.
+	sec := NewButton("S", nil)
+	sec.Style = ButtonSecondary
+	sec.SetBounds(Rect{X: 2, Y: 2, W: 30, H: 10})
+	sb := makeSurface(w, h)
+	sec.Draw(newP(sb, w), theme)
+	if pixelAt(sb, w, 25, 6) != theme.SurfaceAlt {
+		t.Fatalf("secondary face = %+v, want SurfaceAlt", pixelAt(sb, w, 25, 6))
+	}
+}
+
+func TestAccentFg(t *testing.T) {
+	// White fallback when the theme carries no accent_fg_color.
+	if got := accentFg(DefaultLight()); got != RGB(0xFF, 0xFF, 0xFF) {
+		t.Fatalf("accentFg fallback = %+v, want white", got)
+	}
+	// Uses the theme's accent_fg_color when present.
+	th := DefaultLight()
+	th.Extra = map[string]RGBA{"accent_fg_color": RGB(0x11, 0x22, 0x33)}
+	if got := accentFg(th); got != RGB(0x11, 0x22, 0x33) {
+		t.Fatalf("accentFg from Extra = %+v, want (0x11,0x22,0x33)", got)
+	}
+}
+
 func TestButtonDrawStates(t *testing.T) {
 	const w, h = 32, 16
 	theme := DefaultLight()
