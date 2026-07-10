@@ -66,7 +66,7 @@ every native target Go ships.
 | Tabs         | `Notebook`                                                         |
 | Scroll       | `ScrollView`                                                       |
 | Feedback     | `ProgressBar`, `LevelBar`, `Spinner`, `Image`, `Tooltip`, `Notification` |
-| Navigation   | `Menu` + `MenuItem.Shortcut`, `MenuBar` + `Alt+letter`, `Dialog`, `MessageDialog` |
+| Navigation   | `Menu` + `MenuItem.Shortcut`, `MenuBar` + `Alt+letter`, `ContextMenu`, `Dialog`, `MessageDialog` |
 | Bars         | `Toolbar`, `Statusbar`, 10 stock `DrawIcon*` helpers               |
 | Composite    | `FileChooser`, `ColorChooser`, `Calendar`, `DatePicker`, `MarkdownView` |
 | Charts       | `LineChart`, `BarChart`, `PieChart`                               |
@@ -169,9 +169,10 @@ model, not the widget catalogue:
   `SplitDropPayload` / `JoinDropPayload` for multi-item payloads.
   DropZone dropped its synthetic-`EventChar` seam and now drives its
   hover cue + `OnDrop` from the formal lifecycle as a `DropTarget`.
-- **Context menu helper** — one-line `ShowContextMenu(x, y, *Menu,
-  *Popover)` that spawns a Menu at worker-relative coords + auto-
-  dismisses on outside-click.
+- ~~**Context menu helper**~~ — **done (v0.17)**: `ContextMenu`
+  wraps a `Menu` as a right-click popup — `Popup(x, y)` shows it at
+  the cursor, it auto-sizes to its items, clamps itself inside the
+  surface, and dismisses on outside-click.
 - **Overlay layout container** — z-ordered stacking above a
   primary child, so Popover (v0.8) / Toast (v0.8) / Notification /
   Tooltip stack correctly without hosts arranging screen positions.
