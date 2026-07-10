@@ -73,6 +73,24 @@ const (
 	// track drag state clear it here. X/Y carry the release
 	// position (widget-local).
 	EventMouseUp
+	// EventDragStart fires on a DropTarget when a drag first enters it
+	// (drag-enter). The target typically raises a hover cue. Code
+	// carries the drag payload the host is offering, so the target can
+	// decide via AcceptsDrop whether to signal acceptance.
+	EventDragStart
+	// EventDragMove fires as the drag pointer moves while still over the
+	// same DropTarget. X/Y carry the widget-local position (for an
+	// insertion indicator); Code still carries the payload.
+	EventDragMove
+	// EventDragLeave fires when the drag pointer exits a DropTarget
+	// without dropping. The target clears its hover cue. It completes
+	// the enter/move/leave/drop lifecycle so a target never stays stuck
+	// in the hover state.
+	EventDragLeave
+	// EventDrop fires when the drag is released over a DropTarget. Code
+	// carries the payload (multiple items newline-separated — see
+	// SplitDropPayload); the target consumes it and clears its hover cue.
+	EventDrop
 )
 
 // Event is one input event delivered to a widget. The parent container

@@ -163,11 +163,12 @@ model, not the widget catalogue:
   so a caller can plug a larger bitmap or a hand-rasterised
   TrueType at boot. Unblocks `FontChooser` (long-standing deferral)
   + retina-size Label rendering.
-- **First-class drag-and-drop event kinds** — `EventDragStart` /
-  `EventDragMove` / `EventDrop`, plus a `DragSource` / `DropTarget`
-  interface pair. DropZone (v0.9) currently uses a synthetic-
-  `EventChar` seam; formalising the events lets it and future
-  siblings share the same host contract.
+- ~~**First-class drag-and-drop event kinds**~~ — **done (v0.16)**:
+  `EventDragStart` / `EventDragMove` / `EventDragLeave` / `EventDrop`,
+  plus a `DragSource` / `DropTarget` interface pair and
+  `SplitDropPayload` / `JoinDropPayload` for multi-item payloads.
+  DropZone dropped its synthetic-`EventChar` seam and now drives its
+  hover cue + `OnDrop` from the formal lifecycle as a `DropTarget`.
 - **Context menu helper** — one-line `ShowContextMenu(x, y, *Menu,
   *Popover)` that spawns a Menu at worker-relative coords + auto-
   dismisses on outside-click.

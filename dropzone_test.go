@@ -158,47 +158,67 @@ func TestDropZoneClickTogglesHover(t *testing.T) {
 	}
 }
 
-// TestDropZoneCharDropsWhenHovered covers the EventChar + Hover=true
-// + OnDrop non-nil branch: OnDrop must fire with a one-element slice
-// carrying ev.Code.
-func TestDropZoneCharDropsWhenHovered(t *testing.T) {
+// TestDropZoneDragLifecycle covers the enter/move/leave arms: DragStart and
+// DragMove raise Hover, DragLeave clears it.
+func TestDropZoneDragLifecycle(t *testing.T) {
+	d := NewDropZone("x")
+	d.OnEvent(Event{Kind: EventDragStart, Code: "/a"})
+	if !d.Hover {
+		t.Fatal("EventDragStart should raise Hover")
+	}
+	d.Hover = false
+	d.OnEvent(Event{Kind: EventDragMove, Code: "/a"})
+	if !d.Hover {
+		t.Fatal("EventDragMove should raise Hover")
+	}
+	d.OnEvent(Event{Kind: EventDragLeave})
+	if d.Hover {
+		t.Fatal("EventDragLeave should clear Hover")
+	}
+}
+
+// TestDropZoneDropDeliversItems covers EventDrop with a non-nil callback: the
+// payload's newline-separated items reach OnDrop and Hover is cleared.
+func TestDropZoneDropDeliversItems(t *testing.T) {
 	var got []string
 	d := NewDropZone("x")
 	d.OnDrop = func(paths []string) { got = paths }
 	d.Hover = true
-	d.OnEvent(Event{Kind: EventChar, Code: "/tmp/foo.txt"})
-	if len(got) != 1 || got[0] != "/tmp/foo.txt" {
-		t.Fatalf("OnDrop got %v, want [/tmp/foo.txt]", got)
+	d.OnEvent(Event{Kind: EventDrop, Code: "/tmp/a.txt\n/tmp/b.txt"})
+	if len(got) != 2 || got[0] != "/tmp/a.txt" || got[1] != "/tmp/b.txt" {
+		t.Fatalf("OnDrop got %v, want two paths", got)
+	}
+	if d.Hover {
+		t.Fatal("EventDrop should clear Hover")
 	}
 }
 
-// TestDropZoneCharIgnoredWhenIdle covers the EventChar + Hover=false
-// branch: OnDrop must NOT fire when the widget is not in the drag-
-// over state, even if a callback is registered.
-func TestDropZoneCharIgnoredWhenIdle(t *testing.T) {
-	fires := 0
-	d := NewDropZone("x")
-	d.OnDrop = func(paths []string) { fires++ }
-	d.Hover = false
-	d.OnEvent(Event{Kind: EventChar, Code: "/tmp/foo.txt"})
-	if fires != 0 {
-		t.Fatalf("OnDrop fired %d times while idle, want 0", fires)
-	}
-}
-
-// TestDropZoneCharNilCallbackNoPanic covers the EventChar + Hover=true
-// + OnDrop=nil branch: the widget must not panic when no callback is
-// wired (the parent may register OnDrop lazily).
-func TestDropZoneCharNilCallbackNoPanic(t *testing.T) {
+// TestDropZoneDropNilCallbackNoPanic covers EventDrop + OnDrop=nil: the widget
+// must not panic when no callback is wired, and still clears Hover.
+func TestDropZoneDropNilCallbackNoPanic(t *testing.T) {
 	d := NewDropZone("x")
 	d.Hover = true
-	// Must not panic.
-	d.OnEvent(Event{Kind: EventChar, Code: "/tmp/foo.txt"})
+	d.OnEvent(Event{Kind: EventDrop, Code: "/tmp/foo.txt"}) // must not panic
+	if d.Hover {
+		t.Fatal("EventDrop should clear Hover even with nil callback")
+	}
+}
+
+// TestDropZoneAcceptsDrop covers the DropTarget contract: any non-empty payload
+// is droppable, an empty one is not.
+func TestDropZoneAcceptsDrop(t *testing.T) {
+	d := NewDropZone("x")
+	if !d.AcceptsDrop("/tmp/a") {
+		t.Fatal("non-empty payload should be accepted")
+	}
+	if d.AcceptsDrop("") {
+		t.Fatal("empty payload should be rejected")
+	}
 }
 
 // TestDropZoneIgnoresOtherKinds covers the default branch of the
-// switch: EventKeyDown (and every non-Click / non-Char event) must be
-// a no-op — no state change, no callback fired.
+// switch: EventKeyDown (and every unrelated event) must be a no-op —
+// no state change, no callback fired.
 func TestDropZoneIgnoresOtherKinds(t *testing.T) {
 	fires := 0
 	d := NewDropZone("x")
