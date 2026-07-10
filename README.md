@@ -62,7 +62,7 @@ every native target Go ships.
 | Action       | `Button`, `ToggleButton`, `CheckButton`, `RadioButton` + `Group`   |
 | Input        | `Entry`, `TextView` + `Selection` + IME preview, `SpinButton`, `Scale`, `RangeSlider` |
 | Selection    | `ListBox`, `TreeView`, `DropDown`                                  |
-| Layout       | `HBox`, `VBox`, `Grid`, `Frame`, `Stack`, `Paned`, `Expander`      |
+| Layout       | `HBox`, `VBox`, `Grid`, `Frame`, `Stack`, `Overlay`, `Paned`, `Expander` |
 | Tabs         | `Notebook`                                                         |
 | Scroll       | `ScrollView`                                                       |
 | Feedback     | `ProgressBar`, `LevelBar`, `Spinner`, `Image`, `Tooltip`, `Notification` |
@@ -173,9 +173,11 @@ model, not the widget catalogue:
   wraps a `Menu` as a right-click popup — `Popup(x, y)` shows it at
   the cursor, it auto-sizes to its items, clamps itself inside the
   surface, and dismisses on outside-click.
-- **Overlay layout container** — z-ordered stacking above a
-  primary child, so Popover (v0.8) / Toast (v0.8) / Notification /
-  Tooltip stack correctly without hosts arranging screen positions.
+- ~~**Overlay layout container**~~ — **done (v0.18)**: `Overlay`
+  stacks z-ordered `Layers` above a primary `Content` child, so
+  Popover / Toast / Notification / Tooltip / ContextMenu float
+  without hosts arranging z-order. Events route top-down; `Modal`
+  makes a miss swallow (backdrop) instead of falling through.
 - **A11y bridge** — `Role` + `Label` fields on widgets already;
   wire an `A11yPublisher` interface hosts can plug (WAI-ARIA
   wrapping on wasm, TTY-cell metadata on tui, ...).
