@@ -82,15 +82,15 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, border)
-	lineH := GlyphHeight + 4 // 1-pixel-line font + 4 px line spacing
+	lineH := GlyphHeight() + 4 // 1-pixel-line font + 4 px line spacing
 	for i, line := range t.Lines {
 		y := r.Y + 4 + i*lineH
 		DrawText(p, r.X+4, y, line, theme.OnSurface)
 	}
 	if t.Focused {
-		cx := r.X + 4 + t.CursorCol*GlyphAdvance
+		cx := r.X + 4 + t.CursorCol*GlyphAdvance()
 		cy := r.Y + 4 + t.CursorLine*lineH
-		fillRect(p, cx, cy-1, 1, GlyphHeight+2, theme.OnSurface)
+		fillRect(p, cx, cy-1, 1, GlyphHeight()+2, theme.OnSurface)
 		// IME composition preview: render the pending string in the
 		// muted SurfaceAlt tone starting at the cursor, so the user
 		// sees dead-key / CJK candidates without them entering the
@@ -98,7 +98,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 		if t.Composition != "" {
 			cw := TextWidth(t.Composition)
 			DrawText(p, cx, cy, t.Composition, theme.SurfaceAlt)
-			fillRect(p, cx, cy+GlyphHeight, cw, 1, theme.SurfaceAlt)
+			fillRect(p, cx, cy+GlyphHeight(), cw, 1, theme.SurfaceAlt)
 		}
 	}
 }

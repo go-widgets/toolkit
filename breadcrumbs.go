@@ -39,12 +39,12 @@ func NewBreadcrumbs(segments []string) *Breadcrumbs {
 
 // Draw paints each segment followed by a separator (except after the
 // last one). Segments are vertically centred inside Bounds when
-// Bounds.H exceeds GlyphHeight, otherwise they anchor at Bounds.Y.
+// Bounds.H exceeds GlyphHeight(), otherwise they anchor at Bounds.Y.
 func (b *Breadcrumbs) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	ty := r.Y
-	if r.H > GlyphHeight {
-		ty = r.Y + (r.H-GlyphHeight)/2
+	if r.H > GlyphHeight() {
+		ty = r.Y + (r.H-GlyphHeight())/2
 	}
 	x := r.X
 	n := len(b.Segments)

@@ -34,8 +34,8 @@ func (m *mockFFChild) OnEvent(ev Event) {
 // --- Constants -----------------------------------------------------------
 
 func TestFormFieldConstants(t *testing.T) {
-	if FormFieldLabelH != GlyphHeight+2 {
-		t.Fatalf("FormFieldLabelH = %d, want %d", FormFieldLabelH, GlyphHeight+2)
+	if FormFieldLabelH() != GlyphHeight()+2 {
+		t.Fatalf("FormFieldLabelH() = %d, want %d", FormFieldLabelH(), GlyphHeight()+2)
 	}
 	if FormFieldChildGap != 4 {
 		t.Fatalf("FormFieldChildGap = %d, want 4", FormFieldChildGap)
@@ -88,7 +88,7 @@ func TestFormFieldDrawLabelPaintsOnBackground(t *testing.T) {
 
 	// Some pixel in the label row must equal OnBackground.
 	found := false
-	for y := 6 + FormFieldPadY; y < 6+FormFieldPadY+GlyphHeight && !found; y++ {
+	for y := 6 + FormFieldPadY; y < 6+FormFieldPadY+GlyphHeight() && !found; y++ {
 		for x := 4; x < 4+80 && !found; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnBackground {
 				found = true
@@ -108,7 +108,7 @@ func TestFormFieldDrawLabelUsesDarkTheme(t *testing.T) {
 	buf := makeSurface(w, h)
 	f.Draw(newP(buf, w), theme)
 	found := false
-	for y := 6 + FormFieldPadY; y < 6+FormFieldPadY+GlyphHeight && !found; y++ {
+	for y := 6 + FormFieldPadY; y < 6+FormFieldPadY+GlyphHeight() && !found; y++ {
 		for x := 4; x < 4+80 && !found; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnBackground {
 				found = true
@@ -138,7 +138,7 @@ func TestFormFieldDrawWithChildPositionsAndDraws(t *testing.T) {
 		t.Fatalf("Child.Draw invocations = %d, want 1", child.draws)
 	}
 	cb := child.Bounds()
-	wantTop := 6 + FormFieldPadY + FormFieldLabelH + FormFieldChildGap
+	wantTop := 6 + FormFieldPadY + FormFieldLabelH() + FormFieldChildGap
 	wantBottom := 6 + 60 - FormFieldPadY
 	if cb.X != 4+FormFieldPadX {
 		t.Fatalf("Child.X = %d, want %d", cb.X, 4+FormFieldPadX)
@@ -169,7 +169,7 @@ func TestFormFieldDrawHelpUsesBorderInk(t *testing.T) {
 
 	// Look for Border ink in the caption strip at the bottom of the
 	// field's bounds.
-	captionYStart := 6 + 60 - FormFieldPadY - GlyphHeight
+	captionYStart := 6 + 60 - FormFieldPadY - GlyphHeight()
 	captionYEnd := 6 + 60 - FormFieldPadY
 	found := false
 	for y := captionYStart; y < captionYEnd && !found; y++ {
@@ -199,7 +199,7 @@ func TestFormFieldDrawErrorUsesFixedRedInk(t *testing.T) {
 	f.Draw(newP(buf, w), theme)
 
 	red := RGBA{R: 190, G: 60, B: 60, A: 255}
-	captionYStart := 6 + 60 - FormFieldPadY - GlyphHeight
+	captionYStart := 6 + 60 - FormFieldPadY - GlyphHeight()
 	captionYEnd := 6 + 60 - FormFieldPadY
 	found := false
 	for y := captionYStart; y < captionYEnd && !found; y++ {
@@ -228,7 +228,7 @@ func TestFormFieldDrawErrorSuppressesHelp(t *testing.T) {
 	f.Draw(newP(buf, w), theme)
 
 	red := RGBA{R: 190, G: 60, B: 60, A: 255}
-	captionYStart := 6 + 60 - FormFieldPadY - GlyphHeight
+	captionYStart := 6 + 60 - FormFieldPadY - GlyphHeight()
 	captionYEnd := 6 + 60 - FormFieldPadY
 
 	sawRed := false
@@ -266,7 +266,7 @@ func TestFormFieldDrawNilChildStillPaintsLabelAndHelp(t *testing.T) {
 	f.Draw(newP(buf, w), theme)
 	// Label ink present.
 	foundLabel := false
-	for y := 6 + FormFieldPadY; y < 6+FormFieldPadY+GlyphHeight && !foundLabel; y++ {
+	for y := 6 + FormFieldPadY; y < 6+FormFieldPadY+GlyphHeight() && !foundLabel; y++ {
 		for x := 4; x < 4+80 && !foundLabel; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnBackground {
 				foundLabel = true
@@ -382,7 +382,7 @@ func TestFormFieldOnEventNilChildNoPanic(t *testing.T) {
 
 // A caption-height reservation happens when Help or Error is set —
 // exercise the branch where neither is set (the "no caption" child
-// rect is taller by GlyphHeight+FormFieldHelpGap).
+// rect is taller by GlyphHeight()+FormFieldHelpGap).
 func TestFormFieldChildRectExpandsWithoutCaption(t *testing.T) {
 	child := &mockFFChild{}
 	f := NewFormField("Name", child)

@@ -127,7 +127,7 @@ func TestTimelineDrawSingleDefaultEvent(t *testing.T) {
 
 	// Marker centre pixel is Accent.
 	railX := TimelinePadX + TimelineMarkerW/2
-	markerY := TimelinePadY + (GlyphHeight-TimelineMarkerSize)/2
+	markerY := TimelinePadY + (GlyphHeight()-TimelineMarkerSize)/2
 	// Sample the marker's interior (avoid the rail-intersect edge case).
 	if got := pixelAt(buf, w, railX+1, markerY+1); got != theme.Accent {
 		t.Fatalf("marker interior = %+v, want Accent %+v", got, theme.Accent)
@@ -135,7 +135,7 @@ func TestTimelineDrawSingleDefaultEvent(t *testing.T) {
 	// Title text lands: scan the title row for OnSurface pixels.
 	textX := TimelinePadX + TimelineMarkerW
 	inked := 0
-	for y := TimelinePadY; y < TimelinePadY+GlyphHeight; y++ {
+	for y := TimelinePadY; y < TimelinePadY+GlyphHeight(); y++ {
 		for x := textX; x < w; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnSurface {
 				inked++
@@ -168,20 +168,20 @@ func TestTimelineDrawEveryKindWithAndWithoutDetail(t *testing.T) {
 	y := TimelinePadY
 	events := tl.Events
 	for i, ev := range events {
-		markerY := y + (GlyphHeight-TimelineMarkerSize)/2
+		markerY := y + (GlyphHeight()-TimelineMarkerSize)/2
 		wantInk := timelineMarkerInk(ev.Kind, theme)
 		got := pixelAt(buf, w, railX+1, markerY+1)
 		if got != wantInk {
 			t.Fatalf("event %d (%v) marker = %+v, want %+v",
 				i, ev.Kind, got, wantInk)
 		}
-		blockH := TimelineEventH
+		blockH := TimelineEventH()
 		if ev.Detail != "" {
 			// Detail row should carry dim ink (dimInk helper) somewhere.
-			detailY := y + GlyphHeight + TimelineDetailGap
+			detailY := y + GlyphHeight() + TimelineDetailGap
 			inked := 0
 			wantDim := dimInk(theme)
-			for dy := detailY; dy < detailY+GlyphHeight; dy++ {
+			for dy := detailY; dy < detailY+GlyphHeight(); dy++ {
 				for dx := TimelinePadX + TimelineMarkerW; dx < w; dx++ {
 					if pixelAt(buf, w, dx, dy) == wantDim {
 						inked++
@@ -191,7 +191,7 @@ func TestTimelineDrawEveryKindWithAndWithoutDetail(t *testing.T) {
 			if inked == 0 {
 				t.Fatalf("event %d Detail row painted 0 dim ink pixels", i)
 			}
-			blockH += TimelineDetailGap + GlyphHeight
+			blockH += TimelineDetailGap + GlyphHeight()
 		}
 		y += blockH
 	}
@@ -207,12 +207,12 @@ func TestTimelineDrawEmptyDetailSkipsSecondRow(t *testing.T) {
 	tl.SetBounds(Rect{X: 0, Y: 0, W: 160, H: 60})
 	buf := makeSurface(w, h)
 	tl.Draw(newP(buf, w), theme)
-	detailY := TimelinePadY + GlyphHeight + TimelineDetailGap
+	detailY := TimelinePadY + GlyphHeight() + TimelineDetailGap
 	textX := TimelinePadX + TimelineMarkerW
 	// Dim ink is used by Detail text. Rail line uses theme.Border so
 	// restrict the scan to the text column past the rail.
 	wantDim := dimInk(theme)
-	for y := detailY; y < detailY+GlyphHeight; y++ {
+	for y := detailY; y < detailY+GlyphHeight(); y++ {
 		for x := textX; x < w; x++ {
 			if pixelAt(buf, w, x, y) == wantDim {
 				t.Fatalf("empty Detail painted dim ink at (%d,%d)", x, y)
@@ -243,7 +243,7 @@ func TestTimelineDrawDarkTheme(t *testing.T) {
 		t.Fatalf("dark rail = %+v, want dark Border %+v", got, theme.Border)
 	}
 	// Marker = dark Accent.
-	markerY := TimelinePadY + (GlyphHeight-TimelineMarkerSize)/2
+	markerY := TimelinePadY + (GlyphHeight()-TimelineMarkerSize)/2
 	if got := pixelAt(buf, w, railX+1, markerY+1); got != theme.Accent {
 		t.Fatalf("dark marker = %+v, want dark Accent %+v", got, theme.Accent)
 	}

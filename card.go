@@ -43,14 +43,17 @@ const (
 	// CardPadY is the vertical inset for the body text above the first
 	// line + between the footer text and its strip border.
 	CardPadY = 6
-	// CardHeaderH is the height of the header strip when Title != "".
-	CardHeaderH = GlyphHeight + 2*CardPadY
-	// CardFooterH is the height of the footer strip when Footer != "".
-	CardFooterH = GlyphHeight + 2*CardPadY
 	// CardLineSpacing is the extra vertical gap inserted between two
 	// body lines so successive glyph rows don't touch.
 	CardLineSpacing = 2
 )
+
+// CardHeaderH is the height of the header strip when Title != "" (a function,
+// as it derives from the active font's GlyphHeight).
+func CardHeaderH() int { return GlyphHeight() + 2*CardPadY }
+
+// CardFooterH is the height of the footer strip when Footer != "".
+func CardFooterH() int { return GlyphHeight() + 2*CardPadY }
 
 // NewCard constructs a Card with the given title, body + footer.
 // Any of the three may be "" to skip that zone.
@@ -69,25 +72,25 @@ func (c *Card) Draw(p painter.Painter, theme *Theme) {
 	bodyTop := r.Y
 
 	if c.Title != "" {
-		fillRect(p, r.X, r.Y, r.W, CardHeaderH, theme.SurfaceAlt)
-		ty := r.Y + (CardHeaderH-GlyphHeight)/2
+		fillRect(p, r.X, r.Y, r.W, CardHeaderH(), theme.SurfaceAlt)
+		ty := r.Y + (CardHeaderH()-GlyphHeight())/2
 		DrawText(p, r.X+CardPadX, ty, c.Title, theme.OnSurface)
 		// Divider between header and body.
-		fillRect(p, r.X, r.Y+CardHeaderH, r.W, 1, theme.Border)
-		bodyTop = r.Y + CardHeaderH + 1
+		fillRect(p, r.X, r.Y+CardHeaderH(), r.W, 1, theme.Border)
+		bodyTop = r.Y + CardHeaderH() + 1
 	}
 
 	if c.Footer != "" {
-		footerY := r.Y + r.H - CardFooterH
-		fillRect(p, r.X, footerY, r.W, CardFooterH, theme.SurfaceAlt)
-		ty := footerY + (CardFooterH-GlyphHeight)/2
+		footerY := r.Y + r.H - CardFooterH()
+		fillRect(p, r.X, footerY, r.W, CardFooterH(), theme.SurfaceAlt)
+		ty := footerY + (CardFooterH()-GlyphHeight())/2
 		DrawText(p, r.X+CardPadX, ty, c.Footer, theme.OnSurface)
 		// Divider between body and footer.
 		fillRect(p, r.X, footerY-1, r.W, 1, theme.Border)
 	}
 
 	if c.Body != "" {
-		lineH := GlyphHeight + CardLineSpacing
+		lineH := GlyphHeight() + CardLineSpacing
 		y := bodyTop + CardPadY
 		for _, ln := range strings.Split(c.Body, "\n") {
 			DrawText(p, r.X+CardPadX, y, ln, theme.OnSurface)

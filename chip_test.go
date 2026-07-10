@@ -48,7 +48,7 @@ func TestChipAutoSizesWhenWZero(t *testing.T) {
 	c.Draw(newP(makeSurface(80, 40), 80), theme)
 	got := c.Bounds()
 	wantW := TextWidth("hi") + 2*ChipPadX
-	wantH := GlyphHeight + 2*ChipPadY
+	wantH := GlyphHeight() + 2*ChipPadY
 	if got.W != wantW {
 		t.Fatalf("auto-sized W = %d, want %d", got.W, wantW)
 	}

@@ -48,7 +48,7 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 		}
 		fillRect(p, r.X, y, r.W, l.RowHeight, bg)
 		// Vertically centre the 7-px glyph inside the row.
-		textY := y + (l.RowHeight-GlyphHeight)/2
+		textY := y + (l.RowHeight-GlyphHeight())/2
 		DrawText(p, r.X+4, textY, item, ink)
 	}
 }

@@ -42,7 +42,7 @@ func (r *RadioButton) Draw(p painter.Painter, theme *Theme) {
 	if r.Checked {
 		fillRect(p, b.X+3, boxY+3, radioBoxSize-6, radioBoxSize-6, theme.Accent)
 	}
-	textY := b.Y + (b.H-GlyphHeight)/2
+	textY := b.Y + (b.H-GlyphHeight())/2
 	DrawText(p, b.X+radioBoxSize+4, textY, r.Label, theme.OnBackground)
 }
 

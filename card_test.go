@@ -40,14 +40,14 @@ func TestCardDrawAllZonesPopulated(t *testing.T) {
 		t.Fatalf("footer strip pixel = %+v, want SurfaceAlt", pixelAt(buf, w, w-4, h-2))
 	}
 	// Body area (between header and footer) should show the Surface fill.
-	bodyY := CardHeaderH + 4
+	bodyY := CardHeaderH() + 4
 	if pixelAt(buf, w, w-4, bodyY) != theme.Surface {
 		t.Fatalf("body area pixel = %+v, want Surface", pixelAt(buf, w, w-4, bodyY))
 	}
 	// The body ink lands somewhere inside the body area — at least one
 	// pixel painted in OnSurface confirms the split-on-\n loop ran.
 	painted := 0
-	for y := CardHeaderH + 1; y < h-CardFooterH-1; y++ {
+	for y := CardHeaderH() + 1; y < h-CardFooterH()-1; y++ {
 		for x := 0; x < w; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnSurface {
 				painted++
@@ -98,7 +98,7 @@ func TestCardDrawEmptyBodyPaintsNoLines(t *testing.T) {
 	c.Draw(newP(buf, w), theme)
 	// Body area — between header divider and footer divider — no ink.
 	inked := 0
-	for y := CardHeaderH + 2; y < h-CardFooterH-2; y++ {
+	for y := CardHeaderH() + 2; y < h-CardFooterH()-2; y++ {
 		for x := 4; x < w-4; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnSurface {
 				inked++
@@ -139,7 +139,7 @@ func TestCardDrawSingleLineBody(t *testing.T) {
 	buf := makeSurface(w, h)
 	c.Draw(newP(buf, w), theme)
 	painted := 0
-	for y := CardPadY; y < CardPadY+GlyphHeight; y++ {
+	for y := CardPadY; y < CardPadY+GlyphHeight(); y++ {
 		for x := 0; x < w; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnSurface {
 				painted++

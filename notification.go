@@ -60,7 +60,7 @@ func (n *Notification) Show(text string) {
 	n.Life = NotificationLife
 	r := n.Bounds()
 	r.W = TextWidth(text) + 2*NotificationPadX
-	r.H = GlyphHeight + 2*NotificationPadY
+	r.H = GlyphHeight() + 2*NotificationPadY
 	n.SetBounds(r)
 }
 

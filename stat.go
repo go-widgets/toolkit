@@ -108,12 +108,12 @@ func (s *Stat) Draw(p painter.Painter, theme *Theme) {
 	titleY := r.Y + StatPadY
 	DrawText(p, titleX, titleY, s.Title, dimInk(theme))
 
-	valueY := titleY + GlyphHeight + StatTitleGap
+	valueY := titleY + GlyphHeight() + StatTitleGap
 	DrawText(p, titleX, valueY, s.Value, theme.OnSurface)
 	DrawText(p, titleX+1, valueY, s.Value, theme.OnSurface)
 
 	if s.Change != "" {
-		changeY := valueY + GlyphHeight + StatValueGap
+		changeY := valueY + GlyphHeight() + StatValueGap
 		DrawText(p, titleX, changeY, s.Change, statChangeInk(s.Trend, theme))
 	}
 

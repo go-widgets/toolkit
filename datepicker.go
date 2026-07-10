@@ -24,7 +24,7 @@ type DatePicker struct {
 }
 
 // DatePickerFieldH is the pixel height of the closed field.
-const DatePickerFieldH = GlyphHeight + 10
+func DatePickerFieldH() int { return GlyphHeight() + 10 }
 
 // NewDatePicker builds a DatePicker initialised to (year, month, day).
 func NewDatePicker(year, month, day int) *DatePicker {
@@ -55,7 +55,7 @@ func (dp *DatePicker) Text() string {
 // calendar width below the field. Six week-rows is the worst case.
 func (dp *DatePicker) PopoverBounds() Rect {
 	r := dp.Bounds()
-	h := CalendarHeaderH + GlyphHeight + 4 + 6*CalendarCellH + 4
+	h := CalendarHeaderH + GlyphHeight() + 4 + 6*CalendarCellH + 4
 	return Rect{X: r.X, Y: r.Y + r.H, W: 7 * CalendarCellW, H: h}
 }
 
@@ -65,7 +65,7 @@ func (dp *DatePicker) Draw(p painter.Painter, theme *Theme) {
 	r := dp.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	textY := r.Y + (r.H-GlyphHeight)/2
+	textY := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, r.X+6, textY, dp.Text(), theme.OnSurface)
 	dp.drawIcon(p, r, theme)
 	if dp.Open {

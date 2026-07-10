@@ -54,7 +54,7 @@ func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
 		// Label centred in the tab.
 		tw := TextWidth(tab.Label)
 		textX := tx + (NotebookTabWidth-tw)/2
-		textY := r.Y + (NotebookTabStripH-GlyphHeight)/2
+		textY := r.Y + (NotebookTabStripH-GlyphHeight())/2
 		DrawText(p, textX, textY, tab.Label, theme.OnSurface)
 		if i == n.Active {
 			// Accent underline so the active tab reads as selected.

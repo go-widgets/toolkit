@@ -16,7 +16,7 @@ func TestBadgeAutoSizesWhenWZero(t *testing.T) {
 	b.Draw(newP(makeSurface(100, 40), 100), theme)
 	got := b.Bounds()
 	wantW := TextWidth("42") + 2*BadgePadX
-	wantH := GlyphHeight + 2*BadgePadY
+	wantH := GlyphHeight() + 2*BadgePadY
 	if got.W != wantW {
 		t.Fatalf("auto-sized W = %d, want %d", got.W, wantW)
 	}

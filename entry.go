@@ -39,11 +39,11 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Surface)
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
-	textY := r.Y + (r.H-GlyphHeight)/2
+	textY := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, r.X+4, textY, e.Text, theme.OnSurface)
 	if e.Focused {
-		cx := r.X + 4 + e.Cursor*GlyphAdvance
-		fillRect(p, cx, textY-1, 1, GlyphHeight+2, theme.OnSurface)
+		cx := r.X + 4 + e.Cursor*GlyphAdvance()
+		fillRect(p, cx, textY-1, 1, GlyphHeight()+2, theme.OnSurface)
 	}
 }
 

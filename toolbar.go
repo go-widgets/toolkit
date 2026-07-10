@@ -85,7 +85,7 @@ func (t *Toolbar) Draw(p painter.Painter, theme *Theme) {
 			}
 			ch := string(label[0])
 			tx := x + (bw-TextWidth(ch))/2
-			ty := r.Y + (bh-GlyphHeight)/2
+			ty := r.Y + (bh-GlyphHeight())/2
 			ink := theme.OnSurface
 			if it.Disabled {
 				ink = theme.Border

@@ -34,7 +34,7 @@ func (t *Tooltip) Show(anchor Rect) {
 	t.Visible = true
 	t.Anchor = anchor
 	w := TextWidth(t.Text) + 2*TooltipPadX
-	h := GlyphHeight + 2*TooltipPadY
+	h := GlyphHeight() + 2*TooltipPadY
 	t.SetBounds(Rect{
 		X: anchor.X,
 		Y: anchor.Y + anchor.H + 2,

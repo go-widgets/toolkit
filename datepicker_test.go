@@ -12,7 +12,7 @@ import (
 // top-left so popover coordinate math is exercised.
 func newTestDatePicker() *DatePicker {
 	dp := NewDatePicker(2026, 7, 4)
-	dp.SetBounds(Rect{X: 0, Y: 0, W: 160, H: DatePickerFieldH})
+	dp.SetBounds(Rect{X: 0, Y: 0, W: 160, H: DatePickerFieldH()})
 	return dp
 }
 
@@ -75,7 +75,7 @@ func TestDatePickerPickDayFiresOnChange(t *testing.T) {
 	first := WeekdayOfFirst(2026, 7)
 	idx := first + 15 - 1
 	col, row := idx%7, idx/7
-	gridY := CalendarHeaderH + GlyphHeight + 4
+	gridY := CalendarHeaderH + GlyphHeight() + 4
 	calX := col*CalendarCellW + CalendarCellW/2
 	calY := gridY + row*CalendarCellH + CalendarCellH/2
 	// widget-local = calendar-local + (popover origin - field origin)

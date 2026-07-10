@@ -176,12 +176,12 @@ func TestPaginationDrawPrevDisabledInkIsBorder(t *testing.T) {
 	p.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	buf := makeSurface(w, h)
 	p.Draw(newP(buf, w), theme)
-	// The "<" glyph centers around ~x = (PaginationBtnW - GlyphAdvance)/2.
+	// The "<" glyph centers around ~x = (PaginationBtnW - GlyphAdvance())/2.
 	// Look for any Border-coloured ink in the prev-button interior
 	// rows (excluding the outer stroke) to confirm disabled tone.
 	found := false
-	ty := (PaginationBtnH - GlyphHeight) / 2
-	for y := ty; y < ty+GlyphHeight && !found; y++ {
+	ty := (PaginationBtnH - GlyphHeight()) / 2
+	for y := ty; y < ty+GlyphHeight() && !found; y++ {
 		for x := 1; x < PaginationBtnW-1; x++ {
 			if pixelAt(buf, w, x, y) == theme.Border && y > 0 && y < h-1 {
 				found = true
@@ -204,9 +204,9 @@ func TestPaginationDrawNextDisabledInkIsBorder(t *testing.T) {
 	buf := makeSurface(w, h)
 	p.Draw(newP(buf, w), theme)
 	nextX := (PaginationBtnW + PaginationGap) * 4 // prev + 3 nums = 4
-	ty := (PaginationBtnH - GlyphHeight) / 2
+	ty := (PaginationBtnH - GlyphHeight()) / 2
 	found := false
-	for y := ty; y < ty+GlyphHeight && !found; y++ {
+	for y := ty; y < ty+GlyphHeight() && !found; y++ {
 		for x := nextX + 1; x < nextX+PaginationBtnW-1; x++ {
 			if pixelAt(buf, w, x, y) == theme.Border && y > 0 && y < h-1 {
 				found = true
@@ -232,9 +232,9 @@ func TestPaginationDrawEllipsisSlot(t *testing.T) {
 	// Left ellipsis is numeric slot 1 (0-based) → overall button
 	// index 2 (prev + 1 numeric + this).
 	ellX := (PaginationBtnW + PaginationGap) * 2
-	ty := (PaginationBtnH - GlyphHeight) / 2
+	ty := (PaginationBtnH - GlyphHeight()) / 2
 	found := false
-	for y := ty; y < ty+GlyphHeight && !found; y++ {
+	for y := ty; y < ty+GlyphHeight() && !found; y++ {
 		for x := ellX + 1; x < ellX+PaginationBtnW-1; x++ {
 			if pixelAt(buf, w, x, y) == theme.Border {
 				found = true
@@ -261,9 +261,9 @@ func TestPaginationDrawWithOnAccentExtra(t *testing.T) {
 	p.Draw(newP(buf, w), theme)
 	// Current = page 2 = numeric slot 1 → overall button index 2.
 	numX := (PaginationBtnW + PaginationGap) * 2
-	ty := (PaginationBtnH - GlyphHeight) / 2
+	ty := (PaginationBtnH - GlyphHeight()) / 2
 	found := false
-	for y := ty; y < ty+GlyphHeight && !found; y++ {
+	for y := ty; y < ty+GlyphHeight() && !found; y++ {
 		for x := numX + 1; x < numX+PaginationBtnW-1; x++ {
 			if pixelAt(buf, w, x, y) == custom {
 				found = true
@@ -288,9 +288,9 @@ func TestPaginationDrawWithoutOnAccentExtraFallsBack(t *testing.T) {
 	buf := makeSurface(w, h)
 	p.Draw(newP(buf, w), theme)
 	numX := (PaginationBtnW + PaginationGap) * 2
-	ty := (PaginationBtnH - GlyphHeight) / 2
+	ty := (PaginationBtnH - GlyphHeight()) / 2
 	found := false
-	for y := ty; y < ty+GlyphHeight && !found; y++ {
+	for y := ty; y < ty+GlyphHeight() && !found; y++ {
 		for x := numX + 1; x < numX+PaginationBtnW-1; x++ {
 			if pixelAt(buf, w, x, y) == theme.Background {
 				found = true

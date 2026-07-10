@@ -65,7 +65,7 @@ func TestDiffDrawAddedLinePaintsGreenTint(t *testing.T) {
 	d.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 30})
 	buf := makeSurface(w, h)
 	d.Draw(newP(buf, w), theme)
-	// Row 0 lives at y = DiffPadY .. DiffPadY+DiffLineH.
+	// Row 0 lives at y = DiffPadY .. DiffPadY+DiffLineH().
 	// Sample a pixel well inside the row band, past the outer stroke.
 	if pixelAt(buf, w, w-3, DiffPadY+1) != diffAddedFill {
 		t.Fatalf("Added row tint = %+v, want diffAddedFill",
@@ -119,12 +119,12 @@ func TestDiffDrawMixedKinds(t *testing.T) {
 	buf := makeSurface(w, h)
 	d.Draw(newP(buf, w), theme)
 	// Row 1 = Added.
-	yAdded := DiffPadY + 1*DiffLineH + 1
+	yAdded := DiffPadY + 1*DiffLineH() + 1
 	if pixelAt(buf, w, w-3, yAdded) != diffAddedFill {
 		t.Fatalf("row 1 tint = %+v, want Added", pixelAt(buf, w, w-3, yAdded))
 	}
 	// Row 2 = Removed.
-	yRemoved := DiffPadY + 2*DiffLineH + 1
+	yRemoved := DiffPadY + 2*DiffLineH() + 1
 	if pixelAt(buf, w, w-3, yRemoved) != diffRemovedFill {
 		t.Fatalf("row 2 tint = %+v, want Removed", pixelAt(buf, w, w-3, yRemoved))
 	}
@@ -155,9 +155,9 @@ func TestDiffDrawPaintsPrefixGlyphs(t *testing.T) {
 		{"- prefix", diffRemovedInk},
 	}
 	for i, w2 := range wants {
-		y0 := DiffPadY + i*DiffLineH
+		y0 := DiffPadY + i*DiffLineH()
 		found := false
-		for y := y0; y < y0+GlyphHeight && !found; y++ {
+		for y := y0; y < y0+GlyphHeight() && !found; y++ {
 			for x := DiffPadX; x < DiffPadX+5; x++ {
 				if pixelAt(buf, w, x, y) == w2.ink {
 					found = true

@@ -102,7 +102,7 @@ func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
 		}
 		tw := TextWidth(h.Title)
 		tx := titleX0 + (titleW-tw)/2
-		ty := r.Y + (r.H-GlyphHeight)/2
+		ty := r.Y + (r.H-GlyphHeight())/2
 		DrawText(p, tx, ty, h.Title, theme.OnSurface)
 		return
 	}
@@ -110,7 +110,7 @@ func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
 	// Two-line layout: title above subtitle, both centred as a
 	// single block. Subtitle uses theme.Border for the "lighter"
 	// muted-ink convention (matches GTK's dim-label styling).
-	blockH := 2*GlyphHeight + HeaderBarSubtitleGap
+	blockH := 2*GlyphHeight() + HeaderBarSubtitleGap
 	ty := r.Y + (r.H-blockH)/2
 	if h.Title != "" {
 		tw := TextWidth(h.Title)
@@ -119,6 +119,6 @@ func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
 	}
 	sw := TextWidth(h.Subtitle)
 	sx := titleX0 + (titleW-sw)/2
-	sy := ty + GlyphHeight + HeaderBarSubtitleGap
+	sy := ty + GlyphHeight() + HeaderBarSubtitleGap
 	DrawText(p, sx, sy, h.Subtitle, dimInk(theme))
 }

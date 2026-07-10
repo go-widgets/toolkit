@@ -54,7 +54,7 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	// Value text in the left portion.
 	text := strconv.Itoa(s.Value)
-	textY := r.Y + (r.H-GlyphHeight)/2
+	textY := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, r.X+4, textY, text, theme.OnSurface)
 	// Two buttons on the right, vertically stacked.
 	btnX := r.X + r.W - spinButtonW
@@ -63,8 +63,8 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, btnX, r.Y+half, spinButtonW, r.H-half, theme.SurfaceAlt)
 	strokeRect(p, btnX, r.Y, spinButtonW, half, theme.Border)
 	strokeRect(p, btnX, r.Y+half, spinButtonW, r.H-half, theme.Border)
-	DrawText(p, btnX+5, r.Y+(half-GlyphHeight)/2, "+", theme.OnSurface)
-	DrawText(p, btnX+5, r.Y+half+(r.H-half-GlyphHeight)/2, "-", theme.OnSurface)
+	DrawText(p, btnX+5, r.Y+(half-GlyphHeight())/2, "+", theme.OnSurface)
+	DrawText(p, btnX+5, r.Y+half+(r.H-half-GlyphHeight())/2, "-", theme.OnSurface)
 }
 
 // OnEvent: click on the upper-right button increments; click on the

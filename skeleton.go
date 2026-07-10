@@ -44,7 +44,7 @@ type Skeleton struct {
 }
 
 // Skeleton sizing constants. Values chosen to line up with the toolkit's
-// GlyphHeight so a SkeletonText row visually replaces a row of body
+// GlyphHeight() so a SkeletonText row visually replaces a row of body
 // text without shifting the surrounding layout.
 const (
 	// SkeletonLineH is the pixel height of a single SkeletonText bar.

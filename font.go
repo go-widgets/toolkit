@@ -16,14 +16,75 @@ import "github.com/go-widgets/painter"
 // bit 6 = bottom row). The rendering loop below mirrors the dock's
 // drawTextClipped column/row decode.
 
-// GlyphHeight is the per-glyph vertical extent in pixels.
-const GlyphHeight = 7
+// Font is the toolkit's text metrics + rendering abstraction. Widgets lay
+// themselves out against the ACTIVE font's metrics (via GlyphHeight /
+// GlyphAdvance) and paint text through DrawText, so swapping the active font
+// with SetFont rescales the whole UI's typography without touching any widget.
+//
+//   - Advance is the horizontal step from one glyph origin to the next.
+//   - Height is the glyph box height.
+//   - Draw paints text left-to-right at (x, y) in the given ink.
+//
+// All built-in widgets assume a monospace font (fixed Advance), which keeps
+// grid-aligned layout math trivial.
+type Font interface {
+	Advance() int
+	Height() int
+	Draw(p painter.Painter, x, y int, text string, ink RGBA)
+}
 
-// GlyphAdvance is the horizontal step from one glyph's origin to the
-// next (5px glyph body + 1px inter-glyph spacing). All glyphs share
-// the same advance so layout stays grid-aligned even with proportional
-// shapes.
-const GlyphAdvance = 6
+// baseGlyphW / baseGlyphH are the unscaled dimensions of the built-in 5x7
+// bitmap (5 columns of body + 1 of spacing horizontally, 7 rows tall).
+const (
+	baseGlyphAdvance = 6
+	baseGlyphHeight  = 7
+)
+
+// bitmapFont renders the built-in font5x7 table at an integer Scale: each lit
+// bit becomes a Scale×Scale block, so Scale=2 doubles the type size ("retina"
+// text) while staying a pure-integer, dependency-free rasteriser.
+type bitmapFont struct{ Scale int }
+
+// Advance is the scaled horizontal step per glyph.
+func (f *bitmapFont) Advance() int { return baseGlyphAdvance * f.Scale }
+
+// Height is the scaled glyph box height.
+func (f *bitmapFont) Height() int { return baseGlyphHeight * f.Scale }
+
+// NewBitmapFont returns the built-in 5x7 font scaled by the given integer
+// factor (clamped to at least 1). SetFont(NewBitmapFont(2)) doubles all text.
+func NewBitmapFont(scale int) Font {
+	if scale < 1 {
+		scale = 1
+	}
+	return &bitmapFont{Scale: scale}
+}
+
+// defaultFont is the unscaled 5x7 bitmap — the toolkit's out-of-the-box font.
+var defaultFont = &bitmapFont{Scale: 1}
+
+// activeFont is the font every widget currently lays out + renders against.
+var activeFont Font = defaultFont
+
+// SetFont makes f the active font. A nil f restores the built-in default. All
+// subsequent layout (GlyphHeight / GlyphAdvance) and DrawText use it.
+func SetFont(f Font) {
+	if f == nil {
+		f = defaultFont
+	}
+	activeFont = f
+}
+
+// CurrentFont returns the active font.
+func CurrentFont() Font { return activeFont }
+
+// GlyphHeight is the active font's glyph box height. It is a function (not a
+// const) so widgets re-read it after SetFont; layout dimensions that derive
+// from it are likewise functions.
+func GlyphHeight() int { return activeFont.Height() }
+
+// GlyphAdvance is the active font's horizontal step from one glyph to the next.
+func GlyphAdvance() int { return activeFont.Advance() }
 
 // font5x7 is the 5-column x 7-row bitmap font table. Each entry is one
 // glyph: 5 bytes, one per column, low 7 bits encode the rows from top
@@ -120,45 +181,52 @@ var font5x7 = map[byte][5]byte{
 }
 
 // TextWidth returns the pixel width that DrawText would occupy if it
-// rendered text. Every character (known or unknown) consumes one
-// GlyphAdvance slot so callers can pre-size text containers from
-// len(text) alone -- this matches the dock's textWidth helper.
-func TextWidth(text string) int { return GlyphAdvance * len(text) }
+// rendered text in the active font. Every character (known or unknown)
+// consumes one GlyphAdvance slot so callers can pre-size text containers from
+// len(text) alone.
+func TextWidth(text string) int { return GlyphAdvance() * len(text) }
 
-// DrawText paints text left-to-right starting at (x, y) in widget-
-// local coordinates. Each glyph is rendered into a 5x7 cell whose
-// origin is (x + k*GlyphAdvance, y) for the k-th rune. Unknown
-// characters render as a blank but still advance the cursor so
-// column alignment is preserved.
-//
-// On a *painter.PixelPainter (the WUI + GUI back-end path) DrawText
-// uses toolkit's own 60+ glyph 5x7 bitmap font by writing one pixel
-// per lit bit. On any other painter (a *painter.CellPainter for a
-// TUI, an SvgPainter for vector output) DrawText delegates to the
-// painter's own Text primitive — a CellPainter maps one rune per
-// cell + gets terminal-native text, an SvgPainter emits <text>.
-//
-// Pixels are written as opaque ink (alpha forced to 0xFF unless the
-// caller's ink already carries an alpha) with per-pixel clipping so
-// glyphs that overflow the painter degrade gracefully.
+// DrawText paints text left-to-right starting at (x, y) in widget-local
+// coordinates, using the active font (see SetFont). It is a thin wrapper over
+// the active Font's Draw so every widget's text rendering follows a font swap.
 func DrawText(p painter.Painter, x, y int, text string, ink RGBA) {
+	activeFont.Draw(p, x, y, text, ink)
+}
+
+// Draw paints text with the bitmap font. On a *painter.PixelPainter (the WUI +
+// GUI path) each lit bit of the 5x7 glyph becomes a Scale×Scale block whose
+// origin is (x + k*Advance, y) for the k-th rune, so the font scales cleanly.
+// On any other painter (a *painter.CellPainter for a TUI, an SvgPainter for
+// vector output) it delegates to the painter's own Text primitive — one rune
+// per cell / a native <text> — where the pixel scale is not meaningful.
+//
+// Unknown characters render blank but still advance the cursor so column
+// alignment is preserved; pixels clip per-pixel so overflowing glyphs degrade
+// gracefully.
+func (f *bitmapFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
 	if _, isPixel := p.(*painter.PixelPainter); !isPixel {
 		p.Text(x, y, text, ink)
 		return
 	}
+	adv := f.Advance()
 	for k := 0; k < len(text); k++ {
 		bits, ok := font5x7[text[k]]
 		if !ok {
 			continue
 		}
-		gx := x + k*GlyphAdvance
+		gx := x + k*adv
 		for col := 0; col < 5; col++ {
 			cb := bits[col]
-			for row := 0; row < GlyphHeight; row++ {
+			for row := 0; row < baseGlyphHeight; row++ {
 				if cb&(1<<row) == 0 {
 					continue
 				}
-				p.PutPixel(gx+col, y+row, ink)
+				// Paint the Scale×Scale block for this lit bit.
+				for dy := 0; dy < f.Scale; dy++ {
+					for dx := 0; dx < f.Scale; dx++ {
+						p.PutPixel(gx+col*f.Scale+dx, y+row*f.Scale+dy, ink)
+					}
+				}
 			}
 		}
 	}

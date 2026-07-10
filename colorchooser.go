@@ -49,7 +49,7 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	for i, ch := range [3]string{"R", "G", "B"} {
 		y := r.Y + ColorChooserChannelPadY + i*ColorChooserChannelH
 		labelX := r.X + 2
-		DrawText(p, labelX, y+(ColorChooserChannelH-GlyphHeight)/2, ch, theme.OnSurface)
+		DrawText(p, labelX, y+(ColorChooserChannelH-GlyphHeight())/2, ch, theme.OnSurface)
 		trackX := r.X + ColorChooserPadX + 12
 		trackY := y + ColorChooserChannelH/2 - 2
 		trackW := channelW - 12

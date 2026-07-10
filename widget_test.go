@@ -326,17 +326,17 @@ func TestLabelDrawPaintsBitmapText(t *testing.T) {
 	}
 }
 
-// When Bounds.H <= GlyphHeight the label paints at Bounds.Y (the
+// When Bounds.H <= GlyphHeight() the label paints at Bounds.Y (the
 // centring branch is skipped). Cover that branch separately.
 func TestLabelDrawTightBoundsSkipsCentring(t *testing.T) {
 	const w, h = 32, 12
 	theme := DefaultLight()
 	l := NewLabel("A")
-	l.SetBounds(Rect{X: 2, Y: 2, W: 20, H: GlyphHeight})
+	l.SetBounds(Rect{X: 2, Y: 2, W: 20, H: GlyphHeight()})
 	buf := makeSurface(w, h)
 	l.Draw(newP(buf, w), theme)
 	// 'A' column 0 has bits[0]=0x7E (rows 1..6 lit). At tight Bounds
-	// with H == GlyphHeight, ty stays at Bounds.Y = 2. Row 1 relative
+	// with H == GlyphHeight(), ty stays at Bounds.Y = 2. Row 1 relative
 	// to Bounds.Y is (2 + 1) = 3.
 	if pixelAt(buf, w, 2, 3) != theme.OnSurface {
 		t.Fatalf("expected ink at (2,3) with tight bounds; got %+v", pixelAt(buf, w, 2, 3))

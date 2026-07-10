@@ -33,7 +33,7 @@ func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	tw := TextWidth(t.Label)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight)/2
+	ty := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, tx, ty, t.Label, theme.OnSurface)
 }
 

@@ -120,7 +120,7 @@ func (pc *ProgressCircle) Draw(p painter.Painter, theme *Theme) {
 	tw := TextWidth(caption)
 	if inner.W > 0 && inner.H > 0 {
 		tx := inner.X + (inner.W-tw)/2
-		ty := inner.Y + (inner.H-GlyphHeight)/2
+		ty := inner.Y + (inner.H-GlyphHeight())/2
 		DrawText(p, tx, ty, caption, theme.OnSurface)
 	}
 }

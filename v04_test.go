@@ -310,7 +310,7 @@ func TestCalendarSelect(t *testing.T) {
 	c.OnSelect = func(y, m, d int) { got = d }
 	c.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
 	// June 2026 first = Mon -> col 0 row 0. Click the 1st cell.
-	gridY := CalendarHeaderH + GlyphHeight + 4
+	gridY := CalendarHeaderH + GlyphHeight() + 4
 	c.OnEvent(Event{Kind: EventClick, X: 0, Y: gridY + 2})
 	if got != 1 {
 		t.Fatalf("want day=1, got %d", got)
@@ -352,7 +352,7 @@ func TestCalendarOnEventKeyDown(t *testing.T) {
 func TestCalendarSelectNegativeCol(t *testing.T) {
 	c := NewCalendar(2026, 6, 1)
 	c.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
-	gridY := CalendarHeaderH + GlyphHeight + 4
+	gridY := CalendarHeaderH + GlyphHeight() + 4
 	c.OnEvent(Event{Kind: EventClick, X: -50, Y: gridY + 2}) // col<0 branch
 }
 

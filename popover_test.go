@@ -111,7 +111,7 @@ func TestPopoverDrawVisibleWithTitle(t *testing.T) {
 	p.Draw(newP(buf, 120), theme)
 	// Look for the title ink (OnSurface) among the top rows.
 	found := false
-	for y := 0; y < GlyphHeight+PopoverPadY+2 && !found; y++ {
+	for y := 0; y < GlyphHeight()+PopoverPadY+2 && !found; y++ {
 		for x := 0; x < 120; x++ {
 			if pixelAt(buf, 120, x, y) == theme.OnSurface {
 				found = true
@@ -123,7 +123,7 @@ func TestPopoverDrawVisibleWithTitle(t *testing.T) {
 		t.Fatal("no OnSurface title glyph pixel found in header strip")
 	}
 	// Child bounds should be pushed down by the header height.
-	wantY := PopoverPadY + GlyphHeight + PopoverPadY
+	wantY := PopoverPadY + GlyphHeight() + PopoverPadY
 	if child.Bounds().Y != wantY {
 		t.Fatalf("Child.Bounds.Y = %d, want %d", child.Bounds().Y, wantY)
 	}

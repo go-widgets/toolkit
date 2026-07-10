@@ -65,7 +65,7 @@ func TestActionRowDrawBodyAndDivider(t *testing.T) {
 	}
 	// Title text present in OnSurface.
 	found := false
-	for y := ActionRowPadY; y < ActionRowPadY+GlyphHeight && !found; y++ {
+	for y := ActionRowPadY; y < ActionRowPadY+GlyphHeight() && !found; y++ {
 		for x := ActionRowPadX; x < ActionRowPadX+TextWidth("Title") && !found; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnSurface {
 				found = true
@@ -114,9 +114,9 @@ func TestActionRowDrawWithSubtitle(t *testing.T) {
 	a.Draw(newP(buf, w), theme)
 
 	// Subtitle ink is drawn in dimInk tone below the title.
-	sy := ActionRowPadY + GlyphHeight + ActionRowSubtitleGap
+	sy := ActionRowPadY + GlyphHeight() + ActionRowSubtitleGap
 	found := false
-	for y := sy; y < sy+GlyphHeight && !found; y++ {
+	for y := sy; y < sy+GlyphHeight() && !found; y++ {
 		for x := ActionRowPadX; x < ActionRowPadX+TextWidth("sub") && !found; x++ {
 			if pixelAt(buf, w, x, y) == dimInk(theme) {
 				found = true

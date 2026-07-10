@@ -70,13 +70,13 @@ func (s *SplitButton) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, r.X+mainW, r.Y, 1, r.H, theme.Border)
 		aw := TextWidth("v")
 		ax := r.X + mainW + (SplitButtonArrowW-aw)/2
-		ay := r.Y + (r.H-GlyphHeight)/2
+		ay := r.Y + (r.H-GlyphHeight())/2
 		DrawText(p, ax, ay, "v", ink)
 	}
 	if s.Label != "" {
 		tw := TextWidth(s.Label)
 		tx := r.X + (mainW-tw)/2
-		ty := r.Y + (r.H-GlyphHeight)/2
+		ty := r.Y + (r.H-GlyphHeight())/2
 		DrawText(p, tx, ty, s.Label, ink)
 	}
 }

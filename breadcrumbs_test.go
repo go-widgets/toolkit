@@ -100,13 +100,13 @@ func TestBreadcrumbsDrawMultiSegmentPaintsChevron(t *testing.T) {
 	}
 }
 
-// Tight bounds (Bounds.H == GlyphHeight): the centring branch is
+// Tight bounds (Bounds.H == GlyphHeight()): the centring branch is
 // skipped and text anchors at Bounds.Y.
 func TestBreadcrumbsDrawTightBoundsSkipsCentring(t *testing.T) {
-	const w, h = 40, GlyphHeight + 2
+	var w, h = 40, GlyphHeight() + 2
 	theme := DefaultLight()
 	b := NewBreadcrumbs([]string{"Hi"})
-	b.SetBounds(Rect{X: 0, Y: 0, W: 40, H: GlyphHeight})
+	b.SetBounds(Rect{X: 0, Y: 0, W: 40, H: GlyphHeight()})
 	buf := makeSurface(w, h)
 	b.Draw(newP(buf, w), theme)
 	// The centring branch skipped -> ink starts at y = Bounds.Y = 0.

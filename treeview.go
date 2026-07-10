@@ -113,7 +113,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 				}
 			}
 		}
-		textY := y + (rh-GlyphHeight)/2
+		textY := y + (rh-GlyphHeight())/2
 		DrawText(p, indent+TreeChevronW, textY, row.node.Label, ink)
 	}
 }

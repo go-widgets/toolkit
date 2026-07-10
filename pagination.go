@@ -97,7 +97,7 @@ func (pg *Pagination) drawStep(p painter.Painter, theme *Theme, x, y int, label 
 		ink = theme.Border
 	}
 	tx := x + (PaginationBtnW-TextWidth(label))/2
-	ty := y + (PaginationBtnH-GlyphHeight)/2
+	ty := y + (PaginationBtnH-GlyphHeight())/2
 	DrawText(p, tx, ty, label, ink)
 }
 
@@ -117,7 +117,7 @@ func (pg *Pagination) drawSlot(p painter.Painter, theme *Theme, x, y int, slot p
 	fillRect(p, x, y, PaginationBtnW, PaginationBtnH, fill)
 	strokeRect(p, x, y, PaginationBtnW, PaginationBtnH, theme.Border)
 	tx := x + (PaginationBtnW-TextWidth(label))/2
-	ty := y + (PaginationBtnH-GlyphHeight)/2
+	ty := y + (PaginationBtnH-GlyphHeight())/2
 	DrawText(p, tx, ty, label, ink)
 }
 

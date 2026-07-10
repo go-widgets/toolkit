@@ -69,7 +69,7 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 		} else if i == m.Hover {
 			ink = theme.Background // hovered row: invert ink
 		}
-		textY := y + (MenuRowH-GlyphHeight)/2
+		textY := y + (MenuRowH-GlyphHeight())/2
 		DrawText(p, r.X+8, textY, it.Label, ink)
 		if it.Submenu != nil {
 			// ▶ chevron on the right edge to signal a nested menu.
@@ -221,7 +221,7 @@ func (b *MenuBar) Draw(p painter.Painter, theme *Theme) {
 		}
 		tw := TextWidth(name)
 		textX := ix + (iw-tw)/2
-		textY := r.Y + (MenuBarH-GlyphHeight)/2
+		textY := r.Y + (MenuBarH-GlyphHeight())/2
 		DrawText(p, textX, textY, name, ink)
 	}
 }

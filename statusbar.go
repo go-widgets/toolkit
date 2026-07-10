@@ -70,7 +70,7 @@ func (s *Statusbar) Draw(p painter.Painter, theme *Theme) {
 				w = min
 			}
 		}
-		ty := r.Y + (r.H-GlyphHeight)/2
+		ty := r.Y + (r.H-GlyphHeight())/2
 		DrawText(p, x+StatusbarPadX, ty, seg, theme.OnSurface)
 		if i < n-1 {
 			fillRect(p, x+w-1, r.Y+2, 1, r.H-4, theme.Border)
