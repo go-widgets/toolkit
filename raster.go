@@ -51,6 +51,45 @@ func strokeRoundRect(p painter.Painter, x, y, w, h, radius int, c RGBA) {
 	p.StrokeRoundRect(painter.Rect{X: x, Y: y, W: w, H: h}, radius, c, 1)
 }
 
+// drawLine paints a 1-unit-wide line from (x0, y0) to (x1, y1) with c using
+// Bresenham's algorithm over putPixel — the only primitive both back-ends
+// share for arbitrary slopes (on a CellPainter each pixel promotes to a filled
+// cell). Chart widgets use it for polylines and axis rules.
+func drawLine(p painter.Painter, x0, y0, x1, y1 int, c RGBA) {
+	dx := x1 - x0
+	if dx < 0 {
+		dx = -dx
+	}
+	dy := y1 - y0
+	if dy < 0 {
+		dy = -dy
+	}
+	sx := 1
+	if x0 > x1 {
+		sx = -1
+	}
+	sy := 1
+	if y0 > y1 {
+		sy = -1
+	}
+	err := dx - dy
+	for {
+		putPixel(p, x0, y0, c)
+		if x0 == x1 && y0 == y1 {
+			return
+		}
+		e2 := 2 * err
+		if e2 > -dy {
+			err -= dy
+			x0 += sx
+		}
+		if e2 < dx {
+			err += dx
+			y0 += sy
+		}
+	}
+}
+
 // dimInk returns a mid-tone RGBA that reads as a "dim label" against
 // theme.Surface in ANY theme. It's a 60/40 blend of OnSurface and
 // Surface — enough contrast against Surface to stay readable, less
