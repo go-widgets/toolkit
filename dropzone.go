@@ -14,19 +14,25 @@ import "github.com/go-widgets/painter"
 // wasmbox compositor wires to the widget).
 //
 // The Hover flag toggles the dashed-border colour + surface fill so
-// the user sees drag-over feedback before releasing the drop. The
-// host is expected to flip Hover based on native dragenter / dragleave
-// events; the widget itself does not synthesise its own drag+drop
-// events. To keep the OnEvent surface testable, EventClick flips
-// Hover in place (a lightweight simulator hook) and EventChar
-// delivers a single path via ev.Code -- fired to OnDrop only when
-// Hover is true, so the host can gate deliveries on the drag state.
+// the user sees drag-over feedback before releasing the drop. DropZone
+// is a DropTarget: it drives Hover from the formal drag lifecycle —
+// EventDragStart / EventDragMove raise it, EventDragLeave clears it,
+// and EventDrop delivers the payload (multiple paths newline-separated,
+// recovered with SplitDropPayload) to OnDrop and clears Hover. As a
+// convenience for demos and tests, EventClick also flips Hover in place.
 type DropZone struct {
 	Base
 	Prompt string
 	Hover  bool
 	OnDrop func(paths []string)
 }
+
+// DropZone is a DropTarget.
+var _ DropTarget = (*DropZone)(nil)
+
+// AcceptsDrop reports whether a payload is droppable here. A DropZone is a
+// generic file target, so it accepts any non-empty payload.
+func (d *DropZone) AcceptsDrop(payload string) bool { return payload != "" }
 
 // DropZone sizing constants. PadX / PadY are the outer insets from
 // the bounds to where inner content (the prompt text) sits; DashLen
@@ -92,19 +98,23 @@ func (d *DropZone) Draw(p painter.Painter, theme *Theme) {
 	DrawText(p, tx, ty, d.Prompt, theme.OnSurface)
 }
 
-// OnEvent implements the two host-driven behaviours: EventClick flips
-// Hover (the simulator hook: real hosts flip Hover directly on
-// dragenter / dragleave), and EventChar with Hover = true fires
-// OnDrop with a one-element slice containing ev.Code (the delivered
-// path). All other event kinds are ignored so a keyboard event bound
-// for a sibling widget does not accidentally trigger a drop.
+// OnEvent implements the drag lifecycle: EventDragStart / EventDragMove raise
+// Hover, EventDragLeave clears it, and EventDrop fires OnDrop with the payload's
+// items (split from ev.Code) then clears Hover. EventClick flips Hover in place
+// as a demo/test hook. All other event kinds are ignored so a keyboard event
+// bound for a sibling widget does not accidentally trigger a drop.
 func (d *DropZone) OnEvent(ev Event) {
 	switch ev.Kind {
+	case EventDragStart, EventDragMove:
+		d.Hover = true
+	case EventDragLeave:
+		d.Hover = false
+	case EventDrop:
+		d.Hover = false
+		if d.OnDrop != nil {
+			d.OnDrop(SplitDropPayload(ev.Code))
+		}
 	case EventClick:
 		d.Hover = !d.Hover
-	case EventChar:
-		if d.Hover && d.OnDrop != nil {
-			d.OnDrop([]string{ev.Code})
-		}
 	}
 }
