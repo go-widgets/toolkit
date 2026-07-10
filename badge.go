@@ -17,7 +17,7 @@ import "github.com/go-widgets/painter"
 //
 // Auto-sizing: if the caller sets Bounds().W to 0, the first Draw()
 // resizes the Bounds to the text width plus BadgePadX on each side
-// (plus GlyphHeight + BadgePadY on each side vertically if H is also 0).
+// (plus GlyphHeight() + BadgePadY on each side vertically if H is also 0).
 // This spares the caller from having to compute glyph widths just to
 // paint a two-digit counter. A pre-sized Bounds is honoured verbatim
 // so a fixed-width layout column doesn't shift when the digit count
@@ -53,7 +53,7 @@ func (b *Badge) Draw(p painter.Painter, theme *Theme) {
 	if r.W == 0 {
 		r.W = TextWidth(b.Text) + 2*BadgePadX
 		if r.H == 0 {
-			r.H = GlyphHeight + 2*BadgePadY
+			r.H = GlyphHeight() + 2*BadgePadY
 		}
 		b.SetBounds(r)
 	}
@@ -65,6 +65,6 @@ func (b *Badge) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X+r.W-1, r.Y+1, 1, r.H-2, theme.Accent)
 	tw := TextWidth(b.Text)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight)/2
+	ty := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, tx, ty, b.Text, theme.Background)
 }

@@ -60,7 +60,7 @@ func (i *IconButton) Draw(p painter.Painter, theme *Theme) {
 	if i.Icon != "" {
 		tw := TextWidth(i.Icon)
 		tx := r.X + (r.W-tw)/2
-		ty := r.Y + (r.H-GlyphHeight)/2
+		ty := r.Y + (r.H-GlyphHeight())/2
 		DrawText(p, tx, ty, i.Icon, theme.OnSurface)
 	}
 }

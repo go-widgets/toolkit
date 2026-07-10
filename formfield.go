@@ -10,7 +10,7 @@ import "github.com/go-widgets/painter"
 // the top of a FormField. One glyph row plus 2px of breathing space
 // keeps the label snug against the input beneath it without touching
 // the glyph's descender pixels.
-const FormFieldLabelH = GlyphHeight + 2
+func FormFieldLabelH() int { return GlyphHeight() + 2 }
 
 // FormFieldChildGap is the vertical gap in pixels between the bottom
 // of the label row and the top of the composed Child widget.
@@ -78,9 +78,9 @@ func (f *FormField) childRect() Rect {
 	r := f.Bounds()
 	captionH := 0
 	if f.Error != "" || f.Help != "" {
-		captionH = GlyphHeight + FormFieldHelpGap
+		captionH = GlyphHeight() + FormFieldHelpGap
 	}
-	top := r.Y + FormFieldPadY + FormFieldLabelH + FormFieldChildGap
+	top := r.Y + FormFieldPadY + FormFieldLabelH() + FormFieldChildGap
 	bottom := r.Y + r.H - FormFieldPadY - captionH
 	h := bottom - top
 	if h < 0 {

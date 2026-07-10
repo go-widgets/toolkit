@@ -94,7 +94,7 @@ func (d *DropZone) Draw(p painter.Painter, theme *Theme) {
 	}
 	tw := TextWidth(d.Prompt)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight)/2
+	ty := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, tx, ty, d.Prompt, theme.OnSurface)
 }
 

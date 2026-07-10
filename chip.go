@@ -17,7 +17,7 @@ import "github.com/go-widgets/painter"
 // Auto-sizing follows Badge's convention: if Bounds().W is zero the
 // first Draw() sets W to the text width plus ChipPadX on each side
 // (plus the close slot's ChipCloseGap + ChipCloseW when Closable is
-// true), and H to GlyphHeight + 2*ChipPadY when it is also zero. A
+// true), and H to GlyphHeight() + 2*ChipPadY when it is also zero. A
 // pre-sized Bounds is honoured verbatim so a fixed-width layout row
 // does not shift when the chip label changes.
 type Chip struct {
@@ -67,14 +67,14 @@ func (c *Chip) Draw(p painter.Painter, theme *Theme) {
 			r.W += ChipCloseGap + ChipCloseW
 		}
 		if r.H == 0 {
-			r.H = GlyphHeight + 2*ChipPadY
+			r.H = GlyphHeight() + 2*ChipPadY
 		}
 		c.SetBounds(r)
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	tx := r.X + ChipPadX
-	ty := r.Y + (r.H-GlyphHeight)/2
+	ty := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, tx, ty, c.Text, theme.OnSurface)
 	if c.Closable {
 		cx := r.X + r.W - ChipPadX - ChipCloseW + (ChipCloseW-TextWidth("x"))/2

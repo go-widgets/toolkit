@@ -53,7 +53,7 @@ func (b *Banner) buttonRect() (Rect, bool) {
 	}
 	r := b.Bounds()
 	btnW := TextWidth(b.ButtonLabel) + 2*BannerButtonPadX
-	btnH := GlyphHeight + 2*BannerPadY
+	btnH := GlyphHeight() + 2*BannerPadY
 	return Rect{
 		X: r.X + r.W - btnW - BannerPadX,
 		Y: r.Y + (r.H-btnH)/2,

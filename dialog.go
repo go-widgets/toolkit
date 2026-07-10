@@ -67,7 +67,7 @@ func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	// Title bar.
 	fillRect(p, r.X, r.Y, r.W, DialogTitleH, theme.SurfaceAlt)
-	titleY := r.Y + (DialogTitleH-GlyphHeight)/2
+	titleY := r.Y + (DialogTitleH-GlyphHeight())/2
 	DrawText(p, r.X+8, titleY, d.Title, theme.OnSurface)
 	// Content.
 	if d.Content != nil {

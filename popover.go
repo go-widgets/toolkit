@@ -49,7 +49,7 @@ func (p *Popover) headerH() int {
 	if p.Title == "" {
 		return 0
 	}
-	return GlyphHeight + PopoverPadY
+	return GlyphHeight() + PopoverPadY
 }
 
 // childRect returns the surface-coordinate rect the child widget

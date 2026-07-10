@@ -140,7 +140,7 @@ func TestStepsDrawWithCaption(t *testing.T) {
 	// badgeY = (H - StepBoxH)/2 = (40-16)/2 = 12.
 	captionY := 12 + StepBoxH + StepLabelGap
 	painted := 0
-	for y := captionY; y < captionY+GlyphHeight; y++ {
+	for y := captionY; y < captionY+GlyphHeight(); y++ {
 		for x := 0; x < w; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnBackground {
 				painted++
@@ -163,7 +163,7 @@ func TestStepsDrawEmptyCaptionSkipsBelow(t *testing.T) {
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
 	captionY := 12 + StepBoxH + StepLabelGap
-	for y := captionY; y < captionY+GlyphHeight; y++ {
+	for y := captionY; y < captionY+GlyphHeight(); y++ {
 		for x := 0; x < w; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnBackground {
 				t.Fatalf("empty-caption Steps painted ink at (%d,%d)", x, y)

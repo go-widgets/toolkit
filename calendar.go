@@ -131,7 +131,7 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 	// Header: month / year.
 	hdr := monthName(c.Month) + " " + itoa(c.Year)
 	hx := r.X + (r.W-TextWidth(hdr))/2
-	hy := r.Y + (CalendarHeaderH-GlyphHeight)/2
+	hy := r.Y + (CalendarHeaderH-GlyphHeight())/2
 	DrawText(p, hx, hy, hdr, theme.OnSurface)
 	// Weekday row.
 	weekdayY := r.Y + CalendarHeaderH
@@ -142,7 +142,7 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 	// Day grid.
 	first := WeekdayOfFirst(c.Year, c.Month)
 	dim := DaysInMonth(c.Year, c.Month)
-	gridY := weekdayY + GlyphHeight + 4
+	gridY := weekdayY + GlyphHeight() + 4
 	for d := 1; d <= dim; d++ {
 		idx := first + d - 1
 		col := idx % 7
@@ -160,7 +160,7 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 		}
 		fillRect(p, cx, cy, CalendarCellW, CalendarCellH, bg)
 		txt := itoa(d)
-		DrawText(p, cx+(CalendarCellW-TextWidth(txt))/2, cy+(CalendarCellH-GlyphHeight)/2, txt, ink)
+		DrawText(p, cx+(CalendarCellW-TextWidth(txt))/2, cy+(CalendarCellH-GlyphHeight())/2, txt, ink)
 	}
 }
 
@@ -169,7 +169,7 @@ func (c *Calendar) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
 	}
-	gridY := CalendarHeaderH + GlyphHeight + 4
+	gridY := CalendarHeaderH + GlyphHeight() + 4
 	if ev.Y < gridY {
 		return
 	}

@@ -77,6 +77,6 @@ func (a *Avatar) Draw(p painter.Painter, theme *Theme) {
 
 	tw := TextWidth(a.Initials)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight)/2
+	ty := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, tx, ty, a.Initials, accentInk(theme))
 }

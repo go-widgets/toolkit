@@ -49,7 +49,7 @@ func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 		}
 	}
 	// Label to the right of the box, vertically centred on glyph row.
-	textY := r.Y + (r.H-GlyphHeight)/2
+	textY := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, r.X+checkBoxSize+4, textY, c.Label, theme.OnBackground)
 }
 

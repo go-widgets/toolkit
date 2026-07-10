@@ -54,7 +54,7 @@ func (e *Expander) Draw(p painter.Painter, theme *Theme) {
 			fillRect(p, cx+2-t, cy-t, 1, 1+2*t, theme.OnSurface)
 		}
 	}
-	textY := r.Y + (ExpanderHeaderH-GlyphHeight)/2
+	textY := r.Y + (ExpanderHeaderH-GlyphHeight())/2
 	DrawText(p, r.X+16, textY, e.Label, theme.OnSurface)
 	if e.Expanded && e.Content != nil {
 		body := Rect{X: r.X, Y: r.Y + ExpanderHeaderH, W: r.W, H: r.H - ExpanderHeaderH}

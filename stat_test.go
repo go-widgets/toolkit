@@ -105,9 +105,9 @@ func TestStatDrawAllFieldsUp(t *testing.T) {
 	// Value row painted in OnSurface ink. '1' at column 0 has bits[0]=0x00,
 	// but bits[1]=0x42 (row 1 lit) — so scan the value row for an OnSurface
 	// pixel rather than asserting a specific coordinate.
-	valueY := StatPadY + GlyphHeight + StatTitleGap
+	valueY := StatPadY + GlyphHeight() + StatTitleGap
 	inked := 0
-	for y := valueY; y < valueY+GlyphHeight; y++ {
+	for y := valueY; y < valueY+GlyphHeight(); y++ {
 		for x := StatPadX; x < w-StatPadX; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnSurface {
 				inked++
@@ -118,7 +118,7 @@ func TestStatDrawAllFieldsUp(t *testing.T) {
 		t.Fatal("value row painted 0 OnSurface pixels")
 	}
 	// Change row painted in StatUp green. '+' col 0 = 0x08 -> row 3 lit.
-	changeY := valueY + GlyphHeight + StatValueGap
+	changeY := valueY + GlyphHeight() + StatValueGap
 	wantUp := RGBA{R: 50, G: 150, B: 80, A: 255}
 	got := pixelAt(buf, w, StatPadX, changeY+3)
 	if got != wantUp {
@@ -135,7 +135,7 @@ func TestStatDrawChangeDownRed(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
-	changeY := StatPadY + GlyphHeight + StatTitleGap + GlyphHeight + StatValueGap
+	changeY := StatPadY + GlyphHeight() + StatTitleGap + GlyphHeight() + StatValueGap
 	wantDown := RGBA{R: 190, G: 60, B: 60, A: 255}
 	// '-' col 0 bits[0]=0x08 -> row 3 lit.
 	if got := pixelAt(buf, w, StatPadX, changeY+3); got != wantDown {
@@ -153,7 +153,7 @@ func TestStatDrawChangeFlatDim(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
-	changeY := StatPadY + GlyphHeight + StatTitleGap + GlyphHeight + StatValueGap
+	changeY := StatPadY + GlyphHeight() + StatTitleGap + GlyphHeight() + StatValueGap
 	wantDim := dimInk(theme)
 	// '-' col 0 bits[0]=0x08 -> row 3 lit.
 	if got := pixelAt(buf, w, StatPadX, changeY+3); got != wantDim {
@@ -170,13 +170,13 @@ func TestStatDrawEmptyChangeSkipsRow(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
-	changeY := StatPadY + GlyphHeight + StatTitleGap + GlyphHeight + StatValueGap
+	changeY := StatPadY + GlyphHeight() + StatTitleGap + GlyphHeight() + StatValueGap
 	upInk := RGBA{R: 50, G: 150, B: 80, A: 255}
 	downInk := RGBA{R: 190, G: 60, B: 60, A: 255}
 	// The change row's pixel band must have neither Up nor Down ink.
 	// (Border ink also shouldn't appear inside the fill band, so scan
 	// the full 5x7 glyph rows.)
-	for y := changeY; y < changeY+GlyphHeight; y++ {
+	for y := changeY; y < changeY+GlyphHeight(); y++ {
 		for x := 0; x < w; x++ {
 			got := pixelAt(buf, w, x, y)
 			if got == upInk || got == downInk {
@@ -202,7 +202,7 @@ func TestStatDrawValueBoldDoubleDraw(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 60})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
-	valueY := StatPadY + GlyphHeight + StatTitleGap
+	valueY := StatPadY + GlyphHeight() + StatTitleGap
 	// Row 0 of 'H' col 0 sits at (StatPadX, valueY). The +1 pass
 	// puts the same row 0 lit pixel at (StatPadX+1, valueY).
 	if got := pixelAt(buf, w, StatPadX, valueY); got != theme.OnSurface {

@@ -39,9 +39,9 @@ func TestSearchEntryDrawEmptyNoClearIcon(t *testing.T) {
 	// clear "x". The frame stroke itself lives on the four outermost
 	// rows/columns; anything strictly interior in Border is the
 	// affordance. There should be none.
-	textY := (h - GlyphHeight) / 2
+	textY := (h - GlyphHeight()) / 2
 	interiorRight := w - SearchEntryPadX - SearchEntryIconW
-	for y := textY; y < textY+GlyphHeight; y++ {
+	for y := textY; y < textY+GlyphHeight(); y++ {
 		for x := interiorRight; x < w-1; x++ {
 			if pixelAt(buf, w, x, y) == theme.Border && y > 0 && y < h-1 {
 				t.Fatalf("empty SearchEntry painted a clear affordance at (%d,%d)", x, y)
@@ -61,10 +61,10 @@ func TestSearchEntryDrawWithTextPaintsClearIcon(t *testing.T) {
 	s.Draw(newP(buf, w), theme)
 	// Look inside the right icon slot's interior rows for at least
 	// one Border-coloured pixel that isn't part of the outer stroke.
-	textY := (h - GlyphHeight) / 2
+	textY := (h - GlyphHeight()) / 2
 	interiorLeft := w - SearchEntryPadX - SearchEntryIconW
 	found := false
-	for y := textY; y < textY+GlyphHeight && !found; y++ {
+	for y := textY; y < textY+GlyphHeight() && !found; y++ {
 		for x := interiorLeft; x < w-1; x++ {
 			if pixelAt(buf, w, x, y) == theme.Border {
 				found = true
@@ -87,10 +87,10 @@ func TestSearchEntryDrawPaintsPrefixGlyph(t *testing.T) {
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
 	// Some OnSurface ink lands in the left icon slot's interior.
-	textY := (h - GlyphHeight) / 2
+	textY := (h - GlyphHeight()) / 2
 	interiorRight := SearchEntryPadX + SearchEntryIconW
 	found := false
-	for y := textY; y < textY+GlyphHeight && !found; y++ {
+	for y := textY; y < textY+GlyphHeight() && !found; y++ {
 		for x := 1; x < interiorRight; x++ {
 			if pixelAt(buf, w, x, y) == theme.OnSurface {
 				found = true

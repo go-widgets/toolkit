@@ -49,7 +49,7 @@ func (pb *ProgressBar) Draw(p painter.Painter, theme *Theme) {
 	if pb.Label != "" {
 		tw := TextWidth(pb.Label)
 		tx := r.X + (r.W-tw)/2
-		ty := r.Y + (r.H-GlyphHeight)/2
+		ty := r.Y + (r.H-GlyphHeight())/2
 		DrawText(p, tx, ty, pb.Label, theme.OnSurface)
 	}
 }

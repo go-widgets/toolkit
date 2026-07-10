@@ -47,7 +47,7 @@ const (
 
 // DiffLineH is the vertical stride between successive lines: one
 // glyph tall plus two pixels of separation.
-const DiffLineH = GlyphHeight + 2
+func DiffLineH() int { return GlyphHeight() + 2 }
 
 // DiffPadX is the horizontal padding between the widget's outer
 // border and the leading prefix glyph.
@@ -91,7 +91,7 @@ func (d *Diff) Draw(p painter.Painter, theme *Theme) {
 	r := d.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	for i, line := range d.Lines {
-		y := r.Y + DiffPadY + i*DiffLineH
+		y := r.Y + DiffPadY + i*DiffLineH()
 		fill := theme.Surface
 		ink := theme.OnSurface
 		prefix := " "
@@ -105,9 +105,9 @@ func (d *Diff) Draw(p painter.Painter, theme *Theme) {
 			ink = diffRemovedInk
 			prefix = "-"
 		}
-		fillRect(p, r.X+1, y, r.W-2, DiffLineH, fill)
+		fillRect(p, r.X+1, y, r.W-2, DiffLineH(), fill)
 		DrawText(p, r.X+DiffPadX, y, prefix, ink)
-		DrawText(p, r.X+DiffPadX+GlyphAdvance, y, line.Text, ink)
+		DrawText(p, r.X+DiffPadX+GlyphAdvance(), y, line.Text, ink)
 	}
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 }

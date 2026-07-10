@@ -158,11 +158,14 @@ Widget coverage is now materially complete versus GTK 4 + DaisyUI 4.
 The remaining pre-1.0 work is around the *edges* of the widget
 model, not the widget catalogue:
 
-- **Font family plumbing** — the toolkit still ships one 5×7 bitmap
-  font. A `Font` interface (`GlyphAdvance`, `GlyphHeight`, `Draw`)
-  so a caller can plug a larger bitmap or a hand-rasterised
-  TrueType at boot. Unblocks `FontChooser` (long-standing deferral)
-  + retina-size Label rendering.
+- ~~**Font family plumbing**~~ — **done (v0.20)**: a `Font` interface
+  (`Advance`, `Height`, `Draw`) + a scalable built-in bitmap font.
+  `SetFont(NewBitmapFont(2))` doubles all text ("retina"), and every
+  widget re-lays-out because metrics are now read at draw time.
+  **Breaking:** `GlyphHeight` / `GlyphAdvance` and the metric-derived
+  dimensions (`CardHeaderH`, `DatePickerFieldH`, `DiffLineH`,
+  `FormFieldLabelH`, `TimelineEventH`, `CardFooterH`) are now
+  **functions** — append `()` at call sites when upgrading.
 - ~~**First-class drag-and-drop event kinds**~~ — **done (v0.16)**:
   `EventDragStart` / `EventDragMove` / `EventDragLeave` / `EventDrop`,
   plus a `DragSource` / `DropTarget` interface pair and

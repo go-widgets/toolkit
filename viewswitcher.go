@@ -80,7 +80,7 @@ func (v *ViewSwitcher) Draw(p painter.Painter, theme *Theme) {
 			}
 			tw := TextWidth(title)
 			tx := sx + (segW-tw)/2
-			ty := r.Y + (r.H-GlyphHeight)/2
+			ty := r.Y + (r.H-GlyphHeight())/2
 			DrawText(p, tx, ty, title, ink)
 		}
 	}

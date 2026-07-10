@@ -87,7 +87,7 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 		num := strconv.Itoa(i + 1)
 		tw := TextWidth(num)
 		tx := x + (StepBoxW-tw)/2
-		ty := y + (StepBoxH-GlyphHeight)/2
+		ty := y + (StepBoxH-GlyphHeight())/2
 		DrawText(p, tx, ty, num, ink)
 		if lab != "" {
 			lw := TextWidth(lab)

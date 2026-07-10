@@ -100,7 +100,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y+TableHeaderHeight-1, r.W, 1, theme.Border)
 	// Header cell titles.
 	hx := r.X
-	hty := r.Y + (TableHeaderHeight-GlyphHeight)/2
+	hty := r.Y + (TableHeaderHeight-GlyphHeight())/2
 	for i, col := range t.Columns {
 		DrawText(p, hx+TableCellPadX, hty, col.Title, theme.OnBackground)
 		hx += widths[i]
@@ -113,7 +113,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		// one TableRowHeight below the header.
 		tw := TextWidth(tableEmptyPlaceholder)
 		tx := r.X + (r.W-tw)/2
-		ty := bodyY + (TableRowHeight-GlyphHeight)/2
+		ty := bodyY + (TableRowHeight-GlyphHeight())/2
 		DrawText(p, tx, ty, tableEmptyPlaceholder, theme.OnSurface)
 		return
 	}
@@ -139,7 +139,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		}
 		fillRect(p, r.X, y, r.W, TableRowHeight, bg)
 		cx := r.X
-		cty := y + (TableRowHeight-GlyphHeight)/2
+		cty := y + (TableRowHeight-GlyphHeight())/2
 		for j := range t.Columns {
 			if j < len(row) {
 				DrawText(p, cx+TableCellPadX, cty, row[j], ink)

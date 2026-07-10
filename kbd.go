@@ -31,7 +31,7 @@ const (
 
 // NewKbd constructs a Kbd carrying the given key text. Callers set
 // Bounds via SetBounds before Draw; a natural fit is
-// {W: TextWidth(keys) + 2*KbdPadX, H: GlyphHeight + 2*KbdPadY}.
+// {W: TextWidth(keys) + 2*KbdPadX, H: GlyphHeight() + 2*KbdPadY}.
 func NewKbd(keys string) *Kbd { return &Kbd{Keys: keys} }
 
 // Draw paints the chip: filled Surface body, 1-px Border stroke,
@@ -43,6 +43,6 @@ func (k *Kbd) Draw(p painter.Painter, theme *Theme) {
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	tw := TextWidth(k.Keys)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight)/2
+	ty := r.Y + (r.H-GlyphHeight())/2
 	DrawText(p, tx, ty, k.Keys, theme.OnSurface)
 }

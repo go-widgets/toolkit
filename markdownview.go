@@ -134,13 +134,13 @@ func wordWrap(text string, maxChars int) []string {
 }
 
 // mdLineH is the baseline-to-baseline advance for a rendered text line.
-const mdLineH = GlyphHeight + 4
+func mdLineH() int { return GlyphHeight() + 4 }
 
 // Draw lays the parsed blocks top-to-bottom within Bounds.
 func (m *MarkdownView) Draw(p painter.Painter, theme *Theme) {
 	r := m.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	maxChars := (r.W - 8) / GlyphAdvance
+	maxChars := (r.W - 8) / GlyphAdvance()
 	y := r.Y + 4
 	for _, b := range parseMarkdown(m.Source) {
 		y = m.drawBlock(p, theme, b, r, maxChars, y)
@@ -153,29 +153,29 @@ func (m *MarkdownView) drawBlock(p painter.Painter, theme *Theme, b mdBlock, r R
 	case mdHeading:
 		DrawText(p, r.X+4, y, b.text, theme.Accent)
 		if b.level <= 2 { // rule under H1/H2
-			fillRect(p, r.X+4, y+GlyphHeight+1, TextWidth(b.text), 1, theme.Accent)
+			fillRect(p, r.X+4, y+GlyphHeight()+1, TextWidth(b.text), 1, theme.Accent)
 			y += 2
 		}
-		return y + mdLineH + 2
+		return y + mdLineH() + 2
 	case mdBullet:
 		DrawText(p, r.X+4, y, "•", theme.OnSurface) // "•"
 		for i, ln := range wordWrap(b.text, maxChars-2) {
-			DrawText(p, r.X+4+2*GlyphAdvance, y+i*mdLineH, ln, theme.OnSurface)
+			DrawText(p, r.X+4+2*GlyphAdvance(), y+i*mdLineH(), ln, theme.OnSurface)
 		}
-		return y + len(wordWrap(b.text, maxChars-2))*mdLineH
+		return y + len(wordWrap(b.text, maxChars-2))*mdLineH()
 	case mdCode:
 		codeLines := strings.Split(b.text, "\n")
-		bandH := len(codeLines) * mdLineH
+		bandH := len(codeLines) * mdLineH()
 		fillRect(p, r.X+4, y-2, r.W-8, bandH+4, theme.SurfaceAlt)
 		for i, ln := range codeLines {
-			DrawText(p, r.X+8, y+i*mdLineH, ln, theme.OnSurface)
+			DrawText(p, r.X+8, y+i*mdLineH(), ln, theme.OnSurface)
 		}
 		return y + bandH + 4
 	default: // mdParagraph
 		wrapped := wordWrap(b.text, maxChars)
 		for i, ln := range wrapped {
-			DrawText(p, r.X+4, y+i*mdLineH, ln, theme.OnSurface)
+			DrawText(p, r.X+4, y+i*mdLineH(), ln, theme.OnSurface)
 		}
-		return y + len(wrapped)*mdLineH + 2
+		return y + len(wrapped)*mdLineH() + 2
 	}
 }

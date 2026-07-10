@@ -122,7 +122,7 @@ func TestChatBubbleDrawMultiLine(t *testing.T) {
 	buf := makeSurface(w, h)
 	c.Draw(newP(buf, w), theme)
 
-	// The third line ("CCC", width=18) sits at y = padY + 2*(GlyphHeight+LineSpacing)
+	// The third line ("CCC", width=18) sits at y = padY + 2*(GlyphHeight()+LineSpacing)
 	// = 6 + 2*9 = 24. Its glyphs are 7 rows tall so ink should appear
 	// somewhere in rows 24..30. Just verify some OnSurface ink exists past
 	// the first-line region.
@@ -232,7 +232,7 @@ func TestChatBubbleDrawEmptyText(t *testing.T) {
 	c.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	buf := makeSurface(w, h)
 	c.Draw(newP(buf, w), theme)
-	// Empty text: bubble is 20x19 (2*PadX x GlyphHeight+2*PadY). Interior
+	// Empty text: bubble is 20x19 (2*PadX x GlyphHeight()+2*PadY). Interior
 	// pixel at (10,10) is inside the SurfaceAlt fill.
 	if got := pixelAt(buf, w, 10, 10); got != theme.SurfaceAlt {
 		t.Fatalf("empty bubble interior = %+v, want SurfaceAlt", got)

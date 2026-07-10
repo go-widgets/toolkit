@@ -35,7 +35,7 @@ const (
 // Sizing: the bubble grows to fit the widest text line plus 2*PadX,
 // capped at ChatBubbleMaxW so a runaway paste doesn't spill the
 // widget's Bounds. Height is len(lines) * lineH + 2*PadY where lineH
-// = GlyphHeight + ChatBubbleLineSpacing.
+// = GlyphHeight() + ChatBubbleLineSpacing.
 //
 // ChatBubble is a passive display widget — it does not intercept
 // input (HitTest / OnEvent stay as Base defaults). A caller that
@@ -89,7 +89,7 @@ func (c *ChatBubble) Draw(p painter.Painter, theme *Theme) {
 	if bubbleW > ChatBubbleMaxW {
 		bubbleW = ChatBubbleMaxW
 	}
-	lineH := GlyphHeight + ChatBubbleLineSpacing
+	lineH := GlyphHeight() + ChatBubbleLineSpacing
 	bubbleH := len(lines)*lineH - ChatBubbleLineSpacing + 2*ChatBubblePadY
 
 	var bx int

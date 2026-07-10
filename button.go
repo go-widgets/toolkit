@@ -98,7 +98,7 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	if b.Label != "" {
 		tw := TextWidth(b.Label)
 		tx := r.X + (r.W-tw)/2
-		ty := r.Y + (r.H-GlyphHeight)/2
+		ty := r.Y + (r.H-GlyphHeight())/2
 		DrawText(p, tx, ty, b.Label, ink)
 	}
 }

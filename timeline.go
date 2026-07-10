@@ -61,10 +61,6 @@ const (
 	// TimelineMarkerSize is the pixel side of each event's filled
 	// square marker painted on the rail.
 	TimelineMarkerSize = 6
-	// TimelineEventH is the vertical stride from one event's Title
-	// row to the next when the event has NO Detail — one glyph row
-	// plus 4 px of inter-event spacing.
-	TimelineEventH = GlyphHeight + 4
 	// TimelineDetailGap is the vertical space inserted between an
 	// event's Title row and its Detail row when Detail != "".
 	TimelineDetailGap = 2
@@ -76,6 +72,11 @@ const (
 	// and the bottom edge).
 	TimelinePadY = 8
 )
+
+// TimelineEventH is the vertical stride from one event's Title row to the next
+// when the event has NO Detail — one glyph row plus 4 px of inter-event
+// spacing. A function, as it derives from the active font's GlyphHeight.
+func TimelineEventH() int { return GlyphHeight() + 4 }
 
 // NewTimeline constructs a Timeline carrying the given events. A
 // nil events slice is normalised to a non-nil empty slice so
@@ -125,14 +126,14 @@ func (tl *Timeline) Draw(p painter.Painter, theme *Theme) {
 	y := r.Y + TimelinePadY
 	for _, ev := range tl.Events {
 		markerX := railX - TimelineMarkerSize/2
-		markerY := y + (GlyphHeight-TimelineMarkerSize)/2
+		markerY := y + (GlyphHeight()-TimelineMarkerSize)/2
 		fillRect(p, markerX, markerY, TimelineMarkerSize, TimelineMarkerSize,
 			timelineMarkerInk(ev.Kind, theme))
 		DrawText(p, textX, y, ev.Title, theme.OnSurface)
-		blockH := TimelineEventH
+		blockH := TimelineEventH()
 		if ev.Detail != "" {
-			DrawText(p, textX, y+GlyphHeight+TimelineDetailGap, ev.Detail, dimInk(theme))
-			blockH += TimelineDetailGap + GlyphHeight
+			DrawText(p, textX, y+GlyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
+			blockH += TimelineDetailGap + GlyphHeight()
 		}
 		y += blockH
 	}
