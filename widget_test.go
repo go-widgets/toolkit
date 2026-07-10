@@ -83,6 +83,11 @@ func TestBaseDefaults(t *testing.T) {
 // tail — downstream code (e.g. tui's mouse parser) hard-references
 // EventMouseDrag / EventMouseUp by name and would keep compiling
 // but dispatch to the wrong widgets if the values shifted.
+//
+// When a new EventKind is added to widget.go, add it here too. The
+// list is intentionally exhaustive — any kind reachable via a
+// downstream switch that doesn't have a case here can slip past
+// the pinning.
 func TestEventKindValuesAreDistinct(t *testing.T) {
 	seen := map[EventKind]string{}
 	for _, kv := range []struct {
@@ -98,6 +103,10 @@ func TestEventKindValuesAreDistinct(t *testing.T) {
 		{EventCompositionEnd, "EventCompositionEnd"},
 		{EventMouseDrag, "EventMouseDrag"},
 		{EventMouseUp, "EventMouseUp"},
+		{EventDragStart, "EventDragStart"},
+		{EventDragMove, "EventDragMove"},
+		{EventDragLeave, "EventDragLeave"},
+		{EventDrop, "EventDrop"},
 	} {
 		if prior, ok := seen[kv.k]; ok {
 			t.Fatalf("%s collides with %s (both = %d)", kv.name, prior, kv.k)
