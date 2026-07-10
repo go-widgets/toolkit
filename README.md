@@ -26,9 +26,9 @@ in headless tests (screenshot-hash regressions).
   Juno, WhiteSur, Solarized …) drives the widget ink colours.
 - **Pure Go + CGO=0**: no C toolchain, no shared libraries. Builds
   for every Go target including `GOOS=js GOARCH=wasm`.
-- **A11y-ready scaffolding**: widgets carry a `Role` + `Label` so a
-  future a11y bridge can publish them to screen readers without
-  rewriting every widget.
+- **A11y bridge**: core widgets implement an opt-in `Accessible`
+  interface (`A11y() A11yInfo`) so a host can `CollectA11y` and
+  publish them to screen readers without rewriting every widget.
 
 ## Non-goals
 
@@ -178,9 +178,11 @@ model, not the widget catalogue:
   Popover / Toast / Notification / Tooltip / ContextMenu float
   without hosts arranging z-order. Events route top-down; `Modal`
   makes a miss swallow (backdrop) instead of falling through.
-- **A11y bridge** — `Role` + `Label` fields on widgets already;
-  wire an `A11yPublisher` interface hosts can plug (WAI-ARIA
-  wrapping on wasm, TTY-cell metadata on tui, ...).
+- ~~**A11y bridge**~~ — **done (v0.19)**: an opt-in `Accessible`
+  interface (`A11y() A11yInfo` — role + name + value) implemented by
+  the core widgets (Button/Label/Entry/CheckButton/RadioButton/
+  Switch/Scale), plus `CollectA11y([]Widget)` so a host republishes
+  them to the platform layer (WAI-ARIA on wasm, TTY metadata on tui).
 
 ## Architecture
 
