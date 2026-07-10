@@ -91,6 +91,13 @@ const (
 	// carries the payload (multiple items newline-separated — see
 	// SplitDropPayload); the target consumes it and clears its hover cue.
 	EventDrop
+
+	// eventKindEnd is the exclusive upper bound of valid EventKind
+	// values — not itself a valid kind. Its sole purpose is letting
+	// TestEventKindValuesAreDistinct assert exhaustive coverage: any
+	// new EventKind appended above bumps this by one, and a stale
+	// test list will fail loudly instead of silently.
+	eventKindEnd
 )
 
 // Event is one input event delivered to a widget. The parent container

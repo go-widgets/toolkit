@@ -84,13 +84,13 @@ func TestBaseDefaults(t *testing.T) {
 // EventMouseDrag / EventMouseUp by name and would keep compiling
 // but dispatch to the wrong widgets if the values shifted.
 //
-// When a new EventKind is added to widget.go, add it here too. The
-// list is intentionally exhaustive — any kind reachable via a
-// downstream switch that doesn't have a case here can slip past
-// the pinning.
+// The `eventKindEnd` sentinel is the count-check: any new kind
+// appended above it bumps the sentinel by one, and a stale test
+// list here fails loudly (instead of the previous silent gap,
+// where new kinds went un-pinned because nobody remembered to
+// extend this file).
 func TestEventKindValuesAreDistinct(t *testing.T) {
-	seen := map[EventKind]string{}
-	for _, kv := range []struct {
+	cases := []struct {
 		k    EventKind
 		name string
 	}{
@@ -107,7 +107,13 @@ func TestEventKindValuesAreDistinct(t *testing.T) {
 		{EventDragMove, "EventDragMove"},
 		{EventDragLeave, "EventDragLeave"},
 		{EventDrop, "EventDrop"},
-	} {
+	}
+	if len(cases) != int(eventKindEnd) {
+		t.Fatalf("test list has %d entries but eventKindEnd = %d — a new EventKind was added to widget.go without being pinned here",
+			len(cases), int(eventKindEnd))
+	}
+	seen := map[EventKind]string{}
+	for _, kv := range cases {
 		if prior, ok := seen[kv.k]; ok {
 			t.Fatalf("%s collides with %s (both = %d)", kv.name, prior, kv.k)
 		}
