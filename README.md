@@ -68,7 +68,7 @@ every native target Go ships.
 | Feedback     | `ProgressBar`, `LevelBar`, `Spinner`, `Image`, `Tooltip`, `Notification` |
 | Navigation   | `Menu` + `MenuItem.Shortcut`, `MenuBar` + `Alt+letter`, `ContextMenu`, `Dialog`, `MessageDialog` |
 | Bars         | `Toolbar`, `Statusbar`, 10 stock `DrawIcon*` helpers               |
-| Composite    | `FileChooser`, `ColorChooser`, `Calendar`, `DatePicker`, `MarkdownView` |
+| Composite    | `FileChooser`, `ColorChooser`, `FontChooser`, `Calendar`, `DatePicker`, `MarkdownView` |
 | Charts       | `LineChart`, `BarChart`, `PieChart`                               |
 | Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
 
