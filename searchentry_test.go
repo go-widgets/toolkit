@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
 
 // --- Constructor ---------------------------------------------------------
 
@@ -100,6 +104,47 @@ func TestSearchEntryDrawPaintsPrefixGlyph(t *testing.T) {
 	}
 	if !found {
 		t.Fatal("prefix glyph not painted")
+	}
+}
+
+// A non-nil Icon takes over the left prefix slot: the callback is invoked
+// exactly once with the prefix rect + the OnSurface ink, and the "?" text
+// stand-in is NOT drawn (no OnSurface text ink lands in the slot, since the
+// stub callback paints nothing).
+func TestSearchEntryDrawIconReplacesPrefix(t *testing.T) {
+	const w, h = 80, 24
+	theme := DefaultLight()
+	s := NewSearchEntry("")
+	s.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
+	calls := 0
+	var gotRect Rect
+	var gotInk RGBA
+	s.Icon = func(p painter.Painter, r Rect, ink RGBA) {
+		calls++
+		gotRect = r
+		gotInk = ink
+	}
+	buf := makeSurface(w, h)
+	s.Draw(newP(buf, w), theme)
+	if calls != 1 {
+		t.Fatalf("Icon invoked %d times, want 1", calls)
+	}
+	wantRect := Rect{X: SearchEntryPadX, Y: 0, W: SearchEntryIconW, H: h}
+	if gotRect != wantRect {
+		t.Fatalf("Icon rect = %+v, want %+v", gotRect, wantRect)
+	}
+	if gotInk != theme.OnSurface {
+		t.Fatalf("Icon ink = %+v, want OnSurface %+v", gotInk, theme.OnSurface)
+	}
+	// The stub drew nothing, so the left slot carries no OnSurface "?" ink.
+	textY := (h - GlyphHeight()) / 2
+	interiorRight := SearchEntryPadX + SearchEntryIconW
+	for y := textY; y < textY+GlyphHeight(); y++ {
+		for x := 1; x < interiorRight; x++ {
+			if pixelAt(buf, w, x, y) == theme.OnSurface {
+				t.Fatalf("Icon set but '?' stand-in still painted at (%d,%d)", x, y)
+			}
+		}
 	}
 }
 

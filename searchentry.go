@@ -14,10 +14,17 @@ import "github.com/go-widgets/painter"
 // it simply appends printable characters, deletes on Backspace, and
 // clears on a click in the right-side X slot. Callers who need cursor
 // navigation or IME support should reach for Entry / TextView instead.
+//
+// An optional leading Icon lets the host paint a real magnifier (or any
+// glyph) in the left prefix slot instead of the "?" text stand-in. When
+// set, Draw invokes Icon with the prefix slot's rect + the OnSurface ink
+// and skips the "?" text; when nil, the classic "?" stand-in is drawn, so
+// existing callers are unaffected. This mirrors Banner.Icon.
 type SearchEntry struct {
 	Base
 	Text     string
 	OnChange func(s string)
+	Icon     func(p painter.Painter, r Rect, ink RGBA)
 }
 
 // SearchEntryPadX is the horizontal padding between the widget's outer
@@ -56,9 +63,15 @@ func (s *SearchEntry) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	textY := r.Y + (r.H-s.glyphHeight())/2
-	// Left prefix slot.
-	prefixX := r.X + SearchEntryPadX + (SearchEntryIconW-s.glyphAdvance())/2
-	s.drawText(p, prefixX, textY, searchEntryPrefix, theme.OnSurface)
+	// Left prefix slot: a host-supplied Icon (real magnifier) when set,
+	// otherwise the "?" bitmap-font stand-in.
+	if s.Icon != nil {
+		iconR := Rect{X: r.X + SearchEntryPadX, Y: r.Y, W: SearchEntryIconW, H: r.H}
+		s.Icon(p, iconR, theme.OnSurface)
+	} else {
+		prefixX := r.X + SearchEntryPadX + (SearchEntryIconW-s.glyphAdvance())/2
+		s.drawText(p, prefixX, textY, searchEntryPrefix, theme.OnSurface)
+	}
 	// Middle text.
 	s.drawText(p, r.X+SearchEntryPadX+SearchEntryIconW, textY, s.Text, theme.OnSurface)
 	// Right clear slot only when there is text to clear.
