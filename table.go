@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"sort"
+
+	"github.com/go-widgets/painter"
+)
 
 // Table renders a structured data grid: a fixed header row of column
 // titles above a body of text rows. The widget is the missing piece
@@ -26,7 +30,10 @@ import "github.com/go-widgets/painter"
 // with the accent-inverted ink -- theme.Extra["OnAccent"] when the
 // GTK loader supplied one, otherwise theme.Background (the same
 // fallback the Button + ListBox + TreeView selected states already
-// use, so the visual reads consistent across widgets).
+// use, so the visual reads consistent across widgets). When
+// MultiSelect is true every row in the multi-row selection set paints
+// the same way, not just Selected (which keeps acting as the anchor
+// for Shift-range clicks) -- see MultiSelect + SelectedRows.
 //
 // The widget is content-only: it never reorders Rows itself. Header
 // clicks + separator drags are surfaced through OnSort/OnColumnResize
@@ -45,8 +52,35 @@ type Table struct {
 	Rows [][]string
 	// Selected is the 0-indexed row highlighted with Theme.Accent;
 	// -1 (or any out-of-range value) means "no selection" and the
-	// zebra stripe pattern paints unmodified.
+	// zebra stripe pattern paints unmodified. While MultiSelect is
+	// true, Selected doubles as the anchor a Shift-click ranges from;
+	// it is still the ONLY row painted while MultiSelect is false.
 	Selected int
+
+	// MultiSelect switches body-row clicks (handled by OnEvent) from
+	// inert to selection-driving: a plain click selects only that row
+	// (clearing any other selection, moving the Selected anchor to
+	// it); a Ctrl-click toggles that row's membership without
+	// disturbing the anchor; a Shift-click selects the inclusive
+	// range between the anchor (Selected) and the clicked row,
+	// likewise leaving the anchor in place so repeated Shift-clicks
+	// keep ranging from the same origin. Header-row clicks (sort) and
+	// separator drags (resize) are unaffected either way.
+	//
+	// The zero value (false) is the original passive-viewer
+	// behaviour: OnEvent never touches Selected or any selection
+	// state for a body-row click, and Draw highlights only Selected --
+	// byte-for-byte the same as before this field existed.
+	MultiSelect bool
+
+	// selectedRows is the multi-row selection set. A nil map means
+	// "nothing selected", mirroring how Selected == -1 means no
+	// single-row anchor. It is consulted by Draw/IsRowSelected only
+	// while MultiSelect is true, but the SetRowSelection /
+	// ToggleRowSelect / SelectRowRange / ClearRowSelection API works
+	// regardless -- a host may pre-seed a selection before switching
+	// MultiSelect on.
+	selectedRows map[int]bool
 
 	// SortColumn is the 0-indexed column currently sorted, or -1 (or
 	// any out-of-range value) for "no sort" -- Draw skips the ▲/▼
@@ -183,8 +217,13 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		y := bodyY + i*TableRowHeight
 		bg := theme.Surface
 		ink := theme.OnSurface
+		// Highlighted covers both the single-row anchor (always) and,
+		// while MultiSelect is on, any row in the multi-row selection
+		// set. With MultiSelect false the second half short-circuits,
+		// so this collapses to exactly the pre-MultiSelect condition.
+		highlighted := i == selRow || (t.MultiSelect && t.IsRowSelected(i))
 		switch {
-		case i == selRow:
+		case highlighted:
 			bg = theme.Accent
 			ink = onAccent
 		case i%2 == 1:
@@ -394,6 +433,107 @@ func (t *Table) SetColumnWidth(col, w int) {
 	}
 }
 
+// IsRowSelected reports whether row i is a member of the multi-row
+// selection set. A negative i is always false -- mirrors how every
+// other row/column index in this file collapses an invalid value
+// instead of indexing into (or panicking on) the underlying map/slice.
+// It answers from the raw set regardless of MultiSelect; only Draw and
+// OnEvent gate their use of it on MultiSelect being true.
+func (t *Table) IsRowSelected(i int) bool {
+	if i < 0 {
+		return false
+	}
+	return t.selectedRows[i]
+}
+
+// SelectedRows returns every selected row index in ascending order, or
+// nil if nothing is selected. The slice is a fresh copy -- mutating it
+// has no effect on the Table's selection state.
+func (t *Table) SelectedRows() []int {
+	if len(t.selectedRows) == 0 {
+		return nil
+	}
+	out := make([]int, 0, len(t.selectedRows))
+	for i := range t.selectedRows {
+		out = append(out, i)
+	}
+	sort.Ints(out)
+	return out
+}
+
+// SetRowSelection replaces the current selection with exactly rows.
+// Negative entries are dropped; calling it with no arguments (or with
+// only negative ones) clears the selection, same end state as
+// ClearRowSelection.
+func (t *Table) SetRowSelection(rows ...int) {
+	sel := make(map[int]bool, len(rows))
+	for _, r := range rows {
+		if r >= 0 {
+			sel[r] = true
+		}
+	}
+	t.selectedRows = sel
+}
+
+// ClearRowSelection empties the multi-row selection set.
+func (t *Table) ClearRowSelection() {
+	t.selectedRows = nil
+}
+
+// ToggleRowSelect flips row i's membership in the selection set --
+// selecting it if absent, deselecting it if present. A negative i is a
+// no-op.
+func (t *Table) ToggleRowSelect(i int) {
+	if i < 0 {
+		return
+	}
+	if t.selectedRows == nil {
+		t.selectedRows = make(map[int]bool)
+	}
+	if t.selectedRows[i] {
+		delete(t.selectedRows, i)
+	} else {
+		t.selectedRows[i] = true
+	}
+}
+
+// SelectRowRange replaces the selection with the inclusive range
+// between a and b -- callers may pass either endpoint first, matching
+// how a Shift-click can land above OR below the anchor. A negative
+// endpoint clamps to 0 (so an anchor of -1, "nothing selected yet",
+// still yields a sane from-the-top range instead of an empty one); if
+// both endpoints are negative the resulting selection is empty.
+func (t *Table) SelectRowRange(a, b int) {
+	if a > b {
+		a, b = b, a
+	}
+	if a < 0 {
+		a = 0
+	}
+	sel := make(map[int]bool)
+	for i := a; i <= b; i++ {
+		sel[i] = true
+	}
+	t.selectedRows = sel
+}
+
+// rowAt returns the body row index whose vertical band contains
+// localY (a Table-local y coordinate, i.e. relative to the widget's
+// own top edge and therefore still including the header offset), or
+// -1 if localY lands in/above the header or at/past the last row --
+// the same "collapse to -1 outside the valid range" idiom columnAt
+// and ColumnSeparatorAt already use for x coordinates.
+func (t *Table) rowAt(localY int) int {
+	if localY < TableHeaderHeight {
+		return -1
+	}
+	row := (localY - TableHeaderHeight) / TableRowHeight
+	if row < 0 || row >= len(t.Rows) {
+		return -1
+	}
+	return row
+}
+
 // toggleSort updates SortColumn/SortAsc for a header click on col --
 // re-clicking the active column flips SortAsc, clicking a new column
 // resets to ascending -- then fires OnSort with the resulting
@@ -411,29 +551,57 @@ func (t *Table) toggleSort(col int) {
 	}
 }
 
-// OnEvent implements header-click sorting + separator drag-resize.
-// The toolkit's event model is click-only (see Paned): a resize drag
-// begins on an EventClick that lands on a separator (ColumnSeparatorAt),
-// is driven tick-by-tick by EventMouseDrag while the button stays down,
-// and ends on EventMouseUp -- the same grab/move/release state machine
+// OnEvent implements header-click sorting, separator drag-resize, and
+// (while MultiSelect is true) body-row multi-selection. The toolkit's
+// event model is click-only (see Paned): a resize drag begins on an
+// EventClick that lands on a separator (ColumnSeparatorAt), is driven
+// tick-by-tick by EventMouseDrag while the button stays down, and ends
+// on EventMouseUp -- the same grab/move/release state machine
 // RangeSlider uses for its thumbs. A click that lands on a header cell
-// instead of a separator sorts that column (if Sortable); a click
-// below the header row is ignored (the Table has no other interactive
-// surface).
+// instead of a separator sorts that column (if Sortable).
+//
+// A click below the header row is a header/sort/resize no-op -- it
+// falls through to the body-row branch instead. With MultiSelect
+// false that branch is itself a no-op (the original, selection-free
+// behaviour); with MultiSelect true a plain click selects only that
+// row and moves the Selected anchor to it, Ctrl toggles the row
+// without moving the anchor, and Shift selects the inclusive range
+// between the anchor and the clicked row (also without moving the
+// anchor, so repeated Shift-clicks keep ranging from the same
+// origin). A click past the last row (rowAt returns -1) is ignored.
 func (t *Table) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
-		if ev.Y < 0 || ev.Y >= TableHeaderHeight {
+		if ev.Y < 0 {
 			return
 		}
-		if sep := t.ColumnSeparatorAt(ev.X); sep >= 0 {
-			t.resizing = true
-			t.resizingCol = sep
+		if ev.Y < TableHeaderHeight {
+			if sep := t.ColumnSeparatorAt(ev.X); sep >= 0 {
+				t.resizing = true
+				t.resizingCol = sep
+				return
+			}
+			col := t.columnAt(ev.X)
+			if col >= 0 && col < len(t.Columns) && t.Columns[col].Sortable {
+				t.toggleSort(col)
+			}
 			return
 		}
-		col := t.columnAt(ev.X)
-		if col >= 0 && col < len(t.Columns) && t.Columns[col].Sortable {
-			t.toggleSort(col)
+		if !t.MultiSelect {
+			return
+		}
+		row := t.rowAt(ev.Y)
+		if row < 0 {
+			return
+		}
+		switch {
+		case ev.Shift:
+			t.SelectRowRange(t.Selected, row)
+		case ev.Ctrl:
+			t.ToggleRowSelect(row)
+		default:
+			t.SetRowSelection(row)
+			t.Selected = row
 		}
 	case EventMouseDrag:
 		if !t.resizing {
