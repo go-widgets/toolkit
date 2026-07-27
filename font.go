@@ -23,13 +23,18 @@ import "github.com/go-widgets/painter"
 //
 //   - Advance is the horizontal step from one glyph origin to the next.
 //   - Height is the glyph box height.
+//   - Measure is the total width text occupies when drawn (proportional
+//     fonts sum per-glyph advances; a monospace font returns len*Advance).
 //   - Draw paints text left-to-right at (x, y) in the given ink.
 //
-// All built-in widgets assume a monospace font (fixed Advance), which keeps
-// grid-aligned layout math trivial.
+// The built-in bitmap font is monospace (Measure == len*Advance), which keeps
+// grid-aligned layout math trivial. A proportional font (see NewTrueTypeFont)
+// still lays out correctly because widgets size text through Measure/TextWidth
+// rather than assuming a fixed advance.
 type Font interface {
 	Advance() int
 	Height() int
+	Measure(text string) int
 	Draw(p painter.Painter, x, y int, text string, ink RGBA)
 }
 
@@ -50,6 +55,10 @@ func (f *bitmapFont) Advance() int { return baseGlyphAdvance * f.Scale }
 
 // Height is the scaled glyph box height.
 func (f *bitmapFont) Height() int { return baseGlyphHeight * f.Scale }
+
+// Measure is the width text occupies. The bitmap font is monospace, so every
+// rune (known or unknown) consumes exactly one Advance slot.
+func (f *bitmapFont) Measure(text string) int { return len(text) * f.Advance() }
 
 // NewBitmapFont returns the built-in 5x7 font scaled by the given integer
 // factor (clamped to at least 1). SetFont(NewBitmapFont(2)) doubles all text.
@@ -180,11 +189,11 @@ var font5x7 = map[byte][5]byte{
 	'%': {0x62, 0x64, 0x08, 0x13, 0x23}, // percent — needed by the calculator
 }
 
-// TextWidth returns the pixel width that DrawText would occupy if it
-// rendered text in the active font. Every character (known or unknown)
-// consumes one GlyphAdvance slot so callers can pre-size text containers from
-// len(text) alone.
-func TextWidth(text string) int { return GlyphAdvance() * len(text) }
+// TextWidth returns the pixel width that DrawText would occupy if it rendered
+// text in the active font. It defers to the active font's Measure so a
+// proportional font (see NewTrueTypeFont) reports its true rendered width; the
+// built-in bitmap font is monospace, so it still equals len(text)*GlyphAdvance.
+func TextWidth(text string) int { return activeFont.Measure(text) }
 
 // DrawText paints text left-to-right starting at (x, y) in widget-local
 // coordinates, using the active font (see SetFont). It is a thin wrapper over
