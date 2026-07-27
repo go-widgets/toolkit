@@ -462,3 +462,353 @@ func TestTableDrawAligned(t *testing.T) {
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 220, H: 80})
 	tb.Draw(newP(makeTableSurface(220, 80), 220), DefaultLight())
 }
+
+// --- Sorting: header click + toggle ---------------------------------------
+
+func TestNewTableSortColumnDefaultsToNone(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, nil)
+	if tb.SortColumn != -1 {
+		t.Fatalf("SortColumn default = %d, want -1", tb.SortColumn)
+	}
+}
+
+func TestTableHeaderClickSortsAndFiresOnSort(t *testing.T) {
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 50, Sortable: true},
+		{Title: "B", Width: 50, Sortable: true},
+	}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	var gotCol int
+	var gotAsc bool
+	calls := 0
+	tb.OnSort = func(col int, asc bool) { gotCol, gotAsc = col, asc; calls++ }
+
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if calls != 1 {
+		t.Fatalf("OnSort calls = %d, want 1", calls)
+	}
+	if gotCol != 0 || !gotAsc {
+		t.Fatalf("first click = (col %d, asc %v), want (0, true)", gotCol, gotAsc)
+	}
+	if tb.SortColumn != 0 || !tb.SortAsc {
+		t.Fatalf("state after first click = (col %d, asc %v), want (0, true)", tb.SortColumn, tb.SortAsc)
+	}
+
+	// Clicking the SAME column toggles the direction.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if calls != 2 || gotCol != 0 || gotAsc {
+		t.Fatalf("second click (toggle) = (col %d, asc %v, calls %d), want (0, false, 2)", gotCol, gotAsc, calls)
+	}
+
+	// Clicking a DIFFERENT column resets to ascending.
+	tb.OnEvent(Event{Kind: EventClick, X: 60, Y: 5})
+	if calls != 3 || gotCol != 1 || !gotAsc {
+		t.Fatalf("third click (new column) = (col %d, asc %v, calls %d), want (1, true, 3)", gotCol, gotAsc, calls)
+	}
+}
+
+func TestTableHeaderClickNonSortableColumnIgnored(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, nil) // Sortable defaults false
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	called := false
+	tb.OnSort = func(col int, asc bool) { called = true }
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if called {
+		t.Fatal("OnSort fired for a non-Sortable column")
+	}
+	if tb.SortColumn != -1 {
+		t.Fatalf("SortColumn = %d, want -1 (unchanged)", tb.SortColumn)
+	}
+}
+
+func TestTableHeaderClickBelowHeaderRowIgnored(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100, Sortable: true}}, [][]string{{"x"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	called := false
+	tb.OnSort = func(col int, asc bool) { called = true }
+	// Y past the header row -- lands in the body, must be a no-op.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 5})
+	if called {
+		t.Fatal("OnSort fired for a click below the header row")
+	}
+}
+
+func TestTableHeaderClickNilOnSortNoPanic(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100, Sortable: true}}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	// OnSort left nil -- must not panic.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if tb.SortColumn != 0 || !tb.SortAsc {
+		t.Fatalf("state = (col %d, asc %v), want (0, true)", tb.SortColumn, tb.SortAsc)
+	}
+}
+
+func TestTableOnEventIgnoresNonClickWhenNotResizing(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	// EventMouseDrag with no active resize + EventMouseUp with nothing
+	// in progress must both be safe no-ops.
+	tb.OnEvent(Event{Kind: EventMouseDrag, X: 10, Y: 5})
+	tb.OnEvent(Event{Kind: EventMouseUp, X: 10, Y: 5})
+	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+}
+
+// --- Sort indicator rendering ----------------------------------------------
+
+func TestTableDrawSortIndicatorAscending(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, [][]string{{"x"}})
+	tb.SortColumn = 0
+	tb.SortAsc = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	theme := DefaultLight()
+	buf := makeTableSurface(100, 100)
+	tb.Draw(newP(buf, 100), theme)
+	found := false
+	for y := 0; y < TableHeaderHeight && !found; y++ {
+		for x := 0; x < 100; x++ {
+			if pixelAt(buf, 100, x, y) == theme.OnBackground {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no indicator ink found in header row for ascending sort")
+	}
+}
+
+func TestTableDrawSortIndicatorDescending(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, [][]string{{"x"}})
+	tb.SortColumn = 0
+	tb.SortAsc = false
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	theme := DefaultLight()
+	buf := makeTableSurface(100, 100)
+	tb.Draw(newP(buf, 100), theme)
+	found := false
+	for y := 0; y < TableHeaderHeight && !found; y++ {
+		for x := 0; x < 100; x++ {
+			if pixelAt(buf, 100, x, y) == theme.OnBackground {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no indicator ink found in header row for descending sort")
+	}
+}
+
+func TestTableDrawSortColumnOutOfRangeNoIndicator(t *testing.T) {
+	// SortColumn positive-out-of-range must collapse to "no indicator",
+	// same defensive pattern as Selected.
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, [][]string{{"x"}})
+	tb.SortColumn = 99
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	tb.Draw(newP(makeTableSurface(100, 100), 100), DefaultLight())
+}
+
+// --- ColumnSeparatorAt ------------------------------------------------------
+
+func TestColumnSeparatorAtHit(t *testing.T) {
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 60},
+		{Title: "B", Width: 60},
+	}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
+	if got := tb.ColumnSeparatorAt(60); got != 0 {
+		t.Fatalf("ColumnSeparatorAt(60) = %d, want 0", got)
+	}
+	// Within tolerance either side.
+	if got := tb.ColumnSeparatorAt(58); got != 0 {
+		t.Fatalf("ColumnSeparatorAt(58) = %d, want 0", got)
+	}
+	if got := tb.ColumnSeparatorAt(63); got != 0 {
+		t.Fatalf("ColumnSeparatorAt(63) = %d, want 0", got)
+	}
+}
+
+func TestColumnSeparatorAtMiss(t *testing.T) {
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 60},
+		{Title: "B", Width: 60},
+	}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
+	if got := tb.ColumnSeparatorAt(10); got != -1 {
+		t.Fatalf("ColumnSeparatorAt(10) = %d, want -1", got)
+	}
+}
+
+func TestColumnSeparatorAtSingleColumnAlwaysMiss(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	if got := tb.ColumnSeparatorAt(50); got != -1 {
+		t.Fatalf("single-column ColumnSeparatorAt = %d, want -1", got)
+	}
+}
+
+func TestColumnSeparatorAtNoColumnsAlwaysMiss(t *testing.T) {
+	tb := NewTable(nil, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	if got := tb.ColumnSeparatorAt(50); got != -1 {
+		t.Fatalf("no-columns ColumnSeparatorAt = %d, want -1", got)
+	}
+}
+
+// --- SetColumnWidth ----------------------------------------------------
+
+func TestSetColumnWidthClampsToMinimum(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, nil)
+	var gotCol, gotW int
+	tb.OnColumnResize = func(col, w int) { gotCol, gotW = col, w }
+	tb.SetColumnWidth(0, 1)
+	if tb.Columns[0].Width != tableMinColumnWidth {
+		t.Fatalf("Width = %d, want clamp to %d", tb.Columns[0].Width, tableMinColumnWidth)
+	}
+	if gotCol != 0 || gotW != tableMinColumnWidth {
+		t.Fatalf("OnColumnResize = (%d, %d), want (0, %d)", gotCol, gotW, tableMinColumnWidth)
+	}
+}
+
+func TestSetColumnWidthSetsExactAboveMinimum(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 50}}, nil)
+	tb.SetColumnWidth(0, 80)
+	if tb.Columns[0].Width != 80 {
+		t.Fatalf("Width = %d, want 80", tb.Columns[0].Width)
+	}
+}
+
+func TestSetColumnWidthOutOfRangeColumnNoOp(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 50}}, nil)
+	called := false
+	tb.OnColumnResize = func(col, w int) { called = true }
+	tb.SetColumnWidth(5, 80)
+	tb.SetColumnWidth(-1, 80)
+	if called {
+		t.Fatal("OnColumnResize fired for an out-of-range column")
+	}
+	if tb.Columns[0].Width != 50 {
+		t.Fatalf("Width mutated by out-of-range SetColumnWidth: %d", tb.Columns[0].Width)
+	}
+}
+
+func TestSetColumnWidthNilOnColumnResizeNoPanic(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 50}}, nil)
+	tb.SetColumnWidth(0, 80) // OnColumnResize left nil -- must not panic.
+	if tb.Columns[0].Width != 80 {
+		t.Fatalf("Width = %d, want 80", tb.Columns[0].Width)
+	}
+}
+
+// --- Resize drag via OnEvent ------------------------------------------------
+
+func TestTableResizeDragAdjustsWidthAndFiresOnColumnResize(t *testing.T) {
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 60},
+		{Title: "B", Width: 60},
+	}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
+	var gotCol, gotW int
+	calls := 0
+	tb.OnColumnResize = func(col, w int) { gotCol, gotW = col, w; calls++ }
+
+	// Grab the separator at x=60 (between col 0 + col 1).
+	tb.OnEvent(Event{Kind: EventClick, X: 60, Y: 5})
+	// Drag it to x=90 -- column 0 should now be 90px wide.
+	tb.OnEvent(Event{Kind: EventMouseDrag, X: 90, Y: 5})
+	if calls != 1 {
+		t.Fatalf("OnColumnResize calls = %d, want 1", calls)
+	}
+	if gotCol != 0 || gotW != 90 {
+		t.Fatalf("resize = (col %d, w %d), want (0, 90)", gotCol, gotW)
+	}
+	if tb.Columns[0].Width != 90 {
+		t.Fatalf("Columns[0].Width = %d, want 90", tb.Columns[0].Width)
+	}
+
+	// A further drag continues adjusting the same column.
+	tb.OnEvent(Event{Kind: EventMouseDrag, X: 100, Y: 5})
+	if tb.Columns[0].Width != 100 {
+		t.Fatalf("Columns[0].Width after second drag = %d, want 100", tb.Columns[0].Width)
+	}
+
+	// Mouse-up ends the drag; further EventMouseDrag ticks are no-ops.
+	tb.OnEvent(Event{Kind: EventMouseUp, X: 100, Y: 5})
+	tb.OnEvent(Event{Kind: EventMouseDrag, X: 20, Y: 5})
+	if tb.Columns[0].Width != 100 {
+		t.Fatalf("Columns[0].Width after release = %d, want unchanged 100", tb.Columns[0].Width)
+	}
+}
+
+func TestTableResizeDragClampsToMinimum(t *testing.T) {
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 60},
+		{Title: "B", Width: 60},
+	}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
+	tb.OnEvent(Event{Kind: EventClick, X: 60, Y: 5})
+	// Drag far left of column 0's left edge.
+	tb.OnEvent(Event{Kind: EventMouseDrag, X: 0, Y: 5})
+	if tb.Columns[0].Width != tableMinColumnWidth {
+		t.Fatalf("Columns[0].Width = %d, want clamp to %d", tb.Columns[0].Width, tableMinColumnWidth)
+	}
+}
+
+func TestTableHeaderClickPastLastColumnIgnored(t *testing.T) {
+	// columnAt's "not inside any column" branch: click X is past the
+	// last column's right edge (fixed widths short of the widget's
+	// full Bounds().W), so no column -- and therefore no sort -- fires.
+	tb := NewTable([]TableColumn{{Title: "A", Width: 40, Sortable: true}}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	called := false
+	tb.OnSort = func(col int, asc bool) { called = true }
+	tb.OnEvent(Event{Kind: EventClick, X: 80, Y: 5})
+	if called {
+		t.Fatal("OnSort fired for a click past the last column")
+	}
+}
+
+func TestTableResizeDragOnNonFirstSeparatorSumsLeadingWidths(t *testing.T) {
+	// Grabbing a separator OTHER than index 0 exercises the leading-
+	// width accumulation loop in the EventMouseDrag branch.
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 40},
+		{Title: "B", Width: 40},
+		{Title: "C", Width: 40},
+	}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
+	var gotCol, gotW int
+	tb.OnColumnResize = func(col, w int) { gotCol, gotW = col, w }
+
+	// Separator 1 sits at x=80 (col0 40 + col1 40).
+	tb.OnEvent(Event{Kind: EventClick, X: 80, Y: 5})
+	if !tb.resizing || tb.resizingCol != 1 {
+		t.Fatalf("resize state = (resizing %v, col %d), want (true, 1)", tb.resizing, tb.resizingCol)
+	}
+	tb.OnEvent(Event{Kind: EventMouseDrag, X: 100, Y: 5})
+	if gotCol != 1 || gotW != 60 {
+		t.Fatalf("resize = (col %d, w %d), want (1, 60)", gotCol, gotW)
+	}
+	if tb.Columns[1].Width != 60 {
+		t.Fatalf("Columns[1].Width = %d, want 60", tb.Columns[1].Width)
+	}
+}
+
+func TestTableSeparatorClickTakesPriorityOverSort(t *testing.T) {
+	// A header cell that is ALSO Sortable must not fire OnSort when the
+	// click actually lands on the adjacent separator -- resize wins.
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 60, Sortable: true},
+		{Title: "B", Width: 60, Sortable: true},
+	}, nil)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
+	sortFired := false
+	tb.OnSort = func(col int, asc bool) { sortFired = true }
+	tb.OnEvent(Event{Kind: EventClick, X: 60, Y: 5})
+	if sortFired {
+		t.Fatal("OnSort fired for a separator-hit click")
+	}
+	if !tb.resizing || tb.resizingCol != 0 {
+		t.Fatalf("resize state = (resizing %v, col %d), want (true, 0)", tb.resizing, tb.resizingCol)
+	}
+}
