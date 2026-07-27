@@ -88,7 +88,16 @@ func (n *Notebook) OnEvent(ev Event) {
 	if n.Active >= 0 && n.Active < len(n.Tabs) {
 		page := n.Tabs[n.Active].Page
 		if page != nil {
-			page.OnEvent(ev)
+			// The page occupies the body area, which starts NotebookTabStripH
+			// below the Notebook's top. Bound it (matching Draw) and translate
+			// the event into the page's local frame — otherwise a body click
+			// arrives NotebookTabStripH too low and misroutes inside the page
+			// (the bug this fixes; masked at origin, and by tests that only
+			// asserted the page got *an* event, not its coordinates).
+			r := n.Bounds()
+			body := Rect{X: r.X, Y: r.Y + NotebookTabStripH, W: r.W, H: r.H - NotebookTabStripH}
+			page.SetBounds(body)
+			page.OnEvent(translateEvent(ev, r, body))
 		}
 	}
 }
