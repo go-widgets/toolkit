@@ -41,6 +41,86 @@ type TextView struct {
 	// text, so downstream logic (search, syntax, autosave) never
 	// operates on half-formed input.
 	Composition string
+
+	// undo/redo hold point-in-time snapshots taken before each
+	// mutating edit (see pushUndo). Ports the go-widgets/tui
+	// TextEditor's undo model: one snapshot per mutation (no
+	// coalescing of consecutive keystrokes -- simplest correct
+	// behaviour, matching the sibling's documented choice).
+	undo, redo []tvSnapshot
+}
+
+// maxUndo caps the undo history so a long editing session can't grow
+// the snapshot stack without bound.
+const maxUndo = 200
+
+// tvSnapshot is a point-in-time copy of the buffer + cursor +
+// selection, used to restore a prior state on Undo/Redo.
+type tvSnapshot struct {
+	lines []string
+	line  int
+	col   int
+	sel   Selection
+}
+
+// snapshot captures the current buffer + cursor + selection.
+func (t *TextView) snapshot() tvSnapshot {
+	cp := make([]string, len(t.Lines))
+	copy(cp, t.Lines)
+	return tvSnapshot{lines: cp, line: t.CursorLine, col: t.CursorCol, sel: t.Selection}
+}
+
+// restore replaces the buffer + cursor + selection with s.
+func (t *TextView) restore(s tvSnapshot) {
+	t.Lines = s.lines
+	t.CursorLine, t.CursorCol = s.line, s.col
+	t.Selection = s.sel
+}
+
+// pushUndo records the current state before a mutation and drops any
+// redo history -- a fresh edit invalidates the redo branch. Callers
+// invoke this immediately before the mutation it should undo, and
+// only when the operation will actually mutate the buffer (so purely
+// no-op edits -- e.g. Backspace at the buffer start, an empty
+// EventChar -- don't waste a stack slot).
+func (t *TextView) pushUndo() {
+	t.undo = append(t.undo, t.snapshot())
+	if len(t.undo) > maxUndo {
+		t.undo = t.undo[len(t.undo)-maxUndo:]
+	}
+	t.redo = nil
+}
+
+// Undo restores the buffer + cursor + selection to the state before
+// the most recent mutation, pushing the current state onto the redo
+// stack. No-op when there is nothing to undo.
+func (t *TextView) Undo() {
+	if len(t.undo) == 0 {
+		return
+	}
+	t.redo = append(t.redo, t.snapshot())
+	last := t.undo[len(t.undo)-1]
+	t.undo = t.undo[:len(t.undo)-1]
+	t.restore(last)
+	if t.OnChange != nil {
+		t.OnChange()
+	}
+}
+
+// Redo re-applies the most recently undone mutation, pushing the
+// current state back onto the undo stack. No-op when there is
+// nothing to redo.
+func (t *TextView) Redo() {
+	if len(t.redo) == 0 {
+		return
+	}
+	t.undo = append(t.undo, t.snapshot())
+	last := t.redo[len(t.redo)-1]
+	t.redo = t.redo[:len(t.redo)-1]
+	t.restore(last)
+	if t.OnChange != nil {
+		t.OnChange()
+	}
 }
 
 // NewTextView builds a TextView pre-loaded with initial text (split
@@ -115,6 +195,9 @@ func (t *TextView) OnEvent(ev Event) {
 		// the commit result — clear the preview BEFORE inserting so
 		// the buffer + display stay consistent.
 		t.Composition = ""
+		if ev.Code != "" {
+			t.pushUndo()
+		}
 		t.insertText(ev.Code)
 	case EventCompositionStart, EventCompositionUpdate:
 		// Preview only — do NOT touch Lines. Repaint responsibility
@@ -133,9 +216,17 @@ func (t *TextView) OnEvent(ev Event) {
 func (t *TextView) handleKey(code string) {
 	switch code {
 	case "Backspace":
+		if t.CursorCol > 0 || t.CursorLine > 0 {
+			t.pushUndo()
+		}
 		t.backspace()
 	case "Enter":
+		t.pushUndo()
 		t.splitLine()
+	case "Ctrl+Z":
+		t.Undo()
+	case "Ctrl+Y", "Ctrl+Shift+Z":
+		t.Redo()
 	case "ArrowLeft":
 		t.cursorLeft()
 	case "ArrowRight":
