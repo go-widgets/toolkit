@@ -261,6 +261,20 @@ func TestToastAnchorInWidthGrowsWithAction(t *testing.T) {
 	}
 }
 
+// TestToastActionSlotWEmpty covers actionSlotW's empty-label branch directly:
+// every in-widget caller guards on ActionLabel != "" before invoking it, so
+// the return-0 path is only reachable by a direct call — pin it so the helper
+// keeps its "0 when no action" contract (and the branch stays covered).
+func TestToastActionSlotWEmpty(t *testing.T) {
+	if got := (&Toast{}).actionSlotW(); got != 0 {
+		t.Fatalf("actionSlotW with empty ActionLabel = %d, want 0", got)
+	}
+	withLabel := &Toast{ActionLabel: "Undo"}
+	if got := withLabel.actionSlotW(); got <= 0 {
+		t.Fatalf("actionSlotW with a label = %d, want > 0", got)
+	}
+}
+
 // --- Action button: Draw --------------------------------------------------
 
 // TestToastDrawActionButtonOnlyWhenLabelSet paints two otherwise-identical
