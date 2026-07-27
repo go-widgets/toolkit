@@ -156,6 +156,52 @@ func TestNotebookBodyClickTranslatedAtNonZeroBounds(t *testing.T) {
 	}
 }
 
+func TestNotebookTabSides(t *testing.T) {
+	// Selection + body routing + the active-edge indicator for each non-default
+	// side. Bounds 240×100, 3 tabs (tab width 80, strip thickness 24).
+	const w, h = 240, 100
+	acc := DefaultLight().Accent
+	cases := []struct {
+		name    string
+		side    TabSide
+		clickAt [2]int // widget-local click inside the middle (index 1) tab
+		accAt   [2]int // a pixel on the active tab's accent edge after selecting 1
+		bodyAt  [2]int // a widget-local click that lands in the body
+	}{
+		{"bottom", TabBottom, [2]int{120, 88}, [2]int{100, 76}, [2]int{10, 10}},
+		{"left", TabLeft, [2]int{40, 36}, [2]int{78, 30}, [2]int{120, 10}},
+		{"right", TabRight, [2]int{200, 36}, [2]int{160, 30}, [2]int{10, 10}},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			page := &recordingWidget{}
+			n := NewNotebook()
+			n.TabSide = c.side
+			n.AddTab("A", &recordingWidget{})
+			n.AddTab("B", page)
+			n.AddTab("C", &recordingWidget{})
+			n.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+
+			// Click the middle tab → Active = 1.
+			n.OnEvent(Event{Kind: EventClick, X: c.clickAt[0], Y: c.clickAt[1]})
+			if n.Active != 1 {
+				t.Fatalf("%s: click tab 1 → Active=%d", c.name, n.Active)
+			}
+			// Draw: the active tab's edge carries the Accent indicator.
+			buf := makeSurface(w, h)
+			n.Draw(newP(buf, w), DefaultLight())
+			if got := pixelAt(buf, w, c.accAt[0], c.accAt[1]); got != acc {
+				t.Errorf("%s: active edge at %v = %+v, want Accent", c.name, c.accAt, got)
+			}
+			// A body click routes to the (now active) page.
+			n.OnEvent(Event{Kind: EventClick, X: c.bodyAt[0], Y: c.bodyAt[1]})
+			if len(page.events) != 1 {
+				t.Errorf("%s: body click routed %d events, want 1", c.name, len(page.events))
+			}
+		})
+	}
+}
+
 func TestNotebookNilOnTabChangedNoPanic(t *testing.T) {
 	n := NewNotebook()
 	n.AddTab("A", &recordingWidget{})
