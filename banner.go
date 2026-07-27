@@ -71,10 +71,12 @@ func (b *Banner) buttonRect() (Rect, bool) {
 }
 
 // Draw paints the accent-filled strip + the Text ink. A non-nil Icon is
-// drawn first as a leading GlyphHeight square and the Text is shifted
-// right past it. When ButtonLabel is non-empty an outlined action button
-// is drawn right-aligned inside BannerPadX of the trailing edge. Nothing
-// drawn when !Revealed.
+// drawn first as a leading square inset by BannerPadY top and bottom (so
+// the icon scales with the banner height rather than a fixed font glyph
+// box, keeping it legible on a high-DPI / scaled surface), and the Text
+// is shifted right past it. When ButtonLabel is non-empty an outlined
+// action button is drawn right-aligned inside BannerPadX of the trailing
+// edge. Nothing drawn when !Revealed.
 func (b *Banner) Draw(p painter.Painter, theme *Theme) {
 	if !b.Revealed {
 		return
@@ -84,7 +86,10 @@ func (b *Banner) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Accent)
 	textX := r.X + BannerPadX
 	if b.Icon != nil {
-		d := GlyphHeight()
+		d := r.H - 2*BannerPadY
+		if d < 1 {
+			d = 1
+		}
 		iconR := Rect{X: r.X + BannerPadX, Y: r.Y + (r.H-d)/2, W: d, H: d}
 		b.Icon(p, iconR, ink)
 		textX = iconR.X + iconR.W + BannerPadX/2
