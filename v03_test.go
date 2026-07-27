@@ -316,6 +316,190 @@ func TestMenuDrawsHoveredSubmenuSeparator(t *testing.T) {
 	m.Draw(newP(makeSurface(w, h), w), theme)
 }
 
+// --- v0.7: MenuItem.Checkable / RadioGroup --------------------------------
+
+func TestMenuCheckableTogglesAndFiresAction(t *testing.T) {
+	calls := 0
+	m := NewMenu([]MenuItem{
+		{Label: "Word Wrap", Action: func() { calls++ }, Checkable: true},
+	})
+	m.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 80})
+	if m.Items[0].Checked {
+		t.Fatal("expected initially unchecked")
+	}
+
+	m.OnEvent(Event{Kind: EventClick, X: 10, Y: 10}) // row 0
+	if !m.Items[0].Checked {
+		t.Fatal("expected Checked=true after first click")
+	}
+	if calls != 1 {
+		t.Fatalf("Action calls = %d, want 1", calls)
+	}
+
+	m.OnEvent(Event{Kind: EventClick, X: 10, Y: 10}) // toggle back off
+	if m.Items[0].Checked {
+		t.Fatal("expected Checked=false after second click")
+	}
+	if calls != 2 {
+		t.Fatalf("Action calls = %d, want 2", calls)
+	}
+}
+
+func TestMenuRadioGroupExclusiveSelection(t *testing.T) {
+	var fired []string
+	mk := func(label string, group int) MenuItem {
+		return MenuItem{Label: label, RadioGroup: group, Action: func() { fired = append(fired, label) }}
+	}
+	m := NewMenu([]MenuItem{
+		mk("Left", 1),   // 0
+		mk("Center", 1), // 1
+		mk("Right", 1),  // 2
+		mk("Small", 2),  // 3
+		mk("Large", 2),  // 4
+	})
+	m.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 200})
+
+	// Click "Center" (row 1): group 1 selects Center only; group 2 untouched.
+	m.OnEvent(Event{Kind: EventClick, X: 10, Y: 2 + MenuRowH + 1})
+	if m.Items[0].Checked || !m.Items[1].Checked || m.Items[2].Checked {
+		t.Fatalf("group 1 after Center: %+v", m.Items[:3])
+	}
+	if m.Items[3].Checked || m.Items[4].Checked {
+		t.Fatalf("group 2 should be untouched by a group-1 click: %+v", m.Items[3:])
+	}
+
+	// Click "Right" (row 2): Center clears, Right sets, within group 1 only.
+	m.OnEvent(Event{Kind: EventClick, X: 10, Y: 2 + MenuRowH*2 + 1})
+	if m.Items[1].Checked || !m.Items[2].Checked {
+		t.Fatalf("group 1 after Right: %+v", m.Items[:3])
+	}
+
+	// Click "Large" (row 4): group 2 selects Large; group 1 (Right) unaffected.
+	m.OnEvent(Event{Kind: EventClick, X: 10, Y: 2 + MenuRowH*4 + 1})
+	if !m.Items[4].Checked || m.Items[3].Checked {
+		t.Fatalf("group 2 after Large: %+v", m.Items[3:])
+	}
+	if !m.Items[2].Checked {
+		t.Fatal("group 1 selection (Right) must survive a group-2 click")
+	}
+
+	if len(fired) != 3 {
+		t.Fatalf("Action calls = %d, want 3 (%v)", len(fired), fired)
+	}
+}
+
+func TestMenuHasCheckGutter(t *testing.T) {
+	plain := NewMenu([]MenuItem{{Label: "A", Action: func() {}}, {Separator: true}})
+	if plain.hasCheckGutter() {
+		t.Fatal("plain menu should not reserve a check gutter")
+	}
+	withCheckable := NewMenu([]MenuItem{{Label: "A", Checkable: true}})
+	if !withCheckable.hasCheckGutter() {
+		t.Fatal("a Checkable item should reserve a check gutter")
+	}
+	withRadio := NewMenu([]MenuItem{{Label: "A", RadioGroup: 3}})
+	if !withRadio.hasCheckGutter() {
+		t.Fatal("a RadioGroup item should reserve a check gutter")
+	}
+}
+
+// TestMenuPlainLayoutUnchanged proves a Menu with no Checkable/RadioGroup
+// items renders byte-identical to the pre-feature layout: body + border +
+// the label starting at the original 8px inset, no gutter shift.
+func TestMenuPlainLayoutUnchanged(t *testing.T) {
+	const w, h = 128, 60
+	theme := DefaultLight()
+
+	m := NewMenu([]MenuItem{{Label: "Open", Action: func() {}}})
+	m.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	got := makeSurface(w, h)
+	m.Draw(newP(got, w), theme)
+
+	want := makeSurface(w, h)
+	wp := newP(want, w)
+	fillRect(wp, 0, 0, w, h, theme.Surface)
+	strokeRect(wp, 0, 0, w, h, theme.Border)
+	textY := 2 + (MenuRowH-GlyphHeight())/2
+	DrawText(wp, 8, textY, "Open", theme.OnSurface)
+
+	if string(got) != string(want) {
+		t.Fatal("plain (non-checkable) menu layout changed: gutter leaked in")
+	}
+}
+
+func TestMenuCheckGlyphVsBulletGlyph(t *testing.T) {
+	const w, h = 40, MenuRowH
+	theme := DefaultLight()
+	m := NewMenu(nil)
+
+	check := makeSurface(w, h)
+	m.drawCheckGlyph(newP(check, w), 8, 0, false, theme.OnSurface)
+
+	bullet := makeSurface(w, h)
+	m.drawCheckGlyph(newP(bullet, w), 8, 0, true, theme.OnSurface)
+
+	blank := makeSurface(w, h)
+
+	if string(check) == string(blank) {
+		t.Fatal("check glyph painted nothing")
+	}
+	if string(bullet) == string(blank) {
+		t.Fatal("bullet glyph painted nothing")
+	}
+	if string(check) == string(bullet) {
+		t.Fatal("check + bullet glyphs render identically; should be visually distinct")
+	}
+}
+
+func TestMenuDrawChecksGutterAndGlyphs(t *testing.T) {
+	const w, h = 160, MenuRowH*3 + 4
+	theme := DefaultLight()
+	m := NewMenu([]MenuItem{
+		{Label: "Bold", Action: func() {}, Checkable: true, Checked: true},
+		{Label: "Small", Action: func() {}, RadioGroup: 1, Checked: true},
+		{Label: "Plain", Action: func() {}, Checked: true}, // Checked but not checkish: no glyph
+	})
+	if !m.hasCheckGutter() {
+		t.Fatal("menu with a Checkable + a RadioGroup item should reserve a gutter")
+	}
+	m.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	m.Draw(newP(makeSurface(w, h), w), theme) // unhovered pass
+	m.Hover = 0
+	m.Draw(newP(makeSurface(w, h), w), theme) // hovered + checked-row ink inversion
+}
+
+func TestMenuCheckableWithSeparatorAndSubmenuUnaffected(t *testing.T) {
+	sub := NewMenu([]MenuItem{{Label: "Inner", Action: func() {}}})
+	fired := false
+	m := NewMenu([]MenuItem{
+		{Label: "Toggle", Action: func() { fired = true }, Checkable: true}, // row 0
+		{Separator: true},                                                  // row 1 (h = MenuSeparatorH)
+		{Label: "More", Submenu: sub},                                      // row 2 (nil Action -> disabled)
+	})
+	m.SetBounds(Rect{X: 0, Y: 0, W: 140, H: 100})
+	m.Draw(newP(makeSurface(140, 100), 140), DefaultLight())
+
+	// Click the separator row: no panic, no state change.
+	m.OnEvent(Event{Kind: EventClick, X: 10, Y: 2 + MenuRowH + 1})
+	if fired || m.Items[0].Checked {
+		t.Fatal("separator click should not affect state")
+	}
+
+	// Click the checkable row: toggles + fires as usual.
+	m.OnEvent(Event{Kind: EventClick, X: 10, Y: 4})
+	if !fired || !m.Items[0].Checked {
+		t.Fatal("checkable row should toggle Checked + fire Action")
+	}
+
+	// Click the submenu row: nil Action keeps it disabled (existing rule);
+	// it has no Checkable/RadioGroup so Checked must stay false regardless.
+	subY := 2 + MenuRowH + MenuSeparatorH + 1
+	m.OnEvent(Event{Kind: EventClick, X: 10, Y: subY})
+	if m.Items[2].Checked {
+		t.Fatal("submenu row is not checkable; Checked must stay false")
+	}
+}
+
 func TestMenuBarClickToggles(t *testing.T) {
 	b := NewMenuBar()
 	b.AddMenu("File", NewMenu(nil))
