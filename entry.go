@@ -37,6 +37,12 @@ func NewEntry(initial string) *Entry {
 	return &Entry{Text: initial, Cursor: len(r)}
 }
 
+// Value returns the entry's current text. It is the accessor
+// FormField.Value uses (via the unexported valueGetter interface) to
+// pull an Entry's contents without depending on the Text field name
+// directly, so a FormField wrapping an Entry can be validated.
+func (e *Entry) Value() string { return e.Text }
+
 // Draw paints the border, fill, text + (when Focused) a 1-px cursor
 // stroke at the cursor's pixel position.
 func (e *Entry) Draw(p painter.Painter, theme *Theme) {

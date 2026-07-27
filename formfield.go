@@ -62,6 +62,7 @@ type FormField struct {
 	Help  string // optional dim caption below the child
 	Error string // optional error caption below the child (takes precedence)
 	Child Widget // the actual input; may be nil
+	Rules []Rule // optional validation rules run by Validate
 }
 
 // NewFormField constructs a FormField wrapping child with a label
@@ -141,4 +142,41 @@ func (f *FormField) OnEvent(ev Event) {
 		return
 	}
 	f.Child.OnEvent(ev)
+}
+
+// valueGetter is implemented by input widgets that expose their
+// current text (Entry, ...). FormField.Value type-asserts Child
+// against it instead of depending on any concrete input type, so
+// FormField stays usable with future input widgets that adopt the
+// same accessor.
+type valueGetter interface {
+	Value() string
+}
+
+// Value returns the current text of the wrapped Child, or "" when
+// Child is nil or does not implement valueGetter.
+func (f *FormField) Value() string {
+	if vg, ok := f.Child.(valueGetter); ok {
+		return vg.Value()
+	}
+	return ""
+}
+
+// Validate runs Rules against the field's current Value, in order,
+// stopping at the first failure -- the same short-circuit semantics
+// as the package-level Validate. On failure, Error is set to the
+// failing rule's message and Validate returns false. On success (or
+// when Rules is empty), Error is cleared and Validate returns true.
+//
+// Validate only ever touches Error; it does not repaint -- callers
+// invoke it (typically from a submit handler or an OnChange
+// callback on Child) and then trigger their own redraw so the
+// caption row picks up the new Error.
+func (f *FormField) Validate() bool {
+	if err := Validate(f.Value(), f.Rules...); err != nil {
+		f.Error = err.Error()
+		return false
+	}
+	f.Error = ""
+	return true
 }
