@@ -100,6 +100,60 @@ func TestLevelBarTinyCellWidth(t *testing.T) {
 	l.Draw(newP(makeSurface(64, 12), 64), DefaultLight())
 }
 
+func TestProgressBarVerticalFillsFromBottom(t *testing.T) {
+	const w, h = 20, 40
+	acc := DefaultLight().Accent
+	pb := NewProgressBar()
+	pb.Orientation = Vertical
+	pb.Fraction = 0.5
+	pb.Label = "ignored" // no label drawn in vertical mode
+	pb.SetBounds(Rect{X: 0, Y: 0, W: 12, H: h})
+	surf := makeSurface(w, h)
+	pb.Draw(newP(surf, w), DefaultLight())
+	// Bottom half filled Accent, top half bare track (not Accent).
+	if pixelAt(surf, w, 5, h-4) != acc {
+		t.Errorf("vertical bottom not filled: %+v", pixelAt(surf, w, 5, h-4))
+	}
+	if pixelAt(surf, w, 5, 4) == acc {
+		t.Error("vertical top should be empty (fill is bottom-up)")
+	}
+}
+
+func TestLevelBarVerticalFillsFromBottom(t *testing.T) {
+	const w, h = 20, 44
+	acc := DefaultLight().Accent
+	l := NewLevelBar(4)
+	l.Orientation = Vertical
+	l.Value = 2 // bottom two cells lit
+	l.SetBounds(Rect{X: 0, Y: 0, W: 12, H: h})
+	surf := makeSurface(w, h)
+	l.Draw(newP(surf, w), DefaultLight())
+	// Bottom cell lit, top cell not.
+	if pixelAt(surf, w, 5, h-2) != acc {
+		t.Errorf("vertical LevelBar bottom cell not lit: %+v", pixelAt(surf, w, 5, h-2))
+	}
+	if pixelAt(surf, w, 5, 2) == acc {
+		t.Error("vertical LevelBar top cell should be unlit")
+	}
+}
+
+func TestLevelBarVerticalTinyBounds(t *testing.T) {
+	// Cells taller than the bar clamp to 1 and stop at the top edge (no panic,
+	// no draw past bounds).
+	l := NewLevelBar(20)
+	l.Orientation = Vertical
+	l.Value = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 5})
+	surf := makeSurface(16, 16)
+	l.Draw(newP(surf, 16), DefaultLight())
+	sentinel := RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 255}
+	for y := 5; y < 16; y++ { // below the 5-tall bar
+		if pixelAt(surf, 16, 3, y) != sentinel {
+			t.Fatalf("vertical LevelBar painted past its bounds at y=%d", y)
+		}
+	}
+}
+
 func TestLevelBarStaysWithinBounds(t *testing.T) {
 	// Regression: a narrow bar must not paint its cells past its right edge onto
 	// a neighbour. Max=20 at W=5 would stride to x≈39 without the clip.
