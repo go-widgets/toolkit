@@ -6,12 +6,9 @@ package toolkit
 
 import (
 	"fmt"
-	"image"
 
+	"github.com/go-opentype/opentype"
 	"github.com/go-widgets/painter"
-	"golang.org/x/image/font"
-	"golang.org/x/image/font/opentype"
-	"golang.org/x/image/math/fixed"
 )
 
 // truetypeFont renders anti-aliased, proportional text from a parsed
@@ -20,28 +17,29 @@ import (
 // typography to crisp vector glyphs without touching any widget, because
 // widgets measure text through Measure/TextWidth and paint through Draw.
 //
-// Rasterisation uses x/image/font/opentype's coverage masks: each glyph pixel
-// carries an 8-bit alpha that is composited onto the destination via the
-// painter's src-over PutPixel, so edges land as partial-coverage pixels (true
-// anti-aliasing) rather than the bitmap font's hard on/off blocks.
+// Parsing + rasterisation are provided by github.com/go-opentype/opentype — a
+// pure-Go, zero-dependency (stdlib-only) TrueType engine. The toolkit therefore
+// carries NO third-party font dependency: glyph outlines are decoded and
+// scan-converted to anti-aliased coverage masks entirely within the go-widgets
+// ecosystem.
 //
 // The face and its metrics are parsed once in NewTrueTypeFont and cached; the
-// underlying x/image face is not safe for concurrent Draw calls, matching the
-// toolkit's single-threaded render model.
+// face is not safe for concurrent Draw calls, matching the toolkit's
+// single-threaded render model.
 type truetypeFont struct {
-	face    font.Face
+	face    *opentype.Face
 	advance int // width of a space — the fallback monospace-ish step
 	height  int // line height (ascent + descent + line gap)
 	ascent  int // baseline offset from the text top
 }
 
-// NewTrueTypeFont parses ttf (a TrueType/OpenType byte blob) and returns a Font
-// that renders it anti-aliased at sizePx pixels. Parse failures are wrapped and
+// NewTrueTypeFont parses ttf (a TrueType byte blob) and returns a Font that
+// renders it anti-aliased at sizePx pixels. Parse failures are wrapped and
 // returned; on success the face and its metrics are cached for the font's life.
 //
 // Typical use pairs it with an embedded face, e.g.:
 //
-//	f, err := NewTrueTypeFont(goregular.TTF, 16)
+//	f, err := NewTrueTypeFont(myFontTTF, 16)
 //	if err != nil { /* handle */ }
 //	SetFont(f)
 func NewTrueTypeFont(ttf []byte, sizePx int) (Font, error) {
@@ -49,21 +47,13 @@ func NewTrueTypeFont(ttf []byte, sizePx int) (Font, error) {
 	if err != nil {
 		return nil, fmt.Errorf("toolkit: parse TrueType font: %w", err)
 	}
-	// opentype.NewFace cannot fail for a successfully parsed font with these
-	// options (it only allocates + scales), so its error is discarded to keep
-	// the constructor branch-free; the signature is honoured for forward
-	// compatibility with x/image.
-	face, _ := opentype.NewFace(parsed, &opentype.FaceOptions{
-		Size:    float64(sizePx),
-		DPI:     72,
-		Hinting: font.HintingFull,
-	})
+	face := parsed.NewFace(sizePx)
 	m := face.Metrics()
 	return &truetypeFont{
 		face:    face,
-		advance: font.MeasureString(face, " ").Ceil(),
-		height:  m.Height.Ceil(),
-		ascent:  m.Ascent.Ceil(),
+		advance: face.Measure(" "),
+		height:  m.Height,
+		ascent:  m.Ascent,
 	}, nil
 }
 
@@ -77,9 +67,7 @@ func (f *truetypeFont) Height() int { return f.height }
 
 // Measure is the total rendered width of text in pixels, summing each glyph's
 // proportional advance (so "iii" is narrower than "MMM").
-func (f *truetypeFont) Measure(text string) int {
-	return font.MeasureString(f.face, text).Ceil()
-}
+func (f *truetypeFont) Measure(text string) int { return f.face.Measure(text) }
 
 // Draw paints text anti-aliased with (x, y) as the text top-left corner (the
 // toolkit convention), computing the baseline from the face ascent.
@@ -99,19 +87,17 @@ func (f *truetypeFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) 
 		p.Text(x, y, text, ink)
 		return
 	}
-	baseline := fixed.I(y + f.ascent)
-	pen := fixed.I(x)
+	baseline := y + f.ascent
+	pen := x
 	for _, r := range text {
-		dot := fixed.Point26_6{X: pen, Y: baseline}
-		dr, mask, maskp, advance, ok := f.face.Glyph(dot, r)
+		dr, mask, maskp, advance, ok := f.face.GlyphMask(r, pen, baseline)
 		if !ok {
 			// Unmapped rune: nothing to paint and no advance to trust.
 			continue
 		}
-		am := mask.(*image.Alpha)
 		for j := 0; j < dr.Dy(); j++ {
 			for i := 0; i < dr.Dx(); i++ {
-				a := am.AlphaAt(maskp.X+i, maskp.Y+j).A
+				a := mask.AlphaAt(maskp.X+i, maskp.Y+j).A
 				if a == 0 {
 					continue
 				}

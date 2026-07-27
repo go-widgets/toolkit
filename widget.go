@@ -176,8 +176,8 @@ type Widget interface {
 // package-level active font (see SetFont / CurrentFont), so it behaves
 // exactly as if per-widget fonts did not exist. When set — e.g.
 //
-//	badge.Font = NewTrueTypeFont(goregular.TTF, 10)   // small tag
-//	title.Font = NewTrueTypeFont(goregular.TTF, 22)   // large heading
+//	badge.Font, _ = NewTrueTypeFont(myFontTTF, 10)   // small tag
+//	title.Font, _ = NewTrueTypeFont(myFontTTF, 22)   // large heading
 //
 // that single widget measures + paints its text with that font while every
 // other widget keeps using the global one. Widgets consult it through the
