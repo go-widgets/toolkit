@@ -114,29 +114,20 @@ func (f *FileChooser) Draw(p painter.Painter, theme *Theme) {
 // OnEvent dispatches to the child widgets based on which one the event
 // falls inside.
 func (f *FileChooser) OnEvent(ev Event) {
-	switch {
-	case insideRect(ev.X, ev.Y, f.tree.Bounds()):
-		f.tree.OnEvent(localize(ev, f.tree.Bounds()))
-	case insideRect(ev.X, ev.Y, f.list.Bounds()):
-		f.list.OnEvent(localize(ev, f.list.Bounds()))
-	case insideRect(ev.X, ev.Y, f.pathEntry.Bounds()):
-		f.pathEntry.OnEvent(localize(ev, f.pathEntry.Bounds()))
-	case insideRect(ev.X, ev.Y, f.openButton.Bounds()):
-		f.openButton.OnEvent(localize(ev, f.openButton.Bounds()))
-	case insideRect(ev.X, ev.Y, f.cancelButton.Bounds()):
-		f.cancelButton.OnEvent(localize(ev, f.cancelButton.Bounds()))
+	// ev is FileChooser-local; the sub-widgets carry absolute Bounds. Reconstruct
+	// the absolute click to hit-test them, then hand each its own local frame via
+	// translateEvent. The old code compared local ev directly to absolute child
+	// bounds (and subtracted absolute origins), so the whole chooser went dead
+	// whenever it wasn't at (0,0) — e.g. inside a dialog.
+	r := f.Bounds()
+	sx, sy := ev.X+r.X, ev.Y+r.Y
+	for _, c := range []Widget{f.tree, f.list, f.pathEntry, f.openButton, f.cancelButton} {
+		if c.Bounds().Contains(sx, sy) {
+			c.OnEvent(translateEvent(ev, r, c.Bounds()))
+			return
+		}
 	}
 }
 
 // Path returns the entry text — the current effective selection.
 func (f *FileChooser) Path() string { return f.pathEntry.Text }
-
-func insideRect(x, y int, r Rect) bool {
-	return x >= r.X && x < r.X+r.W && y >= r.Y && y < r.Y+r.H
-}
-
-func localize(ev Event, r Rect) Event {
-	ev.X -= r.X
-	ev.Y -= r.Y
-	return ev
-}

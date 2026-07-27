@@ -187,6 +187,24 @@ func TestFileChooserOpenAndCancel(t *testing.T) {
 	}
 }
 
+func TestFileChooserRoutingTranslatesAtNonZeroBounds(t *testing.T) {
+	// Regression: with the chooser off-origin, a click in FileChooser-local
+	// coords must still route to the sub-widget under the cursor.
+	root := &TreeNode{Label: "/", Expanded: true}
+	opened := false
+	fc := NewFileChooser(root, func(n *TreeNode) []string { return nil })
+	fc.OnAccept = func(string) { opened = true }
+	fc.SetBounds(Rect{X: 40, Y: 30, W: 200, H: 200})
+	fc.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
+	// Click the Open button, in FileChooser-local coords (absolute − chooser origin).
+	r := fc.Bounds()
+	ob := fc.openButton.Bounds()
+	fc.OnEvent(Event{Kind: EventClick, X: ob.X - r.X + 5, Y: ob.Y - r.Y + 5})
+	if !opened {
+		t.Fatal("Open did not route at non-zero bounds (coords not translated)")
+	}
+}
+
 func TestFileChooserListActivateOutOfRange(t *testing.T) {
 	root := &TreeNode{Label: "/", Expanded: true}
 	fc := NewFileChooser(root, func(n *TreeNode) []string { return nil })
