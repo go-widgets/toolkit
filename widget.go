@@ -92,6 +92,24 @@ const (
 	// SplitDropPayload); the target consumes it and clears its hover cue.
 	EventDrop
 
+	// EventTouchStart fires when a touch point first lands inside the
+	// widget. X/Y carry the widget-local touch position. Code carries
+	// the touch/pointer id (a host-assigned string, stable for the
+	// lifetime of that contact) so a widget — or a GestureRecognizer —
+	// can distinguish concurrent contacts in a multi-touch stream even
+	// though the toolkit's own GestureRecognizer only tracks one active
+	// pointer at a time.
+	EventTouchStart
+	// EventTouchMove fires as an already-started touch point moves.
+	// X/Y carry the current widget-local position; Code carries the
+	// same touch/pointer id as the EventTouchStart that began it.
+	EventTouchMove
+	// EventTouchEnd fires when a touch point is lifted. X/Y carry the
+	// widget-local release position; Code carries the same touch/pointer
+	// id as the EventTouchStart that began it, so a listener can match
+	// the end to its start even if other contacts are interleaved.
+	EventTouchEnd
+
 	// eventKindEnd is the exclusive upper bound of valid EventKind
 	// values — not itself a valid kind. Its sole purpose is letting
 	// TestEventKindValuesAreDistinct assert exhaustive coverage: any
