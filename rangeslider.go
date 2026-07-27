@@ -116,9 +116,13 @@ func (s *RangeSlider) OnEvent(ev Event) {
 	}
 	switch ev.Kind {
 	case EventClick:
-		// Grab whichever handle's thumb centre is nearer the cursor.
-		lowC := s.thumbX(s.Low) + scaleThumbSize/2
-		highC := s.thumbX(s.High) + scaleThumbSize/2
+		// Grab whichever handle's thumb centre is nearer the cursor. ev.X is
+		// widget-local, so the thumb centres must be too: thumbX returns an
+		// absolute X (it adds r.X), so subtract r.X to compare in the same frame
+		// as ev.X and valueAt. Without this, clicking one thumb grabs the other
+		// whenever the slider is not at X=0.
+		lowC := s.thumbX(s.Low) - r.X + scaleThumbSize/2
+		highC := s.thumbX(s.High) - r.X + scaleThumbSize/2
 		if abs(ev.X-lowC) <= abs(ev.X-highC) {
 			s.active = 1
 		} else {
