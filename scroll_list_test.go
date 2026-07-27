@@ -301,3 +301,234 @@ func TestListBoxDrawSelectedAndUnselected(t *testing.T) {
 		t.Fatalf("row 1 bg = %+v, want Accent", pixelAt(buf, w, 25, 25))
 	}
 }
+
+// --- ListBox multi-selection ---------------------------------------------
+
+func TestListBoxMultiSelectDefaultOffPreservesSingleSelect(t *testing.T) {
+	// Regression: with MultiSelect false (the zero value), Ctrl/Shift must
+	// be completely ignored -- clicking behaves exactly like before this
+	// feature existed, and the selection set never gets populated.
+	got := -1
+	l := NewListBox([]string{"a", "b", "c"})
+	l.OnActivate = func(i int) { got = i }
+	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
+
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 20}) // row 1, no modifiers
+	if l.Selected != 1 || got != 1 {
+		t.Fatalf("Selected=%d got=%d, want 1,1", l.Selected, got)
+	}
+
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 40, Ctrl: true}) // row 2, Ctrl
+	if l.Selected != 2 {
+		t.Fatalf("Ctrl-click without MultiSelect should still move Selected; got %d", l.Selected)
+	}
+	if len(l.SelectedIndices()) != 0 {
+		t.Fatalf("selection set must stay empty when MultiSelect is off; got %v", l.SelectedIndices())
+	}
+
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 0, Shift: true}) // row 0, Shift
+	if l.Selected != 0 {
+		t.Fatalf("Shift-click without MultiSelect should still move Selected; got %d", l.Selected)
+	}
+	if len(l.SelectedIndices()) != 0 {
+		t.Fatalf("selection set must stay empty when MultiSelect is off; got %v", l.SelectedIndices())
+	}
+}
+
+func TestListBoxMultiSelectPlainClickCollapses(t *testing.T) {
+	l := NewListBox([]string{"a", "b", "c", "d"})
+	l.MultiSelect = true
+	l.SetSelection(0, 1, 2)
+	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 80})
+
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 3}) // plain click row 3
+	if got := l.SelectedIndices(); len(got) != 1 || got[0] != 3 {
+		t.Fatalf("plain click must collapse selection to clicked row; got %v", got)
+	}
+	if l.Selected != 3 {
+		t.Fatalf("Selected (anchor) = %d, want 3", l.Selected)
+	}
+	if !l.IsSelected(3) || l.IsSelected(0) || l.IsSelected(1) || l.IsSelected(2) {
+		t.Fatal("IsSelected disagrees with SelectedIndices after plain click")
+	}
+}
+
+func TestListBoxMultiSelectCtrlToggle(t *testing.T) {
+	l := NewListBox([]string{"a", "b", "c"})
+	l.MultiSelect = true
+	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
+
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 0}) // plain: select row 0
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 2, Ctrl: true}) // Ctrl: add row 2
+
+	got := l.SelectedIndices()
+	if len(got) != 2 || got[0] != 0 || got[1] != 2 {
+		t.Fatalf("Ctrl-click should add to selection; got %v", got)
+	}
+	if l.Selected != 2 {
+		t.Fatalf("Ctrl-click should move the anchor; Selected=%d, want 2", l.Selected)
+	}
+
+	// Ctrl-click an already-selected row toggles it OFF.
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 0, Ctrl: true})
+	got = l.SelectedIndices()
+	if len(got) != 1 || got[0] != 2 {
+		t.Fatalf("Ctrl-click on selected row should remove it; got %v", got)
+	}
+}
+
+func TestListBoxMultiSelectShiftRangeForward(t *testing.T) {
+	l := NewListBox([]string{"a", "b", "c", "d", "e"})
+	l.MultiSelect = true
+	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 1}) // anchor row 1
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 3, Shift: true}) // extend to row 3
+
+	got := l.SelectedIndices()
+	want := []int{1, 2, 3}
+	if len(got) != len(want) {
+		t.Fatalf("SelectedIndices = %v, want %v", got, want)
+	}
+	for i, v := range want {
+		if got[i] != v {
+			t.Fatalf("SelectedIndices = %v, want %v", got, want)
+		}
+	}
+	if l.Selected != 1 {
+		t.Fatalf("Shift-click must not move the anchor; Selected=%d, want 1", l.Selected)
+	}
+}
+
+func TestListBoxMultiSelectShiftRangeBackward(t *testing.T) {
+	l := NewListBox([]string{"a", "b", "c", "d", "e"})
+	l.MultiSelect = true
+	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 3}) // anchor row 3
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 1, Shift: true}) // extend up to row 1
+
+	got := l.SelectedIndices()
+	want := []int{1, 2, 3}
+	if len(got) != len(want) {
+		t.Fatalf("SelectedIndices = %v, want %v", got, want)
+	}
+	for i, v := range want {
+		if got[i] != v {
+			t.Fatalf("SelectedIndices = %v, want %v", got, want)
+		}
+	}
+	if l.Selected != 3 {
+		t.Fatalf("Shift-click must not move the anchor; Selected=%d, want 3", l.Selected)
+	}
+}
+
+func TestListBoxSelectionSetAPI(t *testing.T) {
+	l := NewListBox([]string{"a", "b", "c", "d", "e"})
+
+	// SetSelection replaces wholesale + drops out-of-range indices.
+	l.SetSelection(3, 1, -1, 99)
+	if got := l.SelectedIndices(); len(got) != 2 || got[0] != 1 || got[1] != 3 {
+		t.Fatalf("SetSelection = %v, want [1 3]", got)
+	}
+	if !l.IsSelected(1) || !l.IsSelected(3) || l.IsSelected(0) || l.IsSelected(2) {
+		t.Fatal("IsSelected mismatch after SetSelection")
+	}
+
+	// ToggleSelect flips membership, guards out-of-range.
+	l.ToggleSelect(0)
+	if !l.IsSelected(0) {
+		t.Fatal("ToggleSelect(0) should have added row 0")
+	}
+	l.ToggleSelect(0)
+	if l.IsSelected(0) {
+		t.Fatal("ToggleSelect(0) again should have removed row 0")
+	}
+	l.ToggleSelect(-1)
+	l.ToggleSelect(99)
+	if got := l.SelectedIndices(); len(got) != 2 || got[0] != 1 || got[1] != 3 {
+		t.Fatalf("out-of-range ToggleSelect must be a no-op; got %v", got)
+	}
+
+	// SelectRange, either order, clamped to bounds.
+	l.SelectRange(4, 2)
+	if got := l.SelectedIndices(); len(got) != 3 || got[0] != 2 || got[1] != 3 || got[2] != 4 {
+		t.Fatalf("SelectRange(4,2) = %v, want [2 3 4]", got)
+	}
+	l.SelectRange(-5, 1)
+	if got := l.SelectedIndices(); len(got) != 2 || got[0] != 0 || got[1] != 1 {
+		t.Fatalf("SelectRange(-5,1) clamp = %v, want [0 1]", got)
+	}
+	l.SelectRange(3, 500)
+	if got := l.SelectedIndices(); len(got) != 2 || got[0] != 3 || got[1] != 4 {
+		t.Fatalf("SelectRange(3,500) clamp = %v, want [3 4]", got)
+	}
+
+	// ClearSelection empties the set without touching Selected.
+	l.Selected = 2
+	l.ClearSelection()
+	if got := l.SelectedIndices(); len(got) != 0 {
+		t.Fatalf("ClearSelection should leave an empty set; got %v", got)
+	}
+	if l.Selected != 2 {
+		t.Fatalf("ClearSelection must not touch Selected; got %d", l.Selected)
+	}
+}
+
+func TestListBoxToggleSelectOnFreshList(t *testing.T) {
+	// Regression: ToggleSelect must lazily initialise the selection set
+	// when it has never been touched (selected == nil).
+	l := NewListBox([]string{"a", "b"})
+	l.ToggleSelect(0)
+	if !l.IsSelected(0) {
+		t.Fatal("ToggleSelect on a fresh ListBox should add the row")
+	}
+}
+
+func TestListBoxSelectRangeEmptyList(t *testing.T) {
+	l := NewListBox(nil)
+	l.SelectRange(0, 3) // must not panic; nothing to select
+	if got := l.SelectedIndices(); len(got) != 0 {
+		t.Fatalf("SelectRange on empty list = %v, want []", got)
+	}
+}
+
+func TestListBoxMultiSelectDrawHighlightsAllSelectedRows(t *testing.T) {
+	const w, h = 64, 128
+	theme := DefaultLight()
+	l := NewListBox([]string{"a", "b", "c", "d"})
+	l.MultiSelect = true
+	l.SetSelection(0, 2) // two NON-adjacent rows
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 80})
+	buf := makeSurface(w, h)
+	l.Draw(newP(buf, w), theme)
+
+	if pixelAt(buf, w, 25, 5) != theme.Accent {
+		t.Fatalf("row 0 bg = %+v, want Accent (selected)", pixelAt(buf, w, 25, 5))
+	}
+	if pixelAt(buf, w, 25, 25) != theme.Surface {
+		t.Fatalf("row 1 bg = %+v, want Surface (unselected)", pixelAt(buf, w, 25, 25))
+	}
+	if pixelAt(buf, w, 25, 45) != theme.Accent {
+		t.Fatalf("row 2 bg = %+v, want Accent (selected)", pixelAt(buf, w, 25, 45))
+	}
+	if pixelAt(buf, w, 25, 65) != theme.Surface {
+		t.Fatalf("row 3 bg = %+v, want Surface (unselected)", pixelAt(buf, w, 25, 65))
+	}
+}
+
+func TestListBoxMultiSelectDrawIgnoresSelectedWhenSetEmpty(t *testing.T) {
+	// Selected (the anchor) alone must NOT drive highlighting once
+	// MultiSelect is on -- only the selection set does.
+	const w, h = 64, 64
+	theme := DefaultLight()
+	l := NewListBox([]string{"a", "b"})
+	l.MultiSelect = true
+	l.Selected = 1 // anchor points at row 1, but nothing is in the set
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 40})
+	buf := makeSurface(w, h)
+	l.Draw(newP(buf, w), theme)
+	if pixelAt(buf, w, 25, 25) != theme.Surface {
+		t.Fatalf("row 1 bg = %+v, want Surface (set empty)", pixelAt(buf, w, 25, 25))
+	}
+}
