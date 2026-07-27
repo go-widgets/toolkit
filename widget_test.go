@@ -341,6 +341,50 @@ func TestLabelDrawPaintsBitmapText(t *testing.T) {
 	}
 }
 
+func TestLabelAlign(t *testing.T) {
+	const w, h = 80, 16
+	theme := DefaultLight()
+	firstInkedX := func(al Align) int {
+		l := NewLabel("HI")
+		l.Align = al
+		l.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 16})
+		buf := makeSurface(w, h)
+		l.Draw(newP(buf, w), theme)
+		for x := 0; x < w; x++ {
+			for y := 0; y < h; y++ {
+				if pixelAt(buf, w, x, y) == theme.OnSurface {
+					return x
+				}
+			}
+		}
+		return -1
+	}
+	left, center, right := firstInkedX(AlignLeft), firstInkedX(AlignCenter), firstInkedX(AlignRight)
+	// TextWidth("HI") = 12; centre starts at (60-12)/2 = 24, right at 60-12 = 48.
+	if left != 0 || center != 24 || right != 48 {
+		t.Fatalf("alignment: left=%d (0) center=%d (24) right=%d (48)", left, center, right)
+	}
+}
+
+func TestLabelAlignClampsToLeftEdge(t *testing.T) {
+	// Text wider than the bounds under right/centre alignment must not start left
+	// of Bounds.X (the clamp branch).
+	const w, h = 64, 16
+	theme := DefaultLight()
+	l := NewLabel("WIDE TEXT")
+	l.Align = AlignRight
+	l.SetBounds(Rect{X: 5, Y: 0, W: 10, H: 16}) // far narrower than the text
+	buf := makeSurface(w, h)
+	l.Draw(newP(buf, w), theme)
+	for x := 0; x < 5; x++ {
+		for y := 0; y < h; y++ {
+			if pixelAt(buf, w, x, y) == theme.OnSurface {
+				t.Fatalf("clamp failed: ink at x=%d (< Bounds.X 5)", x)
+			}
+		}
+	}
+}
+
 // When Bounds.H <= GlyphHeight() the label paints at Bounds.Y (the
 // centring branch is skipped). Cover that branch separately.
 func TestLabelDrawTightBoundsSkipsCentring(t *testing.T) {
