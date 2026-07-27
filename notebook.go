@@ -14,21 +14,110 @@ type NotebookTab struct {
 	Page  Widget
 }
 
-// Notebook is a tabbed container. The top NotebookTabStripH pixels
-// host the tab strip; the rest is the active page's body. Clicking
-// a tab swaps Active + fires OnTabChanged.
+// TabSide selects which edge of the Notebook hosts the tab strip.
+type TabSide int
+
+const (
+	// TabTop places the strip along the top edge (the default).
+	TabTop TabSide = iota
+	// TabBottom places the strip along the bottom edge.
+	TabBottom
+	// TabLeft places the strip down the left edge (tabs stacked vertically).
+	TabLeft
+	// TabRight places the strip down the right edge (tabs stacked vertically).
+	TabRight
+)
+
+// Notebook is a tabbed container. A NotebookTabStripH-thick strip on the side
+// chosen by TabSide (Top by default) hosts the tabs; the rest is the active
+// page's body. For Top/Bottom the tabs run horizontally (each NotebookTabWidth
+// wide); for Left/Right they stack vertically (each NotebookTabStripH tall).
+// Clicking a tab swaps Active + fires OnTabChanged.
 type Notebook struct {
 	Base
 	Tabs         []NotebookTab
 	Active       int
+	TabSide      TabSide
 	OnTabChanged func(idx int)
 }
 
-// Geometry constants for the tab strip.
+// Geometry constants for the tab strip: the strip's thickness (its height for a
+// Top/Bottom strip, its width for a Left/Right strip) and each tab's extent
+// along the strip.
 const (
 	NotebookTabStripH = 24
 	NotebookTabWidth  = 80
 )
+
+// stripRect is the tab-strip band on the chosen side.
+func (n *Notebook) stripRect() Rect {
+	r := n.Bounds()
+	switch n.TabSide {
+	case TabBottom:
+		return Rect{X: r.X, Y: r.Y + r.H - NotebookTabStripH, W: r.W, H: NotebookTabStripH}
+	case TabLeft:
+		return Rect{X: r.X, Y: r.Y, W: NotebookTabWidth, H: r.H}
+	case TabRight:
+		return Rect{X: r.X + r.W - NotebookTabWidth, Y: r.Y, W: NotebookTabWidth, H: r.H}
+	default: // TabTop
+		return Rect{X: r.X, Y: r.Y, W: r.W, H: NotebookTabStripH}
+	}
+}
+
+// tabRect is the i-th tab's rect (in surface coordinates).
+func (n *Notebook) tabRect(i int) Rect {
+	r := n.Bounds()
+	switch n.TabSide {
+	case TabBottom:
+		return Rect{X: r.X + i*NotebookTabWidth, Y: r.Y + r.H - NotebookTabStripH, W: NotebookTabWidth, H: NotebookTabStripH}
+	case TabLeft:
+		return Rect{X: r.X, Y: r.Y + i*NotebookTabStripH, W: NotebookTabWidth, H: NotebookTabStripH}
+	case TabRight:
+		return Rect{X: r.X + r.W - NotebookTabWidth, Y: r.Y + i*NotebookTabStripH, W: NotebookTabWidth, H: NotebookTabStripH}
+	default: // TabTop
+		return Rect{X: r.X + i*NotebookTabWidth, Y: r.Y, W: NotebookTabWidth, H: NotebookTabStripH}
+	}
+}
+
+// bodyRect is the page area — the bounds minus the strip band.
+func (n *Notebook) bodyRect() Rect {
+	r := n.Bounds()
+	switch n.TabSide {
+	case TabBottom:
+		return Rect{X: r.X, Y: r.Y, W: r.W, H: r.H - NotebookTabStripH}
+	case TabLeft:
+		return Rect{X: r.X + NotebookTabWidth, Y: r.Y, W: r.W - NotebookTabWidth, H: r.H}
+	case TabRight:
+		return Rect{X: r.X, Y: r.Y, W: r.W - NotebookTabWidth, H: r.H}
+	default: // TabTop
+		return Rect{X: r.X, Y: r.Y + NotebookTabStripH, W: r.W, H: r.H - NotebookTabStripH}
+	}
+}
+
+// tabAt returns the tab index at a surface point, or -1.
+func (n *Notebook) tabAt(px, py int) int {
+	for i := range n.Tabs {
+		if n.tabRect(i).Contains(px, py) {
+			return i
+		}
+	}
+	return -1
+}
+
+// drawActiveEdge paints the accent indicator on the active tab's body-facing
+// edge — an underline for Top, an overline for Bottom, a side bar for Left/Right.
+func (n *Notebook) drawActiveEdge(p painter.Painter, tr Rect, ink RGBA) {
+	switch n.TabSide {
+	case TabBottom:
+		fillRect(p, tr.X, tr.Y, tr.W, 2, ink)
+	case TabLeft:
+		fillRect(p, tr.X+tr.W-2, tr.Y, 2, tr.H, ink)
+	case TabRight:
+		fillRect(p, tr.X, tr.Y, 2, tr.H, ink)
+	default: // TabTop
+		fillRect(p, tr.X, tr.Y+tr.H-2, tr.W, 2, ink)
+	}
+}
 
 // NewNotebook returns an empty Notebook with no tabs + Active = 0.
 func NewNotebook() *Notebook { return &Notebook{} }
@@ -39,63 +128,61 @@ func (n *Notebook) AddTab(label string, page Widget) {
 	n.Tabs = append(n.Tabs, NotebookTab{Label: label, Page: page})
 }
 
-// Draw paints the strip + the active page.
+// Draw paints the strip (on the chosen side) + the active page.
 func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
-	r := n.Bounds()
-	// Strip background.
-	fillRect(p, r.X, r.Y, r.W, NotebookTabStripH, theme.SurfaceAlt)
+	strip := n.stripRect()
+	fillRect(p, strip.X, strip.Y, strip.W, strip.H, theme.SurfaceAlt)
 	for i, tab := range n.Tabs {
-		tx := r.X + i*NotebookTabWidth
+		tr := n.tabRect(i)
 		fill := theme.SurfaceAlt
 		if i == n.Active {
 			fill = theme.Surface
 		}
-		fillRect(p, tx, r.Y, NotebookTabWidth, NotebookTabStripH, fill)
+		fillRect(p, tr.X, tr.Y, tr.W, tr.H, fill)
 		// Label centred in the tab.
 		tw := TextWidth(tab.Label)
-		textX := tx + (NotebookTabWidth-tw)/2
-		textY := r.Y + (NotebookTabStripH-GlyphHeight())/2
+		textX := tr.X + (tr.W-tw)/2
+		textY := tr.Y + (tr.H-GlyphHeight())/2
 		DrawText(p, textX, textY, tab.Label, theme.OnSurface)
 		if i == n.Active {
-			// Accent underline so the active tab reads as selected.
-			fillRect(p, tx, r.Y+NotebookTabStripH-2, NotebookTabWidth, 2, theme.Accent)
+			n.drawActiveEdge(p, tr, theme.Accent)
 		}
 	}
 	// Active page in the body area.
 	if n.Active >= 0 && n.Active < len(n.Tabs) {
 		page := n.Tabs[n.Active].Page
 		if page != nil {
-			body := Rect{X: r.X, Y: r.Y + NotebookTabStripH, W: r.W, H: r.H - NotebookTabStripH}
+			body := n.bodyRect()
 			page.SetBounds(body)
 			page.Draw(p, theme)
 		}
 	}
 }
 
-// OnEvent: click on the strip selects a tab; click in the body
-// routes to the active page.
+// OnEvent: a click on a tab (any side) selects it; a click in the body — or any
+// non-click event — routes to the active page, translated into its local frame.
 func (n *Notebook) OnEvent(ev Event) {
-	if ev.Kind == EventClick && ev.Y < NotebookTabStripH {
-		idx := ev.X / NotebookTabWidth
-		if idx >= 0 && idx < len(n.Tabs) {
+	r := n.Bounds()
+	if ev.Kind == EventClick {
+		// ev is widget-local; hit-test the tabs in surface coordinates.
+		ax, ay := ev.X+r.X, ev.Y+r.Y
+		if idx := n.tabAt(ax, ay); idx >= 0 {
 			n.Active = idx
 			if n.OnTabChanged != nil {
 				n.OnTabChanged(idx)
 			}
+			return
 		}
-		return
+		// A click that lands neither on a tab nor in the body (e.g. empty strip
+		// space) is ignored.
+		if !n.bodyRect().Contains(ax, ay) {
+			return
+		}
 	}
 	if n.Active >= 0 && n.Active < len(n.Tabs) {
 		page := n.Tabs[n.Active].Page
 		if page != nil {
-			// The page occupies the body area, which starts NotebookTabStripH
-			// below the Notebook's top. Bound it (matching Draw) and translate
-			// the event into the page's local frame — otherwise a body click
-			// arrives NotebookTabStripH too low and misroutes inside the page
-			// (the bug this fixes; masked at origin, and by tests that only
-			// asserted the page got *an* event, not its coordinates).
-			r := n.Bounds()
-			body := Rect{X: r.X, Y: r.Y + NotebookTabStripH, W: r.W, H: r.H - NotebookTabStripH}
+			body := n.bodyRect()
 			page.SetBounds(body)
 			page.OnEvent(translateEvent(ev, r, body))
 		}
