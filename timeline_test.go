@@ -289,3 +289,52 @@ func TestTimelineDrawIgnoresExtraOnAccent(t *testing.T) {
 		}
 	}
 }
+
+// --- Horizontal orientation ----------------------------------------------
+
+// A horizontal Timeline draws a horizontal rail near the top with markers
+// spread along it and text below. Two events (one with a Detail) exercise
+// the column-advance + Detail branches.
+func TestTimelineDrawHorizontal(t *testing.T) {
+	const w, h = 240, 80
+	theme := DefaultLight()
+	tl := NewTimeline([]TimelineEvent{
+		{Title: "Start", Kind: TimelineSuccess, Detail: "queued"},
+		{Title: "Done", Kind: TimelineDefault},
+	})
+	tl.Horizontal = true
+	tl.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	buf := makeSurface(w, h)
+	tl.Draw(newP(buf, w), theme)
+
+	// Horizontal rail: a Border pixel on the rail row inside the padded band.
+	railY := TimelinePadY + TimelineMarkerW/2
+	if got := pixelAt(buf, w, TimelinePadX+4, railY); got != theme.Border {
+		t.Fatalf("horizontal rail pixel = %+v, want Border %+v", got, theme.Border)
+	}
+	// First marker is TimelineSuccess (sea green) — present somewhere on the
+	// rail row band.
+	green := RGB(0x2E, 0x8B, 0x57)
+	found := false
+	for y := 0; y < h && !found; y++ {
+		for x := 0; x < w; x++ {
+			if pixelAt(buf, w, x, y) == green {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Fatal("horizontal timeline: success marker colour not painted")
+	}
+}
+
+// Horizontal Timeline with an empty-title, empty-detail event exercises the
+// colW < TimelineMarkerSize clamp (colW floors at the marker size).
+func TestTimelineDrawHorizontalEmptyTitleClampsColumn(t *testing.T) {
+	const w, h = 120, 60
+	tl := NewTimeline([]TimelineEvent{{Title: "", Kind: TimelineDefault}})
+	tl.Horizontal = true
+	tl.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	tl.Draw(newP(makeSurface(w, h), w), DefaultLight())
+}

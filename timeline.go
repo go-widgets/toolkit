@@ -47,6 +47,13 @@ type TimelineEvent struct {
 type Timeline struct {
 	Base
 	Events []TimelineEvent
+	// Horizontal runs the rail left-to-right (a process ribbon) instead of
+	// top-to-bottom. The zero value (false) keeps the original vertical
+	// activity-stream layout. A bool rather than the shared Orientation enum
+	// because Timeline's natural default is vertical, whereas that enum's
+	// zero value is Horizontal — a plain flag keeps the non-breaking default
+	// unambiguous.
+	Horizontal bool
 }
 
 // Timeline sizing constants. Marker column is 12 px wide, the
@@ -114,6 +121,10 @@ func timelineMarkerInk(kind TimelineKind, theme *Theme) RGBA {
 // where they intersect, giving the marker its full square silhouette
 // without a separate clipping pass.
 func (tl *Timeline) Draw(p painter.Painter, theme *Theme) {
+	if tl.Horizontal {
+		tl.drawHorizontal(p, theme)
+		return
+	}
 	r := tl.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 
@@ -136,5 +147,41 @@ func (tl *Timeline) Draw(p painter.Painter, theme *Theme) {
 			blockH += TimelineDetailGap + GlyphHeight()
 		}
 		y += blockH
+	}
+}
+
+// drawHorizontal paints the timeline as a left-to-right ribbon: a single
+// horizontal rail near the top with one marker per event spread along it, and
+// each event's Title (+ optional Detail) rendered below its marker. Column
+// widths follow the widest of an event's Title / Detail so captions never
+// overlap.
+func (tl *Timeline) drawHorizontal(p painter.Painter, theme *Theme) {
+	r := tl.Bounds()
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+
+	railY := r.Y + TimelinePadY + TimelineMarkerW/2
+	railX := r.X + TimelinePadX
+	railW := r.W - 2*TimelinePadX
+	fillRect(p, railX, railY, railW, 1, theme.Border)
+
+	textY := r.Y + TimelinePadY + TimelineMarkerW
+	x := r.X + TimelinePadX
+	for _, ev := range tl.Events {
+		colW := TextWidth(ev.Title)
+		if w := TextWidth(ev.Detail); w > colW {
+			colW = w
+		}
+		if colW < TimelineMarkerSize {
+			colW = TimelineMarkerSize
+		}
+		markerX := x + (colW-TimelineMarkerSize)/2
+		markerY := railY - TimelineMarkerSize/2
+		fillRect(p, markerX, markerY, TimelineMarkerSize, TimelineMarkerSize,
+			timelineMarkerInk(ev.Kind, theme))
+		DrawText(p, x, textY, ev.Title, theme.OnSurface)
+		if ev.Detail != "" {
+			DrawText(p, x, textY+GlyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
+		}
+		x += colW + TimelinePadX
 	}
 }

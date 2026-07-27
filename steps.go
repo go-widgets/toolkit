@@ -31,6 +31,11 @@ type Steps struct {
 	Base
 	Labels  []string
 	Current int
+	// Orientation lays the badges out left-to-right (Horizontal, the zero
+	// value — a wizard strip) or top-to-bottom (Vertical — a side
+	// checklist). Vertical draws its connectors as vertical lines and
+	// renders each caption to the right of its badge instead of below it.
+	Orientation Orientation
 }
 
 // Steps sizing constants. Chosen so the badges + connectors fit inside
@@ -64,17 +69,28 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 	if n == 0 {
 		return
 	}
-	y := r.Y
-	if r.H > StepBoxH {
+	vertical := s.Orientation == Vertical
+	// The badge column is pinned to one edge; the layout axis advances the
+	// other coordinate. Horizontal centres the badge row vertically inside a
+	// tall bar (unchanged); vertical leaves the badge at the left edge so the
+	// caption has room to its right.
+	x, y := r.X, r.Y
+	if !vertical && r.H > StepBoxH {
 		y = r.Y + (r.H-StepBoxH)/2
 	}
-	x := r.X
 	for i, lab := range s.Labels {
 		if i > 0 {
-			// Connector: 1-px horizontal line at the badge vertical centre.
-			connY := y + StepBoxH/2
-			fillRect(p, x, connY, StepConnectorW, 1, theme.Border)
-			x += StepConnectorW
+			if vertical {
+				// Connector: 1-px vertical line at the badge horizontal centre.
+				connX := x + StepBoxW/2
+				fillRect(p, connX, y, 1, StepConnectorW, theme.Border)
+				y += StepConnectorW
+			} else {
+				// Connector: 1-px horizontal line at the badge vertical centre.
+				connY := y + StepBoxH/2
+				fillRect(p, x, connY, StepConnectorW, 1, theme.Border)
+				x += StepConnectorW
+			}
 		}
 		fill := theme.SurfaceAlt
 		ink := theme.OnSurface
@@ -90,11 +106,22 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 		ty := y + (StepBoxH-GlyphHeight())/2
 		DrawText(p, tx, ty, num, ink)
 		if lab != "" {
-			lw := TextWidth(lab)
-			lx := x + (StepBoxW-lw)/2
-			ly := y + StepBoxH + StepLabelGap
-			DrawText(p, lx, ly, lab, theme.OnBackground)
+			if vertical {
+				// Caption to the right of the badge, vertically centred on it.
+				lx := x + StepBoxW + StepLabelGap
+				ly := y + (StepBoxH-GlyphHeight())/2
+				DrawText(p, lx, ly, lab, theme.OnBackground)
+			} else {
+				lw := TextWidth(lab)
+				lx := x + (StepBoxW-lw)/2
+				ly := y + StepBoxH + StepLabelGap
+				DrawText(p, lx, ly, lab, theme.OnBackground)
+			}
 		}
-		x += StepBoxW
+		if vertical {
+			y += StepBoxH
+		} else {
+			x += StepBoxW
+		}
 	}
 }
