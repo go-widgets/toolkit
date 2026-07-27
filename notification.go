@@ -40,6 +40,9 @@ const (
 	NotificationPadX = 12
 	NotificationPadY = 8
 	NotificationLife = 180
+	// NotificationMargin is the gap between a corner-anchored notification
+	// and the host edges.
+	NotificationMargin = 12
 )
 
 // NewNotification builds a hidden notification with the given text +
@@ -62,6 +65,16 @@ func (n *Notification) Show(text string) {
 	r.W = TextWidth(text) + 2*NotificationPadX
 	r.H = GlyphHeight() + 2*NotificationPadY
 	n.SetBounds(r)
+}
+
+// AnchorIn sizes the notification to its Text + positions it at corner of
+// host, inset by NotificationMargin. A convenience over the host computing
+// SetBounds by hand for the common "top-right"/"bottom-centre" placements
+// the type is designed for.
+func (n *Notification) AnchorIn(host Rect, corner Corner) {
+	w := TextWidth(n.Text) + 2*NotificationPadX
+	h := GlyphHeight() + 2*NotificationPadY
+	n.SetBounds(anchorCorner(host, w, h, corner, NotificationMargin, 0))
 }
 
 // Hide dismisses the notification immediately (independent of Life).

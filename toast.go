@@ -62,6 +62,10 @@ type Toast struct {
 const (
 	ToastPadX = 10
 	ToastPadY = 6
+	// ToastMargin is the gap between a corner-anchored toast and the host
+	// edges; ToastGap is the vertical space between stacked toasts.
+	ToastMargin = 12
+	ToastGap    = 6
 )
 
 // NewToast builds a hidden Toast with the given text + kind. The host
@@ -88,6 +92,17 @@ func toastFace(kind ToastKind, theme *Theme) RGBA {
 	default: // ToastInfo (also any out-of-range Kind values)
 		return theme.Accent
 	}
+}
+
+// AnchorIn sizes the toast to its Text + positions it at corner of host,
+// stacked at row index (0 = the row nearest the docked edge). Top corners
+// stack downward, bottom corners upward, so a host can lay out a column of
+// toasts by calling AnchorIn once per visible toast with an increasing index.
+func (t *Toast) AnchorIn(host Rect, corner Corner, index int) {
+	w := TextWidth(t.Text) + 2*ToastPadX
+	h := GlyphHeight() + 2*ToastPadY
+	offset := index * (h + ToastGap)
+	t.SetBounds(anchorCorner(host, w, h, corner, ToastMargin, offset))
 }
 
 // Draw paints the pill when Visible. Filled Kind-coloured panel with a
