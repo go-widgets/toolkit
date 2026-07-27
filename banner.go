@@ -19,12 +19,20 @@ import "github.com/go-widgets/painter"
 // The banner paints in Theme.Accent so it reads as a system message
 // rather than a semantic-severity Alert; the action button is drawn
 // as a bordered box in the accent-inverted ink so it stays legible.
+//
+// An optional leading Icon lets the host prefix the message with a glyph
+// (a padlock for a sign-in prompt, a warning triangle, ...). When set,
+// Draw reserves a GlyphHeight square at the leading edge, invokes Icon
+// with that rect + the banner ink, and shifts the Text right past it.
+// Icon is nil by default, leaving the text flush against BannerPadX as
+// before, so existing callers are unaffected.
 type Banner struct {
 	Base
 	Text        string
 	ButtonLabel string
 	Revealed    bool
 	OnAction    func()
+	Icon        func(p painter.Painter, r Rect, ink RGBA)
 }
 
 // Banner sizing constants. BannerPadX/PadY are the internal margin
@@ -62,9 +70,11 @@ func (b *Banner) buttonRect() (Rect, bool) {
 	}, true
 }
 
-// Draw paints the accent-filled strip + the Text ink. When ButtonLabel
-// is non-empty an outlined action button is drawn right-aligned inside
-// BannerPadX of the trailing edge. Nothing drawn when !Revealed.
+// Draw paints the accent-filled strip + the Text ink. A non-nil Icon is
+// drawn first as a leading GlyphHeight square and the Text is shifted
+// right past it. When ButtonLabel is non-empty an outlined action button
+// is drawn right-aligned inside BannerPadX of the trailing edge. Nothing
+// drawn when !Revealed.
 func (b *Banner) Draw(p painter.Painter, theme *Theme) {
 	if !b.Revealed {
 		return
@@ -72,7 +82,14 @@ func (b *Banner) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	ink := accentInk(theme)
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Accent)
-	DrawText(p, r.X+BannerPadX, r.Y+BannerPadY, b.Text, ink)
+	textX := r.X + BannerPadX
+	if b.Icon != nil {
+		d := GlyphHeight()
+		iconR := Rect{X: r.X + BannerPadX, Y: r.Y + (r.H-d)/2, W: d, H: d}
+		b.Icon(p, iconR, ink)
+		textX = iconR.X + iconR.W + BannerPadX/2
+	}
+	DrawText(p, textX, r.Y+BannerPadY, b.Text, ink)
 	if br, ok := b.buttonRect(); ok {
 		strokeRect(p, br.X, br.Y, br.W, br.H, ink)
 		DrawText(p, br.X+BannerButtonPadX, br.Y+BannerPadY, b.ButtonLabel, ink)

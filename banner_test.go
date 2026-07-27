@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
 
 // --- Constructor ---------------------------------------------------------
 
@@ -155,6 +159,45 @@ func TestBannerDrawZeroWidthBoundsSkipsFill(t *testing.T) {
 		if surf2[i] != before[i] {
 			t.Fatalf("zero-height Banner Draw painted byte %d", i)
 		}
+	}
+}
+
+// --- Draw: a leading Icon is invoked + shifts the text ----------------
+
+func TestBannerDrawWithLeadingIcon(t *testing.T) {
+	b := NewBanner("hi")
+	b.SetBounds(Rect{X: 10, Y: 4, W: 200, H: 30})
+	theme := DefaultLight()
+	buf := makeSurface(220, 40)
+	var gotRect Rect
+	var gotInk RGBA
+	called := 0
+	sentinel := RGB(0x12, 0x34, 0x56)
+	b.Icon = func(p painter.Painter, r Rect, ink RGBA) {
+		called++
+		gotRect = r
+		gotInk = ink
+		// Paint a single pixel so the icon's presence is observable.
+		p.PutPixel(r.X, r.Y, sentinel)
+	}
+	b.Draw(newP(buf, 220), theme)
+	if called != 1 {
+		t.Fatalf("Icon invoked %d times, want 1", called)
+	}
+	// The icon rect is a GlyphHeight square inset by BannerPadX at the
+	// leading edge, vertically centred.
+	wantD := GlyphHeight()
+	if gotRect.W != wantD || gotRect.H != wantD {
+		t.Fatalf("icon rect size = %dx%d, want %dx%d", gotRect.W, gotRect.H, wantD, wantD)
+	}
+	if gotRect.X != 10+BannerPadX {
+		t.Fatalf("icon rect X = %d, want %d", gotRect.X, 10+BannerPadX)
+	}
+	if gotInk != accentInk(theme) {
+		t.Fatalf("icon ink = %+v, want accentInk", gotInk)
+	}
+	if pixelAt(buf, 220, gotRect.X, gotRect.Y) != sentinel {
+		t.Fatal("icon pixel not painted at the leading edge")
 	}
 }
 

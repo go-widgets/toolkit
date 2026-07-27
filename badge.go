@@ -8,12 +8,21 @@ import "github.com/go-widgets/painter"
 
 // Badge is a small pill-shaped counter or indicator — the "12" that
 // hangs off an inbox icon, the "NEW" beside a menu item. Renders Text
-// inside a rounded-pill body filled in Theme.Accent with the ink in
-// Theme.Background for contrast.
+// inside a rounded-pill body filled in Fill (Theme.Accent by default)
+// with the ink in Ink (Theme.Background by default) for contrast.
 //
 // A Badge is passive: it displays a value + does not respond to input.
 // The parent widget (button, menu item, ...) is responsible for
 // positioning it in the top-right corner or wherever the design puts it.
+//
+// Per-badge colour: Fill overrides the pill body colour and Ink the
+// text colour. Both default to the zero RGBA, in which case Draw falls
+// back to Theme.Accent / Theme.Background — so a plain NewBadge keeps
+// the theme look, while a caller that needs a categorical colour (a
+// per-source tag, a severity chip, ...) sets Fill/Ink without having to
+// hand-draw its own pill. A fully-transparent colour (A==0) is treated
+// as "unset"; callers wanting a see-through badge is not a use case the
+// widget serves.
 //
 // Auto-sizing: if the caller sets Bounds().W to 0, the first Draw()
 // resizes the Bounds to the text width plus BadgePadX on each side
@@ -25,6 +34,8 @@ import "github.com/go-widgets/painter"
 type Badge struct {
 	Base
 	Text string
+	Fill RGBA // pill body colour; zero (A==0) => Theme.Accent
+	Ink  RGBA // text colour; zero (A==0) => Theme.Background
 }
 
 // BadgePadX / BadgePadY are the horizontal and vertical insets between
@@ -44,10 +55,11 @@ func NewBadge(text string) *Badge { return &Badge{Text: text} }
 // widget resizes itself to fit its Text (and Bounds().H is filled in
 // too if it was zero) before painting; a pre-sized Bounds is preserved.
 //
-// The pill shape is approximated by clipping the four corner pixels:
-// the body fills the full rectangle minus a one-pixel bite off each
-// corner, which reads as "rounded" against the low-resolution 5x7
-// glyph aesthetic without touching the painter's curve primitives.
+// The pill body is a full rounded-rect painted through the painter's
+// FillRoundRect (radius = half the shorter side, so short pills read as
+// a stadium and tall ones as a circle). Back-ends that cannot round (a
+// cell grid) degrade to a square fill. Fill/Ink override the body/text
+// colours; an unset (transparent) colour falls back to the theme.
 func (b *Badge) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	if r.W == 0 {
@@ -57,14 +69,21 @@ func (b *Badge) Draw(p painter.Painter, theme *Theme) {
 		}
 		b.SetBounds(r)
 	}
-	// Three fills approximate a pill: centre strip full-height, then
-	// two 1-px side columns that skip the top + bottom pixels so the
-	// corners read as rounded.
-	fillRect(p, r.X+1, r.Y, r.W-2, r.H, theme.Accent)
-	fillRect(p, r.X, r.Y+1, 1, r.H-2, theme.Accent)
-	fillRect(p, r.X+r.W-1, r.Y+1, 1, r.H-2, theme.Accent)
+	body := theme.Accent
+	if b.Fill.A != 0 {
+		body = b.Fill
+	}
+	ink := theme.Background
+	if b.Ink.A != 0 {
+		ink = b.Ink
+	}
+	radius := r.H
+	if r.W < radius {
+		radius = r.W
+	}
+	p.FillRoundRect(painter.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}, radius/2, body)
 	tw := TextWidth(b.Text)
 	tx := r.X + (r.W-tw)/2
 	ty := r.Y + (r.H-GlyphHeight())/2
-	DrawText(p, tx, ty, b.Text, theme.Background)
+	DrawText(p, tx, ty, b.Text, ink)
 }
