@@ -184,9 +184,10 @@ func TestBannerDrawWithLeadingIcon(t *testing.T) {
 	if called != 1 {
 		t.Fatalf("Icon invoked %d times, want 1", called)
 	}
-	// The icon rect is a GlyphHeight square inset by BannerPadX at the
-	// leading edge, vertically centred.
-	wantD := GlyphHeight()
+	// The icon rect is a square sized to the banner height minus BannerPadY
+	// top+bottom (so it scales with the strip), inset by BannerPadX at the
+	// leading edge and vertically centred.
+	wantD := 30 - 2*BannerPadY
 	if gotRect.W != wantD || gotRect.H != wantD {
 		t.Fatalf("icon rect size = %dx%d, want %dx%d", gotRect.W, gotRect.H, wantD, wantD)
 	}
@@ -198,6 +199,20 @@ func TestBannerDrawWithLeadingIcon(t *testing.T) {
 	}
 	if pixelAt(buf, 220, gotRect.X, gotRect.Y) != sentinel {
 		t.Fatal("icon pixel not painted at the leading edge")
+	}
+}
+
+// TestBannerIconClampsToMinHeight covers the d<1 clamp: a strip shorter
+// than 2*BannerPadY still hands the icon a 1-px square, never a negative
+// size.
+func TestBannerIconClampsToMinHeight(t *testing.T) {
+	b := NewBanner("x")
+	b.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 6}) // 6 < 2*BannerPadY
+	var gotH int
+	b.Icon = func(p painter.Painter, r Rect, ink RGBA) { gotH = r.H }
+	b.Draw(newP(makeSurface(100, 6), 100), DefaultLight())
+	if gotH != 1 {
+		t.Fatalf("clamped icon H = %d, want 1", gotH)
 	}
 }
 

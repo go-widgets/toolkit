@@ -13,9 +13,10 @@ import "github.com/go-widgets/painter"
 // position in Theme.Accent.
 type Scale struct {
 	Base
-	Min, Max float64
-	Value    float64
-	OnChange func(v float64)
+	Min, Max    float64
+	Value       float64
+	Orientation Orientation
+	OnChange    func(v float64)
 }
 
 // scaleThumbSize is the pixel side length of the thumb.
@@ -45,6 +46,25 @@ func (s *Scale) SetValue(v float64) {
 // white thumb -- matching the Switch's pill track + circular knob.
 func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
+	var pos float64
+	if s.Max > s.Min {
+		pos = (s.Value - s.Min) / (s.Max - s.Min)
+	}
+	if s.Orientation == Vertical {
+		const trackW = 4
+		trackX := r.X + (r.W-trackW)/2
+		trackR := trackW / 2
+		fillRoundRect(p, trackX, r.Y, trackW, r.H, trackR, theme.SurfaceAlt)
+		// pos=1 (Max) sits at the top; the Accent fill runs from the thumb centre
+		// down to the bottom (a fader reads "filled" below the knob).
+		ty := r.Y + int((1-pos)*float64(r.H-scaleThumbSize))
+		centreY := ty + scaleThumbSize/2
+		fillRoundRect(p, trackX, centreY, trackW, r.Y+r.H-centreY, trackR, theme.Accent)
+		tx := r.X + (r.W-scaleThumbSize)/2
+		fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
+		strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
+		return
+	}
 	const trackH = 4
 	trackY := r.Y + (r.H-trackH)/2
 	trackR := trackH / 2
