@@ -49,7 +49,7 @@ func (p *Popover) headerH() int {
 	if p.Title == "" {
 		return 0
 	}
-	return GlyphHeight() + PopoverPadY
+	return p.glyphHeight() + PopoverPadY
 }
 
 // childRect returns the surface-coordinate rect the child widget
@@ -77,7 +77,7 @@ func (p *Popover) Draw(pnt painter.Painter, theme *Theme) {
 	fillRect(pnt, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(pnt, r.X, r.Y, r.W, r.H, theme.Border)
 	if p.Title != "" {
-		DrawText(pnt, r.X+PopoverPadX, r.Y+PopoverPadY, p.Title, theme.OnSurface)
+		p.drawText(pnt, r.X+PopoverPadX, r.Y+PopoverPadY, p.Title, theme.OnSurface)
 	}
 	if p.Child != nil {
 		p.Child.SetBounds(p.childRect())

@@ -58,10 +58,10 @@ func (pb *ProgressBar) Draw(p painter.Painter, theme *Theme) {
 	}
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	if pb.Label != "" {
-		tw := TextWidth(pb.Label)
+		tw := pb.textWidth(pb.Label)
 		tx := r.X + (r.W-tw)/2
-		ty := r.Y + (r.H-GlyphHeight())/2
-		DrawText(p, tx, ty, pb.Label, theme.OnSurface)
+		ty := r.Y + (r.H-pb.glyphHeight())/2
+		pb.drawText(p, tx, ty, pb.Label, theme.OnSurface)
 	}
 }
 

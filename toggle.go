@@ -31,10 +31,10 @@ func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	tw := TextWidth(t.Label)
+	tw := t.textWidth(t.Label)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight())/2
-	DrawText(p, tx, ty, t.Label, theme.OnSurface)
+	ty := r.Y + (r.H-t.glyphHeight())/2
+	t.drawText(p, tx, ty, t.Label, theme.OnSurface)
 }
 
 // OnEvent: click flips Pressed + fires OnToggle.

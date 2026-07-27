@@ -105,9 +105,9 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y+TableHeaderHeight-1, r.W, 1, theme.Border)
 	// Header cell titles.
 	hx := r.X
-	hty := r.Y + (TableHeaderHeight-GlyphHeight())/2
+	hty := r.Y + (TableHeaderHeight-t.glyphHeight())/2
 	for i, col := range t.Columns {
-		DrawText(p, cellTextX(hx, widths[i], col.Title, col.Align), hty, col.Title, theme.OnBackground)
+		t.drawText(p, cellTextX(&t.Base, hx, widths[i], col.Title, col.Align), hty, col.Title, theme.OnBackground)
 		hx += widths[i]
 	}
 
@@ -116,10 +116,10 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	if len(t.Rows) == 0 {
 		// "(no data)" centred horizontally within the widget, sitting
 		// one TableRowHeight below the header.
-		tw := TextWidth(tableEmptyPlaceholder)
+		tw := t.textWidth(tableEmptyPlaceholder)
 		tx := r.X + (r.W-tw)/2
-		ty := bodyY + (TableRowHeight-GlyphHeight())/2
-		DrawText(p, tx, ty, tableEmptyPlaceholder, theme.OnSurface)
+		ty := bodyY + (TableRowHeight-t.glyphHeight())/2
+		t.drawText(p, tx, ty, tableEmptyPlaceholder, theme.OnSurface)
 		return
 	}
 	// Resolve which body row is highlighted -- Selected out of range
@@ -144,10 +144,10 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		}
 		fillRect(p, r.X, y, r.W, TableRowHeight, bg)
 		cx := r.X
-		cty := y + (TableRowHeight-GlyphHeight())/2
+		cty := y + (TableRowHeight-t.glyphHeight())/2
 		for j, col := range t.Columns {
 			if j < len(row) {
-				DrawText(p, cellTextX(cx, widths[j], row[j], col.Align), cty, row[j], ink)
+				t.drawText(p, cellTextX(&t.Base, cx, widths[j], row[j], col.Align), cty, row[j], ink)
 			}
 			cx += widths[j]
 		}
@@ -222,16 +222,19 @@ func (t *Table) columnWidths(total int) []int {
 // (AlignLeft) and right (AlignRight) edges; AlignCenter ignores the
 // padding and centres within the full cell. The result is clamped to
 // the left padding so text never starts before the cell's inner edge.
-func cellTextX(cellX, cellW int, text string, align Align) int {
+//
+// b supplies the effective font so right/centre alignment measures the
+// text in the Table's own font (b.textWidth) rather than the global one.
+func cellTextX(b *Base, cellX, cellW int, text string, align Align) int {
 	switch align {
 	case AlignRight:
-		x := cellX + cellW - TableCellPadX - TextWidth(text)
+		x := cellX + cellW - TableCellPadX - b.textWidth(text)
 		if min := cellX + TableCellPadX; x < min {
 			x = min
 		}
 		return x
 	case AlignCenter:
-		x := cellX + (cellW-TextWidth(text))/2
+		x := cellX + (cellW-b.textWidth(text))/2
 		if min := cellX + TableCellPadX; x < min {
 			x = min
 		}

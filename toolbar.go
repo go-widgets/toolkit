@@ -102,15 +102,15 @@ func (t *Toolbar) Draw(p painter.Painter, theme *Theme) {
 				label = "?"
 			}
 			ch := string(label[0])
-			tx := bx + (bw-TextWidth(ch))/2
-			ty := by + (bh-GlyphHeight())/2
+			tx := bx + (bw-t.textWidth(ch))/2
+			ty := by + (bh-t.glyphHeight())/2
 			ink := theme.OnSurface
 			if it.Disabled {
 				ink = theme.Border
 			} else if i == t.pressIdx {
 				ink = theme.Background
 			}
-			DrawText(p, tx, ty, ch, ink)
+			t.drawText(p, tx, ty, ch, ink)
 		}
 		if vertical {
 			pos += bh

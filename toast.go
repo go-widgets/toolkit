@@ -99,8 +99,8 @@ func toastFace(kind ToastKind, theme *Theme) RGBA {
 // stack downward, bottom corners upward, so a host can lay out a column of
 // toasts by calling AnchorIn once per visible toast with an increasing index.
 func (t *Toast) AnchorIn(host Rect, corner Corner, index int) {
-	w := TextWidth(t.Text) + 2*ToastPadX
-	h := GlyphHeight() + 2*ToastPadY
+	w := t.textWidth(t.Text) + 2*ToastPadX
+	h := t.glyphHeight() + 2*ToastPadY
 	offset := index * (h + ToastGap)
 	t.SetBounds(anchorCorner(host, w, h, corner, ToastMargin, offset))
 }
@@ -116,7 +116,7 @@ func (t *Toast) Draw(p painter.Painter, theme *Theme) {
 	face := toastFace(t.Kind, theme)
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	DrawText(p, r.X+ToastPadX, r.Y+ToastPadY, t.Text, accentInk(theme))
+	t.drawText(p, r.X+ToastPadX, r.Y+ToastPadY, t.Text, accentInk(theme))
 }
 
 // Tick decrements Life by 1 when Life is positive. When the countdown

@@ -21,7 +21,7 @@ type recordingWidget struct {
 }
 
 func (r *recordingWidget) Draw(_ painter.Painter, _ *Theme) { r.draws++ }
-func (r *recordingWidget) OnEvent(ev Event)               { r.events = append(r.events, ev) }
+func (r *recordingWidget) OnEvent(ev Event)                 { r.events = append(r.events, ev) }
 
 // --- Stack ---------------------------------------------------------------
 
@@ -398,7 +398,7 @@ func TestPanedEventRoutingTranslatesAtNonZeroBounds(t *testing.T) {
 	d := &recordingWidget{}
 	vp := NewVPaned(c, d)
 	vp.SetBounds(Rect{X: 100, Y: 50, W: 200, H: 80}) // Position defaults to 40
-	vp.OnEvent(Event{Kind: EventClick, X: 5, Y: 50})  // >Position+handle → Second
+	vp.OnEvent(Event{Kind: EventClick, X: 5, Y: 50}) // >Position+handle → Second
 	if len(d.events) != 1 {
 		t.Fatalf("vertical second got %d events, want 1", len(d.events))
 	}

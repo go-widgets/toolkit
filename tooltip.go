@@ -49,8 +49,8 @@ func NewTooltip(text string) *Tooltip { return &Tooltip{Text: text} }
 func (t *Tooltip) Show(anchor Rect) {
 	t.Visible = true
 	t.Anchor = anchor
-	w := TextWidth(t.Text) + 2*TooltipPadX
-	h := GlyphHeight() + 2*TooltipPadY
+	w := t.textWidth(t.Text) + 2*TooltipPadX
+	h := t.glyphHeight() + 2*TooltipPadY
 	var x, y int
 	switch t.Placement {
 	case PlaceAbove:
@@ -76,5 +76,5 @@ func (t *Tooltip) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.OnSurface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	DrawText(p, r.X+TooltipPadX, r.Y+TooltipPadY, t.Text, theme.Background)
+	t.drawText(p, r.X+TooltipPadX, r.Y+TooltipPadY, t.Text, theme.Background)
 }

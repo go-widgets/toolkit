@@ -12,12 +12,12 @@ func TestWhiteSurLight(t *testing.T) {
 	cases := map[string]struct {
 		got, want RGBA
 	}{
-		"Background":   {th.Background, RGB(0xf5, 0xf5, 0xf5)},   // window_bg_color
-		"OnBackground": {th.OnBackground, RGB(0x24, 0x24, 0x24)}, // window_fg_color
-		"Surface":      {th.Surface, RGB(0xff, 0xff, 0xff)},      // view_bg_color
-		"OnSurface":    {th.OnSurface, RGB(0x36, 0x36, 0x36)},    // view_fg_color
-		"SurfaceAlt":   {th.SurfaceAlt, RGB(0xfb, 0xfb, 0xfb)},   // card_bg_color
-		"Accent":       {th.Accent, RGB(0x08, 0x60, 0xf2)},       // accent_bg_color
+		"Background":   {th.Background, RGB(0xf5, 0xf5, 0xf5)},       // window_bg_color
+		"OnBackground": {th.OnBackground, RGB(0x24, 0x24, 0x24)},     // window_fg_color
+		"Surface":      {th.Surface, RGB(0xff, 0xff, 0xff)},          // view_bg_color
+		"OnSurface":    {th.OnSurface, RGB(0x36, 0x36, 0x36)},        // view_fg_color
+		"SurfaceAlt":   {th.SurfaceAlt, RGB(0xfb, 0xfb, 0xfb)},       // card_bg_color
+		"Accent":       {th.Accent, RGB(0x08, 0x60, 0xf2)},           // accent_bg_color
 		"Border":       {th.Border, RGBA{R: 0, G: 0, B: 0, A: 0x1E}}, // borders rgba(0,0,0,0.12)
 	}
 	for name, c := range cases {

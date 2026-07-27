@@ -28,7 +28,7 @@ func RGB(r, g, b uint8) RGBA { return painter.RGB(r, g, b) }
 //   - OnBackground / OnSurface = ink/text on those grounds
 //   - Accent     = focus rings, the active-tab underline, the link colour
 //   - Border     = a thin separator line drawn around or between
-//                  surface regions
+//     surface regions
 type Theme struct {
 	Background   RGBA
 	Surface      RGBA

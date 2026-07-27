@@ -16,26 +16,26 @@ import "github.com/go-widgets/painter"
 // a wasmbox app that has no JS file picker access.
 type FileChooser struct {
 	Base
-	Root     *TreeNode
+	Root      *TreeNode
 	ListFiles func(dir *TreeNode) []string
-	OnAccept func(path string)
-	OnCancel func()
+	OnAccept  func(path string)
+	OnCancel  func()
 
-	tree       *TreeView
-	list       *ListBox
-	pathEntry  *Entry
-	openButton *Button
+	tree         *TreeView
+	list         *ListBox
+	pathEntry    *Entry
+	openButton   *Button
 	cancelButton *Button
 
-	currentDir *TreeNode
+	currentDir   *TreeNode
 	selectedFile string
 }
 
 // Sizing constants.
 const (
-	FileChooserTreeRatio   = 35  // % of width for the tree pane
+	FileChooserTreeRatio    = 35 // % of width for the tree pane
 	FileChooserButtonStripH = 32
-	FileChooserPathH       = 24
+	FileChooserPathH        = 24
 )
 
 // NewFileChooser builds a FileChooser rooted at root with the given

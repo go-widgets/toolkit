@@ -43,18 +43,18 @@ func NewBreadcrumbs(segments []string) *Breadcrumbs {
 func (b *Breadcrumbs) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	ty := r.Y
-	if r.H > GlyphHeight() {
-		ty = r.Y + (r.H-GlyphHeight())/2
+	if r.H > b.glyphHeight() {
+		ty = r.Y + (r.H-b.glyphHeight())/2
 	}
 	x := r.X
 	n := len(b.Segments)
 	for i, seg := range b.Segments {
-		DrawText(p, x, ty, seg, theme.OnBackground)
-		x += TextWidth(seg)
+		b.drawText(p, x, ty, seg, theme.OnBackground)
+		x += b.textWidth(seg)
 		if i < n-1 {
 			x += BreadcrumbGap
-			DrawText(p, x, ty, BreadcrumbSep, theme.Border)
-			x += TextWidth(BreadcrumbSep) + BreadcrumbGap
+			b.drawText(p, x, ty, BreadcrumbSep, theme.Border)
+			x += b.textWidth(BreadcrumbSep) + BreadcrumbGap
 		}
 	}
 }

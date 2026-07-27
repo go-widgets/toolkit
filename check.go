@@ -49,8 +49,8 @@ func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 		}
 	}
 	// Label to the right of the box, vertically centred on glyph row.
-	textY := r.Y + (r.H-GlyphHeight())/2
-	DrawText(p, r.X+checkBoxSize+4, textY, c.Label, theme.OnBackground)
+	textY := r.Y + (r.H-c.glyphHeight())/2
+	c.drawText(p, r.X+checkBoxSize+4, textY, c.Label, theme.OnBackground)
 }
 
 // OnEvent flips Checked + fires OnToggle on click.

@@ -96,9 +96,9 @@ func (pg *Pagination) drawStep(p painter.Painter, theme *Theme, x, y int, label 
 	if !enabled {
 		ink = theme.Border
 	}
-	tx := x + (PaginationBtnW-TextWidth(label))/2
-	ty := y + (PaginationBtnH-GlyphHeight())/2
-	DrawText(p, tx, ty, label, ink)
+	tx := x + (PaginationBtnW-pg.textWidth(label))/2
+	ty := y + (PaginationBtnH-pg.glyphHeight())/2
+	pg.drawText(p, tx, ty, label, ink)
 }
 
 // drawSlot paints one numeric-or-ellipsis slot. The Current slot
@@ -116,9 +116,9 @@ func (pg *Pagination) drawSlot(p painter.Painter, theme *Theme, x, y int, slot p
 	}
 	fillRect(p, x, y, PaginationBtnW, PaginationBtnH, fill)
 	strokeRect(p, x, y, PaginationBtnW, PaginationBtnH, theme.Border)
-	tx := x + (PaginationBtnW-TextWidth(label))/2
-	ty := y + (PaginationBtnH-GlyphHeight())/2
-	DrawText(p, tx, ty, label, ink)
+	tx := x + (PaginationBtnW-pg.textWidth(label))/2
+	ty := y + (PaginationBtnH-pg.glyphHeight())/2
+	pg.drawText(p, tx, ty, label, ink)
 }
 
 // OnEvent routes an EventClick to whichever button contains (X, Y).

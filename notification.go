@@ -10,11 +10,11 @@ import "github.com/go-widgets/painter"
 // slides in over the app's normal frame, holds for a few ticks, then
 // hides itself. Cousin of Tooltip (both are informational overlays)
 // but with three key differences:
-//   1. Notification is time-bounded (Tick decrements Life; hides at 0).
-//   2. Notification is positioned by the host (typically top-right or
-//      bottom-centre), NOT anchored to a source widget.
-//   3. Notification stays up while the user is doing something else —
-//      Tooltip requires the mouse to hover over its anchor.
+//  1. Notification is time-bounded (Tick decrements Life; hides at 0).
+//  2. Notification is positioned by the host (typically top-right or
+//     bottom-centre), NOT anchored to a source widget.
+//  3. Notification stays up while the user is doing something else —
+//     Tooltip requires the mouse to hover over its anchor.
 //
 // The host drives Life via Tick() from its own animation loop
 // (typically a rAF tick). One Notification instance can be reused —
@@ -62,8 +62,8 @@ func (n *Notification) Show(text string) {
 	n.Visible = true
 	n.Life = NotificationLife
 	r := n.Bounds()
-	r.W = TextWidth(text) + 2*NotificationPadX
-	r.H = GlyphHeight() + 2*NotificationPadY
+	r.W = n.textWidth(text) + 2*NotificationPadX
+	r.H = n.glyphHeight() + 2*NotificationPadY
 	n.SetBounds(r)
 }
 
@@ -72,8 +72,8 @@ func (n *Notification) Show(text string) {
 // SetBounds by hand for the common "top-right"/"bottom-centre" placements
 // the type is designed for.
 func (n *Notification) AnchorIn(host Rect, corner Corner) {
-	w := TextWidth(n.Text) + 2*NotificationPadX
-	h := GlyphHeight() + 2*NotificationPadY
+	w := n.textWidth(n.Text) + 2*NotificationPadX
+	h := n.glyphHeight() + 2*NotificationPadY
 	n.SetBounds(anchorCorner(host, w, h, corner, NotificationMargin, 0))
 }
 
@@ -108,5 +108,5 @@ func (n *Notification) Draw(p painter.Painter, theme *Theme) {
 	r := n.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Accent)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	DrawText(p, r.X+NotificationPadX, r.Y+NotificationPadY, n.Text, theme.Background)
+	n.drawText(p, r.X+NotificationPadX, r.Y+NotificationPadY, n.Text, theme.Background)
 }

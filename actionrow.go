@@ -77,10 +77,10 @@ func (a *ActionRow) Draw(p painter.Painter, theme *Theme) {
 	}
 
 	ty := r.Y + ActionRowPadY
-	DrawText(p, textX, ty, a.Title, theme.OnSurface)
+	a.drawText(p, textX, ty, a.Title, theme.OnSurface)
 	if a.Subtitle != "" {
-		sy := ty + GlyphHeight() + ActionRowSubtitleGap
-		DrawText(p, textX, sy, a.Subtitle, dimInk(theme))
+		sy := ty + a.glyphHeight() + ActionRowSubtitleGap
+		a.drawText(p, textX, sy, a.Subtitle, dimInk(theme))
 	}
 
 	if a.Suffix != nil {

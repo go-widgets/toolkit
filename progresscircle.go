@@ -117,10 +117,10 @@ func (pc *ProgressCircle) Draw(p painter.Painter, theme *Theme) {
 	// second guard.
 	pct := int(f*100 + 0.5)
 	caption := strconv.Itoa(pct) + "%"
-	tw := TextWidth(caption)
+	tw := pc.textWidth(caption)
 	if inner.W > 0 && inner.H > 0 {
 		tx := inner.X + (inner.W-tw)/2
-		ty := inner.Y + (inner.H-GlyphHeight())/2
-		DrawText(p, tx, ty, caption, theme.OnSurface)
+		ty := inner.Y + (inner.H-pc.glyphHeight())/2
+		pc.drawText(p, tx, ty, caption, theme.OnSurface)
 	}
 }

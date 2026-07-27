@@ -62,23 +62,23 @@ func NewClosableChip(text string, onClose func()) *Chip {
 func (c *Chip) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()
 	if r.W == 0 {
-		r.W = TextWidth(c.Text) + 2*ChipPadX
+		r.W = c.textWidth(c.Text) + 2*ChipPadX
 		if c.Closable {
 			r.W += ChipCloseGap + ChipCloseW
 		}
 		if r.H == 0 {
-			r.H = GlyphHeight() + 2*ChipPadY
+			r.H = c.glyphHeight() + 2*ChipPadY
 		}
 		c.SetBounds(r)
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	tx := r.X + ChipPadX
-	ty := r.Y + (r.H-GlyphHeight())/2
-	DrawText(p, tx, ty, c.Text, theme.OnSurface)
+	ty := r.Y + (r.H-c.glyphHeight())/2
+	c.drawText(p, tx, ty, c.Text, theme.OnSurface)
 	if c.Closable {
-		cx := r.X + r.W - ChipPadX - ChipCloseW + (ChipCloseW-TextWidth("x"))/2
-		DrawText(p, cx, ty, "x", theme.Border)
+		cx := r.X + r.W - ChipPadX - ChipCloseW + (ChipCloseW-c.textWidth("x"))/2
+		c.drawText(p, cx, ty, "x", theme.Border)
 	}
 }
 

@@ -71,10 +71,10 @@ func (r *Rating) Draw(p painter.Painter, theme *Theme) {
 			glyphInk = ink
 		}
 		fillRect(p, x, b.Y, RatingStarW, RatingStarW, fill)
-		tw := TextWidth("*")
+		tw := r.textWidth("*")
 		tx := x + (RatingStarW-tw)/2
-		ty := b.Y + (RatingStarW-GlyphHeight())/2
-		DrawText(p, tx, ty, "*", glyphInk)
+		ty := b.Y + (RatingStarW-r.glyphHeight())/2
+		r.drawText(p, tx, ty, "*", glyphInk)
 	}
 }
 

@@ -58,7 +58,7 @@ every native target Go ships.
 | Family       | Widgets                                                            |
 | ------------ | ------------------------------------------------------------------ |
 | Base         | `Widget`, `Base`, `Rect`, `Event` (+ IME composition), `Theme`, `RGBA` |
-| Text         | bitmap 5x7 font (60+ glyphs), `DrawText`, `TextWidth`, `Label`     |
+| Text         | bitmap 5x7 + anti-aliased `NewTrueTypeFont`, global `SetFont` + per-widget `Base.Font`, `DrawText`, `TextWidth`, `Label` |
 | Action       | `Button`, `ToggleButton`, `CheckButton`, `RadioButton` + `Group`   |
 | Input        | `Entry`, `TextView` + `Selection` + IME preview, `SpinButton`, `Scale`, `RangeSlider` |
 | Selection    | `ListBox`, `TreeView`, `DropDown`                                  |
@@ -166,6 +166,12 @@ model, not the widget catalogue:
   dimensions (`CardHeaderH`, `DatePickerFieldH`, `DiffLineH`,
   `FormFieldLabelH`, `TimelineEventH`, `CardFooterH`) are now
   **functions** — append `()` at call sites when upgrading.
+  Extended since with anti-aliased vector text
+  (`NewTrueTypeFont(ttf, px)`) and, from **v0.34**, a **per-widget
+  font**: set `widget.Font` (the exported `Base.Font` field) to give one
+  widget its own face/size — e.g. a 10px badge next to a 22px title —
+  while every other widget keeps the global `SetFont` font. A widget
+  with no `Font` set (the default, `nil`) renders exactly as before.
 - ~~**First-class drag-and-drop event kinds**~~ — **done (v0.16)**:
   `EventDragStart` / `EventDragMove` / `EventDragLeave` / `EventDrop`,
   plus a `DragSource` / `DropTarget` interface pair and

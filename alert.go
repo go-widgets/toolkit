@@ -86,5 +86,5 @@ func (a *Alert) Draw(p painter.Painter, theme *Theme) {
 	face := alertFace(a.Kind, theme)
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	DrawText(p, r.X+AlertPadX, r.Y+AlertPadY, a.Text, theme.Background)
+	a.drawText(p, r.X+AlertPadX, r.Y+AlertPadY, a.Text, theme.Background)
 }
