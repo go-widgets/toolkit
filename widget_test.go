@@ -107,6 +107,9 @@ func TestEventKindValuesAreDistinct(t *testing.T) {
 		{EventDragMove, "EventDragMove"},
 		{EventDragLeave, "EventDragLeave"},
 		{EventDrop, "EventDrop"},
+		{EventTouchStart, "EventTouchStart"},
+		{EventTouchMove, "EventTouchMove"},
+		{EventTouchEnd, "EventTouchEnd"},
 	}
 	if len(cases) != int(eventKindEnd) {
 		t.Fatalf("test list has %d entries but eventKindEnd = %d — a new EventKind was added to widget.go without being pinned here",
