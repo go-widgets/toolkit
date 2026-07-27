@@ -80,12 +80,61 @@ func TestScrollViewClampsToMax(t *testing.T) {
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	sv.SetContentSize(200, 300)
 	sv.Scroll(10000, 10000)
-	// maxY = 300 - 60 = 240. maxX = 200 - (100-8) = 108.
-	if sv.OffsetY != 240 {
-		t.Fatalf("OffsetY clamp: got %d, want 240", sv.OffsetY)
+	// Content is wider than the viewport (200 > 100-8=92), so a horizontal
+	// scrollbar reserves the bottom row and the viewport height shrinks to
+	// 60-8=52. maxY = 300-52 = 248; maxX = 200-92 = 108.
+	if sv.OffsetY != 248 {
+		t.Fatalf("OffsetY clamp: got %d, want 248", sv.OffsetY)
 	}
 	if sv.OffsetX != 108 {
 		t.Fatalf("OffsetX clamp: got %d, want 108", sv.OffsetX)
+	}
+}
+
+func TestScrollViewHorizontalScrollbar(t *testing.T) {
+	const w, h = 100, 60
+	acc := DefaultLight().Accent
+	sv := NewScrollView(NewLabel("x"))
+	sv.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 40})
+	sv.SetContentSize(200, 20) // wide (overflows) but short (no vertical overflow)
+	buf := makeSurface(w, h)
+	sv.Draw(newP(buf, w), DefaultLight())
+	// A horizontal thumb (Accent) sits in the bottom scrollbar row.
+	trackY := 40 - scrollbarWidth
+	found := false
+	for x := 0; x < 72 && !found; x++ {
+		if pixelAt(buf, w, x, trackY+3) == acc {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("no horizontal scrollbar thumb drawn for wide content")
+	}
+	// Scrolling right moves the offset (clamped), i.e. horizontal scroll works.
+	sv.Scroll(1000, 0)
+	if sv.OffsetX == 0 {
+		t.Fatal("horizontal scroll did not move OffsetX")
+	}
+}
+
+func TestScrollViewTinyHorizontalThumbClamps(t *testing.T) {
+	// Extremely wide content → the proportional horizontal thumb would be < 8px,
+	// so it clamps to the 8px minimum (the thumbW<8 branch).
+	sv := NewScrollView(NewLabel("x"))
+	sv.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 40})
+	sv.SetContentSize(100000, 20)
+	buf := makeSurface(64, 64)
+	sv.Draw(newP(buf, 64), DefaultLight()) // must not panic; thumb floored to 8
+	acc := DefaultLight().Accent
+	trackY := 40 - scrollbarWidth
+	found := false
+	for x := 0; x < 32; x++ {
+		if pixelAt(buf, 64, x, trackY+3) == acc {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("clamped horizontal thumb not drawn")
 	}
 }
 

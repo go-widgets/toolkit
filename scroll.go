@@ -11,13 +11,10 @@ import "github.com/go-widgets/painter"
 // (= content size); ScrollView paints the child clipped to its own
 // Bounds, with origin shifted by -OffsetX/-OffsetY.
 //
-// A thin scrollbar track (8 px wide) is painted on the right edge in
-// Theme.SurfaceAlt; a Theme.Accent thumb sized proportionally to the
-// viewport/content ratio shows the current scroll position.
-//
-// Wheel events scroll vertically; horizontal scrolling is supported
-// via direct Scroll(dx, dy) calls (no horizontal scrollbar drawn in
-// v0.2).
+// A thin scrollbar track (8 px) is painted on the right edge, and — when the
+// content is wider than the viewport — along the bottom edge too, each in
+// Theme.SurfaceAlt with a Theme.Accent thumb sized proportionally to the
+// viewport/content ratio. Scroll(dx, dy) moves on both axes.
 type ScrollView struct {
 	Base
 	Child            Widget
@@ -26,8 +23,21 @@ type ScrollView struct {
 	contentH         int
 }
 
-// scrollbarWidth is the pixel width of the right-edge scrollbar track.
+// scrollbarWidth is the pixel thickness of a scrollbar track.
 const scrollbarWidth = 8
+
+// viewport is the visible content rect: the bounds minus the always-reserved
+// right scrollbar column and — when the content overflows horizontally — the
+// bottom scrollbar row.
+func (s *ScrollView) viewport() Rect {
+	r := s.Bounds()
+	vw := r.W - scrollbarWidth
+	vh := r.H
+	if s.contentW > vw {
+		vh -= scrollbarWidth
+	}
+	return Rect{X: r.X, Y: r.Y, W: vw, H: vh}
+}
 
 // NewScrollView builds a ScrollView around child. Call SetContentSize
 // after construction to declare the child's logical extent so the
@@ -51,12 +61,12 @@ func (s *ScrollView) SetContentSize(w, h int) {
 func (s *ScrollView) Scroll(dx, dy int) {
 	s.OffsetX += dx
 	s.OffsetY += dy
-	r := s.Bounds()
-	maxX := s.contentW - (r.W - scrollbarWidth)
+	vp := s.viewport()
+	maxX := s.contentW - vp.W
 	if maxX < 0 {
 		maxX = 0
 	}
-	maxY := s.contentH - r.H
+	maxY := s.contentH - vp.H
 	if maxY < 0 {
 		maxY = 0
 	}
@@ -78,44 +88,55 @@ func (s *ScrollView) Scroll(dx, dy int) {
 // track + thumb on the right edge.
 func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
-	// Child viewport excludes the scrollbar column on the right.
+	vp := s.viewport()
 	if s.Child != nil {
 		// Confine the child to the viewport so content scrolled out of view (or
-		// wider than the viewport) can't overdraw neighbours. Requires a Painter
-		// that supports clipping; back-ends that don't fall back to the previous
-		// surface-edge-only behaviour. Popped before the scrollbar is drawn so
-		// the scrollbar (in its own column) isn't clipped away.
+		// wider than it) can't overdraw neighbours or the scrollbars. Requires a
+		// Painter that supports clipping; back-ends that don't fall back to the
+		// previous surface-edge-only behaviour. Popped before the scrollbars.
 		clr, canClip := p.(painter.Clipper)
 		if canClip {
-			clr.PushClip(Rect{X: r.X, Y: r.Y, W: r.W - scrollbarWidth, H: r.H})
+			clr.PushClip(vp)
 		}
 		cb := s.Child.Bounds()
-		s.Child.SetBounds(Rect{
-			X: r.X - s.OffsetX,
-			Y: r.Y - s.OffsetY,
-			W: cb.W,
-			H: cb.H,
-		})
+		s.Child.SetBounds(Rect{X: r.X - s.OffsetX, Y: r.Y - s.OffsetY, W: cb.W, H: cb.H})
 		s.Child.Draw(p, theme)
 		s.Child.SetBounds(cb)
 		if canClip {
 			clr.PopClip()
 		}
 	}
-	// Scrollbar track.
+	// Vertical scrollbar (right edge), sized to the viewport height so it leaves
+	// the corner for a horizontal bar.
 	trackX := r.X + r.W - scrollbarWidth
-	fillRect(p, trackX, r.Y, scrollbarWidth, r.H, theme.SurfaceAlt)
-	// Thumb sized to viewport/content ratio, positioned by OffsetY.
-	if s.contentH > r.H && r.H > 0 {
-		thumbH := r.H * r.H / s.contentH
+	fillRect(p, trackX, r.Y, scrollbarWidth, vp.H, theme.SurfaceAlt)
+	if s.contentH > vp.H && vp.H > 0 {
+		thumbH := vp.H * vp.H / s.contentH
 		if thumbH < 8 {
 			thumbH = 8
 		}
 		thumbY := r.Y
-		if s.contentH-r.H > 0 {
-			thumbY += s.OffsetY * (r.H - thumbH) / (s.contentH - r.H)
+		if s.contentH-vp.H > 0 {
+			thumbY += s.OffsetY * (vp.H - thumbH) / (s.contentH - vp.H)
 		}
 		fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
+	}
+	// Horizontal scrollbar (bottom edge), only when the content overflows
+	// horizontally (which is exactly when the viewport reserved the bottom row).
+	if s.contentW > vp.W {
+		trackY := r.Y + r.H - scrollbarWidth
+		fillRect(p, r.X, trackY, vp.W, scrollbarWidth, theme.SurfaceAlt)
+		if vp.W > 0 {
+			thumbW := vp.W * vp.W / s.contentW
+			if thumbW < 8 {
+				thumbW = 8
+			}
+			thumbX := r.X
+			if s.contentW-vp.W > 0 {
+				thumbX += s.OffsetX * (vp.W - thumbW) / (s.contentW - vp.W)
+			}
+			fillRect(p, thumbX, trackY, thumbW, scrollbarWidth, theme.Accent)
+		}
 	}
 }
 
