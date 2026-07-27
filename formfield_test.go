@@ -405,3 +405,85 @@ func TestFormFieldChildRectExpandsWithoutCaption(t *testing.T) {
 			without, with)
 	}
 }
+
+// --- Value -----------------------------------------------------------------
+
+// Value returns "" when Child is nil.
+func TestFormFieldValueNilChild(t *testing.T) {
+	f := NewFormField("Name", nil)
+	if v := f.Value(); v != "" {
+		t.Fatalf("Value() = %q, want \"\"", v)
+	}
+}
+
+// Value returns "" when Child does not implement valueGetter.
+func TestFormFieldValueChildWithoutValueGetter(t *testing.T) {
+	f := NewFormField("Name", &mockFFChild{})
+	if v := f.Value(); v != "" {
+		t.Fatalf("Value() = %q, want \"\"", v)
+	}
+}
+
+// Value delegates to Child.Value() when Child implements valueGetter
+// (Entry does).
+func TestFormFieldValueChildWithValueGetter(t *testing.T) {
+	child := NewEntry("hello")
+	f := NewFormField("Name", child)
+	if v := f.Value(); v != "hello" {
+		t.Fatalf("Value() = %q, want %q", v, "hello")
+	}
+}
+
+// --- Validate ----------------------------------------------------------
+
+// Validate with empty Rules always succeeds + clears a stale Error.
+func TestFormFieldValidateNoRulesAlwaysValid(t *testing.T) {
+	f := NewFormField("Name", NewEntry(""))
+	f.Error = "stale"
+	if ok := f.Validate(); !ok {
+		t.Fatal("Validate() = false, want true (no Rules)")
+	}
+	if f.Error != "" {
+		t.Fatalf("Error = %q, want cleared", f.Error)
+	}
+}
+
+// Validate runs Rules against Value + sets Error to the first
+// failing rule's message on failure, returning false.
+func TestFormFieldValidateFailureSetsError(t *testing.T) {
+	f := NewFormField("Name", NewEntry(""))
+	f.Rules = []Rule{Required("name is required")}
+	if ok := f.Validate(); ok {
+		t.Fatal("Validate() = true, want false")
+	}
+	if f.Error != "name is required" {
+		t.Fatalf("Error = %q, want %q", f.Error, "name is required")
+	}
+}
+
+// Validate clears a stale Error + returns true when Rules pass.
+func TestFormFieldValidateSuccessClearsError(t *testing.T) {
+	f := NewFormField("Name", NewEntry("Ada"))
+	f.Error = "stale"
+	f.Rules = []Rule{Required("name is required")}
+	if ok := f.Validate(); !ok {
+		t.Fatal("Validate() = false, want true")
+	}
+	if f.Error != "" {
+		t.Fatalf("Error = %q, want cleared", f.Error)
+	}
+}
+
+// Validate stops at the first failing rule (short-circuit semantics,
+// mirroring the package-level Validate).
+func TestFormFieldValidateFirstFailureWins(t *testing.T) {
+	f := NewFormField("Name", NewEntry(""))
+	f.Rules = []Rule{
+		Required("required"),
+		MinLen(5, "too short"),
+	}
+	f.Validate()
+	if f.Error != "required" {
+		t.Fatalf("Error = %q, want %q", f.Error, "required")
+	}
+}

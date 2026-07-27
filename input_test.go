@@ -23,6 +23,17 @@ func TestEntryConstructorParksCursorAtEnd(t *testing.T) {
 	}
 }
 
+func TestEntryValueReturnsText(t *testing.T) {
+	e := NewEntry("hello")
+	if v := e.Value(); v != "hello" {
+		t.Fatalf("Value() = %q, want %q", v, "hello")
+	}
+	e.Text = "changed"
+	if v := e.Value(); v != "changed" {
+		t.Fatalf("Value() = %q, want %q", v, "changed")
+	}
+}
+
 func TestEntryBackspaceDeletesAndFiresOnChange(t *testing.T) {
 	changes := 0
 	e := NewEntry("abc")
