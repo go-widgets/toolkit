@@ -101,6 +101,42 @@ func TestToolbarNilOnClick(t *testing.T) {
 	tb.OnEvent(Event{Kind: EventClick, X: 12, Y: 10}) // must not panic
 }
 
+func TestToolbarVerticalClickAndDraw(t *testing.T) {
+	clicked := -1
+	tb := NewToolbar([]ToolbarItem{
+		{Label: "A", OnClick: func() { clicked = 0 }},
+		{Separator: true},
+		{Label: "B", OnClick: func() { clicked = 1 }},
+	})
+	tb.Orientation = Vertical
+	tb.SetBounds(Rect{X: 0, Y: 0, W: ToolbarButtonW, H: 200})
+	tb.Draw(newP(v04Surface(), v04SurfW), DefaultLight())
+
+	// Item 0 sits at y in [0, bh); click within it.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 12})
+	if clicked != 0 {
+		t.Fatalf("vertical item 0: want clicked=0, got %d", clicked)
+	}
+	// Separator occupies the next ToolbarSepW rows: ignored.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: ToolbarButtonH + ToolbarSepW/2})
+	if clicked != 0 {
+		t.Fatalf("vertical separator click must not fire; got %d", clicked)
+	}
+	// Item 1 (B) after the separator.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: ToolbarButtonH + ToolbarSepW + 12})
+	if clicked != 1 {
+		t.Fatalf("vertical item 1: want clicked=1, got %d", clicked)
+	}
+	// Cross-axis miss: x past the button width.
+	if tb.hitTest(ToolbarButtonW+5, 12) != -1 {
+		t.Fatal("vertical: x past button width must miss")
+	}
+	// Along-axis miss: y past the last item.
+	if tb.hitTest(10, 500) != -1 {
+		t.Fatal("vertical: y past last item must miss")
+	}
+}
+
 func TestBlitRGBASrcTooShort(t *testing.T) {
 	src := []byte{0xFF, 0xFF, 0xFF, 0xFF} // 1 px when caller asks for 2x2
 	blitRGBA(newP(v04Surface(), v04SurfW), 0, 0, 2, 2, src)

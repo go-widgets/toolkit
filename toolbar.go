@@ -16,10 +16,15 @@ import "github.com/go-widgets/painter"
 // be assembled out of MenuBar + Toolbar + Notebook + Statusbar.
 type Toolbar struct {
 	Base
-	Items    []ToolbarItem
-	ButtonW  int // default ToolbarButtonW
-	ButtonH  int // default ToolbarButtonH
-	pressIdx int // -1 = none; set on the last click for visual feedback
+	Items   []ToolbarItem
+	ButtonW int // default ToolbarButtonW
+	ButtonH int // default ToolbarButtonH
+	// Orientation lays the buttons out left-to-right (Horizontal, the zero
+	// value) or top-to-bottom (Vertical). A vertical toolbar draws its
+	// separators as horizontal dividers, so the same Items slice works as a
+	// side rail without change.
+	Orientation Orientation
+	pressIdx    int // -1 = none; set on the last click for visual feedback
 }
 
 // ToolbarItem is one cell in a Toolbar.
@@ -59,12 +64,25 @@ func (t *Toolbar) Draw(p painter.Painter, theme *Theme) {
 		bh = ToolbarButtonH
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	x := r.X
+	vertical := t.Orientation == Vertical
+	// pos advances along the layout axis; the cross-axis origin is fixed.
+	pos := r.X
+	if vertical {
+		pos = r.Y
+	}
 	for i, it := range t.Items {
+		bx, by := pos, r.Y
+		if vertical {
+			bx, by = r.X, pos
+		}
 		if it.Separator {
-			midX := x + ToolbarSepW/2
-			fillRect(p, midX, r.Y+3, 1, bh-6, theme.Border)
-			x += ToolbarSepW
+			if vertical {
+				// Horizontal divider spanning the button width.
+				fillRect(p, bx+3, by+ToolbarSepW/2, bw-6, 1, theme.Border)
+			} else {
+				fillRect(p, bx+ToolbarSepW/2, by+3, 1, bh-6, theme.Border)
+			}
+			pos += ToolbarSepW
 			continue
 		}
 		bg := theme.Surface
@@ -74,18 +92,18 @@ func (t *Toolbar) Draw(p painter.Painter, theme *Theme) {
 		case i == t.pressIdx:
 			bg = theme.Accent
 		}
-		fillRect(p, x, r.Y, bw, bh, bg)
-		strokeRect(p, x, r.Y, bw, bh, theme.Border)
+		fillRect(p, bx, by, bw, bh, bg)
+		strokeRect(p, bx, by, bw, bh, theme.Border)
 		if len(it.Icon) >= 4*bw*bh {
-			blitRGBA(p, x, r.Y, bw, bh, it.Icon)
+			blitRGBA(p, bx, by, bw, bh, it.Icon)
 		} else {
 			label := it.Label
 			if label == "" {
 				label = "?"
 			}
 			ch := string(label[0])
-			tx := x + (bw-TextWidth(ch))/2
-			ty := r.Y + (bh-GlyphHeight())/2
+			tx := bx + (bw-TextWidth(ch))/2
+			ty := by + (bh-GlyphHeight())/2
 			ink := theme.OnSurface
 			if it.Disabled {
 				ink = theme.Border
@@ -94,7 +112,11 @@ func (t *Toolbar) Draw(p painter.Painter, theme *Theme) {
 			}
 			DrawText(p, tx, ty, ch, ink)
 		}
-		x += bw
+		if vertical {
+			pos += bh
+		} else {
+			pos += bw
+		}
 	}
 }
 
@@ -126,22 +148,30 @@ func (t *Toolbar) hitTest(x, y int) int {
 	if bh <= 0 {
 		bh = ToolbarButtonH
 	}
-	if y < 0 || y >= bh {
+	// along is the coordinate on the layout axis, cross on the other one.
+	along, cross, crossExtent := x, y, bh
+	if t.Orientation == Vertical {
+		along, cross, crossExtent = y, x, bw
+	}
+	if cross < 0 || cross >= crossExtent {
 		return -1
 	}
-	cx := 0
+	c := 0
 	for i, it := range t.Items {
-		w := bw
-		if it.Separator {
-			w = ToolbarSepW
+		step := bw
+		if t.Orientation == Vertical {
+			step = bh
 		}
-		if x >= cx && x < cx+w {
+		if it.Separator {
+			step = ToolbarSepW
+		}
+		if along >= c && along < c+step {
 			if it.Separator {
 				return -1
 			}
 			return i
 		}
-		cx += w
+		c += step
 	}
 	return -1
 }
