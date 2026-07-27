@@ -49,7 +49,7 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	for i, ch := range [3]string{"R", "G", "B"} {
 		y := r.Y + ColorChooserChannelPadY + i*ColorChooserChannelH
 		labelX := r.X + 2
-		DrawText(p, labelX, y+(ColorChooserChannelH-GlyphHeight())/2, ch, theme.OnSurface)
+		c.drawText(p, labelX, y+(ColorChooserChannelH-c.glyphHeight())/2, ch, theme.OnSurface)
 		trackX := r.X + ColorChooserPadX + 12
 		trackY := y + ColorChooserChannelH/2 - 2
 		trackW := channelW - 12
@@ -66,7 +66,7 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	strokeRect(p, previewX, previewY, 40, ColorChooserPreviewH, theme.Border)
 	// Hex string under the swatch.
 	hex := c.Hex()
-	DrawText(p, previewX, previewY+ColorChooserPreviewH+2, hex, theme.OnSurface)
+	c.drawText(p, previewX, previewY+ColorChooserPreviewH+2, hex, theme.OnSurface)
 }
 
 // OnEvent handles clicks on the 3 tracks to move the channel knob.

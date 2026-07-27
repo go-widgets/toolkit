@@ -32,9 +32,9 @@ type MenuItem struct {
 // any widget that needs an Openbox-style picker.
 type Menu struct {
 	Base
-	Items    []MenuItem
-	Hover    int // index of hovered row, -1 if none
-	OnClose  func()
+	Items   []MenuItem
+	Hover   int // index of hovered row, -1 if none
+	OnClose func()
 }
 
 // MenuRowH is the pixel height of a menu row.
@@ -69,8 +69,8 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 		} else if i == m.Hover {
 			ink = theme.Background // hovered row: invert ink
 		}
-		textY := y + (MenuRowH-GlyphHeight())/2
-		DrawText(p, r.X+8, textY, it.Label, ink)
+		textY := y + (MenuRowH-m.glyphHeight())/2
+		m.drawText(p, r.X+8, textY, it.Label, ink)
 		if it.Submenu != nil {
 			// ▶ chevron on the right edge to signal a nested menu.
 			// Flat left (tallest column, x = cx-1), point on right
@@ -85,13 +85,13 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 			// the row has a Submenu (the chevron already occupies the
 			// right edge). Muted ink follows the row's active/inactive
 			// state so a hovered row's shortcut inverts too.
-			sw := TextWidth(it.Shortcut)
+			sw := m.textWidth(it.Shortcut)
 			sx := r.X + r.W - 8 - sw
 			shortcutInk := theme.SurfaceAlt
 			if i == m.Hover && it.Action != nil {
 				shortcutInk = theme.Background
 			}
-			DrawText(p, sx, textY, it.Shortcut, shortcutInk)
+			m.drawText(p, sx, textY, it.Shortcut, shortcutInk)
 		}
 		y += MenuRowH
 	}
@@ -188,7 +188,7 @@ func (b *MenuBar) NameWidth(i int) int {
 	if i < 0 || i >= len(b.Names) {
 		return MenuBarItemW
 	}
-	w := TextWidth(b.Names[i]) + 2*MenuBarItemPadX
+	w := b.textWidth(b.Names[i]) + 2*MenuBarItemPadX
 	if w < MenuBarItemW {
 		return MenuBarItemW
 	}
@@ -219,10 +219,10 @@ func (b *MenuBar) Draw(p painter.Painter, theme *Theme) {
 			fillRect(p, ix, r.Y, iw, MenuBarH, theme.Accent)
 			ink = theme.Background
 		}
-		tw := TextWidth(name)
+		tw := b.textWidth(name)
 		textX := ix + (iw-tw)/2
-		textY := r.Y + (MenuBarH-GlyphHeight())/2
-		DrawText(p, textX, textY, name, ink)
+		textY := r.Y + (MenuBarH-b.glyphHeight())/2
+		b.drawText(p, textX, textY, name, ink)
 	}
 }
 

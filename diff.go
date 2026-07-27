@@ -106,8 +106,8 @@ func (d *Diff) Draw(p painter.Painter, theme *Theme) {
 			prefix = "-"
 		}
 		fillRect(p, r.X+1, y, r.W-2, DiffLineH(), fill)
-		DrawText(p, r.X+DiffPadX, y, prefix, ink)
-		DrawText(p, r.X+DiffPadX+GlyphAdvance(), y, line.Text, ink)
+		d.drawText(p, r.X+DiffPadX, y, prefix, ink)
+		d.drawText(p, r.X+DiffPadX+d.glyphAdvance(), y, line.Text, ink)
 	}
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 }

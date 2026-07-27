@@ -15,10 +15,10 @@ import "github.com/go-widgets/painter"
 // font.DrawText with a 4 px left margin.
 type ListBox struct {
 	Base
-	Items       []string
-	Selected    int // -1 = no selection
-	RowHeight   int // pixels per row; default 18 via NewListBox
-	OnActivate  func(idx int)
+	Items      []string
+	Selected   int // -1 = no selection
+	RowHeight  int // pixels per row; default 18 via NewListBox
+	OnActivate func(idx int)
 }
 
 // NewListBox builds a ListBox containing items. Selected starts at
@@ -48,8 +48,8 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 		}
 		fillRect(p, r.X, y, r.W, l.RowHeight, bg)
 		// Vertically centre the 7-px glyph inside the row.
-		textY := y + (l.RowHeight-GlyphHeight())/2
-		DrawText(p, r.X+4, textY, item, ink)
+		textY := y + (l.RowHeight-l.glyphHeight())/2
+		l.drawText(p, r.X+4, textY, item, ink)
 	}
 }
 

@@ -58,10 +58,10 @@ func (i *IconButton) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	if i.Icon != "" {
-		tw := TextWidth(i.Icon)
+		tw := i.textWidth(i.Icon)
 		tx := r.X + (r.W-tw)/2
-		ty := r.Y + (r.H-GlyphHeight())/2
-		DrawText(p, tx, ty, i.Icon, theme.OnSurface)
+		ty := r.Y + (r.H-i.glyphHeight())/2
+		i.drawText(p, tx, ty, i.Icon, theme.OnSurface)
 	}
 }
 

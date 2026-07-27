@@ -73,8 +73,8 @@ func (c *Card) Draw(p painter.Painter, theme *Theme) {
 
 	if c.Title != "" {
 		fillRect(p, r.X, r.Y, r.W, CardHeaderH(), theme.SurfaceAlt)
-		ty := r.Y + (CardHeaderH()-GlyphHeight())/2
-		DrawText(p, r.X+CardPadX, ty, c.Title, theme.OnSurface)
+		ty := r.Y + (CardHeaderH()-c.glyphHeight())/2
+		c.drawText(p, r.X+CardPadX, ty, c.Title, theme.OnSurface)
 		// Divider between header and body.
 		fillRect(p, r.X, r.Y+CardHeaderH(), r.W, 1, theme.Border)
 		bodyTop = r.Y + CardHeaderH() + 1
@@ -83,17 +83,17 @@ func (c *Card) Draw(p painter.Painter, theme *Theme) {
 	if c.Footer != "" {
 		footerY := r.Y + r.H - CardFooterH()
 		fillRect(p, r.X, footerY, r.W, CardFooterH(), theme.SurfaceAlt)
-		ty := footerY + (CardFooterH()-GlyphHeight())/2
-		DrawText(p, r.X+CardPadX, ty, c.Footer, theme.OnSurface)
+		ty := footerY + (CardFooterH()-c.glyphHeight())/2
+		c.drawText(p, r.X+CardPadX, ty, c.Footer, theme.OnSurface)
 		// Divider between body and footer.
 		fillRect(p, r.X, footerY-1, r.W, 1, theme.Border)
 	}
 
 	if c.Body != "" {
-		lineH := GlyphHeight() + CardLineSpacing
+		lineH := c.glyphHeight() + CardLineSpacing
 		y := bodyTop + CardPadY
 		for _, ln := range strings.Split(c.Body, "\n") {
-			DrawText(p, r.X+CardPadX, y, ln, theme.OnSurface)
+			c.drawText(p, r.X+CardPadX, y, ln, theme.OnSurface)
 			y += lineH
 		}
 	}

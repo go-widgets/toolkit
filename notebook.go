@@ -140,10 +140,10 @@ func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
 		}
 		fillRect(p, tr.X, tr.Y, tr.W, tr.H, fill)
 		// Label centred in the tab.
-		tw := TextWidth(tab.Label)
+		tw := n.textWidth(tab.Label)
 		textX := tr.X + (tr.W-tw)/2
-		textY := tr.Y + (tr.H-GlyphHeight())/2
-		DrawText(p, textX, textY, tab.Label, theme.OnSurface)
+		textY := tr.Y + (tr.H-n.glyphHeight())/2
+		n.drawText(p, textX, textY, tab.Label, theme.OnSurface)
 		if i == n.Active {
 			n.drawActiveEdge(p, tr, theme.Accent)
 		}

@@ -92,10 +92,10 @@ func (d *DropZone) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, r.X, y, DropZoneBorderW, h, border)
 		fillRect(p, r.X+r.W-DropZoneBorderW, y, DropZoneBorderW, h, border)
 	}
-	tw := TextWidth(d.Prompt)
+	tw := d.textWidth(d.Prompt)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight())/2
-	DrawText(p, tx, ty, d.Prompt, theme.OnSurface)
+	ty := r.Y + (r.H-d.glyphHeight())/2
+	d.drawText(p, tx, ty, d.Prompt, theme.OnSurface)
 }
 
 // OnEvent implements the drag lifecycle: EventDragStart / EventDragMove raise

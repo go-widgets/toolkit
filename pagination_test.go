@@ -494,7 +494,7 @@ func TestPaginationNilOnChangeNoPanic(t *testing.T) {
 	p := NewPagination(3, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
 	// Fire every mutation path; nil OnChange must be safe.
-	p.OnEvent(Event{Kind: EventClick, X: 4, Y: 4})                                            // prev
+	p.OnEvent(Event{Kind: EventClick, X: 4, Y: 4}) // prev
 	x := (PaginationBtnW+PaginationGap)*4 + 4
 	p.OnEvent(Event{Kind: EventClick, X: x, Y: 4}) // page 4
 	nextX := (PaginationBtnW+PaginationGap)*6 + 4

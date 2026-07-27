@@ -80,7 +80,7 @@ func (c *ChatBubble) Draw(p painter.Painter, theme *Theme) {
 	lines := strings.Split(c.Text, "\n")
 	maxW := 0
 	for _, ln := range lines {
-		w := TextWidth(ln)
+		w := c.textWidth(ln)
 		if w > maxW {
 			maxW = w
 		}
@@ -89,7 +89,7 @@ func (c *ChatBubble) Draw(p painter.Painter, theme *Theme) {
 	if bubbleW > ChatBubbleMaxW {
 		bubbleW = ChatBubbleMaxW
 	}
-	lineH := GlyphHeight() + ChatBubbleLineSpacing
+	lineH := c.glyphHeight() + ChatBubbleLineSpacing
 	bubbleH := len(lines)*lineH - ChatBubbleLineSpacing + 2*ChatBubblePadY
 
 	var bx int
@@ -110,7 +110,7 @@ func (c *ChatBubble) Draw(p painter.Painter, theme *Theme) {
 
 	ty := by + ChatBubblePadY
 	for _, ln := range lines {
-		DrawText(p, bx+ChatBubblePadX, ty, ln, ink)
+		c.drawText(p, bx+ChatBubblePadX, ty, ln, ink)
 		ty += lineH
 	}
 }

@@ -52,8 +52,8 @@ func (d *DropDown) Draw(p painter.Painter, theme *Theme) {
 	r := d.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	textY := r.Y + (r.H-GlyphHeight())/2
-	DrawText(p, r.X+6, textY, d.Current(), theme.OnSurface)
+	textY := r.Y + (r.H-d.glyphHeight())/2
+	d.drawText(p, r.X+6, textY, d.Current(), theme.OnSurface)
 	// ▼ chevron on the right edge to signal a drop-down. The wide base
 	// sits on the top row and rows narrow moving down to the point,
 	// so at t=0 the 1-pixel-wide tip lands at cy+2 and at t=3 the 7-

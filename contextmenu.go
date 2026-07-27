@@ -51,11 +51,11 @@ func (c *ContextMenu) menuSize() (w, h int) {
 			h += MenuSeparatorH
 			continue
 		}
-		rowW := 16 + TextWidth(it.Label)
+		rowW := 16 + c.textWidth(it.Label)
 		if it.Submenu != nil {
 			rowW += 12
 		} else if it.Shortcut != "" {
-			rowW += 12 + TextWidth(it.Shortcut)
+			rowW += 12 + c.textWidth(it.Shortcut)
 		}
 		if rowW > w {
 			w = rowW

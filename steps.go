@@ -101,21 +101,21 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, x, y, StepBoxW, StepBoxH, fill)
 		strokeRect(p, x, y, StepBoxW, StepBoxH, theme.Border)
 		num := strconv.Itoa(i + 1)
-		tw := TextWidth(num)
+		tw := s.textWidth(num)
 		tx := x + (StepBoxW-tw)/2
-		ty := y + (StepBoxH-GlyphHeight())/2
-		DrawText(p, tx, ty, num, ink)
+		ty := y + (StepBoxH-s.glyphHeight())/2
+		s.drawText(p, tx, ty, num, ink)
 		if lab != "" {
 			if vertical {
 				// Caption to the right of the badge, vertically centred on it.
 				lx := x + StepBoxW + StepLabelGap
-				ly := y + (StepBoxH-GlyphHeight())/2
-				DrawText(p, lx, ly, lab, theme.OnBackground)
+				ly := y + (StepBoxH-s.glyphHeight())/2
+				s.drawText(p, lx, ly, lab, theme.OnBackground)
 			} else {
-				lw := TextWidth(lab)
+				lw := s.textWidth(lab)
 				lx := x + (StepBoxW-lw)/2
 				ly := y + StepBoxH + StepLabelGap
-				DrawText(p, lx, ly, lab, theme.OnBackground)
+				s.drawText(p, lx, ly, lab, theme.OnBackground)
 			}
 		}
 		if vertical {

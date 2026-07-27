@@ -144,15 +144,69 @@ type Widget interface {
 // Base provides default Bounds/SetBounds/HitTest impls so a widget
 // embedding it only has to implement Draw + OnEvent. Embedding is
 // optional but convenient.
+//
+// Font is an optional per-widget font override. When nil (the zero value,
+// the default for every widget) the widget lays out + renders against the
+// package-level active font (see SetFont / CurrentFont), so it behaves
+// exactly as if per-widget fonts did not exist. When set — e.g.
+//
+//	badge.Font = NewTrueTypeFont(goregular.TTF, 10)   // small tag
+//	title.Font = NewTrueTypeFont(goregular.TTF, 22)   // large heading
+//
+// that single widget measures + paints its text with that font while every
+// other widget keeps using the global one. Widgets consult it through the
+// font-aware helpers (EffectiveFont / textWidth / drawText / glyphHeight /
+// glyphAdvance) instead of the package-level TextWidth / DrawText /
+// GlyphHeight, so a font swap is scoped to the widget that sets it.
 type Base struct {
 	rect Rect
+	// Font, when non-nil, overrides the global active font for this widget
+	// only. nil means "inherit the active font" (the default).
+	Font Font
 }
 
-func (b *Base) Bounds() Rect              { return b.rect }
-func (b *Base) SetBounds(r Rect)          { b.rect = r }
-func (b *Base) HitTest(px, py int) bool   { return b.rect.Contains(px, py) }
-func (b *Base) OnEvent(ev Event) { _ = ev /* no-op default; widgets override */ }
+func (b *Base) Bounds() Rect            { return b.rect }
+func (b *Base) SetBounds(r Rect)        { b.rect = r }
+func (b *Base) HitTest(px, py int) bool { return b.rect.Contains(px, py) }
+func (b *Base) OnEvent(ev Event)        { _ = ev /* no-op default; widgets override */ }
 func (b *Base) Draw(p painter.Painter, theme *Theme) {
 	// no-op default; concrete widgets override Draw.
 	_, _ = p, theme
 }
+
+// SetFont sets this widget's per-widget font override and returns the Base so
+// the call can be chained fluently (b := (&Badge{}).SetFont(f) style). A nil f
+// clears the override, restoring inheritance of the global active font.
+func (b *Base) SetFont(f Font) *Base {
+	b.Font = f
+	return b
+}
+
+// EffectiveFont is the font this widget renders with: its own Font override if
+// one is set, otherwise the package-level active font (CurrentFont). It never
+// returns nil, so callers can measure/draw through it unconditionally.
+func (b *Base) EffectiveFont() Font {
+	if b.Font != nil {
+		return b.Font
+	}
+	return CurrentFont()
+}
+
+// textWidth is the pixel width this widget's text occupies, measured in the
+// widget's effective font — the per-widget counterpart of the package-level
+// TextWidth.
+func (b *Base) textWidth(s string) int { return b.EffectiveFont().Measure(s) }
+
+// drawText paints s at (x, y) in this widget's effective font — the per-widget
+// counterpart of the package-level DrawText.
+func (b *Base) drawText(p painter.Painter, x, y int, s string, ink RGBA) {
+	b.EffectiveFont().Draw(p, x, y, s, ink)
+}
+
+// glyphHeight is this widget's effective font's glyph box height — the
+// per-widget counterpart of the package-level GlyphHeight.
+func (b *Base) glyphHeight() int { return b.EffectiveFont().Height() }
+
+// glyphAdvance is this widget's effective font's horizontal step per glyph —
+// the per-widget counterpart of the package-level GlyphAdvance.
+func (b *Base) glyphAdvance() int { return b.EffectiveFont().Advance() }

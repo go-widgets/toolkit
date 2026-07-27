@@ -85,9 +85,9 @@ func TestTableColumnWidthsAllAutoLeftoverGoesToLast(t *testing.T) {
 func TestTableColumnWidthsMixSumsToTotal(t *testing.T) {
 	tb := NewTable([]TableColumn{
 		{Title: "a", Width: 30},
-		{Title: "b"},            // auto
+		{Title: "b"}, // auto
 		{Title: "c", Width: 20},
-		{Title: "d"},            // auto
+		{Title: "d"}, // auto
 	}, nil)
 	got := tb.columnWidths(200)
 	sum := 0
@@ -417,7 +417,7 @@ func TestTableDrawAccentInkFallbackWithExtraNoKey(t *testing.T) {
 
 func TestCellTextXLeft(t *testing.T) {
 	// AlignLeft always sits at the left padding, regardless of width.
-	if got := cellTextX(100, 200, "hi", AlignLeft); got != 100+TableCellPadX {
+	if got := cellTextX(&Base{}, 100, 200, "hi", AlignLeft); got != 100+TableCellPadX {
 		t.Fatalf("left = %d, want %d", got, 100+TableCellPadX)
 	}
 }
@@ -425,7 +425,7 @@ func TestCellTextXLeft(t *testing.T) {
 func TestCellTextXRight(t *testing.T) {
 	// AlignRight: right edge of text flush with the cell's right padding.
 	w := TextWidth("hi")
-	if got := cellTextX(100, 200, "hi", AlignRight); got != 100+200-TableCellPadX-w {
+	if got := cellTextX(&Base{}, 100, 200, "hi", AlignRight); got != 100+200-TableCellPadX-w {
 		t.Fatalf("right = %d, want %d", got, 100+200-TableCellPadX-w)
 	}
 }
@@ -433,20 +433,20 @@ func TestCellTextXRight(t *testing.T) {
 func TestCellTextXRightClamp(t *testing.T) {
 	// A cell narrower than the text would push the start left of the inner
 	// edge; it clamps to the left padding instead.
-	if got := cellTextX(100, 1, "wide text", AlignRight); got != 100+TableCellPadX {
+	if got := cellTextX(&Base{}, 100, 1, "wide text", AlignRight); got != 100+TableCellPadX {
 		t.Fatalf("right clamp = %d, want %d", got, 100+TableCellPadX)
 	}
 }
 
 func TestCellTextXCenter(t *testing.T) {
 	w := TextWidth("hi")
-	if got := cellTextX(100, 200, "hi", AlignCenter); got != 100+(200-w)/2 {
+	if got := cellTextX(&Base{}, 100, 200, "hi", AlignCenter); got != 100+(200-w)/2 {
 		t.Fatalf("center = %d, want %d", got, 100+(200-w)/2)
 	}
 }
 
 func TestCellTextXCenterClamp(t *testing.T) {
-	if got := cellTextX(100, 1, "wide text", AlignCenter); got != 100+TableCellPadX {
+	if got := cellTextX(&Base{}, 100, 1, "wide text", AlignCenter); got != 100+TableCellPadX {
 		t.Fatalf("center clamp = %d, want %d", got, 100+TableCellPadX)
 	}
 }

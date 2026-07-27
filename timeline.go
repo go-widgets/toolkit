@@ -137,14 +137,14 @@ func (tl *Timeline) Draw(p painter.Painter, theme *Theme) {
 	y := r.Y + TimelinePadY
 	for _, ev := range tl.Events {
 		markerX := railX - TimelineMarkerSize/2
-		markerY := y + (GlyphHeight()-TimelineMarkerSize)/2
+		markerY := y + (tl.glyphHeight()-TimelineMarkerSize)/2
 		fillRect(p, markerX, markerY, TimelineMarkerSize, TimelineMarkerSize,
 			timelineMarkerInk(ev.Kind, theme))
-		DrawText(p, textX, y, ev.Title, theme.OnSurface)
+		tl.drawText(p, textX, y, ev.Title, theme.OnSurface)
 		blockH := TimelineEventH()
 		if ev.Detail != "" {
-			DrawText(p, textX, y+GlyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
-			blockH += TimelineDetailGap + GlyphHeight()
+			tl.drawText(p, textX, y+tl.glyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
+			blockH += TimelineDetailGap + tl.glyphHeight()
 		}
 		y += blockH
 	}
@@ -167,8 +167,8 @@ func (tl *Timeline) drawHorizontal(p painter.Painter, theme *Theme) {
 	textY := r.Y + TimelinePadY + TimelineMarkerW
 	x := r.X + TimelinePadX
 	for _, ev := range tl.Events {
-		colW := TextWidth(ev.Title)
-		if w := TextWidth(ev.Detail); w > colW {
+		colW := tl.textWidth(ev.Title)
+		if w := tl.textWidth(ev.Detail); w > colW {
 			colW = w
 		}
 		if colW < TimelineMarkerSize {
@@ -178,9 +178,9 @@ func (tl *Timeline) drawHorizontal(p painter.Painter, theme *Theme) {
 		markerY := railY - TimelineMarkerSize/2
 		fillRect(p, markerX, markerY, TimelineMarkerSize, TimelineMarkerSize,
 			timelineMarkerInk(ev.Kind, theme))
-		DrawText(p, x, textY, ev.Title, theme.OnSurface)
+		tl.drawText(p, x, textY, ev.Title, theme.OnSurface)
 		if ev.Detail != "" {
-			DrawText(p, x, textY+GlyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
+			tl.drawText(p, x, textY+tl.glyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
 		}
 		x += colW + TimelinePadX
 	}

@@ -75,8 +75,8 @@ func (a *Avatar) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y+1, 1, r.H-2, face)
 	fillRect(p, r.X+r.W-1, r.Y+1, 1, r.H-2, face)
 
-	tw := TextWidth(a.Initials)
+	tw := a.textWidth(a.Initials)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight())/2
-	DrawText(p, tx, ty, a.Initials, accentInk(theme))
+	ty := r.Y + (r.H-a.glyphHeight())/2
+	a.drawText(p, tx, ty, a.Initials, accentInk(theme))
 }

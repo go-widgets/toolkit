@@ -46,18 +46,18 @@ func (l *Label) HitTest(_, _ int) bool { return false }
 func (l *Label) Draw(p painter.Painter, theme *Theme) {
 	r := l.Bounds()
 	ty := r.Y
-	if r.H > GlyphHeight() {
-		ty += (r.H - GlyphHeight()) / 2
+	if r.H > l.glyphHeight() {
+		ty += (r.H - l.glyphHeight()) / 2
 	}
 	x := r.X
 	switch l.Align {
 	case AlignCenter:
-		x = r.X + (r.W-TextWidth(l.Text))/2
+		x = r.X + (r.W-l.textWidth(l.Text))/2
 	case AlignRight:
-		x = r.X + r.W - TextWidth(l.Text)
+		x = r.X + r.W - l.textWidth(l.Text)
 	}
 	if x < r.X {
 		x = r.X // never start left of the widget
 	}
-	DrawText(p, x, ty, l.Text, theme.OnSurface)
+	l.drawText(p, x, ty, l.Text, theme.OnSurface)
 }

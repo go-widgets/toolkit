@@ -65,13 +65,13 @@ func (s *Statusbar) Draw(p painter.Painter, theme *Theme) {
 		if i == n-1 {
 			w = r.X + r.W - x
 		} else {
-			w = TextWidth(seg) + 2*StatusbarPadX
+			w = s.textWidth(seg) + 2*StatusbarPadX
 			if w < min {
 				w = min
 			}
 		}
-		ty := r.Y + (r.H-GlyphHeight())/2
-		DrawText(p, x+StatusbarPadX, ty, seg, theme.OnSurface)
+		ty := r.Y + (r.H-s.glyphHeight())/2
+		s.drawText(p, x+StatusbarPadX, ty, seg, theme.OnSurface)
 		if i < n-1 {
 			fillRect(p, x+w-1, r.Y+2, 1, r.H-4, theme.Border)
 		}

@@ -68,16 +68,16 @@ func (s *SplitButton) Draw(p painter.Painter, theme *Theme) {
 		// in the arrow slot.
 		fillRect(p, r.X+mainW, r.Y, SplitButtonArrowW, r.H, theme.Accent)
 		fillRect(p, r.X+mainW, r.Y, 1, r.H, theme.Border)
-		aw := TextWidth("v")
+		aw := s.textWidth("v")
 		ax := r.X + mainW + (SplitButtonArrowW-aw)/2
-		ay := r.Y + (r.H-GlyphHeight())/2
-		DrawText(p, ax, ay, "v", ink)
+		ay := r.Y + (r.H-s.glyphHeight())/2
+		s.drawText(p, ax, ay, "v", ink)
 	}
 	if s.Label != "" {
-		tw := TextWidth(s.Label)
+		tw := s.textWidth(s.Label)
 		tx := r.X + (mainW-tw)/2
-		ty := r.Y + (r.H-GlyphHeight())/2
-		DrawText(p, tx, ty, s.Label, ink)
+		ty := r.Y + (r.H-s.glyphHeight())/2
+		s.drawText(p, tx, ty, s.Label, ink)
 	}
 }
 

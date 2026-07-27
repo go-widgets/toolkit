@@ -60,8 +60,8 @@ func (b *Banner) buttonRect() (Rect, bool) {
 		return Rect{}, false
 	}
 	r := b.Bounds()
-	btnW := TextWidth(b.ButtonLabel) + 2*BannerButtonPadX
-	btnH := GlyphHeight() + 2*BannerPadY
+	btnW := b.textWidth(b.ButtonLabel) + 2*BannerButtonPadX
+	btnH := b.glyphHeight() + 2*BannerPadY
 	return Rect{
 		X: r.X + r.W - btnW - BannerPadX,
 		Y: r.Y + (r.H-btnH)/2,
@@ -94,10 +94,10 @@ func (b *Banner) Draw(p painter.Painter, theme *Theme) {
 		b.Icon(p, iconR, ink)
 		textX = iconR.X + iconR.W + BannerPadX/2
 	}
-	DrawText(p, textX, r.Y+BannerPadY, b.Text, ink)
+	b.drawText(p, textX, r.Y+BannerPadY, b.Text, ink)
 	if br, ok := b.buttonRect(); ok {
 		strokeRect(p, br.X, br.Y, br.W, br.H, ink)
-		DrawText(p, br.X+BannerButtonPadX, br.Y+BannerPadY, b.ButtonLabel, ink)
+		b.drawText(p, br.X+BannerButtonPadX, br.Y+BannerPadY, b.ButtonLabel, ink)
 	}
 }
 

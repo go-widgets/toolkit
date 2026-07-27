@@ -78,10 +78,10 @@ func (v *ViewSwitcher) Draw(p painter.Painter, theme *Theme) {
 				fillRect(p, sx, r.Y, segW, r.H, theme.Accent)
 				ink = accentInk(theme)
 			}
-			tw := TextWidth(title)
+			tw := v.textWidth(title)
 			tx := sx + (segW-tw)/2
-			ty := r.Y + (r.H-GlyphHeight())/2
-			DrawText(p, tx, ty, title, ink)
+			ty := r.Y + (r.H-v.glyphHeight())/2
+			v.drawText(p, tx, ty, title, ink)
 		}
 	}
 	// Bottom border line.

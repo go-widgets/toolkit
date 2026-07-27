@@ -41,8 +41,8 @@ func (k *Kbd) Draw(p painter.Painter, theme *Theme) {
 	r := k.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	tw := TextWidth(k.Keys)
+	tw := k.textWidth(k.Keys)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight())/2
-	DrawText(p, tx, ty, k.Keys, theme.OnSurface)
+	ty := r.Y + (r.H-k.glyphHeight())/2
+	k.drawText(p, tx, ty, k.Keys, theme.OnSurface)
 }

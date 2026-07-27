@@ -55,16 +55,16 @@ func (s *SearchEntry) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	textY := r.Y + (r.H-GlyphHeight())/2
+	textY := r.Y + (r.H-s.glyphHeight())/2
 	// Left prefix slot.
-	prefixX := r.X + SearchEntryPadX + (SearchEntryIconW-GlyphAdvance())/2
-	DrawText(p, prefixX, textY, searchEntryPrefix, theme.OnSurface)
+	prefixX := r.X + SearchEntryPadX + (SearchEntryIconW-s.glyphAdvance())/2
+	s.drawText(p, prefixX, textY, searchEntryPrefix, theme.OnSurface)
 	// Middle text.
-	DrawText(p, r.X+SearchEntryPadX+SearchEntryIconW, textY, s.Text, theme.OnSurface)
+	s.drawText(p, r.X+SearchEntryPadX+SearchEntryIconW, textY, s.Text, theme.OnSurface)
 	// Right clear slot only when there is text to clear.
 	if s.Text != "" {
-		clearX := r.X + r.W - SearchEntryPadX - SearchEntryIconW + (SearchEntryIconW-GlyphAdvance())/2
-		DrawText(p, clearX, textY, searchEntryClear, theme.Border)
+		clearX := r.X + r.W - SearchEntryPadX - SearchEntryIconW + (SearchEntryIconW-s.glyphAdvance())/2
+		s.drawText(p, clearX, textY, searchEntryClear, theme.Border)
 	}
 }
 

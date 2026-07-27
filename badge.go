@@ -63,9 +63,9 @@ func NewBadge(text string) *Badge { return &Badge{Text: text} }
 func (b *Badge) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	if r.W == 0 {
-		r.W = TextWidth(b.Text) + 2*BadgePadX
+		r.W = b.textWidth(b.Text) + 2*BadgePadX
 		if r.H == 0 {
-			r.H = GlyphHeight() + 2*BadgePadY
+			r.H = b.glyphHeight() + 2*BadgePadY
 		}
 		b.SetBounds(r)
 	}
@@ -82,8 +82,8 @@ func (b *Badge) Draw(p painter.Painter, theme *Theme) {
 		radius = r.W
 	}
 	p.FillRoundRect(painter.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}, radius/2, body)
-	tw := TextWidth(b.Text)
+	tw := b.textWidth(b.Text)
 	tx := r.X + (r.W-tw)/2
-	ty := r.Y + (r.H-GlyphHeight())/2
-	DrawText(p, tx, ty, b.Text, ink)
+	ty := r.Y + (r.H-b.glyphHeight())/2
+	b.drawText(p, tx, ty, b.Text, ink)
 }

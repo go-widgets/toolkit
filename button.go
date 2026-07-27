@@ -96,10 +96,10 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Border)
 	if b.Label != "" {
-		tw := TextWidth(b.Label)
+		tw := b.textWidth(b.Label)
 		tx := r.X + (r.W-tw)/2
-		ty := r.Y + (r.H-GlyphHeight())/2
-		DrawText(p, tx, ty, b.Label, ink)
+		ty := r.Y + (r.H-b.glyphHeight())/2
+		b.drawText(p, tx, ty, b.Label, ink)
 	}
 }
 

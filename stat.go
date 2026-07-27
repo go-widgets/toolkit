@@ -106,15 +106,15 @@ func (s *Stat) Draw(p painter.Painter, theme *Theme) {
 
 	titleX := r.X + StatPadX
 	titleY := r.Y + StatPadY
-	DrawText(p, titleX, titleY, s.Title, dimInk(theme))
+	s.drawText(p, titleX, titleY, s.Title, dimInk(theme))
 
-	valueY := titleY + GlyphHeight() + StatTitleGap
-	DrawText(p, titleX, valueY, s.Value, theme.OnSurface)
-	DrawText(p, titleX+1, valueY, s.Value, theme.OnSurface)
+	valueY := titleY + s.glyphHeight() + StatTitleGap
+	s.drawText(p, titleX, valueY, s.Value, theme.OnSurface)
+	s.drawText(p, titleX+1, valueY, s.Value, theme.OnSurface)
 
 	if s.Change != "" {
-		changeY := valueY + GlyphHeight() + StatValueGap
-		DrawText(p, titleX, changeY, s.Change, statChangeInk(s.Trend, theme))
+		changeY := valueY + s.glyphHeight() + StatValueGap
+		s.drawText(p, titleX, changeY, s.Change, statChangeInk(s.Trend, theme))
 	}
 
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
