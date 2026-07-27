@@ -139,6 +139,23 @@ func TestNotebookClickBodyRoutesToActivePage(t *testing.T) {
 	}
 }
 
+func TestNotebookBodyClickTranslatedAtNonZeroBounds(t *testing.T) {
+	// Regression: a body click must arrive in the page's local frame, i.e.
+	// shifted up by NotebookTabStripH and by the Notebook's own origin.
+	a := &recordingWidget{}
+	n := NewNotebook()
+	n.AddTab("A", a)
+	n.SetBounds(Rect{X: 100, Y: 50, W: 200, H: 80})
+	n.OnEvent(Event{Kind: EventClick, X: 50, Y: 40}) // notebook-local, in the body
+	if len(a.events) != 1 {
+		t.Fatalf("body click routed %d events, want 1", len(a.events))
+	}
+	// Page origin == Notebook origin in X (offset 0); Y is stripH below the top.
+	if got := a.events[0]; got.X != 50 || got.Y != 40-NotebookTabStripH {
+		t.Fatalf("page received %+v, want {50,%d}", got, 40-NotebookTabStripH)
+	}
+}
+
 func TestNotebookNilOnTabChangedNoPanic(t *testing.T) {
 	n := NewNotebook()
 	n.AddTab("A", &recordingWidget{})
