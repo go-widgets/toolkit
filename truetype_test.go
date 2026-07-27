@@ -5,17 +5,26 @@
 package toolkit
 
 import (
+	_ "embed"
 	"testing"
 
 	"github.com/go-widgets/painter"
-	"golang.org/x/image/font/gofont/goregular"
 )
+
+// testFontTTF is a real TrueType face (Go Regular, Bigelow & Holmes, under a
+// BSD-3-style license — see testdata/goregular.ttf) embedded so the TrueType
+// tests exercise go-opentype's parser + rasteriser on a genuine multi-table
+// font (712 glyphs, composite glyphs, real cmap) without any third-party
+// module dependency.
+//
+//go:embed testdata/goregular.ttf
+var testFontTTF []byte
 
 // newTTF builds a TrueType font from the embedded Go Regular face at the given
 // pixel size, failing the test on any parse error.
 func newTTF(t *testing.T, px int) Font {
 	t.Helper()
-	f, err := NewTrueTypeFont(goregular.TTF, px)
+	f, err := NewTrueTypeFont(testFontTTF, px)
 	if err != nil {
 		t.Fatalf("NewTrueTypeFont(goregular, %d) error: %v", px, err)
 	}
