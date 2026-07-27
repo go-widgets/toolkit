@@ -21,6 +21,14 @@ type Entry struct {
 	Focused  bool
 	OnChange func(text string)
 	OnSubmit func(text string)
+
+	// Composition holds the in-progress IME preview string (dead-key
+	// output, CJK candidate, …). Non-empty while an IME composition is
+	// active; cleared on EventCompositionEnd. Mirrors TextView's field
+	// of the same name: the preview is NOT part of Text until the host
+	// commits it via EventChar, so Text always reflects only committed
+	// input.
+	Composition string
 }
 
 // NewEntry builds an Entry with initial text + cursor parked at end.
@@ -43,6 +51,20 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	e.drawText(p, r.X+4, textY, e.Text, theme.OnSurface)
 	if e.Focused {
 		cx := r.X + 4 + e.Cursor*e.glyphAdvance()
+		if e.Composition != "" {
+			// IME composition preview: render the pending string in
+			// the muted SurfaceAlt tone right at the cursor, ghosted +
+			// underlined so the user sees dead-key / CJK candidates
+			// without them entering Text. Mirrors TextView's
+			// treatment. Unlike TextView (multi-line, cursor pinned to
+			// CursorCol), Entry pushes its single caret past the
+			// preview's pixel width so it visually tracks where the
+			// next committed rune will land.
+			cw := e.textWidth(e.Composition)
+			e.drawText(p, cx, textY, e.Composition, theme.SurfaceAlt)
+			fillRect(p, cx, textY+e.glyphHeight(), cw, 1, theme.SurfaceAlt)
+			cx += cw
+		}
 		fillRect(p, cx, textY-1, 1, e.glyphHeight()+2, theme.OnSurface)
 	}
 }
@@ -83,6 +105,10 @@ func (e *Entry) OnEvent(ev Event) {
 			}
 		}
 	case EventChar:
+		// If an IME composition was in flight, the incoming char is
+		// the commit result — clear the preview BEFORE inserting so
+		// the buffer + display stay consistent.
+		e.Composition = ""
 		ch := []rune(ev.Code)
 		if len(ch) == 0 {
 			return
@@ -93,5 +119,15 @@ func (e *Entry) OnEvent(ev Event) {
 		if e.OnChange != nil {
 			e.OnChange(e.Text)
 		}
+	case EventCompositionStart, EventCompositionUpdate:
+		// Preview only — do NOT touch Text. Repaint responsibility
+		// lies with the host, who typically calls Draw after each
+		// composition event.
+		e.Composition = ev.Code
+	case EventCompositionEnd:
+		// Cancel / commit-without-follow-up: drop the preview. When
+		// the host follows up with EventChar (commit path), the
+		// EventChar arm above will re-clear + insert.
+		e.Composition = ""
 	}
 }
