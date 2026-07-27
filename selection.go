@@ -131,22 +131,38 @@ func (t *TextView) DeleteSelection() {
 	}
 }
 
-// CopySelection returns the selected text + leaves the buffer
-// untouched. Wired to a host clipboard via the host (the toolkit has
-// no global clipboard).
-func (t *TextView) CopySelection() string { return t.SelectionText() }
+// CopySelection returns the selected text and, when non-empty, writes
+// it to the toolkit's global Clipboard (see clipboard.go) so it can
+// be pasted into any other text widget. Leaves the buffer untouched.
+// An empty selection is a no-op on the clipboard (mirrors a
+// Ctrl+C-with-nothing-selected not clobbering whatever was copied
+// before).
+func (t *TextView) CopySelection() string {
+	s := t.SelectionText()
+	if s != "" {
+		SetClipboardText(s)
+	}
+	return s
+}
 
-// CutSelection returns the selected text + removes it from the
-// buffer.
+// CutSelection returns the selected text, writes it to the global
+// Clipboard (when non-empty) + removes it from the buffer.
 func (t *TextView) CutSelection() string {
 	s := t.SelectionText()
+	if s != "" {
+		SetClipboardText(s)
+	}
 	t.DeleteSelection()
 	return s
 }
 
 // Paste inserts text at the cursor (after first deleting the
 // selection if any). "\n" splits lines. The whole operation --
-// selection removal + insertion -- is a single undo step.
+// selection removal + insertion -- is a single undo step. Callers
+// that want to paste the toolkit's global Clipboard contents pass
+// ClipboardText() (this is what the Ctrl+V key path does); Paste
+// itself stays a plain "insert this text" primitive so callers can
+// also use it to insert arbitrary programmatic text.
 func (t *TextView) Paste(text string) {
 	if t.HasSelection() {
 		// DeleteSelection pushes undo; insertText below joins it into

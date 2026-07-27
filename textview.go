@@ -227,6 +227,12 @@ func (t *TextView) handleKey(code string) {
 		t.Undo()
 	case "Ctrl+Y", "Ctrl+Shift+Z":
 		t.Redo()
+	case "Ctrl+C":
+		t.CopySelection()
+	case "Ctrl+X":
+		t.CutSelection()
+	case "Ctrl+V":
+		t.Paste(ClipboardText())
 	case "ArrowLeft":
 		t.cursorLeft()
 	case "ArrowRight":

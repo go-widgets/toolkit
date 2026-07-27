@@ -103,6 +103,31 @@ func (e *Entry) OnEvent(ev Event) {
 			if e.OnSubmit != nil {
 				e.OnSubmit(e.Text)
 			}
+		case "Ctrl+C":
+			// Entry has no selection concept: Ctrl+C copies the whole
+			// value, mirroring "select all + copy".
+			if e.Text != "" {
+				SetClipboardText(e.Text)
+			}
+		case "Ctrl+X":
+			if e.Text != "" {
+				SetClipboardText(e.Text)
+				e.Text = ""
+				e.Cursor = 0
+				if e.OnChange != nil {
+					e.OnChange(e.Text)
+				}
+			}
+		case "Ctrl+V":
+			paste := []rune(ClipboardText())
+			if len(paste) > 0 {
+				runes = append(runes[:e.Cursor], append(paste, runes[e.Cursor:]...)...)
+				e.Cursor += len(paste)
+				e.Text = string(runes)
+				if e.OnChange != nil {
+					e.OnChange(e.Text)
+				}
+			}
 		}
 	case EventChar:
 		// If an IME composition was in flight, the incoming char is

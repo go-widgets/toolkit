@@ -276,6 +276,100 @@ func TestEntryDrawNoCompositionUnchanged(t *testing.T) {
 	}
 }
 
+func TestEntryCtrlCCopiesWholeValueToClipboard(t *testing.T) {
+	defer SetClipboard(nil)
+	SetClipboard(nil)
+	e := NewEntry("hello")
+	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+C"})
+	if got := ClipboardText(); got != "hello" {
+		t.Fatalf("Ctrl+C clipboard = %q, want hello", got)
+	}
+	if e.Text != "hello" {
+		t.Fatal("Ctrl+C must not mutate Text")
+	}
+}
+
+func TestEntryCtrlCEmptyTextDoesNotTouchClipboard(t *testing.T) {
+	defer SetClipboard(nil)
+	SetClipboard(nil)
+	SetClipboardText("previous")
+	e := NewEntry("")
+	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+C"})
+	if got := ClipboardText(); got != "previous" {
+		t.Fatalf("empty-value Ctrl+C must not clobber clipboard, got %q", got)
+	}
+}
+
+func TestEntryCtrlXCutsWholeValueToClipboardAndClears(t *testing.T) {
+	defer SetClipboard(nil)
+	SetClipboard(nil)
+	changes := 0
+	e := NewEntry("hello")
+	e.OnChange = func(t string) { changes++ }
+	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+X"})
+	if got := ClipboardText(); got != "hello" {
+		t.Fatalf("Ctrl+X clipboard = %q, want hello", got)
+	}
+	if e.Text != "" || e.Cursor != 0 || changes != 1 {
+		t.Fatalf("after Ctrl+X: Text=%q Cursor=%d changes=%d", e.Text, e.Cursor, changes)
+	}
+}
+
+func TestEntryCtrlXEmptyTextIsNoOp(t *testing.T) {
+	defer SetClipboard(nil)
+	SetClipboard(nil)
+	SetClipboardText("previous")
+	changes := 0
+	e := NewEntry("")
+	e.OnChange = func(t string) { changes++ }
+	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+X"})
+	if got := ClipboardText(); got != "previous" {
+		t.Fatalf("empty-value Ctrl+X must not clobber clipboard, got %q", got)
+	}
+	if changes != 0 {
+		t.Fatalf("empty-value Ctrl+X must not fire OnChange, changes=%d", changes)
+	}
+}
+
+func TestEntryCtrlVPastesClipboardAtCursor(t *testing.T) {
+	defer SetClipboard(nil)
+	SetClipboard(nil)
+	SetClipboardText("XY")
+	changes := 0
+	e := NewEntry("ab")
+	e.Cursor = 1
+	e.OnChange = func(t string) { changes++ }
+	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+V"})
+	if e.Text != "aXYb" || e.Cursor != 3 || changes != 1 {
+		t.Fatalf("after Ctrl+V: Text=%q Cursor=%d changes=%d", e.Text, e.Cursor, changes)
+	}
+}
+
+func TestEntryCtrlVEmptyClipboardIsNoOp(t *testing.T) {
+	defer SetClipboard(nil)
+	SetClipboard(nil)
+	changes := 0
+	e := NewEntry("ab")
+	e.OnChange = func(t string) { changes++ }
+	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+V"})
+	if e.Text != "ab" || changes != 0 {
+		t.Fatalf("empty-clipboard Ctrl+V: Text=%q changes=%d", e.Text, changes)
+	}
+}
+
+func TestEntryCopyThenPasteAcrossEntriesRoundTrip(t *testing.T) {
+	defer SetClipboard(nil)
+	SetClipboard(nil)
+	src := NewEntry("copied")
+	src.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+C"})
+
+	dst := NewEntry("")
+	dst.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+V"})
+	if dst.Text != "copied" {
+		t.Fatalf("cross-Entry paste = %q, want copied", dst.Text)
+	}
+}
+
 // --- CheckButton ---------------------------------------------------------
 
 func TestCheckButtonClickToggles(t *testing.T) {
