@@ -16,9 +16,10 @@ import "github.com/go-widgets/painter"
 // subsequent drag moves that same handle, clamped so Low never crosses High.
 type RangeSlider struct {
 	Base
-	Min, Max  float64
-	Low, High float64
-	OnChange  func(low, high float64)
+	Min, Max    float64
+	Low, High   float64
+	Orientation Orientation
+	OnChange    func(low, high float64)
 
 	// active is the handle grabbed by the current click/drag: 0 = none,
 	// 1 = Low, 2 = High. It is set on EventClick and cleared on EventMouseUp.
@@ -54,14 +55,28 @@ func (s *RangeSlider) clamp(v float64) float64 {
 	return v
 }
 
-// valueAt maps a widget-local x into a value on the track, clamped to range.
-func (s *RangeSlider) valueAt(x int) float64 {
+// axis returns the start coordinate and length of the slider along its active
+// axis: (r.X, r.W) horizontal, (r.Y, r.H) vertical.
+func (s *RangeSlider) axis() (start, length int) {
 	r := s.Bounds()
-	span := r.W - scaleThumbSize
+	if s.Orientation == Vertical {
+		return r.Y, r.H
+	}
+	return r.X, r.W
+}
+
+// valueAt maps a widget-local coordinate along the active axis into a value,
+// clamped to range. Vertical is flipped so the top is Max.
+func (s *RangeSlider) valueAt(coord int) float64 {
+	_, length := s.axis()
+	span := length - scaleThumbSize
 	if span <= 0 {
 		return s.Min
 	}
-	pos := float64(x-scaleThumbSize/2) / float64(span)
+	pos := float64(coord-scaleThumbSize/2) / float64(span)
+	if s.Orientation == Vertical {
+		pos = 1 - pos
+	}
 	if pos < 0 {
 		pos = 0
 	}
@@ -71,36 +86,55 @@ func (s *RangeSlider) valueAt(x int) float64 {
 	return s.Min + pos*(s.Max-s.Min)
 }
 
-// thumbX returns the left pixel of the thumb for value v.
-func (s *RangeSlider) thumbX(v float64) int {
-	r := s.Bounds()
+// thumbPos returns the thumb's top-left along the active axis for value v (an X
+// horizontal, a Y vertical, where the top = Max).
+func (s *RangeSlider) thumbPos(v float64) int {
+	start, length := s.axis()
 	var pos float64
 	if s.Max > s.Min {
 		pos = (v - s.Min) / (s.Max - s.Min)
 	}
-	return r.X + int(pos*float64(r.W-scaleThumbSize))
+	if s.Orientation == Vertical {
+		pos = 1 - pos
+	}
+	return start + int(pos*float64(length-scaleThumbSize))
 }
 
 // Draw paints the rounded track, the Accent band between the two handles, and
 // a circular white thumb at each handle -- matching Scale's macOS styling.
 func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
-	const trackH = 4
-	trackY := r.Y + (r.H-trackH)/2
-	trackR := trackH / 2
-	fillRoundRect(p, r.X, trackY, r.W, trackH, trackR, theme.SurfaceAlt)
-
-	lowX := s.thumbX(s.Low)
-	highX := s.thumbX(s.High)
-	// Accent band spans from the low thumb centre to the high thumb centre.
-	bandX := lowX + scaleThumbSize/2
-	bandW := highX - lowX
-	if bandW > 0 {
-		fillRoundRect(p, bandX, trackY, bandW, trackH, trackR, theme.Accent)
+	const trackThick = 4
+	trackR := trackThick / 2
+	lowP := s.thumbPos(s.Low)
+	highP := s.thumbPos(s.High)
+	if s.Orientation == Vertical {
+		trackX := r.X + (r.W-trackThick)/2
+		fillRoundRect(p, trackX, r.Y, trackThick, r.H, trackR, theme.SurfaceAlt)
+		// High sits at the top (smaller Y), Low at the bottom; the band runs
+		// between their centres.
+		bandY := highP + scaleThumbSize/2
+		bandH := lowP - highP
+		if bandH > 0 {
+			fillRoundRect(p, trackX, bandY, trackThick, bandH, trackR, theme.Accent)
+		}
+		tx := r.X + (r.W-scaleThumbSize)/2
+		for _, ty := range []int{lowP, highP} {
+			fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
+			strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
+		}
+		return
 	}
-	// Two circular white thumbs with a border (same shape as Scale's knob).
+	trackY := r.Y + (r.H-trackThick)/2
+	fillRoundRect(p, r.X, trackY, r.W, trackThick, trackR, theme.SurfaceAlt)
+	// Accent band spans from the low thumb centre to the high thumb centre.
+	bandX := lowP + scaleThumbSize/2
+	bandW := highP - lowP
+	if bandW > 0 {
+		fillRoundRect(p, bandX, trackY, bandW, trackThick, trackR, theme.Accent)
+	}
 	ty := r.Y + (r.H-scaleThumbSize)/2
-	for _, tx := range []int{lowX, highX} {
+	for _, tx := range []int{lowP, highP} {
 		fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
 		strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
 	}
@@ -110,28 +144,32 @@ func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 // moves the grabbed handle; a mouse-up releases it. Each move re-clamps so the
 // handles never cross, and fires OnChange.
 func (s *RangeSlider) OnEvent(ev Event) {
-	r := s.Bounds()
-	if r.W <= 0 || s.Max <= s.Min {
+	start, length := s.axis()
+	if length <= 0 || s.Max <= s.Min {
 		return
+	}
+	// coord is the click along the active axis, widget-local.
+	coord := ev.X
+	if s.Orientation == Vertical {
+		coord = ev.Y
 	}
 	switch ev.Kind {
 	case EventClick:
-		// Grab whichever handle's thumb centre is nearer the cursor. ev.X is
-		// widget-local, so the thumb centres must be too: thumbX returns an
-		// absolute X (it adds r.X), so subtract r.X to compare in the same frame
-		// as ev.X and valueAt. Without this, clicking one thumb grabs the other
-		// whenever the slider is not at X=0.
-		lowC := s.thumbX(s.Low) - r.X + scaleThumbSize/2
-		highC := s.thumbX(s.High) - r.X + scaleThumbSize/2
-		if abs(ev.X-lowC) <= abs(ev.X-highC) {
+		// Grab whichever handle's thumb centre is nearer the cursor, comparing in
+		// the same widget-local frame as coord (thumbPos returns an absolute
+		// coordinate, so subtract the axis start). Without this, clicking one
+		// thumb grabs the other when the slider is not at the origin.
+		lowC := s.thumbPos(s.Low) - start + scaleThumbSize/2
+		highC := s.thumbPos(s.High) - start + scaleThumbSize/2
+		if abs(coord-lowC) <= abs(coord-highC) {
 			s.active = 1
 		} else {
 			s.active = 2
 		}
-		s.moveActive(ev.X)
+		s.moveActive(coord)
 	case EventMouseDrag:
 		if s.active != 0 {
-			s.moveActive(ev.X)
+			s.moveActive(coord)
 		}
 	case EventMouseUp:
 		s.active = 0

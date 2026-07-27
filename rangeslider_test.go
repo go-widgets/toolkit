@@ -90,6 +90,48 @@ func TestRangeSliderHandlePickIsLocalAtNonZeroBounds(t *testing.T) {
 	}
 }
 
+func TestRangeSliderVertical(t *testing.T) {
+	// Vertical: top = Max. A click near the top grabs High and drags it up; a
+	// click near the bottom grabs Low. The Accent band spans the mid-track.
+	s := NewRangeSlider(0, 100, 20, 80)
+	s.Orientation = Vertical
+	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 200})
+	s.OnEvent(Event{Kind: EventClick, X: 10, Y: 40}) // near the top
+	if s.active != 2 {
+		t.Fatalf("top click active=%d, want 2 (High)", s.active)
+	}
+	if s.Low != 20 {
+		t.Errorf("Low moved to %v, want 20 (untouched)", s.Low)
+	}
+	if s.High <= 80 {
+		t.Errorf("High=%v, want dragged up past 80", s.High)
+	}
+
+	s2 := NewRangeSlider(0, 100, 20, 80)
+	s2.Orientation = Vertical
+	s2.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 200})
+	s2.OnEvent(Event{Kind: EventClick, X: 10, Y: 160}) // near the bottom
+	if s2.active != 1 {
+		t.Fatalf("bottom click active=%d, want 1 (Low)", s2.active)
+	}
+
+	surf := makeSurface(20, 200)
+	s.Draw(newP(surf, 20), DefaultLight())
+	if pixelAt(surf, 20, 10, 100) != DefaultLight().Accent {
+		t.Errorf("vertical band missing mid-track: %+v", pixelAt(surf, 20, 10, 100))
+	}
+}
+
+func TestRangeSliderVerticalNoTravelReturnsMin(t *testing.T) {
+	// A vertical slider with no travel (H ≤ thumb) → valueAt returns Min.
+	s := NewRangeSlider(0, 100, 20, 80)
+	s.Orientation = Vertical
+	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: scaleThumbSize - 1})
+	if v := s.valueAt(5); v != s.Min {
+		t.Fatalf("valueAt on zero vertical span = %v, want Min %v", v, s.Min)
+	}
+}
+
 func TestRangeSliderHandlesDoNotCross(t *testing.T) {
 	s := newTestRangeSlider()
 
