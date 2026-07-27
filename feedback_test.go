@@ -215,6 +215,40 @@ func TestScaleClickMapsAcrossThumbTravel(t *testing.T) {
 	}
 }
 
+func TestScaleVertical(t *testing.T) {
+	s := NewScale(0, 100, 50)
+	s.Orientation = Vertical
+	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 100})
+	// A click at the top thumb-centre reaches Max (up = more).
+	s.OnEvent(Event{Kind: EventClick, X: 10, Y: scaleThumbSize / 2})
+	if s.Value != 100 {
+		t.Fatalf("top click = %v, want 100 (Max)", s.Value)
+	}
+	// A click at the bottom thumb-centre reaches Min.
+	s.OnEvent(Event{Kind: EventClick, X: 10, Y: 100 - scaleThumbSize/2})
+	if s.Value != 0 {
+		t.Fatalf("bottom click = %v, want 0 (Min)", s.Value)
+	}
+	// Draw the vertical path: with Value=Max the Accent fill spans down the track.
+	s.Value = 100
+	surf := makeSurface(20, 100)
+	s.Draw(newP(surf, 20), DefaultLight())
+	if pixelAt(surf, 20, 10, 60) != DefaultLight().Accent {
+		t.Errorf("vertical accent fill missing mid-track: %+v", pixelAt(surf, 20, 10, 60))
+	}
+}
+
+func TestScaleVerticalNarrowIgnored(t *testing.T) {
+	// No vertical travel (H ≤ thumb) → clicks ignored (span ≤ 0 guard).
+	s := NewScale(0, 100, 42)
+	s.Orientation = Vertical
+	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: scaleThumbSize})
+	s.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if s.Value != 42 {
+		t.Fatalf("narrow vertical scale click changed value to %v", s.Value)
+	}
+}
+
 func TestScaleClickNarrowIgnored(t *testing.T) {
 	// A scale no wider than the thumb has no travel → clicks are ignored.
 	s := NewScale(0, 100, 42)

@@ -13,9 +13,10 @@ import "github.com/go-widgets/painter"
 // position in Theme.Accent.
 type Scale struct {
 	Base
-	Min, Max float64
-	Value    float64
-	OnChange func(v float64)
+	Min, Max    float64
+	Value       float64
+	Orientation Orientation
+	OnChange    func(v float64)
 }
 
 // scaleThumbSize is the pixel side length of the thumb.
@@ -45,16 +46,31 @@ func (s *Scale) SetValue(v float64) {
 // white thumb -- matching the Switch's pill track + circular knob.
 func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
+	var pos float64
+	if s.Max > s.Min {
+		pos = (s.Value - s.Min) / (s.Max - s.Min)
+	}
+	if s.Orientation == Vertical {
+		const trackW = 4
+		trackX := r.X + (r.W-trackW)/2
+		trackR := trackW / 2
+		fillRoundRect(p, trackX, r.Y, trackW, r.H, trackR, theme.SurfaceAlt)
+		// pos=1 (Max) sits at the top; the Accent fill runs from the thumb centre
+		// down to the bottom (a fader reads "filled" below the knob).
+		ty := r.Y + int((1-pos)*float64(r.H-scaleThumbSize))
+		centreY := ty + scaleThumbSize/2
+		fillRoundRect(p, trackX, centreY, trackW, r.Y+r.H-centreY, trackR, theme.Accent)
+		tx := r.X + (r.W-scaleThumbSize)/2
+		fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
+		strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
+		return
+	}
 	const trackH = 4
 	trackY := r.Y + (r.H-trackH)/2
 	trackR := trackH / 2
 	// Full (unfilled) track first, then the Accent fill up to the thumb centre.
 	fillRoundRect(p, r.X, trackY, r.W, trackH, trackR, theme.SurfaceAlt)
-	// Position the thumb. When Max == Min, sit at the left.
-	var pos float64
-	if s.Max > s.Min {
-		pos = (s.Value - s.Min) / (s.Max - s.Min)
-	}
+	// Position the thumb (pos computed above). When Max == Min, sit at the left.
 	tx := r.X + int(pos*float64(r.W-scaleThumbSize))
 	fillRoundRect(p, r.X, trackY, tx+scaleThumbSize/2-r.X, trackH, trackR, theme.Accent)
 	// Circular white thumb + border (same shape as the Switch knob).
@@ -70,16 +86,26 @@ func (s *Scale) OnEvent(ev Event) {
 		return
 	}
 	r := s.Bounds()
-	// Map the click across the track the THUMB centre actually travels
-	// (r.W - scaleThumbSize), offsetting by half a thumb — the inverse of Draw's
-	// thumb placement. The old pos = ev.X / r.W ignored the thumb width, so the
-	// thumb never sat under the cursor and edge clicks didn't reach Min/Max
-	// cleanly. Matches RangeSlider.valueAt.
-	span := r.W - scaleThumbSize
-	if span <= 0 || s.Max <= s.Min {
+	if s.Max <= s.Min {
 		return
 	}
-	pos := float64(ev.X-scaleThumbSize/2) / float64(span)
+	// Map the click across the track the THUMB centre actually travels (extent −
+	// scaleThumbSize), offset by half a thumb — the inverse of Draw's placement.
+	// Vertical is flipped so the top is Max (a fader reads up = more).
+	var pos float64
+	if s.Orientation == Vertical {
+		span := r.H - scaleThumbSize
+		if span <= 0 {
+			return
+		}
+		pos = 1 - float64(ev.Y-scaleThumbSize/2)/float64(span)
+	} else {
+		span := r.W - scaleThumbSize
+		if span <= 0 {
+			return
+		}
+		pos = float64(ev.X-scaleThumbSize/2) / float64(span)
+	}
 	if pos < 0 {
 		pos = 0
 	}
