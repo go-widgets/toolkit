@@ -32,6 +32,19 @@ type TreeView struct {
 	OnActivate func(node *TreeNode)
 	RowHeight  int // default 18
 
+	// MultiSelect enables a multi-node selection set on top of the
+	// single-node Selected anchor. When false (the default), TreeView
+	// behaves exactly as before: only Selected is tracked/painted.
+	MultiSelect bool
+
+	// selected is the multi-select set. Only consulted when
+	// MultiSelect is true. Selected remains the "anchor" node used as
+	// the start of a Shift range: it follows plain + Ctrl clicks, but
+	// a Shift click (a range extension) never itself becomes the new
+	// anchor, so repeated Shift clicks keep extending from the same
+	// origin.
+	selected map[*TreeNode]bool
+
 	// rows is a transient flat list of (node, depth) pairs computed on
 	// every Draw + OnEvent so hit-tests + paint share one definition
 	// of "visible".
@@ -76,6 +89,92 @@ func (t *TreeView) walkTree(n *TreeNode, depth int) {
 	}
 }
 
+// IsSelected reports whether n is part of the multi-select set. It
+// only reflects MultiSelect state; when MultiSelect is false it
+// always returns false (single-select uses Selected directly).
+func (t *TreeView) IsSelected(n *TreeNode) bool {
+	return t.selected != nil && t.selected[n]
+}
+
+// SelectedNodes returns the multi-selected nodes in visible
+// (pre-order, expanded-aware) traversal order. Empty when
+// MultiSelect is false or nothing is selected.
+func (t *TreeView) SelectedNodes() []*TreeNode {
+	if len(t.selected) == 0 {
+		return nil
+	}
+	t.flatten()
+	out := make([]*TreeNode, 0, len(t.selected))
+	for _, row := range t.rows {
+		if t.selected[row.node] {
+			out = append(out, row.node)
+		}
+	}
+	return out
+}
+
+// SetSelection replaces the multi-select set with nodes. The last
+// node (if any) becomes the anchor (Selected).
+func (t *TreeView) SetSelection(nodes ...*TreeNode) {
+	t.selected = make(map[*TreeNode]bool, len(nodes))
+	for _, n := range nodes {
+		t.selected[n] = true
+	}
+	if len(nodes) > 0 {
+		t.Selected = nodes[len(nodes)-1]
+	}
+}
+
+// ClearSelection empties the multi-select set. Selected (the anchor)
+// is left untouched.
+func (t *TreeView) ClearSelection() {
+	t.selected = nil
+}
+
+// ToggleSelect flips n's membership in the multi-select set.
+func (t *TreeView) ToggleSelect(n *TreeNode) {
+	if n == nil {
+		return
+	}
+	if t.selected == nil {
+		t.selected = make(map[*TreeNode]bool)
+	}
+	if t.selected[n] {
+		delete(t.selected, n)
+	} else {
+		t.selected[n] = true
+	}
+}
+
+// SelectRange selects every node between a + b (inclusive) over the
+// currently-visible flattened node order (collapsed subtrees are
+// excluded, matching what the user can actually see). If either node
+// isn't currently visible, SelectRange is a no-op.
+func (t *TreeView) SelectRange(a, b *TreeNode) {
+	t.flatten()
+	ai, bi := -1, -1
+	for i, row := range t.rows {
+		if row.node == a {
+			ai = i
+		}
+		if row.node == b {
+			bi = i
+		}
+	}
+	if ai == -1 || bi == -1 {
+		return
+	}
+	if ai > bi {
+		ai, bi = bi, ai
+	}
+	if t.selected == nil {
+		t.selected = make(map[*TreeNode]bool)
+	}
+	for i := ai; i <= bi; i++ {
+		t.selected[t.rows[i].node] = true
+	}
+}
+
 // Draw paints every visible row.
 func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 	t.flatten()
@@ -88,7 +187,11 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 		y := r.Y + i*rh
 		bg := theme.Surface
 		ink := theme.OnSurface
-		if row.node == t.Selected {
+		isSel := row.node == t.Selected
+		if t.MultiSelect {
+			isSel = t.IsSelected(row.node)
+		}
+		if isSel {
 			bg = theme.Accent
 			ink = theme.Background
 		}
@@ -142,7 +245,19 @@ func (t *TreeView) OnEvent(ev Event) {
 		row.node.Expanded = !row.node.Expanded
 		return
 	}
-	t.Selected = row.node
+	if t.MultiSelect {
+		switch {
+		case ev.Shift && t.Selected != nil:
+			t.SelectRange(t.Selected, row.node)
+		case ev.Ctrl:
+			t.ToggleSelect(row.node)
+			t.Selected = row.node
+		default:
+			t.SetSelection(row.node)
+		}
+	} else {
+		t.Selected = row.node
+	}
 	if t.OnActivate != nil {
 		t.OnActivate(row.node)
 	}
