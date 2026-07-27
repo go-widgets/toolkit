@@ -578,6 +578,21 @@ func TestDropDownPopoverBounds(t *testing.T) {
 	}
 }
 
+func TestDropDownPopoverBoundsOpenUp(t *testing.T) {
+	d := NewDropDown([]string{"a", "b", "c"}, 0)
+	d.SetBounds(Rect{X: 5, Y: 200, W: 100, H: 20})
+	d.OpenUp = true
+	b := d.PopoverBounds()
+	// The popover sits ABOVE the control: bottom edge flush with the widget's
+	// top, height unchanged.
+	if b.X != 5 || b.Y != 200-3*18 || b.W != 100 || b.H != 3*18 {
+		t.Fatalf("PopoverBounds openUp = %+v", b)
+	}
+	if b.Y+b.H != 200 {
+		t.Fatalf("popover bottom %d, want flush with widget top 200", b.Y+b.H)
+	}
+}
+
 func TestDropDownPopoverBoundsClampsRows(t *testing.T) {
 	opts := make([]string, 20)
 	for i := range opts {
