@@ -412,3 +412,53 @@ func TestTableDrawAccentInkFallbackWithExtraNoKey(t *testing.T) {
 		t.Fatalf("row 0 fill = %+v, want Accent %+v", got, theme.Accent)
 	}
 }
+
+// --- Per-column alignment (cellTextX) -----------------------------------
+
+func TestCellTextXLeft(t *testing.T) {
+	// AlignLeft always sits at the left padding, regardless of width.
+	if got := cellTextX(100, 200, "hi", AlignLeft); got != 100+TableCellPadX {
+		t.Fatalf("left = %d, want %d", got, 100+TableCellPadX)
+	}
+}
+
+func TestCellTextXRight(t *testing.T) {
+	// AlignRight: right edge of text flush with the cell's right padding.
+	w := TextWidth("hi")
+	if got := cellTextX(100, 200, "hi", AlignRight); got != 100+200-TableCellPadX-w {
+		t.Fatalf("right = %d, want %d", got, 100+200-TableCellPadX-w)
+	}
+}
+
+func TestCellTextXRightClamp(t *testing.T) {
+	// A cell narrower than the text would push the start left of the inner
+	// edge; it clamps to the left padding instead.
+	if got := cellTextX(100, 1, "wide text", AlignRight); got != 100+TableCellPadX {
+		t.Fatalf("right clamp = %d, want %d", got, 100+TableCellPadX)
+	}
+}
+
+func TestCellTextXCenter(t *testing.T) {
+	w := TextWidth("hi")
+	if got := cellTextX(100, 200, "hi", AlignCenter); got != 100+(200-w)/2 {
+		t.Fatalf("center = %d, want %d", got, 100+(200-w)/2)
+	}
+}
+
+func TestCellTextXCenterClamp(t *testing.T) {
+	if got := cellTextX(100, 1, "wide text", AlignCenter); got != 100+TableCellPadX {
+		t.Fatalf("center clamp = %d, want %d", got, 100+TableCellPadX)
+	}
+}
+
+// TestTableDrawAligned exercises the Draw path with a right-aligned + a
+// centre-aligned column so the header + body branches both run.
+func TestTableDrawAligned(t *testing.T) {
+	tb := NewTable([]TableColumn{
+		{Title: "Name", Width: 120, Align: AlignLeft},
+		{Title: "Qty", Width: 60, Align: AlignRight},
+		{Title: "OK", Width: 40, Align: AlignCenter},
+	}, [][]string{{"widget", "42", "y"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 220, H: 80})
+	tb.Draw(newP(makeTableSurface(220, 80), 220), DefaultLight())
+}
