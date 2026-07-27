@@ -26,6 +26,17 @@ import (
 // clicked (plain or Ctrl). When MultiSelect is false (the default)
 // none of this is reachable: Ctrl/Shift are ignored and only Selected
 // is ever highlighted, exactly as before this feature existed.
+//
+// Virtual scrolling: ListBox is self-contained -- it never relies on
+// an outer ScrollView. ScrollRow is the index of the top visible row;
+// Draw paints only the rows that fit in Bounds().H (windowed
+// rendering, so a list with thousands of rows costs the same per
+// frame as one with a handful), and OnEvent maps click coordinates
+// back through ScrollRow so hit-testing stays correct while scrolled.
+// See ScrollTo / ScrollBy. When every row already fits in the
+// viewport (len(Items) <= the number of visible rows) rendering is
+// byte-identical to a ListBox with no scrolling at all -- no
+// scrollbar is drawn and the windowing has no visible effect.
 type ListBox struct {
 	Base
 	Items       []string
@@ -33,6 +44,14 @@ type ListBox struct {
 	RowHeight   int // pixels per row; default 18 via NewListBox
 	OnActivate  func(idx int)
 	MultiSelect bool // enable Ctrl/Shift multi-row selection
+
+	// ScrollRow is the index of the row painted at the very top of the
+	// widget's bounds. Reads through Draw/OnEvent are clamped to
+	// [0, maxScrollRow()] on the fly (see clampedScrollRow), so setting
+	// this directly to an out-of-range value is safe -- it just behaves
+	// as whichever in-range value it clamps to. Prefer ScrollTo/ScrollBy,
+	// which clamp + write back immediately.
+	ScrollRow int
 
 	// selected holds the multi-selection set. Only consulted for
 	// rendering/queries when MultiSelect is true, but the mutator
@@ -53,14 +72,44 @@ func NewListBox(items []string) *ListBox {
 	}
 }
 
-// Draw paints every row inside the widget's bounds. Rows that fall
-// outside the bounds (because the list is longer than the viewport)
-// are still drawn but clipped per-pixel by the raster helpers; wrap
-// a ScrollView around the ListBox for proper scrollable behaviour.
+// Draw paints only the rows currently within the scroll window --
+// [ScrollRow, ScrollRow+visibleRows) -- positioning row i at
+// top + (i-ScrollRow)*RowHeight. When every row already fits
+// (len(Items) <= visibleRows() and ScrollRow clamps to 0), that
+// window covers the whole list and rendering is byte-identical to a
+// non-scrolling ListBox: no scrollbar, no clipping, full-width rows.
+//
+// When the list overflows the viewport, rows are clipped to the
+// content area (via painter.Clipper, if the backend supports it) so
+// a partially-visible trailing row never bleeds past Bounds().H, and
+// a thin scrollbar track+thumb is painted on the right edge.
 func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 	r := l.Bounds()
-	for i, item := range l.Items {
-		y := r.Y + i*l.RowHeight
+	vr := l.visibleRows()
+	overflow := len(l.Items) > vr
+
+	cr := r // content rect: full bounds, minus the scrollbar column if any
+	if overflow {
+		cr.W -= scrollbarWidth
+	}
+
+	var clr painter.Clipper
+	canClip := false
+	if overflow {
+		clr, canClip = p.(painter.Clipper)
+		if canClip {
+			clr.PushClip(cr)
+		}
+	}
+
+	start := l.clampedScrollRow()
+	end := start + vr
+	if end > len(l.Items) {
+		end = len(l.Items)
+	}
+	for i := start; i < end; i++ {
+		item := l.Items[i]
+		y := r.Y + (i-start)*l.RowHeight
 		bg := theme.Surface
 		ink := theme.OnSurface
 		hi := i == l.Selected
@@ -71,16 +120,137 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 			bg = theme.Accent
 			ink = theme.Background
 		}
-		fillRect(p, r.X, y, r.W, l.RowHeight, bg)
+		fillRect(p, cr.X, y, cr.W, l.RowHeight, bg)
 		// Vertically centre the 7-px glyph inside the row.
 		textY := y + (l.RowHeight-l.glyphHeight())/2
-		l.drawText(p, r.X+4, textY, item, ink)
+		l.drawText(p, cr.X+4, textY, item, ink)
+	}
+
+	if overflow && canClip {
+		clr.PopClip()
+	}
+	if overflow {
+		l.drawScrollbar(p, theme, r)
 	}
 }
 
-// OnEvent dispatches click events: a click at (X, Y) selects the
-// row idx = Y / RowHeight (clamped to the list length); OnActivate
-// fires with that idx.
+// visibleRows is how many rows fit vertically within Bounds().H at
+// RowHeight, rounded UP so a partially-visible trailing row still
+// counts (Draw then clips it to the exact pixel boundary). A
+// non-positive RowHeight or Bounds().H both collapse to 0 -- no rows
+// fit, and callers must not divide by RowHeight in that case.
+func (l *ListBox) visibleRows() int {
+	if l.RowHeight <= 0 {
+		return 0
+	}
+	h := l.Bounds().H
+	if h <= 0 {
+		return 0
+	}
+	n := h / l.RowHeight
+	if h%l.RowHeight != 0 {
+		n++
+	}
+	return n
+}
+
+// maxScrollRow is the highest ScrollRow that still leaves a full
+// window of content on screen: len(Items) - visibleRows(), floored
+// at 0 so a list that already fits the viewport never scrolls.
+func (l *ListBox) maxScrollRow() int {
+	m := len(l.Items) - l.visibleRows()
+	if m < 0 {
+		return 0
+	}
+	return m
+}
+
+// clampedScrollRow returns ScrollRow clamped to [0, maxScrollRow()]
+// WITHOUT mutating the field. Draw + OnEvent read through this
+// instead of ScrollRow directly, so an out-of-range value (set
+// directly, or left stale after Items shrank) never paints or
+// hit-tests outside the valid window.
+func (l *ListBox) clampedScrollRow() int {
+	s := l.ScrollRow
+	if s < 0 {
+		s = 0
+	}
+	if m := l.maxScrollRow(); s > m {
+		s = m
+	}
+	return s
+}
+
+// ScrollTo moves the top visible row to row, clamped to
+// [0, maxScrollRow()], and writes the clamped value back to
+// ScrollRow.
+func (l *ListBox) ScrollTo(row int) {
+	l.ScrollRow = row
+	l.ScrollRow = l.clampedScrollRow()
+}
+
+// ScrollBy shifts ScrollRow by delta rows (negative scrolls up),
+// clamped exactly like ScrollTo.
+func (l *ListBox) ScrollBy(delta int) {
+	l.ScrollTo(l.ScrollRow + delta)
+}
+
+// scrollToSelected nudges ScrollRow so Selected stays within the
+// visible window: scrolling up if Selected sits above ScrollRow,
+// down if it sits at or past the last visible row. It is a no-op
+// when nothing is selected (Selected < 0) so a fresh or
+// selection-cleared list is never pulled to a bogus ScrollRow.
+//
+// ListBox has no built-in keyboard navigation today; this is exposed
+// for a host (or a future arrow-key handler) that drives Selected
+// externally and wants the list to keep it in view.
+func (l *ListBox) scrollToSelected() {
+	if l.Selected < 0 {
+		return
+	}
+	if l.Selected < l.ScrollRow {
+		l.ScrollTo(l.Selected)
+		return
+	}
+	vr := l.visibleRows()
+	if vr <= 0 {
+		return
+	}
+	if l.Selected >= l.ScrollRow+vr {
+		l.ScrollTo(l.Selected - vr + 1)
+	}
+}
+
+// drawScrollbar paints the vertical scrollbar track (always, while
+// overflowing) + a proportionally-sized thumb (while there's
+// something to scroll) on the right edge of r -- the full widget
+// bounds, not the shrunk content rect. Modelled on ScrollView's
+// track+thumb proportion math, but driven by ScrollRow (whole rows)
+// rather than a pixel offset, since ListBox only ever scrolls by
+// full rows.
+func (l *ListBox) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
+	trackX := r.X + r.W - scrollbarWidth
+	fillRect(p, trackX, r.Y, scrollbarWidth, r.H, theme.SurfaceAlt)
+
+	contentH := len(l.Items) * l.RowHeight
+	if r.H <= 0 || contentH <= r.H {
+		return
+	}
+	thumbH := r.H * r.H / contentH
+	if thumbH < 8 {
+		thumbH = 8
+	}
+	thumbY := r.Y
+	if max := l.maxScrollRow(); max > 0 {
+		thumbY += l.clampedScrollRow() * (r.H - thumbH) / max
+	}
+	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
+}
+
+// OnEvent dispatches click events: a click at (X, Y) selects the row
+// idx = ScrollRow + Y/RowHeight -- Y/RowHeight locates the row within
+// the visible window, ScrollRow maps that back to an absolute Items
+// index (clamped to the list length); OnActivate fires with that idx.
 //
 // When MultiSelect is false, a click simply moves Selected to idx --
 // unchanged from the widget's original single-selection behaviour,
@@ -105,7 +275,7 @@ func (l *ListBox) OnEvent(ev Event) {
 	if ev.Y < 0 { // Go truncates toward zero -- guard early.
 		return
 	}
-	idx := ev.Y / l.RowHeight
+	idx := l.clampedScrollRow() + ev.Y/l.RowHeight
 	if idx >= len(l.Items) {
 		return
 	}
