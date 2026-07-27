@@ -4,9 +4,65 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
+
+// fillWidget paints its whole bounds a solid colour — a probe for clip tests.
+type fillWidget struct {
+	Base
+	color RGBA
+}
+
+func (f *fillWidget) Draw(p painter.Painter, _ *Theme) {
+	r := f.Bounds()
+	fillRect(p, r.X, r.Y, r.W, r.H, f.color)
+}
+
+// noClipPainter wraps a Painter but hides any Clipper capability (embedding the
+// Painter INTERFACE promotes only its methods), so ScrollView's clip type-
+// assertion fails and the fallback path runs.
+type noClipPainter struct{ painter.Painter }
 
 // --- ScrollView ----------------------------------------------------------
+
+func TestScrollViewClipsChildToViewport(t *testing.T) {
+	// Regression: a child taller/wider than the viewport must be clipped to it,
+	// not overdraw the surface below or the scrollbar column.
+	const w, h = 64, 64
+	red := RGBA{R: 255, A: 255}
+	child := &fillWidget{color: red}
+	child.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 200}) // taller than the 40-px viewport
+	sv := NewScrollView(child)
+	sv.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 40})
+	sv.SetContentSize(40, 200)
+	buf := makeSurface(w, h)
+	sv.Draw(newP(buf, w), DefaultLight())
+
+	if pixelAt(buf, w, 10, 20) != red {
+		t.Fatalf("inside viewport not painted: %+v", pixelAt(buf, w, 10, 20))
+	}
+	if pixelAt(buf, w, 10, 50) == red { // row 50 > viewport H 40
+		t.Fatal("child painted below the viewport (not clipped)")
+	}
+	if pixelAt(buf, w, 35, 20) == red { // x=35 ≥ W−scrollbarWidth (32)
+		t.Fatal("child painted into the scrollbar column (not clipped)")
+	}
+}
+
+func TestScrollViewDrawWithoutClipperFallsBack(t *testing.T) {
+	// A Painter that isn't a Clipper takes the fallback path (no clip) without
+	// panicking — the child still draws (surface-edge clipped only).
+	child := &fillWidget{color: RGBA{R: 1, A: 255}}
+	child.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 200})
+	sv := NewScrollView(child)
+	sv.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 40})
+	sv.SetContentSize(40, 200)
+	buf := makeSurface(64, 64)
+	sv.Draw(noClipPainter{newP(buf, 64)}, DefaultLight())
+}
 
 func TestScrollViewClampNegativeOffsets(t *testing.T) {
 	child := NewLabel("x")

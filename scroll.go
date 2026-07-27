@@ -80,6 +80,15 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	// Child viewport excludes the scrollbar column on the right.
 	if s.Child != nil {
+		// Confine the child to the viewport so content scrolled out of view (or
+		// wider than the viewport) can't overdraw neighbours. Requires a Painter
+		// that supports clipping; back-ends that don't fall back to the previous
+		// surface-edge-only behaviour. Popped before the scrollbar is drawn so
+		// the scrollbar (in its own column) isn't clipped away.
+		clr, canClip := p.(painter.Clipper)
+		if canClip {
+			clr.PushClip(Rect{X: r.X, Y: r.Y, W: r.W - scrollbarWidth, H: r.H})
+		}
 		cb := s.Child.Bounds()
 		s.Child.SetBounds(Rect{
 			X: r.X - s.OffsetX,
@@ -89,6 +98,9 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 		})
 		s.Child.Draw(p, theme)
 		s.Child.SetBounds(cb)
+		if canClip {
+			clr.PopClip()
+		}
 	}
 	// Scrollbar track.
 	trackX := r.X + r.W - scrollbarWidth
