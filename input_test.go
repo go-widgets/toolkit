@@ -157,6 +157,125 @@ func TestEntryDrawUnfocused(t *testing.T) {
 	}
 }
 
+func TestEntryCompositionStartUpdateEnd(t *testing.T) {
+	e := NewEntry("abc")
+	// Start: preview becomes visible; Text untouched.
+	e.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
+	if e.Composition != "^" {
+		t.Fatalf("start: Composition=%q", e.Composition)
+	}
+	if e.Text != "abc" {
+		t.Fatalf("start must not touch Text, got %q", e.Text)
+	}
+	// Update: preview refreshed.
+	e.OnEvent(Event{Kind: EventCompositionUpdate, Code: "ê"})
+	if e.Composition != "ê" {
+		t.Fatalf("update: Composition=%q", e.Composition)
+	}
+	if e.Text != "abc" {
+		t.Fatalf("update must not touch Text, got %q", e.Text)
+	}
+	// End (cancel path): preview cleared, Text unchanged.
+	e.OnEvent(Event{Kind: EventCompositionEnd, Code: ""})
+	if e.Composition != "" {
+		t.Fatalf("end: Composition should clear, got %q", e.Composition)
+	}
+	if e.Text != "abc" {
+		t.Fatal("end (cancel) must not touch Text")
+	}
+}
+
+func TestEntryCompositionCommitViaEventChar(t *testing.T) {
+	changes := 0
+	e := NewEntry("abc")
+	e.OnChange = func(t string) { changes++ }
+	// Preview.
+	e.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
+	// Host now commits by delivering EventChar with the composed rune.
+	e.OnEvent(Event{Kind: EventChar, Code: "ê"})
+	if e.Composition != "" {
+		t.Fatal("EventChar must clear the composition preview")
+	}
+	if e.Text != "abcê" || changes != 1 {
+		t.Fatalf("commit: Text=%q changes=%d", e.Text, changes)
+	}
+}
+
+func TestEntryCompositionCancelledDiscardsPreviewNoChar(t *testing.T) {
+	e := NewEntry("abc")
+	e.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
+	e.OnEvent(Event{Kind: EventCompositionUpdate, Code: "^a"})
+	// Cancelled: host does NOT send EventChar.
+	e.OnEvent(Event{Kind: EventCompositionEnd})
+	if e.Composition != "" {
+		t.Fatalf("cancelled composition should discard preview, got %q", e.Composition)
+	}
+	if e.Text != "abc" {
+		t.Fatalf("cancelled composition must not mutate Text, got %q", e.Text)
+	}
+}
+
+func TestEntryCompositionEmptyCharAfterStartStillClearsPreview(t *testing.T) {
+	e := NewEntry("ab")
+	e.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
+	e.OnEvent(Event{Kind: EventChar, Code: ""})
+	if e.Composition != "" {
+		t.Fatal("empty EventChar should still clear the composition preview")
+	}
+	if e.Text != "ab" {
+		t.Fatal("empty EventChar should not mutate Text")
+	}
+}
+
+func TestEntryCompositionInteractsWithCursorPosition(t *testing.T) {
+	e := NewEntry("ab")
+	e.Cursor = 1
+	e.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
+	if e.Cursor != 1 {
+		t.Fatalf("composition start should not move the caret, Cursor=%d", e.Cursor)
+	}
+	e.OnEvent(Event{Kind: EventChar, Code: "x"})
+	if e.Text != "axb" || e.Cursor != 2 {
+		t.Fatalf("commit at mid-string cursor: Text=%q Cursor=%d", e.Text, e.Cursor)
+	}
+}
+
+func TestEntryDrawCompositionPreviewDistinctFromCommittedText(t *testing.T) {
+	const w, h = 64, 24
+	theme := DefaultLight()
+	e := NewEntry("ab")
+	e.Focused = true
+	e.Composition = "^"
+	e.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
+	buf := makeSurface(w, h)
+	e.Draw(newP(buf, w), theme)
+	// No pixel-precise assertion beyond exercising the preview branch;
+	// the buffer must at least differ from the no-composition render.
+	buf2 := makeSurface(w, h)
+	e2 := NewEntry("ab")
+	e2.Focused = true
+	e2.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
+	e2.Draw(newP(buf2, w), theme)
+	if string(buf) == string(buf2) {
+		t.Fatal("composition preview should render visibly distinct from the no-composition frame")
+	}
+}
+
+func TestEntryDrawNoCompositionUnchanged(t *testing.T) {
+	// Regression: with Composition == "" (the zero value), Draw must be
+	// byte-identical to the pre-IME rendering path.
+	const w, h = 64, 24
+	theme := DefaultLight()
+	e := NewEntry("ab")
+	e.Focused = true
+	e.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
+	buf := makeSurface(w, h)
+	e.Draw(newP(buf, w), theme)
+	if pixelAt(buf, w, 30, 0) != theme.Accent {
+		t.Fatalf("focused top-edge border = %+v, want Accent", pixelAt(buf, w, 30, 0))
+	}
+}
+
 // --- CheckButton ---------------------------------------------------------
 
 func TestCheckButtonClickToggles(t *testing.T) {
