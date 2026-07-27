@@ -83,11 +83,14 @@ func (l *LevelBar) Draw(p painter.Painter, theme *Theme) {
 		cellW = 1
 	}
 	for i := 0; i < l.Max; i++ {
+		x := r.X + i*(cellW+1)
+		if x+cellW > r.X+r.W {
+			break // this cell would spill past the widget — stop (as do all after)
+		}
 		fill := theme.SurfaceAlt
 		if i < l.Value {
 			fill = theme.Accent
 		}
-		x := r.X + i*(cellW+1)
 		fillRect(p, x, r.Y, cellW, r.H, fill)
 	}
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
