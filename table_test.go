@@ -1483,6 +1483,463 @@ func TestTableScrollToSelectedNoopWhenNoVisibleCapacity(t *testing.T) {
 	}
 }
 
+// --- Drag-to-reorder body rows ------------------------------------------
+
+// tableBodyClickY returns the Table-local Y that lands inside body row
+// idx's band (its vertical centre), assuming ScrollRow == 0 -- the same
+// geometry TableHeaderHeight + row*TableRowHeight + TableRowHeight/2
+// tests elsewhere already inline.
+func tableBodyClickY(idx int) int {
+	return TableHeaderHeight + idx*TableRowHeight + TableRowHeight/2
+}
+
+// tableInsertY returns the Table-local Y that rowInsertIndexAt resolves
+// back to exactly idx, for a Table currently scrolled to scroll. Derived
+// from rowInsertIndexAt's own rounding formula: the row boundary itself
+// (no half-row offset) always floors back to idx.
+func tableInsertY(scroll, idx int) int {
+	return TableHeaderHeight + (idx-scroll)*TableRowHeight
+}
+
+// TestTableReorderableFalseIsByteIdentical is the core regression guard:
+// with Reorderable left at its zero value (false), DragData/AcceptsDrop
+// are inert, every drag event is a no-op (Rows never mutate), and
+// pre-existing sort/resize/multi-select behaviour is completely
+// unaffected.
+func TestTableReorderableFalseIsByteIdentical(t *testing.T) {
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 60, Sortable: true},
+		{Title: "B", Width: 60, Sortable: true},
+	}, [][]string{{"a0", "b0"}, {"a1", "b1"}, {"a2", "b2"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 200})
+
+	// A body-row press must not arm a drag.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(0)})
+	if got := tb.DragData(); got != "" {
+		t.Fatalf("DragData() with Reorderable=false = %q, want \"\"", got)
+	}
+	if tb.AcceptsDrop("tablerow:0") {
+		t.Fatal("AcceptsDrop(own scheme) = true with Reorderable=false")
+	}
+
+	// A drop carrying a well-formed tablerow payload must not touch Rows.
+	before := fmt.Sprintf("%v", tb.Rows)
+	tb.OnEvent(Event{Kind: EventDragMove, Y: tableBodyClickY(1)})
+	tb.OnEvent(Event{Kind: EventDrop, Y: tableBodyClickY(1), Code: "tablerow:0"})
+	if got := fmt.Sprintf("%v", tb.Rows); got != before {
+		t.Fatalf("Rows mutated by a drop with Reorderable=false: %v", tb.Rows)
+	}
+
+	// Sort still works.
+	var gotCol int
+	var gotAsc bool
+	tb.OnSort = func(col int, asc bool) { gotCol, gotAsc = col, asc }
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if gotCol != 0 || !gotAsc {
+		t.Fatalf("sort broken: (%d,%v), want (0,true)", gotCol, gotAsc)
+	}
+
+	// Separator resize still works.
+	tb.OnEvent(Event{Kind: EventClick, X: 60, Y: 5})
+	tb.OnEvent(Event{Kind: EventMouseDrag, X: 90, Y: 5})
+	if tb.Columns[0].Width != 90 {
+		t.Fatalf("resize broken: Columns[0].Width = %d, want 90", tb.Columns[0].Width)
+	}
+	tb.OnEvent(Event{Kind: EventMouseUp, X: 90, Y: 5})
+
+	// Multi-select still works.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(0)})
+	if tb.Selected != 0 {
+		t.Fatalf("multi-select broken: Selected = %d, want 0", tb.Selected)
+	}
+
+	// Draw must not paint any indicator line -- sample every row boundary
+	// in the body for a stray Accent pixel (none of the rows/selection
+	// above should have landed one at these exact boundary rows either,
+	// but row 0 IS selected/Accent-filled, so only sample boundary rows
+	// that are neither selected nor a zebra Background/Surface fill
+	// ambiguity: use row 2, which is unselected).
+	theme := DefaultLight()
+	buf := makeTableSurface(120, 200)
+	tb.Draw(newP(buf, 120), theme)
+	boundaryY := TableHeaderHeight + 2*TableRowHeight
+	if got := pixelAt(buf, 120, 30, boundaryY); got == theme.Accent {
+		t.Fatalf("indicator-coloured pixel found at row-2 boundary with Reorderable=false: %+v", got)
+	}
+}
+
+// TestTableReorderableDragDataForPressedBodyRow covers the DragSource
+// half of the contract: a body-row press records dragRow, and DragData
+// reports it via the private "tablerow:" scheme.
+func TestTableReorderableDragDataForPressedBodyRow(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.Reorderable = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+
+	if got := tb.DragData(); got != "" {
+		t.Fatalf("DragData() before any press = %q, want \"\"", got)
+	}
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(1)})
+	if got := tb.DragData(); got != "tablerow:1" {
+		t.Fatalf("DragData() after pressing row 1 = %q, want %q", got, "tablerow:1")
+	}
+	// Pressing a different row re-arms the payload.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(0)})
+	if got := tb.DragData(); got != "tablerow:0" {
+		t.Fatalf("DragData() after pressing row 0 = %q, want %q", got, "tablerow:0")
+	}
+}
+
+// TestTableReorderableHeaderAndSeparatorPressDoNotArmDrag covers the
+// "header/separator presses do NOT start a row drag" requirement: both
+// land above TableHeaderHeight and must leave dragRow (and therefore
+// DragData) untouched, while a subsequent body-row press still works.
+func TestTableReorderableHeaderAndSeparatorPressDoNotArmDrag(t *testing.T) {
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 60, Sortable: true},
+		{Title: "B", Width: 60, Sortable: true},
+	}, [][]string{{"a0", "b0"}, {"a1", "b1"}})
+	tb.Reorderable = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 200})
+
+	// Header-cell click (sorts column 0).
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if got := tb.DragData(); got != "" {
+		t.Fatalf("DragData() after header click = %q, want \"\"", got)
+	}
+
+	// Separator click (starts a resize).
+	tb.OnEvent(Event{Kind: EventClick, X: 60, Y: 5})
+	if !tb.resizing {
+		t.Fatal("separator click did not start a resize (test setup broken)")
+	}
+	if got := tb.DragData(); got != "" {
+		t.Fatalf("DragData() after separator click = %q, want \"\"", got)
+	}
+	tb.OnEvent(Event{Kind: EventMouseUp, X: 60, Y: 5})
+
+	// A genuine body-row press still arms the drag afterwards.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(1)})
+	if got := tb.DragData(); got != "tablerow:1" {
+		t.Fatalf("DragData() after body press = %q, want %q", got, "tablerow:1")
+	}
+}
+
+// TestTableAcceptsDropOwnSchemeVsForeign covers AcceptsDrop's payload
+// validation: only a well-formed "tablerow:<non-negative int>" payload
+// is accepted; any other scheme, a negative index, or garbage is not.
+func TestTableAcceptsDropOwnSchemeVsForeign(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"r0"}})
+	tb.Reorderable = true
+
+	cases := []struct {
+		payload string
+		want    bool
+	}{
+		{"tablerow:0", true},
+		{"tablerow:5", true}, // AcceptsDrop only validates the scheme/format, not row range
+		{"/tmp/file.txt", false},
+		{"tablerow:-1", false},
+		{"tablerow:abc", false},
+		{"tablerow:", false},
+		{"", false},
+	}
+	for _, c := range cases {
+		if got := tb.AcceptsDrop(c.payload); got != c.want {
+			t.Errorf("AcceptsDrop(%q) = %v, want %v", c.payload, got, c.want)
+		}
+	}
+}
+
+// TestTableDragMoveSetsIndicatorAndDrawPaintsIt covers EventDragMove
+// computing dropIndicator + Draw painting the insertion line, and
+// EventDragLeave clearing it again.
+func TestTableDragMoveSetsIndicatorAndDrawPaintsIt(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.Reorderable = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	theme := DefaultLight()
+
+	// Move the drag to the boundary between row 0 and row 1 (insertion
+	// index 1).
+	tb.OnEvent(Event{Kind: EventDragMove, X: 10, Y: tableInsertY(0, 1)})
+	if tb.dropIndicator != 1 {
+		t.Fatalf("dropIndicator after DragMove = %d, want 1", tb.dropIndicator)
+	}
+	buf := makeTableSurface(100, 200)
+	tb.Draw(newP(buf, 100), theme)
+	indicatorY := TableHeaderHeight + 1*TableRowHeight
+	if got := pixelAt(buf, 100, 50, indicatorY); got != theme.Accent {
+		t.Fatalf("indicator pixel at (50,%d) = %+v, want Accent", indicatorY, got)
+	}
+
+	// Leaving clears the indicator: a fresh Draw no longer paints it.
+	tb.OnEvent(Event{Kind: EventDragLeave})
+	if tb.dropIndicator != -1 {
+		t.Fatalf("dropIndicator after DragLeave = %d, want -1", tb.dropIndicator)
+	}
+	buf2 := makeTableSurface(100, 200)
+	tb.Draw(newP(buf2, 100), theme)
+	if got := pixelAt(buf2, 100, 50, indicatorY); got == theme.Accent {
+		t.Fatalf("indicator pixel still painted after DragLeave: %+v", got)
+	}
+}
+
+// TestTableDragMoveNoopWhenNotReorderable covers EventDragMove's guard:
+// with Reorderable false, dropIndicator must stay untouched (-1's
+// zero-value equivalent is never reached because Draw never consults it
+// either -- but the field itself must not be mutated).
+func TestTableDragMoveNoopWhenNotReorderable(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, [][]string{{"r0"}, {"r1"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	tb.OnEvent(Event{Kind: EventDragMove, X: 10, Y: tableBodyClickY(0)})
+	if tb.dropIndicator != -1 {
+		t.Fatalf("dropIndicator mutated by DragMove with Reorderable=false: %d", tb.dropIndicator)
+	}
+}
+
+// TestTableReorderDropMovesRowDownSelectionFollowsAndFiresOnReorder
+// covers the "down" direction: dragging row 0 to insertion index 3
+// among 5 rows lands it at resting index 2 (removing it first shifts
+// the later rows left by one), Selected/selectedRows follow it there,
+// an untouched row's selection membership is preserved at its shifted
+// index, and OnReorder fires with (from, actual resting index).
+func TestTableReorderDropMovesRowDownSelectionFollowsAndFiresOnReorder(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}, {"r3"}, {"r4"}})
+	tb.Reorderable = true
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 5 * TableRowHeight + TableHeaderHeight})
+
+	// Press + pre-select row 0 (anchor), row 2 (falls INSIDE the
+	// insertion window (from, final] -- it must shift left by one to
+	// make room), and row 4 (stays past the window, unaffected).
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(0)})
+	tb.SetRowSelection(0, 2, 4)
+	if got := tb.DragData(); got != "tablerow:0" {
+		t.Fatalf("DragData() = %q, want %q", got, "tablerow:0")
+	}
+
+	var gotFrom, gotTo int
+	calls := 0
+	tb.OnReorder = func(from, to int) { gotFrom, gotTo = from, to; calls++ }
+
+	tb.OnEvent(Event{Kind: EventDragMove, Y: tableInsertY(0, 3)})
+	tb.OnEvent(Event{Kind: EventDrop, Y: tableInsertY(0, 3), Code: tb.DragData()})
+
+	want := [][]string{{"r1"}, {"r2"}, {"r0"}, {"r3"}, {"r4"}}
+	if fmt.Sprintf("%v", tb.Rows) != fmt.Sprintf("%v", want) {
+		t.Fatalf("Rows after down-move = %v, want %v", tb.Rows, want)
+	}
+	if calls != 1 {
+		t.Fatalf("OnReorder calls = %d, want 1", calls)
+	}
+	if gotFrom != 0 || gotTo != 2 {
+		t.Fatalf("OnReorder = (%d,%d), want (0,2)", gotFrom, gotTo)
+	}
+	if tb.Selected != 2 {
+		t.Fatalf("Selected after move = %d, want 2 (followed the moved row)", tb.Selected)
+	}
+	got := tb.SelectedRows()
+	if len(got) != 3 || got[0] != 1 || got[1] != 2 || got[2] != 4 {
+		t.Fatalf("SelectedRows after move = %v, want [1 2 4] (row 2 shifted to 1, moved row at 2, row 4 unaffected)", got)
+	}
+	if tb.dropIndicator != -1 {
+		t.Fatalf("dropIndicator after drop = %d, want -1", tb.dropIndicator)
+	}
+}
+
+// TestTableReorderDropMovesRowUpAndShiftsIntermediateSelection covers
+// the "up" direction: dragging the LAST row to insertion index 1 lands
+// it at resting index 1 exactly (to <= from, so no -1 adjustment), and
+// an intermediate row's selection shifts +1 to make room.
+func TestTableReorderDropMovesRowUpAndShiftsIntermediateSelection(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}, {"r3"}, {"r4"}})
+	tb.Reorderable = true
+	tb.Selected = 2 // an intermediate row, in the shifted range [to, from)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 5 * TableRowHeight + TableHeaderHeight})
+
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(4)})
+	if got := tb.DragData(); got != "tablerow:4" {
+		t.Fatalf("DragData() = %q, want %q", got, "tablerow:4")
+	}
+
+	var gotFrom, gotTo int
+	tb.OnReorder = func(from, to int) { gotFrom, gotTo = from, to }
+	tb.OnEvent(Event{Kind: EventDrop, Y: tableInsertY(0, 1), Code: "tablerow:4"})
+
+	want := [][]string{{"r0"}, {"r4"}, {"r1"}, {"r2"}, {"r3"}}
+	if fmt.Sprintf("%v", tb.Rows) != fmt.Sprintf("%v", want) {
+		t.Fatalf("Rows after up-move = %v, want %v", tb.Rows, want)
+	}
+	if gotFrom != 4 || gotTo != 1 {
+		t.Fatalf("OnReorder = (%d,%d), want (4,1)", gotFrom, gotTo)
+	}
+	if tb.Selected != 3 {
+		t.Fatalf("Selected after up-move = %d, want 3 (shifted +1 out of the way)", tb.Selected)
+	}
+}
+
+// TestTableReorderDropForeignOrGarbagePayloadIgnored covers EventDrop
+// with a payload that fails parseTableRowDragPayload: a foreign scheme,
+// and a well-formed scheme whose index is out of range for the current
+// Rows -- neither must mutate Rows or fire OnReorder.
+func TestTableReorderDropForeignOrGarbagePayloadIgnored(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.Reorderable = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	called := false
+	tb.OnReorder = func(from, to int) { called = true }
+
+	for _, payload := range []string{"/tmp/foo.txt", "garbage", "tablerow:abc", "tablerow:99"} {
+		tb.OnEvent(Event{Kind: EventDrop, Y: tableBodyClickY(1), Code: payload})
+	}
+	if called {
+		t.Fatal("OnReorder fired for a foreign/garbage/out-of-range payload")
+	}
+	want := [][]string{{"r0"}, {"r1"}, {"r2"}}
+	if fmt.Sprintf("%v", tb.Rows) != fmt.Sprintf("%v", want) {
+		t.Fatalf("Rows mutated by an ignored drop: %v", tb.Rows)
+	}
+}
+
+// TestTableReorderDropWhileScrolledTargetsAbsoluteRow covers the
+// "reorder while scrolled" requirement: rowInsertIndexAt must resolve a
+// drop's local Y through ScrollRow, targeting the ABSOLUTE row painted
+// there rather than its on-screen offset.
+func TestTableReorderDropWhileScrolledTargetsAbsoluteRow(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
+	tb.Reorderable = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows
+	tb.ScrollRow = 10
+
+	// Press absolute row 12 (screen position 2) to arm the drag.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(2)})
+	if got := tb.DragData(); got != "tablerow:12" {
+		t.Fatalf("DragData() while scrolled = %q, want %q", got, "tablerow:12")
+	}
+
+	var gotFrom, gotTo int
+	tb.OnReorder = func(from, to int) { gotFrom, gotTo = from, to }
+	// Drop at screen position 4 (absolute insertion index 14).
+	tb.OnEvent(Event{Kind: EventDrop, Y: tableInsertY(10, 14), Code: "tablerow:12"})
+
+	if gotFrom != 12 {
+		t.Fatalf("OnReorder from = %d, want 12", gotFrom)
+	}
+	// to>from -> resting index is to-1 == 13.
+	if gotTo != 13 {
+		t.Fatalf("OnReorder to = %d, want 13", gotTo)
+	}
+	if tb.Rows[13][0] != "r12" {
+		t.Fatalf("Rows[13] = %v, want row r12 to have landed there", tb.Rows[13])
+	}
+}
+
+// TestTableDragMoveAboveHeaderClampsToScroll covers rowInsertIndexAt's
+// localY < TableHeaderHeight branch: hovering over the fixed header
+// resolves to the top of the currently-visible window (ScrollRow),
+// never a negative or otherwise out-of-range index.
+func TestTableDragMoveAboveHeaderClampsToScroll(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.Reorderable = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+
+	tb.OnEvent(Event{Kind: EventDragMove, X: 10, Y: 5}) // inside the header band
+	if tb.dropIndicator != 0 {
+		t.Fatalf("dropIndicator for a header-band DragMove = %d, want 0 (== ScrollRow)", tb.dropIndicator)
+	}
+}
+
+// TestTableDragMovePastLastRowClampsToRowCount covers rowInsertIndexAt's
+// idx > len(Rows) clamp: a drag far below the last row must resolve to
+// exactly len(Rows) ("insert after the last row"), not an
+// out-of-bounds index.
+func TestTableDragMovePastLastRowClampsToRowCount(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.Reorderable = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 2000})
+
+	tb.OnEvent(Event{Kind: EventDragMove, X: 10, Y: TableHeaderHeight + 100*TableRowHeight})
+	if tb.dropIndicator != len(tb.Rows) {
+		t.Fatalf("dropIndicator for a far-below-last-row DragMove = %d, want %d", tb.dropIndicator, len(tb.Rows))
+	}
+}
+
+// TestRemapRowIndexIdentityMoveLeavesOtherRowsUnchanged covers
+// remapRowIndex's final fallthrough (from == final, i != from): dropping
+// a row back onto its own slot must not perturb any OTHER row's
+// selection membership.
+func TestRemapRowIndexIdentityMoveLeavesOtherRowsUnchanged(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.SetRowSelection(1, 2)
+	tb.reorderRow(1, 1) // to <= from -> final == from == 1, a no-op move
+	got := tb.SelectedRows()
+	if len(got) != 2 || got[0] != 1 || got[1] != 2 {
+		t.Fatalf("SelectedRows after identity move = %v, want [1 2] (unchanged)", got)
+	}
+	want := [][]string{{"r0"}, {"r1"}, {"r2"}}
+	if fmt.Sprintf("%v", tb.Rows) != fmt.Sprintf("%v", want) {
+		t.Fatalf("Rows after identity move = %v, want unchanged %v", tb.Rows, want)
+	}
+}
+
+// --- reorderRow: direct-call defensive clamps ---------------------------
+
+// TestReorderRowOutOfRangeFromIsNoop covers the from<0||from>=n guard --
+// an out-of-range from (reachable only via a direct call; EventDrop's
+// parseTableRowDragPayload already rejects a negative index, and the
+// out-of-range-positive case is covered end-to-end by
+// TestTableReorderDropForeignOrGarbagePayloadIgnored) must leave Rows +
+// OnReorder untouched.
+func TestReorderRowOutOfRangeFromIsNoop(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"r0"}, {"r1"}})
+	called := false
+	tb.OnReorder = func(from, to int) { called = true }
+	tb.reorderRow(-1, 0)
+	tb.reorderRow(2, 0)
+	if called {
+		t.Fatal("OnReorder fired for an out-of-range from")
+	}
+	want := [][]string{{"r0"}, {"r1"}}
+	if fmt.Sprintf("%v", tb.Rows) != fmt.Sprintf("%v", want) {
+		t.Fatalf("Rows mutated by an out-of-range from: %v", tb.Rows)
+	}
+}
+
+// TestReorderRowClampsToArgument covers the to<0 / to>n defensive clamp
+// documented on reorderRow -- reachable only via a direct call, since
+// the only production caller (EventDrop) always passes an
+// already-clamped rowInsertIndexAt result. Mirrors how other Table
+// methods (e.g. SetColumnWidth) clamp a raw caller-supplied value.
+func TestReorderRowClampsToArgument(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	// to < 0 clamps to 0: from=2 moved to the very front.
+	tb.reorderRow(2, -5)
+	want := [][]string{{"r2"}, {"r0"}, {"r1"}}
+	if fmt.Sprintf("%v", tb.Rows) != fmt.Sprintf("%v", want) {
+		t.Fatalf("Rows after to<0 clamp = %v, want %v", tb.Rows, want)
+	}
+
+	tb2 := NewTable([]TableColumn{{Title: "A"}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	// to > n clamps to n (3): from=0 moved to the very back.
+	tb2.reorderRow(0, 999)
+	want2 := [][]string{{"r1"}, {"r2"}, {"r0"}}
+	if fmt.Sprintf("%v", tb2.Rows) != fmt.Sprintf("%v", want2) {
+		t.Fatalf("Rows after to>n clamp = %v, want %v", tb2.Rows, want2)
+	}
+}
+
 func TestTableScrollToSelectedScrollsUpAndDown(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows
