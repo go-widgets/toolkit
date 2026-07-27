@@ -23,6 +23,10 @@ type TreeNode struct {
 // else on the row selects it + fires OnActivate with the clicked
 // node.
 //
+// Rendering is windowed (virtualized): only the rows that fit inside
+// Bounds().H are ever painted, no matter how many nodes are visible in
+// the flattened (expand-aware) order. See ScrollRow.
+//
 // Use for file browsers, settings hierarchies, JSON inspectors,
 // outline views.
 type TreeView struct {
@@ -31,6 +35,14 @@ type TreeView struct {
 	Selected   *TreeNode
 	OnActivate func(node *TreeNode)
 	RowHeight  int // default 18
+
+	// ScrollRow is the index, into the current visible-flattened node
+	// list, of the top row Draw paints. It's clamped on every Draw /
+	// OnEvent to [0, max(0, visibleCount-windowRows)], so it's always
+	// safe to set directly; prefer ScrollTo/ScrollBy for arithmetic on
+	// it. When the whole tree fits in Bounds().H, ScrollRow==0 paints
+	// byte-identically to a TreeView with no virtualization.
+	ScrollRow int
 
 	// MultiSelect enables a multi-node selection set on top of the
 	// single-node Selected anchor. When false (the default), TreeView
@@ -87,6 +99,77 @@ func (t *TreeView) walkTree(n *TreeNode, depth int) {
 	for _, c := range n.Children {
 		t.walkTree(c, depth+1)
 	}
+}
+
+// rowHeight returns the effective per-row pixel height, applying the
+// same "0 means default" fallback everywhere it's needed.
+func (t *TreeView) rowHeight() int {
+	if t.RowHeight <= 0 {
+		return 18
+	}
+	return t.RowHeight
+}
+
+// windowRows returns how many full rows fit inside Bounds().H at the
+// effective row height. 0 when Bounds().H hasn't been set (or is
+// non-positive), which callers treat as "don't virtualize" so a
+// TreeView used before SetBounds keeps painting every row.
+func (t *TreeView) windowRows() int {
+	h := t.Bounds().H
+	if h <= 0 {
+		return 0
+	}
+	return h / t.rowHeight()
+}
+
+// clampScrollRow confines row to [0, max(0, total-window)], the range
+// that always leaves the window full of real rows (or, when the tree
+// is shorter than the window, pinned at 0).
+func (t *TreeView) clampScrollRow(row, total, window int) int {
+	return clampInt(row, 0, max(0, total-window))
+}
+
+// ScrollTo sets ScrollRow to row, clamped against the tree's current
+// flattened shape + the widget's bounds.
+func (t *TreeView) ScrollTo(row int) {
+	t.flatten()
+	t.ScrollRow = t.clampScrollRow(row, len(t.rows), t.windowRows())
+}
+
+// ScrollBy adjusts ScrollRow by delta, with the same clamping as
+// ScrollTo. Negative delta scrolls up.
+func (t *TreeView) ScrollBy(delta int) {
+	t.ScrollTo(t.ScrollRow + delta)
+}
+
+// scrollToSelected nudges ScrollRow by the minimum amount needed to
+// bring Selected back inside the visible window. A nil Selected (no
+// selection yet) is a deliberate no-op: without a node to locate
+// there's no valid target row, and computing one anyway is exactly
+// how a stray -1 "not found" index turns into a negative ScrollRow.
+func (t *TreeView) scrollToSelected() {
+	if t.Selected == nil {
+		return
+	}
+	t.flatten()
+	idx := -1
+	for i, row := range t.rows {
+		if row.node == t.Selected {
+			idx = i
+			break
+		}
+	}
+	if idx == -1 {
+		return
+	}
+	wr := t.windowRows()
+	switch {
+	case idx < t.ScrollRow:
+		t.ScrollRow = idx
+	case wr > 0 && idx >= t.ScrollRow+wr:
+		t.ScrollRow = idx - wr + 1
+	}
+	t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), wr)
 }
 
 // IsSelected reports whether n is part of the multi-select set. It
@@ -175,16 +258,44 @@ func (t *TreeView) SelectRange(a, b *TreeNode) {
 	}
 }
 
-// Draw paints every visible row.
+// Draw paints the rows in the current scroll window: flattened nodes
+// [ScrollRow, ScrollRow+windowRows). When the whole tree fits inside
+// Bounds().H, that window covers every row + ScrollRow clamps to 0, so
+// painting is byte-identical to an unvirtualized TreeView. When it
+// doesn't fit, a right-edge scrollbar track+thumb is painted too.
 func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 	t.flatten()
 	r := t.Bounds()
-	rh := t.RowHeight
-	if rh <= 0 {
-		rh = 18
+	rh := t.rowHeight()
+	total := len(t.rows)
+	wr := t.windowRows()
+	windowed := wr > 0 && total > wr
+	t.ScrollRow = t.clampScrollRow(t.ScrollRow, total, wr)
+
+	rowW := r.W
+	if windowed {
+		rowW = r.W - scrollbarWidth
 	}
-	for i, row := range t.rows {
-		y := r.Y + i*rh
+	start, end := 0, total
+	if windowed {
+		start = t.ScrollRow
+		end = start + wr
+	}
+
+	// Only clip when actually windowing: an unclipped Draw (the whole
+	// tree fits) must stay byte-identical to a pre-virtualization
+	// TreeView, including for rows whose label overflows Bounds().W —
+	// today that's drawn, not clipped, and this must not change it.
+	var clr painter.Clipper
+	if windowed {
+		if c, ok := p.(painter.Clipper); ok {
+			clr = c
+			clr.PushClip(Rect{X: r.X, Y: r.Y, W: rowW, H: r.H})
+		}
+	}
+	for i := start; i < end; i++ {
+		row := t.rows[i]
+		y := r.Y + (i-start)*rh
 		bg := theme.Surface
 		ink := theme.OnSurface
 		isSel := row.node == t.Selected
@@ -195,7 +306,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 			bg = theme.Accent
 			ink = theme.Background
 		}
-		fillRect(p, r.X, y, r.W, rh, bg)
+		fillRect(p, r.X, y, rowW, rh, bg)
 		indent := r.X + row.depth*TreeIndentW
 		// Chevron if the node has children: ▶ collapsed, ▼ expanded.
 		// The wide base sits away from the pointing direction: for ▼
@@ -219,30 +330,64 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 		textY := y + (rh-t.glyphHeight())/2
 		t.drawText(p, indent+TreeChevronW, textY, row.node.Label, ink)
 	}
+	if clr != nil {
+		clr.PopClip()
+	}
+	if windowed {
+		t.drawScrollbar(p, theme, r, wr, total)
+	}
+}
+
+// drawScrollbar paints the right-edge track + thumb, sized + positioned
+// by the same viewport/content proportion math ScrollView uses. Only
+// called when the flattened list overflows the window.
+func (t *TreeView) drawScrollbar(p painter.Painter, theme *Theme, r Rect, wr, total int) {
+	trackX := r.X + r.W - scrollbarWidth
+	fillRect(p, trackX, r.Y, scrollbarWidth, r.H, theme.SurfaceAlt)
+	thumbH := r.H * wr / total
+	if thumbH < 8 {
+		thumbH = 8
+	}
+	maxScroll := total - wr // > 0: drawScrollbar is only called when windowed
+	thumbY := r.Y + t.ScrollRow*(r.H-thumbH)/maxScroll
+	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
 }
 
 // OnEvent: a click on the chevron toggles Expanded; a click anywhere
-// else on the row selects the node + fires OnActivate.
+// else on the row selects the node + fires OnActivate. Y is mapped
+// through ScrollRow back to the flattened index it targets.
 func (t *TreeView) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
 	}
 	t.flatten()
-	rh := t.RowHeight
-	if rh <= 0 {
-		rh = 18
-	}
+	rh := t.rowHeight()
+	total := len(t.rows)
+	wr := t.windowRows()
+	windowed := wr > 0 && total > wr
+	t.ScrollRow = t.clampScrollRow(t.ScrollRow, total, wr)
 	if ev.Y < 0 {
 		return
 	}
-	idx := ev.Y / rh
-	if idx >= len(t.rows) {
+	localIdx := ev.Y / rh
+	if windowed && localIdx >= wr {
+		// Below the last painted row (only possible when Bounds().H
+		// isn't an exact multiple of rh): nothing was drawn there.
+		return
+	}
+	idx := localIdx + t.ScrollRow
+	if idx >= total {
 		return
 	}
 	row := t.rows[idx]
 	chevronX := row.depth*TreeIndentW + 4
 	if ev.X >= chevronX-3 && ev.X < chevronX+8 && len(row.node.Children) > 0 {
 		row.node.Expanded = !row.node.Expanded
+		// Toggling a subtree can shrink (collapse) or grow (expand) the
+		// visible row count out from under ScrollRow: re-flatten +
+		// re-clamp so it never points past the new end of the list.
+		t.flatten()
+		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.windowRows())
 		return
 	}
 	if t.MultiSelect {
