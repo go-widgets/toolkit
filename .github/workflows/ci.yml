@@ -34,11 +34,14 @@ jobs:
 
       - name: Assert 100% statement coverage
         run: |
-          total=$(go tool cover -func=coverage.out | awk 'END { gsub(/%/,"",$3); print $3 }')
-          echo "total coverage: ${total}%"
-          if [ "$(printf '%.0f' "$total")" != "100" ]; then
-            echo "::error::coverage below 100% (got ${total}%)"
-            go tool cover -func=coverage.out | grep -v "100.0%"
+          # Exact, no rounding: fail if ANY line (per-function or the total) is
+          # below 100.0%. The old `printf '%.0f'` on the aggregate let a
+          # 99.95% slip through as "100" and masked an under-covered helper.
+          go tool cover -func=coverage.out
+          below=$(go tool cover -func=coverage.out | awk '$NF != "100.0%"')
+          if [ -n "$below" ]; then
+            echo "::error::coverage below 100% on:"
+            echo "$below"
             exit 1
           fi
 
