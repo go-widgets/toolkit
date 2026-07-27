@@ -70,10 +70,16 @@ func (s *Scale) OnEvent(ev Event) {
 		return
 	}
 	r := s.Bounds()
-	if r.W <= 0 || s.Max <= s.Min {
+	// Map the click across the track the THUMB centre actually travels
+	// (r.W - scaleThumbSize), offsetting by half a thumb — the inverse of Draw's
+	// thumb placement. The old pos = ev.X / r.W ignored the thumb width, so the
+	// thumb never sat under the cursor and edge clicks didn't reach Min/Max
+	// cleanly. Matches RangeSlider.valueAt.
+	span := r.W - scaleThumbSize
+	if span <= 0 || s.Max <= s.Min {
 		return
 	}
-	pos := float64(ev.X) / float64(r.W)
+	pos := float64(ev.X-scaleThumbSize/2) / float64(span)
 	if pos < 0 {
 		pos = 0
 	}

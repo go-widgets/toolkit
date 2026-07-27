@@ -100,6 +100,23 @@ func TestLevelBarTinyCellWidth(t *testing.T) {
 	l.Draw(newP(makeSurface(64, 12), 64), DefaultLight())
 }
 
+func TestLevelBarStaysWithinBounds(t *testing.T) {
+	// Regression: a narrow bar must not paint its cells past its right edge onto
+	// a neighbour. Max=20 at W=5 would stride to x≈39 without the clip.
+	const w, h = 64, 12
+	l := NewLevelBar(20)
+	l.Value = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 5, H: 10})
+	surf := makeSurface(w, h)
+	l.Draw(newP(surf, w), DefaultLight())
+	sentinel := RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 255}
+	for x := 5; x < w; x++ { // every column at/after the bar's right edge
+		if got := pixelAt(surf, w, x, 5); got != sentinel {
+			t.Fatalf("LevelBar painted past its bounds at x=%d: %+v", x, got)
+		}
+	}
+}
+
 // --- Scale ---------------------------------------------------------------
 
 func TestScaleSetValueClamps(t *testing.T) {
@@ -125,6 +142,32 @@ func TestScaleClickSetsValueAndFires(t *testing.T) {
 	}
 	if got != 50 {
 		t.Fatalf("OnChange got %v", got)
+	}
+}
+
+func TestScaleClickMapsAcrossThumbTravel(t *testing.T) {
+	// Regression: the click maps over the thumb's travel (W − thumbSize), so a
+	// click at the left-/right-most thumb centre reaches Min/Max cleanly. The old
+	// ev.X/r.W mapping gave a non-zero value at the left edge.
+	s := NewScale(0, 100, 50)
+	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
+	s.OnEvent(Event{Kind: EventClick, X: scaleThumbSize / 2, Y: 10})
+	if s.Value != 0 {
+		t.Fatalf("left-edge click = %v, want 0 (Min)", s.Value)
+	}
+	s.OnEvent(Event{Kind: EventClick, X: 100 - scaleThumbSize/2, Y: 10})
+	if s.Value != 100 {
+		t.Fatalf("right-edge click = %v, want 100 (Max)", s.Value)
+	}
+}
+
+func TestScaleClickNarrowIgnored(t *testing.T) {
+	// A scale no wider than the thumb has no travel → clicks are ignored.
+	s := NewScale(0, 100, 42)
+	s.SetBounds(Rect{X: 0, Y: 0, W: scaleThumbSize, H: 20})
+	s.OnEvent(Event{Kind: EventClick, X: 8, Y: 10})
+	if s.Value != 42 {
+		t.Fatalf("narrow scale (no travel) click changed value to %v", s.Value)
 	}
 }
 
