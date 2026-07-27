@@ -187,3 +187,55 @@ func TestStepsDrawTightBoundsSkipsCentring(t *testing.T) {
 			pixelAt(buf, w, 0, 0))
 	}
 }
+
+// --- Vertical orientation ------------------------------------------------
+
+// A vertical Steps stacks badges downward with vertical connectors and
+// draws each caption to the RIGHT of its badge. Two labels exercise the
+// connector branch + the vertical caption branch.
+func TestStepsDrawVertical(t *testing.T) {
+	const w, h = 120, 120
+	theme := DefaultLight()
+	s := NewSteps([]string{"One", "Two"}, 0)
+	s.Orientation = Vertical
+	s.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	buf := makeSurface(w, h)
+	s.Draw(newP(buf, w), theme)
+
+	// Second badge sits one StepBoxH + one connector below the first, so
+	// its top-left border corner lands at y = StepBoxH + StepConnectorW.
+	badge2Y := StepBoxH + StepConnectorW
+	if pixelAt(buf, w, 0, badge2Y) != theme.Border {
+		t.Fatalf("vertical second-badge corner = %+v, want Border",
+			pixelAt(buf, w, 0, badge2Y))
+	}
+	// The vertical connector paints a Border pixel on the badge centre
+	// column between the two badges.
+	connX := StepBoxW / 2
+	if pixelAt(buf, w, connX, StepBoxH+StepConnectorW/2) != theme.Border {
+		t.Fatal("vertical connector not painted between badges")
+	}
+	// Caption "One" renders to the right of the first badge, vertically
+	// centred on it — some OnBackground ink lands past the badge width.
+	painted := 0
+	capY := (StepBoxH - GlyphHeight()) / 2
+	for y := capY; y < capY+GlyphHeight(); y++ {
+		for x := StepBoxW + StepLabelGap; x < w; x++ {
+			if pixelAt(buf, w, x, y) == theme.OnBackground {
+				painted++
+			}
+		}
+	}
+	if painted == 0 {
+		t.Fatal("vertical Steps painted 0 caption pixels to the right of the badge")
+	}
+}
+
+// Vertical Steps with an empty caption skips the caption branch.
+func TestStepsDrawVerticalEmptyCaption(t *testing.T) {
+	const w, h = 80, 80
+	s := NewSteps([]string{"", ""}, 0)
+	s.Orientation = Vertical
+	s.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	s.Draw(newP(makeSurface(w, h), w), DefaultLight())
+}
