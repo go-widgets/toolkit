@@ -6,6 +6,8 @@ package toolkit
 
 import (
 	"sort"
+	"strconv"
+	"strings"
 
 	"github.com/go-widgets/painter"
 )
@@ -37,6 +39,19 @@ import (
 // viewport (len(Items) <= the number of visible rows) rendering is
 // byte-identical to a ListBox with no scrolling at all -- no
 // scrollbar is drawn and the windowing has no visible effect.
+//
+// Drag-to-reorder: setting Reorderable turns the ListBox into both a
+// DragSource and a DropTarget for its own private "listrow:" payload
+// scheme (see ListRowDragPrefix / DragData / AcceptsDrop) -- a host wires
+// its native drag gestures to the widget exactly as it would for any other
+// DragSource/DropTarget pair (see dnd.go), and the ListBox handles
+// tracking the pressed row, painting an insertion-line indicator on
+// EventDragMove, and reordering Items in place on EventDrop, firing
+// OnReorder. When Reorderable is false (the default) none of this is
+// reachable: DragData always returns "", AcceptsDrop always returns
+// false, EventDragMove/EventDragLeave/EventDrop are no-ops, and Draw never
+// paints an indicator -- rendering + behavior are byte-identical to a
+// ListBox with no drag-to-reorder support at all.
 type ListBox struct {
 	Base
 	Items       []string
@@ -44,6 +59,16 @@ type ListBox struct {
 	RowHeight   int // pixels per row; default 18 via NewListBox
 	OnActivate  func(idx int)
 	MultiSelect bool // enable Ctrl/Shift multi-row selection
+
+	// Reorderable enables drag-to-reorder (see the type doc). Default
+	// false leaves the ListBox exactly as it behaved before this feature
+	// existed.
+	Reorderable bool
+
+	// OnReorder fires after a successful drag-reorder with the row's
+	// original index (from) and its final index after the move (to).
+	// Nil-guarded; never called while Reorderable is false.
+	OnReorder func(from, to int)
 
 	// ScrollRow is the index of the row painted at the very top of the
 	// widget's bounds. Reads through Draw/OnEvent are clamped to
@@ -59,6 +84,19 @@ type ListBox struct {
 	// regardless of MultiSelect so callers can drive selection
 	// programmatically before switching the widget into multi mode.
 	selected map[int]bool
+
+	// pressedRow is the row hit by the most recent valid EventClick, or
+	// -1 if none has landed yet. DragData reads it to know which row a
+	// drag beginning "now" should carry -- a host starts a drag right
+	// after the mousedown that already reached us as EventClick, so the
+	// pressed row IS the row being dragged.
+	pressedRow int
+
+	// dropIndicator is the insertion boundary (an index in
+	// [0, len(Items)]) Draw paints a line at while a Reorderable drag
+	// hovers over this ListBox, or -1 when there is none to show. Driven
+	// by EventDragMove/EventDragLeave/EventDrop.
+	dropIndicator int
 }
 
 // NewListBox builds a ListBox containing items. Selected starts at
@@ -66,10 +104,46 @@ type ListBox struct {
 // 7-px font + 11 px vertical padding).
 func NewListBox(items []string) *ListBox {
 	return &ListBox{
-		Items:     items,
-		Selected:  -1,
-		RowHeight: 18,
+		Items:         items,
+		Selected:      -1,
+		RowHeight:     18,
+		pressedRow:    -1,
+		dropIndicator: -1,
 	}
+}
+
+// ListBox is a DragSource + DropTarget when Reorderable (see the type doc).
+var (
+	_ DragSource = (*ListBox)(nil)
+	_ DropTarget = (*ListBox)(nil)
+)
+
+// ListRowDragPrefix is the payload scheme ListBox's drag-to-reorder gesture
+// uses: DragData returns ListRowDragPrefix followed by the pressed row's
+// decimal index, and AcceptsDrop only recognizes payloads carrying this
+// prefix -- so a foreign payload (say, a file path offered to a DropZone)
+// is never mistaken for a reorder drag.
+const ListRowDragPrefix = "listrow:"
+
+// DragData returns the drag-to-reorder payload for the row hit by the most
+// recent EventClick (see pressedRow), or "" when Reorderable is false or no
+// row has been pressed yet.
+func (l *ListBox) DragData() string {
+	if !l.Reorderable || l.pressedRow < 0 {
+		return ""
+	}
+	return ListRowDragPrefix + strconv.Itoa(l.pressedRow)
+}
+
+// AcceptsDrop reports whether payload is a reorder drag carrying ListBox's
+// own "listrow:" scheme. It is always false when Reorderable is false, and
+// false for any payload that doesn't carry the scheme (e.g. a different
+// DragSource's payload).
+func (l *ListBox) AcceptsDrop(payload string) bool {
+	if !l.Reorderable {
+		return false
+	}
+	return strings.HasPrefix(payload, ListRowDragPrefix)
 }
 
 // Draw paints only the rows currently within the scroll window --
@@ -126,12 +200,39 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 		l.drawText(p, cr.X+4, textY, item, ink)
 	}
 
+	if l.Reorderable && l.dropIndicator >= 0 {
+		l.drawDropIndicator(p, theme, cr, start, end)
+	}
+
 	if overflow && canClip {
 		clr.PopClip()
 	}
 	if overflow {
 		l.drawScrollbar(p, theme, r)
 	}
+}
+
+// dropIndicatorHeight is the pixel thickness of the insertion line Draw
+// paints between rows while a Reorderable drag hovers over this ListBox.
+const dropIndicatorHeight = 2
+
+// drawDropIndicator paints the reorder insertion line at dropIndicator's
+// row boundary, straddling the gap between the row above and the row
+// below it. cr is the content rect (full width minus the scrollbar column,
+// if any); start/end are the currently-visible row window as computed by
+// Draw. A boundary outside [start, end] -- the drag is hovering a row
+// that's currently scrolled off-screen -- paints nothing, rather than an
+// indicator jammed against the top/bottom edge.
+func (l *ListBox) drawDropIndicator(p painter.Painter, theme *Theme, cr Rect, start, end int) {
+	rel := l.dropIndicator - start
+	if rel < 0 || rel > end-start {
+		return
+	}
+	y := cr.Y + rel*l.RowHeight - dropIndicatorHeight/2
+	if y < cr.Y {
+		y = cr.Y
+	}
+	fillRect(p, cr.X, y, cr.W, dropIndicatorHeight, theme.Accent)
 }
 
 // visibleRows is how many rows fit vertically within Bounds().H at
@@ -247,7 +348,26 @@ func (l *ListBox) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
 }
 
-// OnEvent dispatches click events: a click at (X, Y) selects the row
+// OnEvent dispatches: EventClick to onClick (selection, unchanged from
+// before this feature); EventDragMove/EventDragLeave/EventDrop to the
+// drag-to-reorder handlers below, which are all no-ops while Reorderable
+// is false, so behavior is byte-identical to a ListBox with no
+// drag-to-reorder support when the feature isn't opted into. Every other
+// event kind is ignored.
+func (l *ListBox) OnEvent(ev Event) {
+	switch ev.Kind {
+	case EventClick:
+		l.onClick(ev)
+	case EventDragMove:
+		l.onDragMove(ev)
+	case EventDragLeave:
+		l.onDragLeave()
+	case EventDrop:
+		l.onDrop(ev)
+	}
+}
+
+// onClick handles a click at (X, Y): it selects the row
 // idx = ScrollRow + Y/RowHeight -- Y/RowHeight locates the row within
 // the visible window, ScrollRow maps that back to an absolute Items
 // index (clamped to the list length); OnActivate fires with that idx.
@@ -265,10 +385,11 @@ func (l *ListBox) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 //     anchor (Selected) and idx, replacing the selection set, and
 //     leaves the anchor itself unchanged so successive Shift-clicks
 //     keep extending/shrinking from the same origin.
-func (l *ListBox) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
-		return
-	}
+//
+// Every valid click also records idx as pressedRow (see DragData) --
+// unconditionally, regardless of Reorderable, since it costs nothing and
+// DragData itself already gates on Reorderable.
+func (l *ListBox) onClick(ev Event) {
 	if l.RowHeight <= 0 {
 		return
 	}
@@ -279,6 +400,7 @@ func (l *ListBox) OnEvent(ev Event) {
 	if idx >= len(l.Items) {
 		return
 	}
+	l.pressedRow = idx
 
 	if l.MultiSelect {
 		switch {
@@ -298,6 +420,155 @@ func (l *ListBox) OnEvent(ev Event) {
 	if l.OnActivate != nil {
 		l.OnActivate(idx)
 	}
+}
+
+// rowInsertionIndex maps a widget-local Y to a drag insertion boundary --
+// the index in [0, len(Items)] a dropped row would land at if inserted
+// there. It locates the row under the pointer via the same
+// ScrollRow-relative math as onClick's hit-test, then picks the near edge
+// of that row: the boundary above it if the pointer is in its top half,
+// the boundary below (row+1) if in its bottom half. That way dragging to
+// the middle of the list targets the nearest gap between rows rather than
+// always "before".
+func (l *ListBox) rowInsertionIndex(y int) int {
+	if l.RowHeight <= 0 {
+		return 0
+	}
+	if y < 0 {
+		y = 0
+	}
+	row := y / l.RowHeight
+	within := y % l.RowHeight
+	idx := l.clampedScrollRow() + row
+	if within >= l.RowHeight/2 {
+		idx++
+	}
+	// idx can never be negative here: y and clampedScrollRow() are both
+	// >= 0 at this point, so row and idx are too -- only the upper bound
+	// needs clamping.
+	if idx > len(l.Items) {
+		idx = len(l.Items)
+	}
+	return idx
+}
+
+// onDragMove updates dropIndicator to the insertion boundary under ev.Y
+// while Reorderable; a no-op otherwise, so dropIndicator (and therefore
+// Draw) never changes when the feature isn't opted into.
+func (l *ListBox) onDragMove(ev Event) {
+	if !l.Reorderable {
+		return
+	}
+	l.dropIndicator = l.rowInsertionIndex(ev.Y)
+}
+
+// onDragLeave clears dropIndicator while Reorderable; a no-op otherwise.
+func (l *ListBox) onDragLeave() {
+	if !l.Reorderable {
+		return
+	}
+	l.dropIndicator = -1
+}
+
+// onDrop implements the reorder-drop half of the DnD lifecycle: while
+// Reorderable, it parses ev.Code as one of this ListBox's own "listrow:"
+// payloads (see DragData/AcceptsDrop), moves that row to the insertion
+// boundary under ev.Y, keeps Selected + the multi-select set pointing at
+// the same logical rows they pointed at before the move, clears
+// dropIndicator, and fires OnReorder with the row's original + final
+// index. A non-Reorderable ListBox, a payload AcceptsDrop rejects (a
+// foreign scheme, or garbage), or an unparsable/out-of-range source row
+// are all silently ignored -- Items is left untouched and OnReorder does
+// not fire.
+func (l *ListBox) onDrop(ev Event) {
+	if !l.Reorderable {
+		return
+	}
+	l.dropIndicator = -1
+	if !l.AcceptsDrop(ev.Code) {
+		return
+	}
+	from, err := strconv.Atoi(strings.TrimPrefix(ev.Code, ListRowDragPrefix))
+	if err != nil || from < 0 || from >= len(l.Items) {
+		return
+	}
+	to := l.rowInsertionIndex(ev.Y)
+	newIdx := l.moveItem(from, to)
+
+	l.Selected = remapReorderedIndex(l.Selected, from, to)
+	if l.selected != nil {
+		remapped := make(map[int]bool, len(l.selected))
+		for i := range l.selected {
+			remapped[remapReorderedIndex(i, from, to)] = true
+		}
+		l.selected = remapped
+	}
+
+	if l.OnReorder != nil {
+		l.OnReorder(from, newIdx)
+	}
+}
+
+// moveTargetIndex is the final resting index of a row moved from "from" to
+// insertion boundary "to" (both in the pre-move index space -- "to" in
+// [0, len(Items)], as produced by rowInsertionIndex). Removing "from"
+// shifts every later boundary left by one, so a boundary past "from" lands
+// one lower than it reads in the original space.
+func moveTargetIndex(from, to int) int {
+	if to > from {
+		return to - 1
+	}
+	return to
+}
+
+// remapReorderedIndex maps idx -- any row's index BEFORE a move -- to its
+// index after moving the row at "from" to boundary "to" (see
+// moveTargetIndex). It mirrors the same remove-then-insert shift moveItem
+// applies to Items, so callers can keep selection state (Selected, the
+// multi-select set) pointing at the same logical rows across a reorder.
+func remapReorderedIndex(idx, from, to int) int {
+	target := moveTargetIndex(from, to)
+	if idx == from {
+		return target
+	}
+	j := idx
+	if idx > from {
+		j--
+	}
+	if j >= target {
+		j++
+	}
+	return j
+}
+
+// moveItem relocates Items[from] to insertion boundary "to" (see
+// rowInsertionIndex), preserving every other row's relative order, and
+// returns the moved row's final index (see moveTargetIndex). The caller
+// (onDrop) only ever passes a "from" already validated against
+// len(Items).
+func (l *ListBox) moveItem(from, to int) int {
+	if from < 0 || from >= len(l.Items) {
+		return from
+	}
+	target := moveTargetIndex(from, to)
+
+	item := l.Items[from]
+	rest := make([]string, 0, len(l.Items)-1)
+	rest = append(rest, l.Items[:from]...)
+	rest = append(rest, l.Items[from+1:]...)
+	if target < 0 {
+		target = 0
+	}
+	if target > len(rest) {
+		target = len(rest)
+	}
+
+	out := make([]string, 0, len(l.Items))
+	out = append(out, rest[:target]...)
+	out = append(out, item)
+	out = append(out, rest[target:]...)
+	l.Items = out
+	return target
 }
 
 // IsSelected reports whether row i is a member of the multi-selection
