@@ -28,9 +28,10 @@ import "github.com/go-widgets/painter"
 // fallback the Button + ListBox + TreeView selected states already
 // use, so the visual reads consistent across widgets).
 //
-// The widget is content-only: no per-cell events, no header sorting,
-// no column drag-resize. A future revision layered on top may add
-// them; the MVP is a passive spreadsheet-shaped viewer.
+// The widget is content-only: it never reorders Rows itself. Header
+// clicks + separator drags are surfaced through OnSort/OnColumnResize
+// so the host (which owns the data model) can re-sort Rows or persist
+// a new column width, then hand the Table back its updated state.
 type Table struct {
 	Base
 	// Columns are the header cells (title + optional pixel width).
@@ -46,6 +47,39 @@ type Table struct {
 	// -1 (or any out-of-range value) means "no selection" and the
 	// zebra stripe pattern paints unmodified.
 	Selected int
+
+	// SortColumn is the 0-indexed column currently sorted, or -1 (or
+	// any out-of-range value) for "no sort" -- Draw skips the ▲/▼
+	// indicator and OnEvent treats every header click as a fresh sort.
+	// The Table never reorders Rows itself; SortColumn/SortAsc only
+	// drive the indicator glyph, matching how Selected only drives the
+	// accent highlight.
+	SortColumn int
+	// SortAsc is the direction of SortColumn: true draws ▲ (ascending),
+	// false draws ▼ (descending). Meaningless while SortColumn is out
+	// of range.
+	SortAsc bool
+	// OnSort fires when a Sortable header cell is clicked. col is the
+	// clicked column; ascending is the NEW direction after the click
+	// (clicking the already-active column toggles it, clicking a new
+	// column resets to ascending). The Table updates SortColumn/SortAsc
+	// itself before firing so the very next Draw shows the indicator;
+	// the host is responsible for re-sorting Rows and handing them back.
+	OnSort func(col int, ascending bool)
+
+	// OnColumnResize fires whenever a separator drag (or a direct
+	// SetColumnWidth call) changes a column's width. newWidth is the
+	// clamped pixel width now in effect.
+	OnColumnResize func(col, newWidth int)
+
+	// resizing + resizingCol track an in-progress separator drag started
+	// by a header-row EventClick on a separator hit (see
+	// ColumnSeparatorAt) and cleared on EventMouseUp. resizing is a
+	// separate bool (rather than resizingCol == -1) so the zero value of
+	// a directly-constructed Table{} -- resizingCol == 0 -- can never be
+	// mistaken for "dragging separator 0".
+	resizing    bool
+	resizingCol int
 }
 
 // TableColumn is one column definition: a header title + an optional
@@ -60,6 +94,10 @@ type TableColumn struct {
 	// the original left-justified behaviour; AlignRight is the natural
 	// choice for numeric columns, AlignCenter for short status flags.
 	Align Align
+	// Sortable opts this column into header-click sorting. The zero
+	// value (false) makes a header click a no-op, so existing callers
+	// that never set it keep the original passive-viewer behaviour.
+	Sortable bool
 }
 
 // TableHeaderHeight is the pixel height of the header row.
@@ -82,9 +120,10 @@ const tableEmptyPlaceholder = "(no data)"
 // renders with plain zebra striping.
 func NewTable(cols []TableColumn, rows [][]string) *Table {
 	return &Table{
-		Columns:  cols,
-		Rows:     rows,
-		Selected: -1,
+		Columns:    cols,
+		Rows:       rows,
+		Selected:   -1,
+		SortColumn: -1,
 	}
 }
 
@@ -103,11 +142,21 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, TableHeaderHeight, theme.SurfaceAlt)
 	// 1-px bottom-edge stroke separates the header from the body.
 	fillRect(p, r.X, r.Y+TableHeaderHeight-1, r.W, 1, theme.Border)
-	// Header cell titles.
+	// Header cell titles. sortCol collapses an out-of-range SortColumn
+	// to -1, mirroring how Draw resolves Selected below -- an
+	// unconstructed or stale Table never crashes drawing an indicator
+	// on a column that no longer exists.
+	sortCol := -1
+	if t.SortColumn >= 0 && t.SortColumn < len(t.Columns) {
+		sortCol = t.SortColumn
+	}
 	hx := r.X
 	hty := r.Y + (TableHeaderHeight-t.glyphHeight())/2
 	for i, col := range t.Columns {
 		t.drawText(p, cellTextX(&t.Base, hx, widths[i], col.Title, col.Align), hty, col.Title, theme.OnBackground)
+		if i == sortCol {
+			drawSortIndicator(p, hx+widths[i]-8, r.Y+TableHeaderHeight/2, t.SortAsc, theme.OnBackground)
+		}
 		hx += widths[i]
 	}
 
@@ -256,4 +305,147 @@ func accentInk(theme *Theme) RGBA {
 		}
 	}
 	return theme.Background
+}
+
+// drawSortIndicator paints a small 5-px-tall ▲ (ascending) / ▼
+// (descending) triangle centred on (cx, cy), using the same
+// row-by-row fillRect technique as Expander/Accordion's disclosure
+// chevron so the glyph reads consistently across the toolkit.
+func drawSortIndicator(p painter.Painter, cx, cy int, ascending bool, ink RGBA) {
+	if ascending {
+		// ▲ : narrow tip at the top, widening to the flat bottom row.
+		for t := 0; t < 5; t++ {
+			fillRect(p, cx-t, cy-2+t, 1+2*t, 1, ink)
+		}
+		return
+	}
+	// ▼ : flat top (widest row), point at bottom (narrow tip) --
+	// identical shape to drawDisclosureChevron's expanded state.
+	for t := 0; t < 5; t++ {
+		fillRect(p, cx-t, cy+2-t, 1+2*t, 1, ink)
+	}
+}
+
+// tableMinColumnWidth is the floor SetColumnWidth clamps to -- small
+// enough to still show a sliver of a cell, large enough that a column
+// can never be dragged into (or past) zero width.
+const tableMinColumnWidth = 20
+
+// tableSeparatorHitTolerance is the +/- pixel band around a column
+// separator's exact x that still counts as a hit, mirroring the
+// forgiving hit-test every pointer-driven drag handle needs (an exact
+// 1-px target is unusable with a mouse).
+const tableSeparatorHitTolerance = 3
+
+// columnAt returns the index of the column whose cell spans localX (a
+// Table-local x coordinate), or -1 if localX falls outside every
+// column -- e.g. an empty Columns slice or a localX past the last
+// column's right edge when the fixed-Width columns overflow the
+// widget's Bounds().
+func (t *Table) columnAt(localX int) int {
+	widths := t.columnWidths(t.Bounds().W)
+	x := 0
+	for i, w := range widths {
+		if localX >= x && localX < x+w {
+			return i
+		}
+		x += w
+	}
+	return -1
+}
+
+// ColumnSeparatorAt returns the 0-based index of the separator under
+// localX (a Table-local x coordinate) -- the separator between column
+// i and column i+1 -- within tableSeparatorHitTolerance pixels, or -1
+// if localX is not near any separator. A single-column (or empty)
+// Table has no separators and always returns -1.
+func (t *Table) ColumnSeparatorAt(localX int) int {
+	if len(t.Columns) < 2 {
+		return -1
+	}
+	widths := t.columnWidths(t.Bounds().W)
+	x := 0
+	for i := 0; i < len(widths)-1; i++ {
+		x += widths[i]
+		if localX >= x-tableSeparatorHitTolerance && localX <= x+tableSeparatorHitTolerance {
+			return i
+		}
+	}
+	return -1
+}
+
+// SetColumnWidth pins column col to a fixed pixel width w (clamped to
+// tableMinColumnWidth), then fires OnColumnResize with the clamped
+// value. Like a Paned's MoveHandle, this is the direct, host-callable
+// entry point a drag handler (internal or external) drives; an
+// out-of-range col is a no-op. Setting a width converts an "auto"
+// column into a fixed one, exactly as dragging a Paned's handle turns
+// its 50/50 default into an explicit Position.
+func (t *Table) SetColumnWidth(col, w int) {
+	if col < 0 || col >= len(t.Columns) {
+		return
+	}
+	if w < tableMinColumnWidth {
+		w = tableMinColumnWidth
+	}
+	t.Columns[col].Width = w
+	if t.OnColumnResize != nil {
+		t.OnColumnResize(col, w)
+	}
+}
+
+// toggleSort updates SortColumn/SortAsc for a header click on col --
+// re-clicking the active column flips SortAsc, clicking a new column
+// resets to ascending -- then fires OnSort with the resulting
+// direction. The Table never touches Rows itself; the host re-sorts
+// and hands the Table its updated data.
+func (t *Table) toggleSort(col int) {
+	if t.SortColumn == col {
+		t.SortAsc = !t.SortAsc
+	} else {
+		t.SortColumn = col
+		t.SortAsc = true
+	}
+	if t.OnSort != nil {
+		t.OnSort(col, t.SortAsc)
+	}
+}
+
+// OnEvent implements header-click sorting + separator drag-resize.
+// The toolkit's event model is click-only (see Paned): a resize drag
+// begins on an EventClick that lands on a separator (ColumnSeparatorAt),
+// is driven tick-by-tick by EventMouseDrag while the button stays down,
+// and ends on EventMouseUp -- the same grab/move/release state machine
+// RangeSlider uses for its thumbs. A click that lands on a header cell
+// instead of a separator sorts that column (if Sortable); a click
+// below the header row is ignored (the Table has no other interactive
+// surface).
+func (t *Table) OnEvent(ev Event) {
+	switch ev.Kind {
+	case EventClick:
+		if ev.Y < 0 || ev.Y >= TableHeaderHeight {
+			return
+		}
+		if sep := t.ColumnSeparatorAt(ev.X); sep >= 0 {
+			t.resizing = true
+			t.resizingCol = sep
+			return
+		}
+		col := t.columnAt(ev.X)
+		if col >= 0 && col < len(t.Columns) && t.Columns[col].Sortable {
+			t.toggleSort(col)
+		}
+	case EventMouseDrag:
+		if !t.resizing {
+			return
+		}
+		widths := t.columnWidths(t.Bounds().W)
+		left := 0
+		for i := 0; i < t.resizingCol; i++ {
+			left += widths[i]
+		}
+		t.SetColumnWidth(t.resizingCol, ev.X-left)
+	case EventMouseUp:
+		t.resizing = false
+	}
 }
