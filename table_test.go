@@ -794,6 +794,383 @@ func TestTableResizeDragOnNonFirstSeparatorSumsLeadingWidths(t *testing.T) {
 	}
 }
 
+// --- Multi-row selection: model methods --------------------------------
+
+func TestIsRowSelectedDefaultFalse(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"x"}, {"y"}})
+	if tb.IsRowSelected(0) {
+		t.Fatal("fresh Table reports row 0 selected")
+	}
+	if tb.IsRowSelected(-1) {
+		t.Fatal("negative index must never report selected")
+	}
+}
+
+func TestSetRowSelectionReplacesAndDropsNegative(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"a"}, {"b"}, {"c"}})
+	tb.SetRowSelection(0, 2, -5)
+	if !tb.IsRowSelected(0) || !tb.IsRowSelected(2) || tb.IsRowSelected(1) {
+		t.Fatalf("selection after SetRowSelection(0,2,-5) wrong: %v", tb.SelectedRows())
+	}
+	// A second call fully replaces the first.
+	tb.SetRowSelection(1)
+	if tb.IsRowSelected(0) || tb.IsRowSelected(2) || !tb.IsRowSelected(1) {
+		t.Fatalf("SetRowSelection did not replace prior selection: %v", tb.SelectedRows())
+	}
+	// No-args (or all-negative) clears.
+	tb.SetRowSelection()
+	if got := tb.SelectedRows(); got != nil {
+		t.Fatalf("SetRowSelection() = %v, want nil", got)
+	}
+	tb.SetRowSelection(1)
+	tb.SetRowSelection(-1, -2)
+	if got := tb.SelectedRows(); got != nil {
+		t.Fatalf("SetRowSelection(all-negative) = %v, want nil", got)
+	}
+}
+
+func TestClearRowSelection(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"a"}, {"b"}})
+	tb.SetRowSelection(0, 1)
+	tb.ClearRowSelection()
+	if got := tb.SelectedRows(); got != nil {
+		t.Fatalf("SelectedRows after Clear = %v, want nil", got)
+	}
+	if tb.IsRowSelected(0) || tb.IsRowSelected(1) {
+		t.Fatal("rows still report selected after ClearRowSelection")
+	}
+}
+
+func TestToggleRowSelect(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"a"}, {"b"}})
+	tb.ToggleRowSelect(0)
+	if !tb.IsRowSelected(0) {
+		t.Fatal("row 0 not selected after first toggle")
+	}
+	tb.ToggleRowSelect(0)
+	if tb.IsRowSelected(0) {
+		t.Fatal("row 0 still selected after second toggle")
+	}
+	// Negative index is a documented no-op -- must not panic or seed
+	// a phantom entry.
+	tb.ToggleRowSelect(-1)
+	if got := tb.SelectedRows(); got != nil {
+		t.Fatalf("SelectedRows after negative toggle = %v, want nil", got)
+	}
+}
+
+func TestToggleRowSelectOnFreshTableWithNilMap(t *testing.T) {
+	// Covers the selectedRows == nil branch of ToggleRowSelect -- a
+	// Table constructed directly (not through NewTable) still works.
+	tb := &Table{Columns: []TableColumn{{Title: "A"}}, Rows: [][]string{{"a"}}}
+	tb.ToggleRowSelect(0)
+	if !tb.IsRowSelected(0) {
+		t.Fatal("ToggleRowSelect on nil selectedRows map failed to select")
+	}
+}
+
+func TestSelectedRowsAscendingOrder(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"a"}, {"b"}, {"c"}, {"d"}})
+	tb.SetRowSelection(3, 0, 2)
+	got := tb.SelectedRows()
+	want := []int{0, 2, 3}
+	if len(got) != len(want) {
+		t.Fatalf("SelectedRows() = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("SelectedRows() = %v, want %v", got, want)
+		}
+	}
+}
+
+func TestSelectRowRangeBothDirections(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"a"}, {"b"}, {"c"}, {"d"}, {"e"}})
+	tb.SelectRowRange(1, 3)
+	if got := tb.SelectedRows(); len(got) != 3 || got[0] != 1 || got[2] != 3 {
+		t.Fatalf("SelectRowRange(1,3) = %v, want [1 2 3]", got)
+	}
+	// Reversed endpoints (b < a) must yield the same inclusive range.
+	tb.SelectRowRange(4, 2)
+	if got := tb.SelectedRows(); len(got) != 3 || got[0] != 2 || got[2] != 4 {
+		t.Fatalf("SelectRowRange(4,2) = %v, want [2 3 4]", got)
+	}
+	// A negative low endpoint (e.g. an unset -1 anchor) clamps to 0.
+	tb.SelectRowRange(-1, 1)
+	if got := tb.SelectedRows(); len(got) != 2 || got[0] != 0 || got[1] != 1 {
+		t.Fatalf("SelectRowRange(-1,1) = %v, want [0 1]", got)
+	}
+	// Both endpoints negative -- empty selection, no panic.
+	tb.SelectRowRange(-5, -1)
+	if got := tb.SelectedRows(); got != nil {
+		t.Fatalf("SelectRowRange(-5,-1) = %v, want nil", got)
+	}
+}
+
+// --- Multi-row selection: OnEvent body-row clicks -----------------------
+
+func TestMultiSelectDisabledBodyClickIsNoOp(t *testing.T) {
+	// MultiSelect defaults false -- a body-row click must be a total
+	// no-op, exactly matching pre-MultiSelect behaviour.
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	tb.Selected = -1
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 5})
+	if tb.Selected != -1 {
+		t.Fatalf("Selected mutated by body click w/o MultiSelect: %d", tb.Selected)
+	}
+	if got := tb.SelectedRows(); got != nil {
+		t.Fatalf("SelectedRows mutated by body click w/o MultiSelect: %v", got)
+	}
+}
+
+func TestMultiSelectPlainClickSelectsOnlyThatRowAndMovesAnchor(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	tb.SetRowSelection(0, 2) // pre-seed a selection to prove it gets cleared
+
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + TableRowHeight + 1}) // row 1
+	if tb.Selected != 1 {
+		t.Fatalf("Selected = %d, want 1 (anchor moved to plain-clicked row)", tb.Selected)
+	}
+	got := tb.SelectedRows()
+	if len(got) != 1 || got[0] != 1 {
+		t.Fatalf("SelectedRows after plain click = %v, want [1]", got)
+	}
+}
+
+func TestMultiSelectCtrlClickTogglesWithoutMovingAnchor(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	tb.Selected = 0
+	tb.SetRowSelection(0)
+
+	// Ctrl-click row 2 adds it without disturbing the anchor.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 2*TableRowHeight + 1, Ctrl: true})
+	if tb.Selected != 0 {
+		t.Fatalf("Selected = %d, want 0 (anchor unmoved by Ctrl-click)", tb.Selected)
+	}
+	got := tb.SelectedRows()
+	if len(got) != 2 || got[0] != 0 || got[1] != 2 {
+		t.Fatalf("SelectedRows after Ctrl-click add = %v, want [0 2]", got)
+	}
+
+	// Ctrl-click row 0 again removes it (still selected).
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 1, Ctrl: true})
+	got = tb.SelectedRows()
+	if len(got) != 1 || got[0] != 2 {
+		t.Fatalf("SelectedRows after Ctrl-click remove = %v, want [2]", got)
+	}
+}
+
+func TestMultiSelectShiftClickRangeBothDirections(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}, {"r3"}, {"r4"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+
+	// Plain click sets the anchor at row 1.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + TableRowHeight + 1})
+	if tb.Selected != 1 {
+		t.Fatalf("anchor after plain click = %d, want 1", tb.Selected)
+	}
+	// Shift-click row 3 -- range extends DOWNWARD from the anchor.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 3*TableRowHeight + 1, Shift: true})
+	if tb.Selected != 1 {
+		t.Fatalf("anchor moved by Shift-click: %d, want unchanged 1", tb.Selected)
+	}
+	got := tb.SelectedRows()
+	if len(got) != 3 || got[0] != 1 || got[2] != 3 {
+		t.Fatalf("SelectedRows after downward Shift-click = %v, want [1 2 3]", got)
+	}
+
+	// A second Shift-click, row 0 -- range recomputed UPWARD from the
+	// SAME anchor (not cumulative with the previous range).
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 1, Shift: true})
+	got = tb.SelectedRows()
+	if len(got) != 2 || got[0] != 0 || got[1] != 1 {
+		t.Fatalf("SelectedRows after upward Shift-click = %v, want [0 1]", got)
+	}
+}
+
+func TestMultiSelectShiftClickWithNoPriorAnchorRangesFromTop(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	// Selected starts at -1 (NewTable default) -- Shift-click row 2
+	// must clamp the range to start at 0.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 2*TableRowHeight + 1, Shift: true})
+	got := tb.SelectedRows()
+	if len(got) != 3 || got[0] != 0 || got[2] != 2 {
+		t.Fatalf("SelectedRows after Shift-click w/ no anchor = %v, want [0 1 2]", got)
+	}
+}
+
+func TestMultiSelectBodyClickPastLastRowIgnored(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	// Y falls in the body area but past the last row's band.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 2*TableRowHeight + 5})
+	if got := tb.SelectedRows(); got != nil {
+		t.Fatalf("SelectedRows after past-last-row click = %v, want nil", got)
+	}
+	if tb.Selected != -1 {
+		t.Fatalf("Selected mutated by past-last-row click: %d", tb.Selected)
+	}
+}
+
+func TestMultiSelectModifierBodyClickDoesNotTriggerSortOrResize(t *testing.T) {
+	// A Ctrl/Shift click on a BODY row must never be mistaken for a
+	// header sort or a separator resize -- those only ever look at
+	// ev.Y < TableHeaderHeight, regardless of modifiers.
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 50, Sortable: true},
+		{Title: "B", Width: 50, Sortable: true},
+	}, [][]string{{"a0", "b0"}, {"a1", "b1"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	sortFired := false
+	tb.OnSort = func(col int, asc bool) { sortFired = true }
+	resizeFired := false
+	tb.OnColumnResize = func(col, w int) { resizeFired = true }
+
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 1, Ctrl: true})
+	tb.OnEvent(Event{Kind: EventClick, X: 50, Y: TableHeaderHeight + TableRowHeight + 1, Shift: true})
+	if sortFired {
+		t.Fatal("OnSort fired for a modifier body-row click")
+	}
+	if resizeFired || tb.resizing {
+		t.Fatal("resize state entered for a modifier body-row click")
+	}
+	if got := tb.SelectedRows(); len(got) == 0 {
+		t.Fatalf("modifier body clicks produced no selection: %v", got)
+	}
+}
+
+func TestMultiSelectHeaderSortAndResizeStillWorkWithMultiSelectTrue(t *testing.T) {
+	// Regression: enabling MultiSelect must not disturb existing
+	// header-click sort or separator-drag resize behaviour.
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 60, Sortable: true},
+		{Title: "B", Width: 60, Sortable: true},
+	}, [][]string{{"a0", "b0"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
+
+	var gotCol int
+	var gotAsc bool
+	tb.OnSort = func(col int, asc bool) { gotCol, gotAsc = col, asc }
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if gotCol != 0 || !gotAsc {
+		t.Fatalf("sort with MultiSelect=true: got (%d,%v), want (0,true)", gotCol, gotAsc)
+	}
+
+	var gotRCol, gotRW int
+	tb.OnColumnResize = func(col, w int) { gotRCol, gotRW = col, w }
+	tb.OnEvent(Event{Kind: EventClick, X: 60, Y: 5})
+	tb.OnEvent(Event{Kind: EventMouseDrag, X: 90, Y: 5})
+	if gotRCol != 0 || gotRW != 90 {
+		t.Fatalf("resize with MultiSelect=true: got (%d,%d), want (0,90)", gotRCol, gotRW)
+	}
+	tb.OnEvent(Event{Kind: EventMouseUp, X: 90, Y: 5})
+}
+
+func TestTableOnEventClickNegativeYIgnored(t *testing.T) {
+	// Covers the ev.Y < 0 guard at the very top of the EventClick
+	// branch -- a coordinate a container might hand down during an
+	// edge-case hit-test translation must never panic or fall through
+	// to header/body handling.
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100, Sortable: true}},
+		[][]string{{"r0"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	called := false
+	tb.OnSort = func(col int, asc bool) { called = true }
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: -5})
+	if called {
+		t.Fatal("OnSort fired for a negative-Y click")
+	}
+	if tb.Selected != -1 || tb.SelectedRows() != nil {
+		t.Fatalf("selection mutated by negative-Y click: Selected=%d rows=%v", tb.Selected, tb.SelectedRows())
+	}
+}
+
+func TestRowAtAboveHeaderAndPastLastRow(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, [][]string{{"a"}, {"b"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	if got := tb.rowAt(0); got != -1 {
+		t.Fatalf("rowAt(0) [in header] = %d, want -1", got)
+	}
+	if got := tb.rowAt(TableHeaderHeight - 1); got != -1 {
+		t.Fatalf("rowAt(header bottom edge) = %d, want -1", got)
+	}
+	if got := tb.rowAt(TableHeaderHeight + 2*TableRowHeight); got != -1 {
+		t.Fatalf("rowAt(past last row) = %d, want -1", got)
+	}
+	if got := tb.rowAt(TableHeaderHeight + TableRowHeight/2); got != 0 {
+		t.Fatalf("rowAt(row 0 centre) = %d, want 0", got)
+	}
+}
+
+// --- Multi-row selection: Draw rendering --------------------------------
+
+func TestTableDrawMultiSelectHighlightsEverySelectedRow(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.MultiSelect = true
+	tb.Selected = -1
+	tb.SetRowSelection(0, 2)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	theme := DefaultLight()
+	buf := makeTableSurface(100, 200)
+	tb.Draw(newP(buf, 100), theme)
+
+	if got := tableRowCentrePixel(buf, 100, 50, 0, 0); got != theme.Accent {
+		t.Fatalf("row 0 fill = %+v, want Accent (multi-selected)", got)
+	}
+	if got := tableRowCentrePixel(buf, 100, 50, 0, 2); got != theme.Accent {
+		t.Fatalf("row 2 fill = %+v, want Accent (multi-selected)", got)
+	}
+	// Row 1 is neither Selected nor in the selection set -- plain
+	// zebra (odd index -> Background).
+	if got := tableRowCentrePixel(buf, 100, 50, 0, 1); got != theme.Background {
+		t.Fatalf("row 1 fill = %+v, want Background (unselected)", got)
+	}
+}
+
+func TestTableDrawMultiSelectFalseIgnoresSelectedRowsSet(t *testing.T) {
+	// Even if selectedRows was seeded directly (e.g. via the host API
+	// before flipping MultiSelect back off), Draw with MultiSelect
+	// false must ignore it entirely -- byte-identical to pre-feature
+	// rendering, driven only by Selected.
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}, {"r2"}})
+	tb.SetRowSelection(0, 2)
+	tb.Selected = 1
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	theme := DefaultLight()
+	buf := makeTableSurface(100, 200)
+	tb.Draw(newP(buf, 100), theme)
+
+	if got := tableRowCentrePixel(buf, 100, 50, 0, 1); got != theme.Accent {
+		t.Fatalf("row 1 (Selected) fill = %+v, want Accent", got)
+	}
+	if got := tableRowCentrePixel(buf, 100, 50, 0, 0); got != theme.Surface {
+		t.Fatalf("row 0 fill = %+v, want Surface (selectedRows ignored w/ MultiSelect=false)", got)
+	}
+	if got := tableRowCentrePixel(buf, 100, 50, 0, 2); got != theme.Surface {
+		t.Fatalf("row 2 fill = %+v, want Surface (selectedRows ignored w/ MultiSelect=false)", got)
+	}
+}
+
 func TestTableSeparatorClickTakesPriorityOverSort(t *testing.T) {
 	// A header cell that is ALSO Sortable must not fire OnSort when the
 	// click actually lands on the adjacent separator -- resize wins.
