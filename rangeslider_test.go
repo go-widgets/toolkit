@@ -70,6 +70,26 @@ func TestRangeSliderClickGrabsNearestHandle(t *testing.T) {
 	}
 }
 
+func TestRangeSliderHandlePickIsLocalAtNonZeroBounds(t *testing.T) {
+	// Regression: at a non-zero X, clicking near the High thumb must grab High,
+	// not Low. The bug compared local ev.X to absolute thumb centres, so a click
+	// near High (local) looked nearer Low (absolute) and grabbed the wrong one.
+	s := NewRangeSlider(0, 100, 20, 80)
+	s.SetBounds(Rect{X: 100, Y: 0, W: 200, H: scaleThumbSize})
+	// High thumb's local centre ≈ 155 (abs 247 − origin 100 + thumb/2).
+	s.OnEvent(Event{Kind: EventClick, X: 150})
+	if s.active != 2 {
+		t.Fatalf("active = %d, want 2 (High) — handle-pick used absolute coords", s.active)
+	}
+	// High grabbed → Low is untouched; the buggy path would have snapped Low up.
+	if s.Low != 20 {
+		t.Errorf("Low moved to %v (wrong handle grabbed), want 20", s.Low)
+	}
+	if s.High >= 80 || s.High < 70 {
+		t.Errorf("High = %v, want it dragged near the click (~77)", s.High)
+	}
+}
+
 func TestRangeSliderHandlesDoNotCross(t *testing.T) {
 	s := newTestRangeSlider()
 
