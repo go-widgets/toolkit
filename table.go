@@ -82,6 +82,19 @@ type Table struct {
 	// MultiSelect on.
 	selectedRows map[int]bool
 
+	// ScrollRow is the 0-indexed body row currently painted at the top
+	// of the body (the header itself never scrolls). Draw + rowAt both
+	// read it through clampScrollRow, so an out-of-range value set
+	// directly (or left stale after Rows shrinks) never windows past
+	// [0, maxScrollRow()] -- the same defensive-collapse idiom Selected
+	// and SortColumn already use. The zero value (0) is the original,
+	// pre-feature behaviour: the body starts at row 0, and if every row
+	// fits within Bounds().H, Draw renders byte-identically to before
+	// this field existed (no scrollbar, no windowing). Use ScrollTo /
+	// ScrollBy / scrollToSelected to move it -- they keep the field
+	// itself clamped, unlike a raw assignment.
+	ScrollRow int
+
 	// SortColumn is the 0-indexed column currently sorted, or -1 (or
 	// any out-of-range value) for "no sort" -- Draw skips the ▲/▼
 	// indicator and OnEvent treats every header click as a fresh sort.
@@ -170,7 +183,8 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
-	widths := t.columnWidths(r.W)
+	overflow := t.bodyOverflows()
+	widths := t.columnWidths(t.contentWidth())
 
 	// --- Header row ------------------------------------------------
 	fillRect(p, r.X, r.Y, r.W, TableHeaderHeight, theme.SurfaceAlt)
@@ -213,8 +227,32 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		selRow = t.Selected
 	}
 	onAccent := accentInk(theme)
-	for i, row := range t.Rows {
-		y := bodyY + i*TableRowHeight
+	// scroll is the top visible row, defensively re-collapsed from
+	// ScrollRow exactly like selRow/sortCol above. end is one past the
+	// last row the current body height can show; when every row fits
+	// (the common, pre-feature case) end == len(t.Rows) and scroll == 0,
+	// so this loop paints identically to the un-windowed original.
+	scroll := t.clampScrollRow()
+	end := scroll + t.bodyVisibleRows()
+	if end > len(t.Rows) {
+		end = len(t.Rows)
+	}
+	// Clip the body to its own rect before painting rows. bodyVisibleRows
+	// rounds UP, so when Bounds().H isn't an exact multiple of
+	// TableRowHeight the last windowed row is only partially inside the
+	// widget -- without a clip its background/text would spill past
+	// r.Y+r.H onto whatever the host draws below this widget, and (once
+	// the scrollbar is painted afterwards) would already have overdrawn
+	// where the thumb belongs. Back-ends that can't clip just render
+	// unclipped, the same graceful degradation ScrollView already relies
+	// on for its child.
+	clr, canClip := p.(painter.Clipper)
+	if canClip {
+		clr.PushClip(Rect{X: r.X, Y: bodyY, W: r.W, H: r.Y + r.H - bodyY})
+	}
+	for i := scroll; i < end; i++ {
+		row := t.Rows[i]
+		y := bodyY + (i-scroll)*TableRowHeight
 		bg := theme.Surface
 		ink := theme.OnSurface
 		// Highlighted covers both the single-row anchor (always) and,
@@ -227,7 +265,9 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 			bg = theme.Accent
 			ink = onAccent
 		case i%2 == 1:
-			// Zebra: row 0 -> Surface, row 1 -> Background, ...
+			// Zebra keyed on the row's ABSOLUTE index i (not its
+			// on-screen position) so scrolling never shifts which rows
+			// read as odd/even.
 			bg = theme.Background
 		}
 		fillRect(p, r.X, y, r.W, TableRowHeight, bg)
@@ -240,6 +280,9 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 			cx += widths[j]
 		}
 	}
+	if canClip {
+		clr.PopClip()
+	}
 
 	// --- Column separators ----------------------------------------
 	// One 1-px vertical stroke between adjacent columns, spanning the
@@ -250,6 +293,47 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		sepX += widths[i]
 		fillRect(p, sepX, r.Y, 1, r.H, theme.Border)
 	}
+
+	// --- Vertical scrollbar (right edge, body only) -----------------
+	// Only drawn while the body actually overflows -- with all rows
+	// fitting (the byte-identical case) this is skipped entirely, same
+	// as the pre-feature Table never painting one.
+	if overflow {
+		t.drawScrollbar(p, theme, r, bodyY, scroll)
+	}
+}
+
+// tableScrollbarThumbMin is the pixel floor a scrollbar thumb is
+// clamped to, mirroring ScrollView's own floor so a huge row count
+// never shrinks the thumb into an unclickable sliver.
+const tableScrollbarThumbMin = 8
+
+// drawScrollbar paints the right-edge scrollbar track + thumb over the
+// body rows -- the header sits above it and never scrolls, so the
+// track spans only [bodyY, r.Y+r.H). It reuses ScrollView.Draw's exact
+// pixel-proportion formula for the vertical thumb, substituting "rows
+// converted to pixels" (len(t.Rows)*TableRowHeight, scroll*TableRowHeight)
+// for ScrollView's arbitrary child content height/offset. Only called
+// by Draw while bodyOverflows() is true, which guarantees trackH > 0
+// and contentH > trackH (see bodyOverflows), so no defensive
+// zero/negative-denominator guard is needed here.
+func (t *Table) drawScrollbar(p painter.Painter, theme *Theme, r Rect, bodyY, scroll int) {
+	trackX := r.X + r.W - scrollbarWidth
+	trackH := r.Y + r.H - bodyY
+	fillRect(p, trackX, bodyY, scrollbarWidth, trackH, theme.SurfaceAlt)
+	contentH := len(t.Rows) * TableRowHeight
+	thumbH := trackH * trackH / contentH
+	if thumbH < tableScrollbarThumbMin {
+		thumbH = tableScrollbarThumbMin
+	}
+	// maxScrollRow() is guaranteed > 0 here (bodyOverflows() already
+	// established len(t.Rows) > bodyVisibleRows(), so the raw
+	// len(t.Rows)-bodyVisibleRows() difference maxScrollRow clamps is
+	// already positive) -- no divide-by-zero guard needed on that front,
+	// and contentH > trackH (established above) keeps the denominator
+	// below positive too.
+	thumbY := bodyY + scroll*TableRowHeight*(trackH-thumbH)/(contentH-trackH)
+	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
 }
 
 // columnWidths distributes the total pixel budget across every column.
@@ -382,7 +466,7 @@ const tableSeparatorHitTolerance = 3
 // column's right edge when the fixed-Width columns overflow the
 // widget's Bounds().
 func (t *Table) columnAt(localX int) int {
-	widths := t.columnWidths(t.Bounds().W)
+	widths := t.columnWidths(t.contentWidth())
 	x := 0
 	for i, w := range widths {
 		if localX >= x && localX < x+w {
@@ -402,7 +486,7 @@ func (t *Table) ColumnSeparatorAt(localX int) int {
 	if len(t.Columns) < 2 {
 		return -1
 	}
-	widths := t.columnWidths(t.Bounds().W)
+	widths := t.columnWidths(t.contentWidth())
 	x := 0
 	for i := 0; i < len(widths)-1; i++ {
 		x += widths[i]
@@ -430,6 +514,120 @@ func (t *Table) SetColumnWidth(col, w int) {
 	t.Columns[col].Width = w
 	if t.OnColumnResize != nil {
 		t.OnColumnResize(col, w)
+	}
+}
+
+// bodyVisibleRows is how many body-row slots the widget's current
+// Bounds().H offers below the fixed header, rounded UP -- the last
+// slot may show only a partial row rather than leave a gap when the
+// height isn't an exact multiple of TableRowHeight. Draw clips the
+// body to Bounds() so that partial row never paints past the widget's
+// own edge (see the PushClip call in Draw).
+func (t *Table) bodyVisibleRows() int {
+	h := t.Bounds().H - TableHeaderHeight
+	if h <= 0 {
+		return 0
+	}
+	return (h + TableRowHeight - 1) / TableRowHeight
+}
+
+// bodyOverflows reports whether Rows holds more entries than fit in
+// the body at the widget's current height -- the single condition
+// that gates the right-edge scrollbar's presence, and the column
+// width reservation contentWidth carves out for it, in Draw. A body
+// with no visible row capacity at all (Bounds().H shorter than the
+// header) never "overflows" -- there is no body pixel row for a
+// scrollbar track to occupy.
+func (t *Table) bodyOverflows() bool {
+	vis := t.bodyVisibleRows()
+	return vis > 0 && len(t.Rows) > vis
+}
+
+// maxScrollRow is the highest legal ScrollRow: enough rows short of
+// the end that the body still shows a full window of bodyVisibleRows
+// rows, or 0 once Rows no longer overflows (including the empty-Rows
+// case) -- exactly the "[0, max(0, len(Rows)-visibleRows)]" range
+// ScrollRow's doc promises.
+func (t *Table) maxScrollRow() int {
+	max := len(t.Rows) - t.bodyVisibleRows()
+	if max < 0 {
+		max = 0
+	}
+	return max
+}
+
+// clampScrollRow returns ScrollRow collapsed into [0, maxScrollRow()]
+// -- the same "an out-of-range field never crashes Draw" idiom
+// Selected + SortColumn already use, applied read-only here so a
+// stale or directly-assigned ScrollRow (e.g. left over after Rows
+// shrinks) never windows past the valid row range. It does NOT mutate
+// t.ScrollRow; ScrollTo/ScrollBy/scrollToSelected are the API that
+// keeps the field itself clamped going forward.
+func (t *Table) clampScrollRow() int {
+	s := t.ScrollRow
+	if s < 0 {
+		s = 0
+	}
+	if max := t.maxScrollRow(); s > max {
+		s = max
+	}
+	return s
+}
+
+// contentWidth is the pixel budget columnWidths distributes for both
+// the header + body: the widget's full width, minus a scrollbarWidth
+// reservation on the right edge while the body overflows vertically.
+// Draw, columnAt, ColumnSeparatorAt and the resize-drag branch of
+// OnEvent all resolve column geometry through this one spot so the
+// header, body, hit-testing and the scrollbar always agree on where
+// every column + separator sits.
+func (t *Table) contentWidth() int {
+	w := t.Bounds().W
+	if t.bodyOverflows() {
+		w -= scrollbarWidth
+		if w < 0 {
+			w = 0
+		}
+	}
+	return w
+}
+
+// ScrollTo sets ScrollRow to row, clamped into [0, maxScrollRow()] --
+// the direct, host-callable entry point a scrollbar drag or a
+// PageUp/PageDown key handler drives, mirroring how SetColumnWidth is
+// the direct entry point a separator drag drives.
+func (t *Table) ScrollTo(row int) {
+	t.ScrollRow = row
+	t.ScrollRow = t.clampScrollRow()
+}
+
+// ScrollBy adjusts ScrollRow by delta rows (positive scrolls down,
+// negative scrolls up), clamped the same way as ScrollTo. A mouse
+// wheel or arrow-key handler calls this directly.
+func (t *Table) ScrollBy(delta int) {
+	t.ScrollTo(t.ScrollRow + delta)
+}
+
+// scrollToSelected nudges ScrollRow just far enough to bring Selected
+// back into the visible window: up if Selected sits above ScrollRow,
+// down if it sits at or past the bottom of the window, otherwise
+// ScrollRow is left untouched. Selected < 0 ("no selection") is a
+// guarded no-op -- without it the arithmetic below would compute a
+// bogus target from a -1 row index, the same off-by-one that panicked
+// the tui Table's equivalent helper with "index out of range [-1]".
+func (t *Table) scrollToSelected() {
+	if t.Selected < 0 {
+		return
+	}
+	vis := t.bodyVisibleRows()
+	if vis <= 0 {
+		return
+	}
+	switch {
+	case t.Selected < t.ScrollRow:
+		t.ScrollTo(t.Selected)
+	case t.Selected >= t.ScrollRow+vis:
+		t.ScrollTo(t.Selected - vis + 1)
 	}
 }
 
@@ -522,12 +720,15 @@ func (t *Table) SelectRowRange(a, b int) {
 // own top edge and therefore still including the header offset), or
 // -1 if localY lands in/above the header or at/past the last row --
 // the same "collapse to -1 outside the valid range" idiom columnAt
-// and ColumnSeparatorAt already use for x coordinates.
+// and ColumnSeparatorAt already use for x coordinates. The offset
+// within the body is added to clampScrollRow() (not raw ScrollRow) so
+// a click always resolves to whatever row Draw actually painted at
+// that y, even with an out-of-range ScrollRow.
 func (t *Table) rowAt(localY int) int {
 	if localY < TableHeaderHeight {
 		return -1
 	}
-	row := (localY - TableHeaderHeight) / TableRowHeight
+	row := t.clampScrollRow() + (localY-TableHeaderHeight)/TableRowHeight
 	if row < 0 || row >= len(t.Rows) {
 		return -1
 	}
@@ -607,7 +808,7 @@ func (t *Table) OnEvent(ev Event) {
 		if !t.resizing {
 			return
 		}
-		widths := t.columnWidths(t.Bounds().W)
+		widths := t.columnWidths(t.contentWidth())
 		left := 0
 		for i := 0; i < t.resizingCol; i++ {
 			left += widths[i]
