@@ -103,10 +103,18 @@ const (
 // Event is one input event delivered to a widget. The parent container
 // translated mouse coordinates into widget-local pixels; Code is the
 // key/char text for keyboard events.
+//
+// Ctrl and Shift report whether those modifier keys were held when the event
+// was produced. They are meaningful on any event kind but most useful on
+// EventClick, where they drive multi-selection (Ctrl-click toggles a row,
+// Shift-click extends a range from the anchor). Hosts that don't track
+// modifiers simply leave them false, which preserves the original
+// single-selection behaviour everywhere.
 type Event struct {
-	Kind EventKind
-	X, Y int
-	Code string
+	Kind        EventKind
+	X, Y        int
+	Code        string
+	Ctrl, Shift bool
 }
 
 // Widget is the toolkit's single core abstraction. Every widget --
