@@ -6,18 +6,34 @@ package toolkit
 
 import "github.com/go-widgets/painter"
 
+// TooltipPlacement selects which side of the anchor the bubble sits on. Below
+// is the zero value (the original behaviour).
+type TooltipPlacement int
+
+const (
+	// PlaceBelow puts the bubble under the anchor (the default).
+	PlaceBelow TooltipPlacement = iota
+	// PlaceAbove puts the bubble over the anchor.
+	PlaceAbove
+	// PlaceLeft puts the bubble to the anchor's left.
+	PlaceLeft
+	// PlaceRight puts the bubble to the anchor's right.
+	PlaceRight
+)
+
 // Tooltip is a small text bubble shown near the cursor when the user
 // hovers over a target widget. The host app drives Visible + Anchor
 // (typically toggled by a mouse-enter/leave handler with a 500 ms
 // delay); the toolkit's role is the rendering geometry.
 //
-// Auto-sized to the Text width + 8 px horizontal padding + 6 px
-// vertical padding; appears just below/right of (Anchor.X, Anchor.Y).
+// Auto-sized to the Text width + padding; positioned on the side of the anchor
+// chosen by Placement (below by default).
 type Tooltip struct {
 	Base
-	Text    string
-	Visible bool
-	Anchor  Rect // widget the tooltip belongs to; positions below it
+	Text      string
+	Visible   bool
+	Placement TooltipPlacement
+	Anchor    Rect // widget the tooltip belongs to
 }
 
 // TooltipPadX / TooltipPadY are the inner text-padding constants.
@@ -35,12 +51,18 @@ func (t *Tooltip) Show(anchor Rect) {
 	t.Anchor = anchor
 	w := TextWidth(t.Text) + 2*TooltipPadX
 	h := GlyphHeight() + 2*TooltipPadY
-	t.SetBounds(Rect{
-		X: anchor.X,
-		Y: anchor.Y + anchor.H + 2,
-		W: w,
-		H: h,
-	})
+	var x, y int
+	switch t.Placement {
+	case PlaceAbove:
+		x, y = anchor.X, anchor.Y-h-2
+	case PlaceLeft:
+		x, y = anchor.X-w-2, anchor.Y
+	case PlaceRight:
+		x, y = anchor.X+anchor.W+2, anchor.Y
+	default: // PlaceBelow
+		x, y = anchor.X, anchor.Y+anchor.H+2
+	}
+	t.SetBounds(Rect{X: x, Y: y, W: w, H: h})
 }
 
 // Hide removes the tooltip from view.

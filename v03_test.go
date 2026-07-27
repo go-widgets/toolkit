@@ -452,6 +452,29 @@ func TestTooltipShowAndHide(t *testing.T) {
 	}
 }
 
+func TestTooltipPlacement(t *testing.T) {
+	anchor := Rect{X: 100, Y: 100, W: 40, H: 20}
+	// "Hi": w = TextWidth + 2·PadX = 12+16 = 28; h = GlyphHeight + 2·PadY = 7+8 = 15.
+	cases := []struct {
+		name         string
+		place        TooltipPlacement
+		wantX, wantY int
+	}{
+		{"below", PlaceBelow, 100, 122}, // anchor.Y + H + 2
+		{"above", PlaceAbove, 100, 83},  // anchor.Y - h - 2
+		{"left", PlaceLeft, 70, 100},    // anchor.X - w - 2
+		{"right", PlaceRight, 142, 100}, // anchor.X + W + 2
+	}
+	for _, c := range cases {
+		tt := NewTooltip("Hi")
+		tt.Placement = c.place
+		tt.Show(anchor)
+		if b := tt.Bounds(); b.X != c.wantX || b.Y != c.wantY {
+			t.Errorf("%s: origin = (%d,%d), want (%d,%d)", c.name, b.X, b.Y, c.wantX, c.wantY)
+		}
+	}
+}
+
 func TestTooltipDrawWhenHiddenNoOp(t *testing.T) {
 	tt := NewTooltip("Hi")
 	buf := makeSurface(64, 64)
