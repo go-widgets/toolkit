@@ -55,6 +55,11 @@ type Table struct {
 type TableColumn struct {
 	Title string
 	Width int // pixels; 0 = auto (equal share of remaining space)
+	// Align controls horizontal placement of BOTH the header title and
+	// every body cell in this column. The zero value (AlignLeft) keeps
+	// the original left-justified behaviour; AlignRight is the natural
+	// choice for numeric columns, AlignCenter for short status flags.
+	Align Align
 }
 
 // TableHeaderHeight is the pixel height of the header row.
@@ -102,7 +107,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	hx := r.X
 	hty := r.Y + (TableHeaderHeight-GlyphHeight())/2
 	for i, col := range t.Columns {
-		DrawText(p, hx+TableCellPadX, hty, col.Title, theme.OnBackground)
+		DrawText(p, cellTextX(hx, widths[i], col.Title, col.Align), hty, col.Title, theme.OnBackground)
 		hx += widths[i]
 	}
 
@@ -140,9 +145,9 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, r.X, y, r.W, TableRowHeight, bg)
 		cx := r.X
 		cty := y + (TableRowHeight-GlyphHeight())/2
-		for j := range t.Columns {
+		for j, col := range t.Columns {
 			if j < len(row) {
-				DrawText(p, cx+TableCellPadX, cty, row[j], ink)
+				DrawText(p, cellTextX(cx, widths[j], row[j], col.Align), cty, row[j], ink)
 			}
 			cx += widths[j]
 		}
@@ -209,6 +214,31 @@ func (t *Table) columnWidths(total int) []int {
 		widths[lastAutoIdx] = 0
 	}
 	return widths
+}
+
+// cellTextX returns the x at which to start drawing text of the given
+// string inside a cell whose left edge is cellX and whose width is
+// cellW, honouring align. TableCellPadX is reserved on both the left
+// (AlignLeft) and right (AlignRight) edges; AlignCenter ignores the
+// padding and centres within the full cell. The result is clamped to
+// the left padding so text never starts before the cell's inner edge.
+func cellTextX(cellX, cellW int, text string, align Align) int {
+	switch align {
+	case AlignRight:
+		x := cellX + cellW - TableCellPadX - TextWidth(text)
+		if min := cellX + TableCellPadX; x < min {
+			x = min
+		}
+		return x
+	case AlignCenter:
+		x := cellX + (cellW-TextWidth(text))/2
+		if min := cellX + TableCellPadX; x < min {
+			x = min
+		}
+		return x
+	default: // AlignLeft
+		return cellX + TableCellPadX
+	}
 }
 
 // accentInk returns the ink colour to draw ON a Theme.Accent field.
