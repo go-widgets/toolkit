@@ -77,6 +77,13 @@ func (e *Expander) OnEvent(ev Event) {
 		return
 	}
 	if e.Expanded && e.Content != nil {
-		e.Content.OnEvent(ev)
+		// Content occupies the body below the ExpanderHeaderH-tall header. Bound
+		// it (matching Draw) and translate the click into its local frame, so a
+		// click on interactive content isn't shifted down by the header height
+		// (plus the Expander's own origin) and misrouted.
+		r := e.Bounds()
+		body := Rect{X: r.X, Y: r.Y + ExpanderHeaderH, W: r.W, H: r.H - ExpanderHeaderH}
+		e.Content.SetBounds(body)
+		e.Content.OnEvent(translateEvent(ev, r, body))
 	}
 }

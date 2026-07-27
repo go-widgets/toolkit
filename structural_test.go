@@ -423,6 +423,23 @@ func TestExpanderClickBodyRoutesWhenExpanded(t *testing.T) {
 	}
 }
 
+func TestExpanderBodyClickTranslatedAtNonZeroBounds(t *testing.T) {
+	// Regression: expanded-body clicks must arrive in the content's local frame
+	// (shifted up by ExpanderHeaderH and by the Expander's own origin).
+	body := &recordingWidget{}
+	e := NewExpander("S", body)
+	e.Expanded = true
+	e.SetBounds(Rect{X: 30, Y: 20, W: 200, H: 100})
+	e.OnEvent(Event{Kind: EventClick, X: 5, Y: 40}) // expander-local, in the body
+	if len(body.events) != 1 {
+		t.Fatalf("body click routed %d events, want 1", len(body.events))
+	}
+	// Content origin: X == Expander origin (offset 0), Y is ExpanderHeaderH below.
+	if got := body.events[0]; got.X != 5 || got.Y != 40-ExpanderHeaderH {
+		t.Fatalf("content received %+v, want {5,%d}", got, 40-ExpanderHeaderH)
+	}
+}
+
 func TestExpanderClickBodyIgnoredWhenCollapsed(t *testing.T) {
 	body := &recordingWidget{}
 	e := NewExpander("S", body)
