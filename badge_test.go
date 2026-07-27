@@ -54,22 +54,42 @@ func TestBadgePreSizedNoOverride(t *testing.T) {
 	}
 }
 
-// TestBadgeDrawFillsAccent samples an interior body pixel above the
-// text-glyph row to prove the pill body is painted in Theme.Accent.
+// TestBadgeDrawFillsAccent samples interior body pixels to prove the
+// rounded pill body is painted in Theme.Accent. Both samples sit well
+// inside the corner radius so they land on solid body, not the
+// anti-aliased corner arc.
 func TestBadgeDrawFillsAccent(t *testing.T) {
 	theme := DefaultLight()
 	b := NewBadge("9")
 	b.SetBounds(Rect{X: 2, Y: 2, W: 20, H: 10})
 	surf := makeSurface(40, 20)
 	b.Draw(newP(surf, 40), theme)
-	// (5, 2) is inside the pill body, above the text row (which starts
-	// at y = 2 + (10-7)/2 = 3). Must be Accent.
-	if got := pixelAt(surf, 40, 5, 2); got != theme.Accent {
-		t.Fatalf("badge body at (5,2) = %+v, want Accent", got)
+	// The vertical centre of the pill body: solid fill across the middle.
+	if got := pixelAt(surf, 40, 12, 7); got != theme.Accent {
+		t.Fatalf("badge centre body at (12,7) = %+v, want Accent", got)
 	}
-	// The centre column of the pill also samples the body colour.
-	if got := pixelAt(surf, 40, 12, 2); got != theme.Accent {
-		t.Fatalf("badge centre body = %+v, want Accent", got)
+	// A second interior sample nearer the left, still inside the radius.
+	if got := pixelAt(surf, 40, 8, 7); got != theme.Accent {
+		t.Fatalf("badge body at (8,7) = %+v, want Accent", got)
+	}
+}
+
+// TestBadgeFillAndInkOverride covers the per-badge colour branches: a
+// Fill overrides the pill body colour and an Ink overrides the text
+// colour, independently of the theme.
+func TestBadgeFillAndInkOverride(t *testing.T) {
+	theme := DefaultLight()
+	fill := RGBA{R: 0x11, G: 0x99, B: 0x44, A: 0xFF}
+	b := &Badge{Text: "R", Fill: fill, Ink: RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}}
+	b.SetBounds(Rect{X: 2, Y: 2, W: 24, H: 12})
+	surf := makeSurface(40, 20)
+	b.Draw(newP(surf, 40), theme)
+	// The pill body is the custom Fill, not the theme Accent.
+	if got := pixelAt(surf, 40, 14, 8); got != fill {
+		t.Fatalf("badge body = %+v, want custom Fill %+v", got, fill)
+	}
+	if fill == theme.Accent {
+		t.Fatal("test precondition: custom Fill must differ from theme.Accent")
 	}
 }
 
