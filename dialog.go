@@ -92,7 +92,12 @@ func (d *Dialog) OnEvent(ev Event) {
 		}
 	}
 	if d.Content != nil {
-		d.Content.OnEvent(ev)
+		// Content occupies the body between the title bar and the button strip
+		// (bounded in SetBounds). Translate the event into its local frame — the
+		// buttons above already reconstruct absolute coords, but the content was
+		// forwarded raw, so a click on interactive content landed DialogTitleH
+		// too low (plus the Dialog's own origin).
+		d.Content.OnEvent(translateEvent(ev, d.Bounds(), d.Content.Bounds()))
 	}
 }
 
