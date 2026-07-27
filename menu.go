@@ -19,13 +19,33 @@ import "github.com/go-widgets/painter"
 // app is responsible for actually wiring the key combo to the
 // item's Action (there is no cross-platform "Ctrl vs Cmd" logic in
 // the toolkit — different apps route keys through different SDKs).
+//
+// Checkable marks the row as a toggle: activating it flips Checked
+// (in addition to still calling Action, if any) + the row renders a
+// ✓ glyph in a left-hand gutter when Checked.
+//
+// RadioGroup, when non-zero, makes the row a member of a mutually
+// exclusive set: every item in the same Menu sharing the same
+// RadioGroup value is a sibling. Activating one sets its Checked to
+// true + clears Checked on every sibling; the row renders a •
+// (bullet) glyph instead of a check mark. RadioGroup implies
+// checkable behaviour — Checkable does not need to also be set.
+// RadioGroup == 0 means "not part of any radio group".
 type MenuItem struct {
-	Label     string
-	Action    func()
-	Submenu   *Menu
-	Separator bool
-	Shortcut  string
+	Label      string
+	Action     func()
+	Submenu    *Menu
+	Separator  bool
+	Shortcut   string
+	Checkable  bool
+	Checked    bool
+	RadioGroup int
 }
+
+// isCheckish reports whether it should reserve/paint a check or
+// bullet glyph slot — either explicitly Checkable, or a member of a
+// radio group (RadioGroup implies checkable).
+func (it *MenuItem) isCheckish() bool { return it.Checkable || it.RadioGroup != 0 }
 
 // Menu is a vertical popover-style list of MenuItems. Used by the
 // compositor's right-click root menu, by MenuBar drop-downs and by
@@ -43,8 +63,27 @@ const MenuRowH = 22
 // MenuSeparatorH is the height of a separator row.
 const MenuSeparatorH = 6
 
+// MenuCheckGutterW is the pixel width of the left-hand gutter that
+// holds a checkable/radio row's ✓ or • glyph. A Menu only reserves
+// this gutter (shifting every row's label right) when at least one of
+// its Items is checkable or belongs to a radio group; a Menu with no
+// such items lays out exactly as before this feature (label starts at
+// the plain 8px inset), so plain menus render unchanged.
+const MenuCheckGutterW = 14
+
 // NewMenu builds a Menu with the given items + Hover at -1.
 func NewMenu(items []MenuItem) *Menu { return &Menu{Items: items, Hover: -1} }
+
+// hasCheckGutter reports whether any item wants a check/bullet glyph,
+// i.e. whether Draw must reserve MenuCheckGutterW before the label.
+func (m *Menu) hasCheckGutter() bool {
+	for i := range m.Items {
+		if m.Items[i].isCheckish() {
+			return true
+		}
+	}
+	return false
+}
 
 // Draw paints the menu's body + every row + a hover highlight on the
 // currently-hovered row.
@@ -52,6 +91,10 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 	r := m.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	gutter := 0
+	if m.hasCheckGutter() {
+		gutter = MenuCheckGutterW
+	}
 	y := r.Y + 2
 	for i, it := range m.Items {
 		if it.Separator {
@@ -70,7 +113,10 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 			ink = theme.Background // hovered row: invert ink
 		}
 		textY := y + (MenuRowH-m.glyphHeight())/2
-		m.drawText(p, r.X+8, textY, it.Label, ink)
+		if it.isCheckish() && it.Checked {
+			m.drawCheckGlyph(p, r.X+8, y, it.RadioGroup != 0, ink)
+		}
+		m.drawText(p, r.X+8+gutter, textY, it.Label, ink)
 		if it.Submenu != nil {
 			// ▶ chevron on the right edge to signal a nested menu.
 			// Flat left (tallest column, x = cx-1), point on right
@@ -97,8 +143,30 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
+// drawCheckGlyph paints a Checked row's indicator in the check gutter:
+// a • bullet (filled square dot) for a radio item, or a ✓-ish check
+// mark (two pixel strokes, mirroring CheckButton's approximation) for
+// a plain checkable item. gx is the gutter's left edge, rowY the
+// row's top (widget-local), both in the same frame as Draw's y.
+func (m *Menu) drawCheckGlyph(p painter.Painter, gx, rowY int, radio bool, ink RGBA) {
+	const glyphBox = 10
+	boxY := rowY + (MenuRowH-glyphBox)/2
+	if radio {
+		fillRect(p, gx+3, boxY+3, glyphBox-6, glyphBox-6, ink)
+		return
+	}
+	for t := 0; t < 3; t++ {
+		fillRect(p, gx+t, boxY+5+t, 1, 1, ink)
+	}
+	for t := 0; t < 5; t++ {
+		fillRect(p, gx+2+t, boxY+8-t, 1, 1, ink)
+	}
+}
+
 // OnEvent: a click on an enabled row fires its Action + closes the
-// menu via OnClose (if wired).
+// menu via OnClose (if wired). Before Action runs, a checkable row
+// toggles its own Checked; a radio-grouped row instead selects itself
+// exclusively within its RadioGroup (see selectRadio).
 func (m *Menu) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
@@ -107,13 +175,33 @@ func (m *Menu) OnEvent(ev Event) {
 	if idx < 0 || idx >= len(m.Items) {
 		return
 	}
-	it := m.Items[idx]
+	it := &m.Items[idx]
 	if it.Separator || it.Action == nil {
 		return
+	}
+	switch {
+	case it.RadioGroup != 0:
+		m.selectRadio(idx)
+	case it.Checkable:
+		it.Checked = !it.Checked
 	}
 	it.Action()
 	if m.OnClose != nil {
 		m.OnClose()
+	}
+}
+
+// selectRadio sets Items[idx].Checked = true + clears Checked on every
+// other item in m.Items that shares Items[idx].RadioGroup (siblings
+// live within one Menu's Items — a submenu's items are a separate
+// Menu + never touched). Items outside the group (RadioGroup == 0 or
+// a different group) are left untouched.
+func (m *Menu) selectRadio(idx int) {
+	group := m.Items[idx].RadioGroup
+	for i := range m.Items {
+		if m.Items[i].RadioGroup == group {
+			m.Items[i].Checked = i == idx
+		}
 	}
 }
 
