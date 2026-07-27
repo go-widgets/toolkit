@@ -320,7 +320,10 @@ func TestFormFieldOnEventClickInsideChildForwards(t *testing.T) {
 	f.Draw(newP(makeSurface(200, 100), 200), DefaultLight())
 	cr := child.Bounds()
 
-	f.OnEvent(Event{Kind: EventClick, X: cr.X + 3, Y: cr.Y + 3})
+	// Send a FormField-LOCAL click (the documented convention) whose absolute
+	// position is 3px into the child: local = absolute - FormField origin.
+	r := f.Bounds()
+	f.OnEvent(Event{Kind: EventClick, X: cr.X - r.X + 3, Y: cr.Y - r.Y + 3})
 	if child.events != 1 {
 		t.Fatalf("child received %d events, want 1", child.events)
 	}

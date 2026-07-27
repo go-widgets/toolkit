@@ -127,12 +127,18 @@ func (f *FormField) OnEvent(ev Event) {
 		return
 	}
 	if ev.Kind == EventClick {
+		// ev is widget-local; childRect() is in surface (absolute) coordinates.
+		// Reconstruct the absolute click to hit-test the child rect, then hand
+		// the child its own local frame via translateEvent — instead of the old
+		// code, which compared local ev against absolute cr and so dropped every
+		// click whenever the FormField was not at the origin.
+		r := f.Bounds()
 		cr := f.childRect()
-		if ev.X < cr.X || ev.X >= cr.X+cr.W || ev.Y < cr.Y || ev.Y >= cr.Y+cr.H {
+		if !cr.Contains(ev.X+r.X, ev.Y+r.Y) {
 			return
 		}
-		ev.X -= cr.X
-		ev.Y -= cr.Y
+		f.Child.OnEvent(translateEvent(ev, r, cr))
+		return
 	}
 	f.Child.OnEvent(ev)
 }
