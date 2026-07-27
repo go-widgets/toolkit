@@ -517,6 +517,265 @@ func TestListBoxMultiSelectDrawHighlightsAllSelectedRows(t *testing.T) {
 	}
 }
 
+// --- ListBox virtual scrolling --------------------------------------------
+
+// listSentinel is makeSurface's fill colour -- a pixel still holding it was
+// never painted by the widget.
+var listSentinel = RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}
+
+func TestListBoxVisibleRowsCeilsPartialRow(t *testing.T) {
+	l := NewListBox(make([]string, 10))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 45}) // 45/20 = 2 rem 5 -> ceil 3
+	if got := l.visibleRows(); got != 3 {
+		t.Fatalf("visibleRows() = %d, want 3", got)
+	}
+}
+
+func TestListBoxVisibleRowsZeroRowHeight(t *testing.T) {
+	l := NewListBox(make([]string, 10))
+	l.RowHeight = 0
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
+	if got := l.visibleRows(); got != 0 {
+		t.Fatalf("visibleRows() with RowHeight<=0 = %d, want 0", got)
+	}
+}
+
+func TestListBoxVisibleRowsZeroHeightBounds(t *testing.T) {
+	l := NewListBox(make([]string, 10))
+	l.RowHeight = 20
+	// SetBounds never called -> Bounds().H == 0.
+	if got := l.visibleRows(); got != 0 {
+		t.Fatalf("visibleRows() with H<=0 = %d, want 0", got)
+	}
+}
+
+func TestListBoxSmallListDrawUnchangedNoScrollbar(t *testing.T) {
+	// Regression: a list that fits entirely renders exactly like a
+	// non-scrolling ListBox -- full-width rows, no scrollbar column.
+	const w, h = 64, 64
+	theme := DefaultLight()
+	l := NewListBox([]string{"a", "b"})
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // plenty of room
+	buf := makeSurface(w, h)
+	l.Draw(newP(buf, w), theme)
+	if got := pixelAt(buf, w, 46, 5); got != theme.Surface {
+		t.Fatalf("row background should extend the full width (no scrollbar); got %+v, want Surface", got)
+	}
+	if got := pixelAt(buf, w, 46, 25); got != theme.Surface {
+		t.Fatalf("row 1 background should extend the full width; got %+v, want Surface", got)
+	}
+}
+
+func TestListBoxWindowedDrawOnlyPaintsVisibleRows(t *testing.T) {
+	const w, h = 64, 128
+	theme := DefaultLight()
+	items := make([]string, 20)
+	for i := range items {
+		items[i] = "row"
+	}
+	l := NewListBox(items)
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // exactly 5 rows visible
+	l.ScrollRow = 3                              // window = rows [3,8)
+	l.Selected = 5                                // in-window
+	buf := makeSurface(w, h)
+	l.Draw(newP(buf, w), theme)
+
+	// Row 8 would land at local slot 5 (y in [100,120)) if drawn -- it
+	// isn't, so that band must stay the untouched sentinel.
+	if got := pixelAt(buf, w, 20, 105); got != listSentinel {
+		t.Fatalf("off-window row 8 appears painted at slot 5; got %+v", got)
+	}
+	// Row 5 is in-window (local slot 2, y in [40,60)) and is Selected,
+	// so it must paint Accent.
+	if got := pixelAt(buf, w, 20, 45); got != theme.Accent {
+		t.Fatalf("in-window selected row 5 bg = %+v, want Accent", got)
+	}
+	// Row 3 (first visible, local slot 0) paints Surface (unselected).
+	if got := pixelAt(buf, w, 20, 5); got != theme.Surface {
+		t.Fatalf("in-window row 3 bg = %+v, want Surface", got)
+	}
+}
+
+func TestListBoxWindowedDrawWithoutClipperFallsBack(t *testing.T) {
+	l := NewListBox(make([]string, 20))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
+	buf := makeSurface(64, 64)
+	l.Draw(noClipPainter{newP(buf, 64)}, DefaultLight()) // must not panic
+}
+
+func TestListBoxDrawZeroHeightBoundsNoPanic(t *testing.T) {
+	l := NewListBox(make([]string, 5))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 0})
+	buf := makeSurface(64, 64)
+	l.Draw(newP(buf, 64), DefaultLight()) // must not panic
+}
+
+func TestListBoxScrollbarZeroRowHeightNoPanic(t *testing.T) {
+	l := NewListBox(make([]string, 5))
+	l.RowHeight = 0
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
+	buf := makeSurface(64, 64)
+	l.Draw(newP(buf, 64), DefaultLight()) // must not panic; no thumb (contentH=0)
+}
+
+func TestListBoxScrollbarThumbRendersOnOverflow(t *testing.T) {
+	const w, h = 64, 128
+	theme := DefaultLight()
+	l := NewListBox(make([]string, 20))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // 5 of 20 rows visible -> overflow
+	buf := makeSurface(w, h)
+	l.Draw(newP(buf, w), theme)
+
+	trackX := 50 - scrollbarWidth // 42
+	foundTrack := false
+	for y := 90; y < 100; y++ {
+		if pixelAt(buf, w, trackX+3, y) == theme.SurfaceAlt {
+			foundTrack = true
+		}
+	}
+	if !foundTrack {
+		t.Fatal("scrollbar track not painted")
+	}
+	foundThumb := false
+	for y := 0; y < 20; y++ {
+		if pixelAt(buf, w, trackX+3, y) == theme.Accent {
+			foundThumb = true
+		}
+	}
+	if !foundThumb {
+		t.Fatal("scrollbar thumb not painted")
+	}
+}
+
+func TestListBoxScrollbarTinyThumbClamps(t *testing.T) {
+	// Extremely long content -> the proportional thumb would be < 8px,
+	// so it clamps to the 8px minimum (the thumbH<8 branch).
+	const w, h = 64, 128
+	theme := DefaultLight()
+	l := NewListBox(make([]string, 100000))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
+	buf := makeSurface(w, h)
+	l.Draw(newP(buf, w), theme) // must not panic; thumb floored to 8
+
+	trackX := 50 - scrollbarWidth
+	found := false
+	for y := 0; y < 8; y++ {
+		if pixelAt(buf, w, trackX+3, y) == theme.Accent {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("clamped scrollbar thumb not drawn")
+	}
+}
+
+func TestListBoxScrollRowClampBothEnds(t *testing.T) {
+	l := NewListBox(make([]string, 20))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // 5 visible -> maxScrollRow = 15
+	l.ScrollRow = -5
+	if got := l.clampedScrollRow(); got != 0 {
+		t.Fatalf("negative ScrollRow should clamp to 0; got %d", got)
+	}
+	l.ScrollRow = 1000
+	if got := l.clampedScrollRow(); got != 15 {
+		t.Fatalf("ScrollRow should clamp to maxScrollRow=15; got %d", got)
+	}
+}
+
+func TestListBoxClickWithScrollRowSelectsCorrectRow(t *testing.T) {
+	got := -1
+	l := NewListBox(make([]string, 20))
+	l.OnActivate = func(i int) { got = i }
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
+	l.ScrollRow = 3
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 25}) // local slot 1 -> abs row 4
+	if l.Selected != 4 {
+		t.Fatalf("Selected = %d, want 4", l.Selected)
+	}
+	if got != 4 {
+		t.Fatalf("OnActivate fired with %d, want 4", got)
+	}
+}
+
+func TestListBoxScrollToAndScrollByClamp(t *testing.T) {
+	l := NewListBox(make([]string, 20))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // maxScrollRow = 15
+
+	l.ScrollTo(1000)
+	if l.ScrollRow != 15 {
+		t.Fatalf("ScrollTo(1000) = %d, want 15", l.ScrollRow)
+	}
+	l.ScrollTo(-1000)
+	if l.ScrollRow != 0 {
+		t.Fatalf("ScrollTo(-1000) = %d, want 0", l.ScrollRow)
+	}
+	l.ScrollTo(5)
+	l.ScrollBy(3)
+	if l.ScrollRow != 8 {
+		t.Fatalf("ScrollBy(3) from 5 = %d, want 8", l.ScrollRow)
+	}
+	l.ScrollBy(-100)
+	if l.ScrollRow != 0 {
+		t.Fatalf("ScrollBy(-100) should clamp to 0; got %d", l.ScrollRow)
+	}
+}
+
+func TestListBoxScrollToSelectedNoSelectionIsNoOp(t *testing.T) {
+	l := NewListBox(make([]string, 20))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
+	l.ScrollRow = 3
+	// Selected stays at -1 (NewListBox default).
+	l.scrollToSelected()
+	if l.ScrollRow != 3 {
+		t.Fatalf("scrollToSelected with Selected=-1 must be a no-op; ScrollRow=%d, want 3", l.ScrollRow)
+	}
+}
+
+func TestListBoxScrollToSelectedScrollsUp(t *testing.T) {
+	l := NewListBox(make([]string, 20))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // 5 visible
+	l.ScrollRow = 10
+	l.Selected = 2 // above the window
+	l.scrollToSelected()
+	if l.ScrollRow != 2 {
+		t.Fatalf("ScrollRow = %d, want 2 (scrolled up to Selected)", l.ScrollRow)
+	}
+}
+
+func TestListBoxScrollToSelectedScrollsDown(t *testing.T) {
+	l := NewListBox(make([]string, 20))
+	l.RowHeight = 20
+	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // 5 visible, window starts [0,5)
+	l.Selected = 9                               // below the window
+	l.scrollToSelected()
+	if l.ScrollRow != 5 { // Selected - vr + 1 = 9-5+1
+		t.Fatalf("ScrollRow = %d, want 5", l.ScrollRow)
+	}
+}
+
+func TestListBoxScrollToSelectedZeroVisibleRowsIsNoOp(t *testing.T) {
+	l := NewListBox(make([]string, 5))
+	l.RowHeight = 0 // -> visibleRows() == 0
+	l.Selected = 2
+	l.ScrollRow = 0
+	l.scrollToSelected()
+	if l.ScrollRow != 0 {
+		t.Fatalf("vr<=0 branch must be a no-op; ScrollRow=%d, want 0", l.ScrollRow)
+	}
+}
+
 func TestListBoxMultiSelectDrawIgnoresSelectedWhenSetEmpty(t *testing.T) {
 	// Selected (the anchor) alone must NOT drive highlighting once
 	// MultiSelect is on -- only the selection set does.
