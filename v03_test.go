@@ -398,6 +398,22 @@ func TestDialogClickFallsThroughToContent(t *testing.T) {
 	}
 }
 
+func TestDialogContentClickTranslatedAtNonZeroBounds(t *testing.T) {
+	// Regression: content clicks must arrive in the content's local frame,
+	// shifted down by DialogTitleH and by the Dialog's own origin.
+	body := &recordingWidget{}
+	d := NewDialog("X", body)
+	d.SetBounds(Rect{X: 40, Y: 30, W: 300, H: 200})
+	d.OnEvent(Event{Kind: EventClick, X: 20, Y: 60}) // dialog-local, in the content body
+	if len(body.events) != 1 {
+		t.Fatalf("content event count = %d, want 1", len(body.events))
+	}
+	// Content origin: X == Dialog origin (offset 0); Y is DialogTitleH below.
+	if got := body.events[0]; got.X != 20 || got.Y != 60-DialogTitleH {
+		t.Fatalf("content received %+v, want {20,%d}", got, 60-DialogTitleH)
+	}
+}
+
 func TestDialogNilContentNoPanic(t *testing.T) {
 	d := NewDialog("X", nil)
 	d.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
