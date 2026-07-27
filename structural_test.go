@@ -308,6 +308,43 @@ func TestPanedEventRoutingVertical(t *testing.T) {
 	}
 }
 
+func TestPanedEventRoutingTranslatesAtNonZeroBounds(t *testing.T) {
+	// The regression the old tests missed: with the Paned NOT at the origin, the
+	// forwarded event must be translated into each child's local frame.
+	a := &recordingWidget{}
+	b := &recordingWidget{}
+	p := NewHPaned(a, b)
+	p.SetBounds(Rect{X: 100, Y: 50, W: 200, H: 80}) // Position defaults to 100
+	// A Paned-local click at X=120 lands in the Second pane (>Position+handle).
+	p.OnEvent(Event{Kind: EventClick, X: 120, Y: 10})
+	if len(b.events) != 1 {
+		t.Fatalf("second pane got %d events, want 1", len(b.events))
+	}
+	// Second pane's absolute X = 100+100+6 = 206; child-local X = 120+100-206 = 14.
+	if got := b.events[0]; got.X != 14 || got.Y != 10 {
+		t.Fatalf("second pane received %+v, want local {14,10}", got)
+	}
+	// First pane (offset 0) is unchanged by translation.
+	p.OnEvent(Event{Kind: EventClick, X: 20, Y: 10})
+	if len(a.events) != 1 || a.events[0].X != 20 || a.events[0].Y != 10 {
+		t.Fatalf("first pane received %+v, want {20,10}", a.events[0])
+	}
+
+	// Vertical: same translation on Y.
+	c := &recordingWidget{}
+	d := &recordingWidget{}
+	vp := NewVPaned(c, d)
+	vp.SetBounds(Rect{X: 100, Y: 50, W: 200, H: 80}) // Position defaults to 40
+	vp.OnEvent(Event{Kind: EventClick, X: 5, Y: 50})  // >Position+handle → Second
+	if len(d.events) != 1 {
+		t.Fatalf("vertical second got %d events, want 1", len(d.events))
+	}
+	// Second abs Y = 50+40+6 = 96; child-local Y = 50+50-96 = 4.
+	if got := d.events[0]; got.X != 5 || got.Y != 4 {
+		t.Fatalf("vertical second received %+v, want local {5,4}", got)
+	}
+}
+
 func TestPanedEventOnHandleIgnored(t *testing.T) {
 	a := &recordingWidget{}
 	b := &recordingWidget{}

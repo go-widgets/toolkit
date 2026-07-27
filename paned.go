@@ -124,17 +124,20 @@ func (p *Paned) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
 	}
-	if p.Orientation == PanedHorizontal {
-		if ev.X < p.Position && p.First != nil {
-			p.First.OnEvent(ev)
-		} else if ev.X >= p.Position+PanedHandleW && p.Second != nil {
-			p.Second.OnEvent(ev)
-		}
-	} else {
-		if ev.Y < p.Position && p.First != nil {
-			p.First.OnEvent(ev)
-		} else if ev.Y >= p.Position+PanedHandleW && p.Second != nil {
-			p.Second.OnEvent(ev)
-		}
+	// ev is Paned-local; p.Position is a local offset, so the split test is
+	// local-vs-local. The child, however, sits at a non-zero offset within the
+	// Paned (First at the origin, Second past Position+handle), so the forwarded
+	// event MUST be translated to child-local coordinates — otherwise a click in
+	// the Second pane arrives with the Paned's coordinates and misroutes inside
+	// the child (the bug this fixes; invisible only when Bounds is at 0,0).
+	pos := ev.X
+	if p.Orientation == PanedVertical {
+		pos = ev.Y
+	}
+	pr := p.Bounds()
+	if pos < p.Position && p.First != nil {
+		p.First.OnEvent(translateEvent(ev, pr, p.First.Bounds()))
+	} else if pos >= p.Position+PanedHandleW && p.Second != nil {
+		p.Second.OnEvent(translateEvent(ev, pr, p.Second.Bounds()))
 	}
 }
