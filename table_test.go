@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // makeTableSurface allocates a w*h RGBA byte slice pre-filled with a
 // sentinel colour so the Table tests can distinguish painted pixels
@@ -1187,5 +1190,325 @@ func TestTableSeparatorClickTakesPriorityOverSort(t *testing.T) {
 	}
 	if !tb.resizing || tb.resizingCol != 0 {
 		t.Fatalf("resize state = (resizing %v, col %d), want (true, 0)", tb.resizing, tb.resizingCol)
+	}
+}
+
+// --- Vertical scroll window (body-row virtualization) -------------------
+
+// tableManyRows builds n single-column rows labelled "r0".."r{n-1}", for
+// tests that need a table taller than any reasonable Bounds().H.
+func tableManyRows(n int) [][]string {
+	rows := make([][]string, n)
+	for i := range rows {
+		rows[i] = []string{fmt.Sprintf("r%d", i)}
+	}
+	return rows
+}
+
+func TestTableBodyVisibleRowsTinyHeightIsZero(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"r0"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: TableHeaderHeight})
+	if got := tb.bodyVisibleRows(); got != 0 {
+		t.Fatalf("bodyVisibleRows() at H==TableHeaderHeight = %d, want 0", got)
+	}
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: TableHeaderHeight - 5})
+	if got := tb.bodyVisibleRows(); got != 0 {
+		t.Fatalf("bodyVisibleRows() at H<TableHeaderHeight = %d, want 0", got)
+	}
+}
+
+// TestTableScrollSmallTableUnchangedAndRegressionsStillWork is the core
+// "byte-identical when everything fits" guarantee: no scrollbar paints,
+// and header-click sort, separator-drag resize and multi-select all keep
+// working exactly as before ScrollRow existed.
+func TestTableScrollSmallTableUnchangedAndRegressionsStillWork(t *testing.T) {
+	tb := NewTable([]TableColumn{
+		{Title: "A", Width: 60, Sortable: true},
+		{Title: "B", Width: 60, Sortable: true},
+	}, [][]string{{"a0", "b0"}, {"a1", "b1"}})
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 200})
+	theme := DefaultLight()
+	buf := makeTableSurface(120, 200)
+	tb.Draw(newP(buf, 120), theme)
+
+	// No scrollbar: Accent must never appear in the would-be track
+	// column (rightmost scrollbarWidth px) while nothing is selected.
+	for y := TableHeaderHeight; y < TableHeaderHeight+2*TableRowHeight; y++ {
+		for x := 120 - scrollbarWidth; x < 120; x++ {
+			if got := pixelAt(buf, 120, x, y); got == theme.Accent {
+				t.Fatalf("unexpected scrollbar-coloured pixel at (%d,%d) on a fully-fitting table", x, y)
+			}
+		}
+	}
+
+	// Sort still works.
+	var gotCol int
+	var gotAsc bool
+	tb.OnSort = func(col int, asc bool) { gotCol, gotAsc = col, asc }
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if gotCol != 0 || !gotAsc || tb.SortColumn != 0 {
+		t.Fatalf("sort broken: gotCol=%d gotAsc=%v SortColumn=%d", gotCol, gotAsc, tb.SortColumn)
+	}
+
+	// Separator-drag resize still works.
+	tb.OnEvent(Event{Kind: EventClick, X: 60, Y: 5})
+	tb.OnEvent(Event{Kind: EventMouseDrag, X: 90, Y: 5})
+	if tb.Columns[0].Width != 90 {
+		t.Fatalf("resize broken: Columns[0].Width = %d, want 90", tb.Columns[0].Width)
+	}
+	tb.OnEvent(Event{Kind: EventMouseUp, X: 90, Y: 5})
+
+	// Multi-select still works.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 1})
+	if tb.Selected != 0 {
+		t.Fatalf("multi-select broken: Selected = %d, want 0", tb.Selected)
+	}
+	if got := tb.SelectedRows(); len(got) != 1 || got[0] != 0 {
+		t.Fatalf("multi-select broken: SelectedRows() = %v, want [0]", got)
+	}
+}
+
+// TestTableScrollWindowsLargeTable is the core windowing test: only the
+// visible slice paints, and the scrollbar thumb appears while it does.
+func TestTableScrollWindowsLargeTable(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
+	// Body = exactly 5 rows (24 + 5*22 = 134): more rows than fit, so
+	// the body overflows and a scrollbar is expected.
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134})
+	theme := DefaultLight()
+
+	// The surface is much taller than the widget -- an accidental
+	// un-windowed render (all 20 rows, as the pre-feature Table always
+	// did) would leave ink far below Bounds().H. The sentinel colour
+	// surviving there proves the windowing loop actually stopped early.
+	buf := makeTableSurface(120, 600)
+	tb.Draw(newP(buf, 120), theme)
+
+	// In-window: absolute row 2 (screen position 2) painted with its
+	// zebra colour (even index -> Surface).
+	inWinY := TableHeaderHeight + 2*TableRowHeight + TableRowHeight/2
+	if got := pixelAt(buf, 120, 50, inWinY); got != theme.Surface {
+		t.Fatalf("in-window row 2 fill = %+v, want Surface", got)
+	}
+
+	// Off-window: row 19's position had the Table rendered UN-windowed
+	// is far below Bounds().H -- must remain the untouched sentinel.
+	sentinel := RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}
+	offWinY := TableHeaderHeight + 19*TableRowHeight + TableRowHeight/2
+	if got := pixelAt(buf, 120, 50, offWinY); got != sentinel {
+		t.Fatalf("off-window row 19 was painted at %+v, want untouched sentinel", got)
+	}
+
+	// Scrollbar thumb: an Accent-coloured pixel exists in the track
+	// column while the body overflows (no row is selected, so Accent
+	// can only be the thumb here).
+	foundThumb := false
+	for y := TableHeaderHeight; y < 134 && !foundThumb; y++ {
+		if pixelAt(buf, 120, 115, y) == theme.Accent {
+			foundThumb = true
+		}
+	}
+	if !foundThumb {
+		t.Fatal("no scrollbar thumb pixel found while body overflows")
+	}
+}
+
+// TestTableScrollZebraParityPreservedByAbsoluteIndex proves the zebra
+// stripe is keyed on each row's ABSOLUTE index, not its on-screen
+// position -- scrolling must never shift which rows read as odd/even.
+func TestTableScrollZebraParityPreservedByAbsoluteIndex(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows
+	tb.ScrollRow = 11                              // odd absolute index lands at screen position 0
+	theme := DefaultLight()
+	buf := makeTableSurface(120, 200)
+	tb.Draw(newP(buf, 120), theme)
+
+	// Absolute row 11 (odd) at SCREEN position 0 must be Background --
+	// a zebra keyed on screen position would wrongly paint Surface here
+	// (position 0 is even).
+	y0 := TableHeaderHeight + TableRowHeight/2
+	if got := pixelAt(buf, 120, 50, y0); got != theme.Background {
+		t.Fatalf("row 11 at screen pos 0 fill = %+v, want Background (zebra keyed by absolute index)", got)
+	}
+	// Absolute row 12 (even) at screen position 1 must be Surface.
+	y1 := TableHeaderHeight + TableRowHeight + TableRowHeight/2
+	if got := pixelAt(buf, 120, 50, y1); got != theme.Surface {
+		t.Fatalf("row 12 at screen pos 1 fill = %+v, want Surface", got)
+	}
+}
+
+// TestTableScrollClipsPartiallyVisibleLastRow covers the Clipper branch:
+// when Bounds().H isn't an exact multiple of TableRowHeight, the last
+// windowed row only partially fits -- without clipping it would spill
+// past the widget's own bottom edge.
+func TestTableScrollClipsPartiallyVisibleLastRow(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(10))
+	// Body height 50px is NOT a multiple of TableRowHeight (22): 2 full
+	// rows (44px) + a 6px sliver of a 3rd. bodyVisibleRows rounds up to
+	// 3, so row 2 (the 3rd visible row) paints only partially inside
+	// Bounds().H.
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: TableHeaderHeight + 50})
+	theme := DefaultLight()
+	// Surface taller than the widget so an unclipped row 2 would spill
+	// visibly below Bounds().H into the sentinel area.
+	buf := makeTableSurface(120, 150)
+	tb.Draw(newP(buf, 120), theme)
+
+	widgetBottom := TableHeaderHeight + 50 // 74
+	// Row 2's unclipped band spans y in [68, 90); this y sits inside
+	// that band but past the widget's own bottom edge (74).
+	spillY := widgetBottom + 5 // 79
+	sentinel := RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}
+	if got := pixelAt(buf, 120, 50, spillY); got != sentinel {
+		t.Fatalf("clip failed: pixel at (50,%d) below Bounds().H = %+v, want untouched sentinel", spillY, got)
+	}
+}
+
+// TestTableScrollClickWithNonZeroScrollRowSelectsCorrectRow covers the
+// rowAt mapping through clampScrollRow: a click's local Y must resolve
+// to the ABSOLUTE row currently painted there, not the on-screen offset.
+func TestTableScrollClickWithNonZeroScrollRowSelectsCorrectRow(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
+	tb.MultiSelect = true
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows
+	tb.ScrollRow = 10
+
+	// Click at screen row 2 (3rd visible band) -- must resolve to
+	// ABSOLUTE row 12 (10+2), not row 2.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 2*TableRowHeight + 1})
+	if tb.Selected != 12 {
+		t.Fatalf("Selected = %d, want 12 (ScrollRow 10 + screen row 2)", tb.Selected)
+	}
+}
+
+// TestTableScrollRowClampBothEnds exercises ScrollTo's clamp at both the
+// low (negative) and high (past maxScrollRow) ends, plus the
+// pass-through middle case.
+func TestTableScrollRowClampBothEnds(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows -> maxScrollRow == 15
+
+	tb.ScrollTo(-5)
+	if tb.ScrollRow != 0 {
+		t.Fatalf("ScrollTo(-5) = %d, want clamp to 0", tb.ScrollRow)
+	}
+	tb.ScrollTo(999)
+	if tb.ScrollRow != 15 {
+		t.Fatalf("ScrollTo(999) = %d, want clamp to 15 (maxScrollRow)", tb.ScrollRow)
+	}
+	tb.ScrollTo(7)
+	if tb.ScrollRow != 7 {
+		t.Fatalf("ScrollTo(7) = %d, want 7 (within range, unclamped)", tb.ScrollRow)
+	}
+}
+
+func TestTableScrollByAdjustsAndClamps(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // maxScrollRow == 15
+
+	tb.ScrollBy(5)
+	if tb.ScrollRow != 5 {
+		t.Fatalf("ScrollBy(5) = %d, want 5", tb.ScrollRow)
+	}
+	tb.ScrollBy(-100)
+	if tb.ScrollRow != 0 {
+		t.Fatalf("ScrollBy(-100) = %d, want clamp to 0", tb.ScrollRow)
+	}
+	tb.ScrollBy(1000)
+	if tb.ScrollRow != 15 {
+		t.Fatalf("ScrollBy(1000) = %d, want clamp to 15", tb.ScrollRow)
+	}
+}
+
+// TestTableScrollScrollbarThumbFloorClamp covers drawScrollbar's
+// tableScrollbarThumbMin clamp: with a huge row count crammed behind a
+// short track, the proportional thumb height would compute to less than
+// the floor and must be clamped up to it.
+func TestTableScrollScrollbarThumbFloorClamp(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(500))
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5-row track vs. 500 rows of content
+	theme := DefaultLight()
+	buf := makeTableSurface(120, 200)
+	tb.Draw(newP(buf, 120), theme)
+
+	// The clamped-up thumb must still appear (at least
+	// tableScrollbarThumbMin px tall) at the top of the track.
+	found := false
+	for y := TableHeaderHeight; y < 134 && !found; y++ {
+		if pixelAt(buf, 120, 115, y) == theme.Accent {
+			found = true
+		}
+	}
+	if !found {
+		t.Fatal("no floor-clamped scrollbar thumb pixel found")
+	}
+}
+
+// TestTableScrollContentWidthNegativeClamp covers contentWidth's w<0
+// clamp: a widget narrower than scrollbarWidth, with an overflowing
+// body, must not hand columnWidths a negative budget.
+func TestTableScrollContentWidthNegativeClamp(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, tableManyRows(10))
+	// W (5) < scrollbarWidth (8); body overflows vertically (10 rows,
+	// only 5 fit in H=134), so contentWidth reserves scrollbarWidth and
+	// must clamp the result to 0 instead of going negative.
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 5, H: 134})
+	if got := tb.contentWidth(); got != 0 {
+		t.Fatalf("contentWidth() = %d, want clamp to 0", got)
+	}
+	// Draw must not panic with this degenerate width either.
+	tb.Draw(newP(makeTableSurface(5, 200), 5), DefaultLight())
+}
+
+func TestTableScrollToSelectedNoopWhenSelectedNegative(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"r0"}, {"r1"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
+	tb.Selected = -1
+	tb.ScrollRow = 3
+	tb.scrollToSelected()
+	if tb.ScrollRow != 3 {
+		t.Fatalf("ScrollRow mutated by scrollToSelected with Selected=-1: %d, want unchanged 3", tb.ScrollRow)
+	}
+}
+
+func TestTableScrollToSelectedNoopWhenNoVisibleCapacity(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"r0"}, {"r1"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: TableHeaderHeight}) // 0 visible rows
+	tb.Selected = 1
+	tb.scrollToSelected()
+	if tb.ScrollRow != 0 {
+		t.Fatalf("ScrollRow = %d, want unchanged 0 when body has no visible capacity", tb.ScrollRow)
+	}
+}
+
+func TestTableScrollToSelectedScrollsUpAndDown(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows
+
+	// Selected below the window -> scrolls DOWN just enough that
+	// Selected lands on the last visible row.
+	tb.ScrollRow = 0
+	tb.Selected = 8
+	tb.scrollToSelected()
+	if tb.ScrollRow != 4 { // 8 - 5 + 1
+		t.Fatalf("ScrollRow after downward scrollToSelected = %d, want 4", tb.ScrollRow)
+	}
+
+	// Selected above the window -> scrolls UP to put Selected at top.
+	tb.ScrollRow = 10
+	tb.Selected = 3
+	tb.scrollToSelected()
+	if tb.ScrollRow != 3 {
+		t.Fatalf("ScrollRow after upward scrollToSelected = %d, want 3", tb.ScrollRow)
+	}
+
+	// Selected already inside the window -> no change.
+	tb.ScrollRow = 2
+	tb.Selected = 4 // window is [2,7)
+	tb.scrollToSelected()
+	if tb.ScrollRow != 2 {
+		t.Fatalf("ScrollRow after in-window scrollToSelected = %d, want unchanged 2", tb.ScrollRow)
 	}
 }
