@@ -120,6 +120,7 @@ func (t *TextView) DeleteSelection() {
 	if t.Selection.IsEmpty() {
 		return
 	}
+	t.pushUndo()
 	sel := t.Selection
 	t.Lines = DeleteSelection(t.Lines, sel)
 	t.CursorLine = sel.StartLine
@@ -144,10 +145,15 @@ func (t *TextView) CutSelection() string {
 }
 
 // Paste inserts text at the cursor (after first deleting the
-// selection if any). "\n" splits lines.
+// selection if any). "\n" splits lines. The whole operation --
+// selection removal + insertion -- is a single undo step.
 func (t *TextView) Paste(text string) {
 	if t.HasSelection() {
+		// DeleteSelection pushes undo; insertText below joins it into
+		// the same step (no separate push).
 		t.DeleteSelection()
+	} else if text != "" {
+		t.pushUndo()
 	}
 	t.insertText(text)
 }
