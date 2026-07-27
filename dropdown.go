@@ -21,6 +21,9 @@ type DropDown struct {
 	Options  []string
 	Selected int
 	Open     bool
+	// OpenUp makes the popover appear ABOVE the control instead of below it —
+	// set it when the control sits near the bottom edge so the list has room.
+	OpenUp   bool
 	OnSelect func(idx int)
 }
 
@@ -84,15 +87,22 @@ func (d *DropDown) Select(idx int) {
 }
 
 // PopoverBounds returns the Rect the host should give to its popover
-// ListBox: same X+W as the widget, positioned just below, height
-// proportional to the option count (clamped to PopoverMaxRows rows).
+// ListBox: same X+W as the widget, height proportional to the option
+// count (clamped to PopoverMaxRows rows). Positioned just below the
+// widget, or — when OpenUp is set — just above it so a control near the
+// bottom edge still has room for its list.
 func (d *DropDown) PopoverBounds() Rect {
 	rows := len(d.Options)
 	if rows > PopoverMaxRows {
 		rows = PopoverMaxRows
 	}
 	r := d.Bounds()
-	return Rect{X: r.X, Y: r.Y + r.H, W: r.W, H: rows * 18}
+	h := rows * 18
+	y := r.Y + r.H
+	if d.OpenUp {
+		y = r.Y - h
+	}
+	return Rect{X: r.X, Y: y, W: r.W, H: h}
 }
 
 // PopoverMaxRows caps the dropdown popover height; longer option
