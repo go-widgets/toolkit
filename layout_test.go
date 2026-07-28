@@ -439,3 +439,85 @@ func TestFrameEventOutsideChildIgnored(t *testing.T) {
 		t.Fatalf("border-only event should not reach child; count=%d", child.evCount)
 	}
 }
+
+func TestHBoxFlexAndFixed(t *testing.T) {
+	h := NewHBox()
+	h.Spacing = -1
+	fixedW, flex1, flex2 := &spyWidget{}, &spyWidget{}, &spyWidget{}
+	h.AddFixed(fixedW, 20)
+	h.AddFlex(flex1, 1)
+	h.AddFlex(flex2, 3)
+	// W=100, fixed=20, avail=80, flexTotal=4 → flex1=20, flex2=60.
+	h.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 10})
+	if got := fixedW.Bounds(); got != (Rect{X: 0, Y: 0, W: 20, H: 10}) {
+		t.Fatalf("fixed = %+v", got)
+	}
+	if got := flex1.Bounds(); got != (Rect{X: 20, Y: 0, W: 20, H: 10}) {
+		t.Fatalf("flex1 = %+v", got)
+	}
+	if got := flex2.Bounds(); got != (Rect{X: 40, Y: 0, W: 60, H: 10}) {
+		t.Fatalf("flex2 = %+v", got)
+	}
+}
+
+func TestVBoxFlexAndFixed(t *testing.T) {
+	v := NewVBox()
+	v.Spacing = -1
+	head, body := &spyWidget{}, &spyWidget{}
+	v.AddFixed(head, 30)
+	v.AddFlex(body, 1)
+	// H=100, fixed=30, avail=70 → body fills 70.
+	v.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 100})
+	if got := head.Bounds(); got != (Rect{X: 0, Y: 0, W: 10, H: 30}) {
+		t.Fatalf("head = %+v", got)
+	}
+	if got := body.Bounds(); got != (Rect{X: 0, Y: 30, W: 10, H: 70}) {
+		t.Fatalf("body = %+v", got)
+	}
+}
+
+func TestBoxAddClampsAndOverflow(t *testing.T) {
+	// Negative flex clamps to 1; a single flex child fills the box.
+	h := NewHBox()
+	h.Spacing = -1
+	c := &spyWidget{}
+	h.AddFlex(c, -5)
+	h.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 10})
+	if c.Bounds().W != 50 {
+		t.Fatalf("flex clamp width = %d, want 50", c.Bounds().W)
+	}
+	// Negative fixed clamps to 0.
+	v := NewVBox()
+	v.Spacing = -1
+	d := &spyWidget{}
+	v.AddFixed(d, -3)
+	v.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 50})
+	if d.Bounds().H != 0 {
+		t.Fatalf("fixed clamp height = %d, want 0", d.Bounds().H)
+	}
+	e := &spyWidget{}
+	v.AddFlex(e, -1) // VBox AddFlex clamp
+	v.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 40})
+	if e.Bounds().H != 40 {
+		t.Fatalf("vbox flex clamp height = %d, want 40", e.Bounds().H)
+	}
+	// Fixed larger than the box → avail clamps to 0 (no negative sizes).
+	h2 := NewHBox()
+	h2.Spacing = -1
+	big, flex := &spyWidget{}, &spyWidget{}
+	h2.AddFixed(big, 100)
+	h2.AddFlex(flex, 1)
+	h2.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 10})
+	if flex.Bounds().W != 0 {
+		t.Fatalf("overflow flex width = %d, want 0", flex.Bounds().W)
+	}
+	// HBox AddFixed negative clamps to 0.
+	h3 := NewHBox()
+	h3.Spacing = -1
+	fx := &spyWidget{}
+	h3.AddFixed(fx, -2)
+	h3.SetBounds(Rect{X: 0, Y: 0, W: 30, H: 10})
+	if fx.Bounds().W != 0 {
+		t.Fatalf("hbox fixed clamp width = %d, want 0", fx.Bounds().W)
+	}
+}

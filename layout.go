@@ -32,80 +32,134 @@ func translateEvent(ev Event, parentRect, childRect Rect) Event {
 	return out
 }
 
-// --- HBox ----------------------------------------------------------------
+// --- box sizing ----------------------------------------------------------
 
-// HBox is a horizontal flow container. Children are laid out left-to-
-// right + share the container's width equally (minus Spacing gaps
-// between adjacent children). Children's Y + height fill the box's
-// vertical extent.
-//
-// HBox is a Widget itself: Draw fans out to every child + OnEvent
-// hit-tests by child Bounds, translating coordinates into the
-// matched child's local space before forwarding.
-type HBox struct {
-	Base
-	// Spacing is the gap in pixels between adjacent children. Defaults
-	// to 4 when left at zero (set to a negative value to truly disable
-	// the gap; negative values are clamped to zero at layout time).
-	Spacing  int
-	children []Widget
+// boxChild pairs a widget with its main-axis sizing spec: a flex weight (a
+// proportional share of the space left after fixed children + gaps) or a fixed
+// pixel size. Append gives flex 1 (all-equal, the historical behaviour);
+// AddFlex sets an explicit weight; AddFixed a fixed size — the Sencha
+// vbox/hbox model (flex + fixed items).
+type boxChild struct {
+	w    Widget
+	flex int // >0 => proportional; 0 => fixed
+	size int // used when flex == 0
 }
 
-// NewHBox constructs an empty HBox. Callers add children via Append
-// + then call SetBounds to trigger layout.
+// boxSpacing normalises a container's Spacing (0 → default, negative → 0).
+func boxSpacing(s int) int {
+	if s == 0 {
+		return defaultSpacing
+	}
+	if s < 0 {
+		return 0
+	}
+	return s
+}
+
+// boxCells returns each child's main-axis size for a container of the given
+// total extent and spacing: fixed children keep their size, the remainder is
+// split among flex children by weight (integer division, no remainder
+// redistribution — so an all-flex-1 box matches the historical equal split
+// exactly).
+func boxCells(total, spacing int, children []boxChild) []int {
+	n := len(children)
+	sizes := make([]int, n)
+	fixed, flexTotal := 0, 0
+	for _, c := range children {
+		if c.flex > 0 {
+			flexTotal += c.flex
+		} else {
+			fixed += c.size
+		}
+	}
+	avail := total - spacing*(n-1) - fixed
+	if avail < 0 {
+		avail = 0
+	}
+	for i, c := range children {
+		if c.flex > 0 && flexTotal > 0 {
+			sizes[i] = avail * c.flex / flexTotal
+		} else {
+			sizes[i] = c.size
+		}
+	}
+	return sizes
+}
+
+// --- HBox ----------------------------------------------------------------
+
+// HBox is a horizontal flow container. Children are laid out left-to-right;
+// each takes a flex share of the width or a fixed width (see boxChild), with
+// Spacing gaps between them. Children's Y + height fill the box's vertical
+// extent.
+//
+// HBox is a Widget itself: Draw fans out to every child + OnEvent hit-tests by
+// child Bounds, translating coordinates into the matched child's local space.
+type HBox struct {
+	Base
+	// Spacing is the gap in pixels between adjacent children. Defaults to 4 when
+	// left at zero (negative values are clamped to zero at layout time).
+	Spacing  int
+	children []boxChild
+}
+
+// NewHBox constructs an empty HBox. Add children via Append/AddFlex/AddFixed.
 func NewHBox() *HBox { return &HBox{} }
 
-// Append adds w to the right of any existing children. Re-runs layout
-// so the new child is positioned immediately + the caller doesn't
-// have to remember to re-call SetBounds.
-func (h *HBox) Append(w Widget) {
-	h.children = append(h.children, w)
+// Append adds w with flex weight 1 (an equal share of the width).
+func (h *HBox) Append(w Widget) { h.add(w, 1, 0) }
+
+// AddFlex adds w with an explicit flex weight (clamped to ≥1).
+func (h *HBox) AddFlex(w Widget, flex int) {
+	if flex < 1 {
+		flex = 1
+	}
+	h.add(w, flex, 0)
+}
+
+// AddFixed adds w with a fixed width in pixels (clamped to ≥0).
+func (h *HBox) AddFixed(w Widget, size int) {
+	if size < 0 {
+		size = 0
+	}
+	h.add(w, 0, size)
+}
+
+func (h *HBox) add(w Widget, flex, size int) {
+	h.children = append(h.children, boxChild{w: w, flex: flex, size: size})
 	h.SetBounds(h.Bounds())
 }
 
-// SetBounds positions the HBox + lays out its children. Width is
-// divided equally among children; Spacing pixels separate adjacent
-// cells. Children's Y matches the box's Y; height matches H.
+// SetBounds positions the HBox + lays out its children across the width.
 func (h *HBox) SetBounds(r Rect) {
 	h.Base.SetBounds(r)
-	n := len(h.children)
-	if n == 0 {
+	if len(h.children) == 0 {
 		return
 	}
-	spacing := h.Spacing
-	if spacing == 0 {
-		spacing = defaultSpacing
-	}
-	if spacing < 0 {
-		spacing = 0
-	}
-	totalGap := spacing * (n - 1)
-	cellW := (r.W - totalGap) / n
+	sp := boxSpacing(h.Spacing)
+	sizes := boxCells(r.W, sp, h.children)
+	x := r.X
 	for i, c := range h.children {
-		x := r.X + i*(cellW+spacing)
-		c.SetBounds(Rect{X: x, Y: r.Y, W: cellW, H: r.H})
+		c.w.SetBounds(Rect{X: x, Y: r.Y, W: sizes[i], H: r.H})
+		x += sizes[i] + sp
 	}
 }
 
-// Draw paints every child in append order. Children render directly
-// into the surface using their own Bounds; the HBox itself draws no
-// background or border (it's a pure layout container).
+// Draw paints every child in append order (the box itself draws nothing).
 func (h *HBox) Draw(p painter.Painter, theme *Theme) {
 	for _, c := range h.children {
-		c.Draw(p, theme)
+		c.w.Draw(p, theme)
 	}
 }
 
-// OnEvent hit-tests by child Bounds + forwards the event with
-// coordinates translated into the child's local space. The first
-// child whose Bounds contains the event point wins (children should
-// not overlap inside an HBox, but a stable order is still useful).
+// OnEvent forwards to the first child whose Bounds contains the event point,
+// translated into that child's local space.
 func (h *HBox) OnEvent(ev Event) {
 	pr := h.Bounds()
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	for _, c := range h.children {
-		if c.Bounds().Contains(sx, sy) {
-			c.OnEvent(translateEvent(ev, pr, c.Bounds()))
+		if c.w.Bounds().Contains(sx, sy) {
+			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
 			return
 		}
 	}
@@ -113,61 +167,72 @@ func (h *HBox) OnEvent(ev Event) {
 
 // --- VBox ----------------------------------------------------------------
 
-// VBox is the vertical analogue of HBox: children stack top-to-bottom,
-// sharing the container's height + filling its width.
+// VBox is the vertical analogue of HBox: children stack top-to-bottom, each a
+// flex share of the height or a fixed height, filling the box's width.
 type VBox struct {
 	Base
-	// Spacing is the gap in pixels between adjacent children; same
-	// semantics as HBox.Spacing.
+	// Spacing is the gap in pixels between adjacent children; same semantics as
+	// HBox.Spacing.
 	Spacing  int
-	children []Widget
+	children []boxChild
 }
 
 // NewVBox constructs an empty VBox.
 func NewVBox() *VBox { return &VBox{} }
 
-// Append adds w below any existing children + re-runs layout.
-func (v *VBox) Append(w Widget) {
-	v.children = append(v.children, w)
+// Append adds w with flex weight 1 (an equal share of the height).
+func (v *VBox) Append(w Widget) { v.add(w, 1, 0) }
+
+// AddFlex adds w with an explicit flex weight (clamped to ≥1).
+func (v *VBox) AddFlex(w Widget, flex int) {
+	if flex < 1 {
+		flex = 1
+	}
+	v.add(w, flex, 0)
+}
+
+// AddFixed adds w with a fixed height in pixels (clamped to ≥0).
+func (v *VBox) AddFixed(w Widget, size int) {
+	if size < 0 {
+		size = 0
+	}
+	v.add(w, 0, size)
+}
+
+func (v *VBox) add(w Widget, flex, size int) {
+	v.children = append(v.children, boxChild{w: w, flex: flex, size: size})
 	v.SetBounds(v.Bounds())
 }
 
-// SetBounds positions the VBox + stacks its children vertically.
+// SetBounds positions the VBox + stacks its children down the height.
 func (v *VBox) SetBounds(r Rect) {
 	v.Base.SetBounds(r)
-	n := len(v.children)
-	if n == 0 {
+	if len(v.children) == 0 {
 		return
 	}
-	spacing := v.Spacing
-	if spacing == 0 {
-		spacing = defaultSpacing
-	}
-	if spacing < 0 {
-		spacing = 0
-	}
-	totalGap := spacing * (n - 1)
-	cellH := (r.H - totalGap) / n
+	sp := boxSpacing(v.Spacing)
+	sizes := boxCells(r.H, sp, v.children)
+	y := r.Y
 	for i, c := range v.children {
-		y := r.Y + i*(cellH+spacing)
-		c.SetBounds(Rect{X: r.X, Y: y, W: r.W, H: cellH})
+		c.w.SetBounds(Rect{X: r.X, Y: y, W: r.W, H: sizes[i]})
+		y += sizes[i] + sp
 	}
 }
 
 // Draw paints every child in append order.
 func (v *VBox) Draw(p painter.Painter, theme *Theme) {
 	for _, c := range v.children {
-		c.Draw(p, theme)
+		c.w.Draw(p, theme)
 	}
 }
 
-// OnEvent hit-tests + forwards just like HBox.
+// OnEvent forwards to the first child containing the event point.
 func (v *VBox) OnEvent(ev Event) {
 	pr := v.Bounds()
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	for _, c := range v.children {
-		if c.Bounds().Contains(sx, sy) {
-			c.OnEvent(translateEvent(ev, pr, c.Bounds()))
+		if c.w.Bounds().Contains(sx, sy) {
+			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
 			return
 		}
 	}
