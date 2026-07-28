@@ -29,9 +29,17 @@ import (
 // single-threaded render model.
 type truetypeFont struct {
 	face    *opentype.Face
-	advance int // width of a space — the fallback monospace-ish step
-	height  int // line height (ascent + descent + line gap)
-	ascent  int // baseline offset from the text top
+	parsed  *opentype.Font // the parsed font, for per-rune glyph-coverage queries
+	advance int            // width of a space — the fallback monospace-ish step
+	height  int            // line height (ascent + descent + line gap)
+	ascent  int            // baseline offset from the text top
+}
+
+// covers reports whether this font has a glyph for r (used by fallbackFont to
+// route each rune to a font that can render it).
+func (f *truetypeFont) covers(r rune) bool {
+	_, ok := f.parsed.GlyphIndex(r)
+	return ok
 }
 
 // NewTrueTypeFont parses ttf (a TrueType byte blob) and returns a Font that
@@ -52,6 +60,7 @@ func NewTrueTypeFont(ttf []byte, sizePx int) (Font, error) {
 	m := face.Metrics()
 	return &truetypeFont{
 		face:    face,
+		parsed:  parsed,
 		advance: face.Measure(" "),
 		height:  m.Height,
 		ascent:  m.Ascent,
@@ -111,7 +120,13 @@ func (f *truetypeFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) 
 		p.Text(x, y, visualText(text), ink)
 		return
 	}
-	baseline := y + f.ascent
+	f.drawShaped(pix, x, y+f.ascent, text, ink)
+}
+
+// drawShaped shapes + blits text with an explicit baseline (so a fallback chain
+// can align runs from different faces to one common baseline). Returns the pen
+// advance.
+func (f *truetypeFont) drawShaped(pix *painter.PixelPainter, x, baseline int, text string, ink RGBA) int {
 	pen := x
 	for _, g := range shape.Shape(f.face, text, shape.Options{Direction: textDirection.base()}) {
 		// .notdef (index 0) is the shaper's blank-for-unknown; every other
@@ -131,4 +146,5 @@ func (f *truetypeFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) 
 		}
 		pen += g.XAdvance
 	}
+	return pen
 }
