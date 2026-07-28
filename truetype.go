@@ -82,6 +82,10 @@ func (f *truetypeFont) Measure(text string) int { return f.face.Measure(text) }
 // Runes the face cannot map (control characters, unassigned code points) are
 // skipped, matching the bitmap font's blank-for-unknown behaviour.
 func (f *truetypeFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
+	// Reorder logical text into visual order first, so the strictly
+	// left-to-right glyph loop below renders bidirectional text correctly.
+	// Under the default DirLTR this is a no-op for all-LTR text.
+	text = visualText(text)
 	pix, isPixel := p.(*painter.PixelPainter)
 	if !isPixel {
 		p.Text(x, y, text, ink)

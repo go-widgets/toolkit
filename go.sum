@@ -1,3 +1,5 @@
+github.com/go-opentype/bidi v0.2.0 h1:ze8chEUw22c98LZug2GByD9cc3Zuq0qARxrSLGj1ioQ=
+github.com/go-opentype/bidi v0.2.0/go.mod h1:PaWZ9P93jwQaXsEvAoSxvJ3P70S9f8TuFGDstTvcfmM=
 github.com/go-opentype/opentype v0.1.0 h1:ok3QZb2t1xjIOhDaqtvOhZ/rCvY62ng927ckygfrbQg=
 github.com/go-opentype/opentype v0.1.0/go.mod h1:AOixevJf7XQaH7+WG+OMIOZEbYPXfMqklVk26Y6YTUU=
 github.com/go-widgets/painter v0.1.3 h1:50oeDH76vMUlxQ8117wMFf5MGuAJlq5n2JeVS+QlpnM=
