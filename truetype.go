@@ -8,6 +8,7 @@ import (
 	"fmt"
 
 	"github.com/go-opentype/opentype"
+	"github.com/go-opentype/shape"
 	"github.com/go-widgets/painter"
 )
 
@@ -65,50 +66,69 @@ func (f *truetypeFont) Advance() int { return f.advance }
 // Height is the face's line height (ascent + descent + line gap), in pixels.
 func (f *truetypeFont) Height() int { return f.height }
 
-// Measure is the total rendered width of text in pixels, summing each glyph's
-// proportional advance (so "iii" is narrower than "MMM").
-func (f *truetypeFont) Measure(text string) int { return f.face.Measure(text) }
+// Measure is the total rendered width of text in pixels: it shapes the run
+// through the complex-text shaper (see Draw) and sums the positioned glyph
+// advances, so the reported width matches what Draw paints — cursive joining,
+// ligatures and kerning that change the advances are reflected. For plain
+// Latin with no active GSUB/GPOS this equals the sum of per-glyph advances, so
+// "iii" is still narrower than "MMM"; an empty string measures 0.
+func (f *truetypeFont) Measure(text string) int {
+	total := 0
+	for _, g := range shape.Shape(f.face, text, shape.Options{Direction: textDirection.base()}) {
+		total += g.XAdvance
+	}
+	return total
+}
 
 // Draw paints text anti-aliased with (x, y) as the text top-left corner (the
 // toolkit convention), computing the baseline from the face ascent.
 //
-// On a *painter.PixelPainter it rasterises each rune to an alpha coverage mask
-// and composites it: every covered pixel is written as the ink colour with its
-// alpha scaled by the mask coverage, so the painter's src-over PutPixel blends
-// glyph edges into partial-coverage pixels. On any other painter (a CellPainter
-// for a TUI, an SvgPainter for vector output) pixel coverage is meaningless, so
-// it delegates to that painter's own Text primitive, mirroring the bitmap font.
+// On a *painter.PixelPainter it runs the complex-text shaper
+// (github.com/go-opentype/shape) to turn the logical run into positioned glyphs
+// in visual order — resolving bidi embedding levels, Arabic cursive joining
+// (init/medi/fina/isol GSUB), ligatures, mark attachment and kerning — then
+// blits each glyph by its index at (pen+XOffset, baseline-YOffset), advancing
+// the pen by the shaped XAdvance. YOffset is font-space y-up (a positive value
+// lifts a diacritic above the baseline), so it is subtracted in the screen's
+// y-down space. This renders real Arabic joined-and-marked, unlike the previous
+// per-rune presentation-form fallback. Each covered pixel is written as the ink
+// colour with its alpha scaled by the mask coverage, so the painter's src-over
+// PutPixel blends glyph edges into partial-coverage pixels.
 //
-// Runes the face cannot map (control characters, unassigned code points) are
-// skipped, matching the bitmap font's blank-for-unknown behaviour.
+// On any other painter (a CellPainter for a TUI, an SvgPainter for vector
+// output) pixel coverage — and glyph indices — are meaningless, so it reorders
+// the text into visual order (bidi only, no GID shaping) and delegates to that
+// painter's own rune-based Text primitive, mirroring the bitmap font.
+//
+// Glyphs the font cannot map (control characters, unassigned code points shape
+// to .notdef, index 0) are not painted, matching the bitmap font's
+// blank-for-unknown behaviour.
 func (f *truetypeFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
-	// Reorder logical text into visual order first, so the strictly
-	// left-to-right glyph loop below renders bidirectional text correctly.
-	// Under the default DirLTR this is a no-op for all-LTR text.
-	text = visualText(text)
 	pix, isPixel := p.(*painter.PixelPainter)
 	if !isPixel {
-		p.Text(x, y, text, ink)
+		// Non-pixel painter: no glyph-index blitting is possible, so fall back
+		// to the bidi visual-order reorder and hand runes to the painter.
+		p.Text(x, y, visualText(text), ink)
 		return
 	}
 	baseline := y + f.ascent
 	pen := x
-	for _, r := range text {
-		dr, mask, maskp, advance, ok := f.face.GlyphMask(r, pen, baseline)
-		if !ok {
-			// Unmapped rune: nothing to paint and no advance to trust.
-			continue
-		}
-		for j := 0; j < dr.Dy(); j++ {
-			for i := 0; i < dr.Dx(); i++ {
-				a := mask.AlphaAt(maskp.X+i, maskp.Y+j).A
-				if a == 0 {
-					continue
+	for _, g := range shape.Shape(f.face, text, shape.Options{Direction: textDirection.base()}) {
+		// .notdef (index 0) is the shaper's blank-for-unknown; every other
+		// index the shaper emits is a valid, renderable glyph of this font.
+		if g.GID != 0 {
+			dr, mask, maskp, _, _ := f.face.GlyphMaskIndex(g.GID, pen+g.XOffset, baseline-g.YOffset)
+			for j := 0; j < dr.Dy(); j++ {
+				for i := 0; i < dr.Dx(); i++ {
+					a := mask.AlphaAt(maskp.X+i, maskp.Y+j).A
+					if a == 0 {
+						continue
+					}
+					alpha := uint8(uint32(a) * uint32(ink.A) / 255)
+					pix.PutPixel(dr.Min.X+i, dr.Min.Y+j, RGBA{R: ink.R, G: ink.G, B: ink.B, A: alpha})
 				}
-				alpha := uint8(uint32(a) * uint32(ink.A) / 255)
-				pix.PutPixel(dr.Min.X+i, dr.Min.Y+j, RGBA{R: ink.R, G: ink.G, B: ink.B, A: alpha})
 			}
 		}
-		pen += advance
+		pen += g.XAdvance
 	}
 }

@@ -5,9 +5,14 @@
 package toolkit
 
 import (
+	"bytes"
 	_ "embed"
 	"testing"
 
+	"github.com/go-opentype/bidi"
+	"github.com/go-opentype/fonts/inter"
+	"github.com/go-opentype/fonts/notosansarabic"
+	"github.com/go-opentype/shape"
 	"github.com/go-widgets/painter"
 )
 
@@ -222,5 +227,147 @@ func TestSetFontTrueTypeThenDrawText(t *testing.T) {
 	}
 	if partial == 0 {
 		t.Fatal("DrawText via TrueType active font produced no anti-aliased pixels")
+	}
+}
+
+// --- complex-text shaping (github.com/go-opentype/shape) ------------------
+
+// newTTFace builds the concrete *truetypeFont (not the Font interface) so a
+// shaping test can reach the underlying *opentype.Face for a naive, unshaped
+// reference render.
+func newTTFace(t *testing.T, ttf []byte, px int) *truetypeFont {
+	t.Helper()
+	f, err := NewTrueTypeFont(ttf, px)
+	if err != nil {
+		t.Fatalf("NewTrueTypeFont: %v", err)
+	}
+	return f.(*truetypeFont)
+}
+
+// drawIsolated blits each rune's isolated (cmap) glyph strictly left-to-right
+// with no shaping — no cursive joining, no reordering, no marks. It reproduces
+// the pre-shaper best-effort layout and is the negative oracle: correct
+// shaping of a cursive Arabic word must NOT match it.
+func drawIsolated(f *truetypeFont, p *painter.PixelPainter, x, y int, text string, ink RGBA) {
+	baseline := y + f.ascent
+	pen := x
+	for _, r := range text {
+		dr, mask, maskp, advance, ok := f.face.GlyphMask(r, pen, baseline)
+		if ok && mask != nil {
+			for j := 0; j < dr.Dy(); j++ {
+				for i := 0; i < dr.Dx(); i++ {
+					a := mask.AlphaAt(maskp.X+i, maskp.Y+j).A
+					if a == 0 {
+						continue
+					}
+					alpha := uint8(uint32(a) * uint32(ink.A) / 255)
+					p.PutPixel(dr.Min.X+i, dr.Min.Y+j, RGBA{R: ink.R, G: ink.G, B: ink.B, A: alpha})
+				}
+			}
+		}
+		pen += advance
+	}
+}
+
+// A real Arabic word renders through the complex shaper: its cursive joining
+// forms, ccmp dot decomposition and GPOS mark placement make the picture differ
+// from the naive isolated-glyph layout, and at least one glyph is lifted off
+// the baseline (an attached dot), proving mark positioning ran.
+func TestTrueTypeArabicIsShapedNotIsolated(t *testing.T) {
+	SetTextDirection(DirRTL)
+	defer SetTextDirection(DirLTR)
+
+	f := newTTFace(t, notosansarabic.TTF, 40)
+	const word = "بيت" // bayt: three cursive-joining letters, each dotted
+	const w, h = 240, 80
+
+	shaped := makeSurface(w, h)
+	f.Draw(painter.NewPixelPainter(shaped, w, h), 6, 6, word, RGB(0x10, 0x20, 0x30))
+
+	isolated := makeSurface(w, h)
+	drawIsolated(f, painter.NewPixelPainter(isolated, w, h), 6, 6, word, RGB(0x10, 0x20, 0x30))
+
+	if bytes.Equal(shaped, isolated) {
+		t.Fatal("shaped Arabic is byte-identical to the isolated-glyph layout: shaping did not run")
+	}
+	if bytes.Equal(shaped, makeSurface(w, h)) {
+		t.Fatal("shaped Arabic produced an empty buffer")
+	}
+
+	marked := false
+	for _, g := range shape.Shape(f.face, word, shape.Options{Direction: bidi.RightToLeft}) {
+		if g.YOffset != 0 {
+			marked = true
+		}
+	}
+	if !marked {
+		t.Fatal("no glyph carries a non-zero YOffset: Arabic marks were not positioned")
+	}
+}
+
+// Mixed Latin+Arabic under a left-to-right base: the Latin letter stays
+// leftmost (cluster 0 first), while the trailing Arabic run is laid out
+// right-to-left — its source clusters read in non-increasing order — which a
+// naive left-to-right rune loop can never produce.
+func TestTrueTypeMixedBidiShaping(t *testing.T) {
+	f := newTTFace(t, notosansarabic.TTF, 32)
+	glyphs := shape.Shape(f.face, "aبت", shape.Options{Direction: bidi.LeftToRight})
+	if len(glyphs) < 3 {
+		t.Fatalf("expected several glyphs, got %d", len(glyphs))
+	}
+	if glyphs[0].Cluster != 0 {
+		t.Fatalf("first (leftmost) glyph cluster = %d, want 0 (Latin stays LTR-left)", glyphs[0].Cluster)
+	}
+	sawReversal := false
+	prev := glyphs[1].Cluster
+	for _, g := range glyphs[2:] {
+		if g.Cluster > prev {
+			t.Fatalf("Arabic run not right-to-left: cluster %d follows %d", g.Cluster, prev)
+		}
+		if g.Cluster < prev {
+			sawReversal = true
+		}
+		prev = g.Cluster
+	}
+	if !sawReversal {
+		t.Fatal("no right-to-left cluster reversal in the Arabic run")
+	}
+}
+
+// Kerning changes the width: the shaped Measure of a negative-kern Latin pair
+// ("AV") is strictly narrower than the sum of the two isolated advances, and
+// TextWidth reports the same shaped width through the active font.
+func TestTrueTypeMeasureAppliesKerning(t *testing.T) {
+	f := newTTFace(t, inter.TTF, 64)
+	shaped := f.Measure("AV")
+	naive := f.face.Advance('A') + f.face.Advance('V')
+	if !(shaped < naive) {
+		t.Fatalf("kerned Measure(\"AV\")=%d should be < naive advance sum %d", shaped, naive)
+	}
+
+	SetFont(f)
+	defer SetFont(nil)
+	if TextWidth("AV") != shaped {
+		t.Fatalf("TextWidth(\"AV\")=%d != Measure(\"AV\")=%d", TextWidth("AV"), shaped)
+	}
+}
+
+// Pure-LTR Latin stays byte-for-byte identical through the shaper: an all-LTR
+// run with no active GSUB/GPOS reproduces the plain advance-width layout, so
+// the shaped Draw matches the naive per-rune isolated render exactly. (This
+// complements the goregular regression in bidi_test.go on a second face.)
+func TestTrueTypeLTRShapedByteIdentical(t *testing.T) {
+	f := newTTFace(t, testFontTTF, 16)
+	const w, h = 96, 24
+	const s = "Widget 42!"
+
+	shaped := makeSurface(w, h)
+	f.Draw(painter.NewPixelPainter(shaped, w, h), 2, 2, s, RGB(0x10, 0x20, 0x30))
+
+	isolated := makeSurface(w, h)
+	drawIsolated(f, painter.NewPixelPainter(isolated, w, h), 2, 2, s, RGB(0x10, 0x20, 0x30))
+
+	if !bytes.Equal(shaped, isolated) {
+		t.Fatal("LTR Latin shaped render differs from the naive isolated layout: byte-identity broken")
 	}
 }
