@@ -430,6 +430,34 @@ func TestCheckButtonDrawCheckedAndUnchecked(t *testing.T) {
 	}
 }
 
+// A Sized checkbox scales its box and tick; checking it must change the render,
+// exercising boxSize(Size>0) and the scaled drawCheckmark.
+func TestCheckButtonSizedCheckmark(t *testing.T) {
+	const w, h = 60, 40
+	theme := DefaultLight()
+	draw := func(checked bool) []byte {
+		c := NewCheckButton("", checked)
+		c.Size = 24 // larger than the 12px default
+		c.SetBounds(Rect{X: 2, Y: 2, W: 40, H: 36})
+		buf := makeSurface(w, h)
+		c.Draw(newP(buf, w), theme)
+		return buf
+	}
+	on, off := draw(true), draw(false)
+	if string(on) == string(off) {
+		t.Fatal("a checked sized box should render its scaled tick, differing from unchecked")
+	}
+	// The 24px box's centre is Accent-filled when checked.
+	if pixelAt(on, w, 2+12, 2+18) != theme.Accent {
+		t.Fatalf("sized checked box centre = %+v, want Accent", pixelAt(on, w, 14, 20))
+	}
+	// A tiny sized box (b/12 < 1) clamps the stroke width to 1 and must not panic.
+	small := NewCheckButton("", true)
+	small.Size = 6
+	small.SetBounds(Rect{X: 1, Y: 1, W: 20, H: 10})
+	small.Draw(newP(makeSurface(w, h), w), theme)
+}
+
 // --- RadioButton + RadioGroup --------------------------------------------
 
 func TestRadioButtonStandaloneToggles(t *testing.T) {
