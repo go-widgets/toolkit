@@ -30,6 +30,10 @@ type Label struct {
 	Base
 	Text  string
 	Align Align
+	// Ink overrides the text colour. The zero value (A==0) means "inherit the
+	// theme's OnSurface colour"; set a colour with a non-zero alpha to paint the
+	// label in it (e.g. a muted or accent tone).
+	Ink RGBA
 }
 
 // NewLabel constructs a Label carrying text.
@@ -59,5 +63,9 @@ func (l *Label) Draw(p painter.Painter, theme *Theme) {
 	if x < r.X {
 		x = r.X // never start left of the widget
 	}
-	l.drawText(p, x, ty, l.Text, theme.OnSurface)
+	ink := theme.OnSurface
+	if l.Ink.A != 0 {
+		ink = l.Ink
+	}
+	l.drawText(p, x, ty, l.Text, ink)
 }
