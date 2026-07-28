@@ -213,6 +213,9 @@ func DrawText(p painter.Painter, x, y int, text string, ink RGBA) {
 // alignment is preserved; pixels clip per-pixel so overflowing glyphs degrade
 // gracefully.
 func (f *bitmapFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
+	// Arrange logical text into visual order so mixed / right-to-left text is
+	// consistent with the TrueType path; DirLTR keeps all-LTR text byte-identical.
+	text = visualText(text)
 	if _, isPixel := p.(*painter.PixelPainter); !isPixel {
 		p.Text(x, y, text, ink)
 		return
