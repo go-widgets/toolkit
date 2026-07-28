@@ -1,0 +1,102 @@
+// Copyright (c) 2026 the wasmdesk/toolkit authors. All rights reserved.
+// Use of this source code is governed by a BSD-3-Clause license that can be
+// found in the LICENSE file at the root of this repository.
+
+package toolkit
+
+import "testing"
+
+func TestScrollbarThumbGeometry(t *testing.T) {
+	// Vertical: viewport is half the content → thumb ~half the track; offset at
+	// the bottom pins the thumb to the end.
+	sb := NewScrollbar()
+	sb.Total, sb.Viewport = 200, 100
+	sb.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
+
+	sb.Offset = 0
+	top := sb.ThumbRect()
+	if top.H != 50 || top.Y != 0 {
+		t.Fatalf("top thumb = %+v, want H=50 Y=0", top)
+	}
+	sb.Offset = 100 // max (Total-Viewport)
+	bot := sb.ThumbRect()
+	if bot.Y+bot.H != 100 {
+		t.Fatalf("bottom thumb should reach the track end: %+v", bot)
+	}
+	sb.Offset = 50 // middle
+	mid := sb.ThumbRect()
+	if !(mid.Y > top.Y && mid.Y < bot.Y) {
+		t.Fatalf("mid thumb %d not between %d and %d", mid.Y, top.Y, bot.Y)
+	}
+
+	// Over/under-shoot offsets clamp.
+	sb.Offset = -20
+	if sb.ThumbRect().Y != 0 {
+		t.Fatal("negative offset must clamp to the top")
+	}
+	sb.Offset = 9999
+	if r := sb.ThumbRect(); r.Y+r.H != 100 {
+		t.Fatalf("huge offset must clamp to the bottom: %+v", r)
+	}
+}
+
+func TestScrollbarEverythingFitsAndMinThumb(t *testing.T) {
+	// Everything visible → thumb fills the track.
+	sb := NewScrollbar()
+	sb.Total, sb.Viewport = 80, 100 // viewport >= total
+	sb.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
+	if r := sb.ThumbRect(); r.H != 100 {
+		t.Fatalf("thumb should fill the track when all fits: %+v", r)
+	}
+
+	// A tiny viewport in huge content still yields a grabbable minimum thumb.
+	sb.Total, sb.Viewport = 100000, 100
+	if r := sb.ThumbRect(); r.H != scrollbarMinThumb {
+		t.Fatalf("thumb = %d, want min %d", r.H, scrollbarMinThumb)
+	}
+
+	// Degenerate totals default to 1 (no divide-by-zero).
+	sb.Total, sb.Viewport = 0, 0
+	if r := sb.ThumbRect(); r.H <= 0 {
+		t.Fatalf("degenerate totals should still yield a thumb: %+v", r)
+	}
+}
+
+func TestScrollbarHorizontal(t *testing.T) {
+	sb := NewScrollbar()
+	sb.Horizontal = true
+	sb.Total, sb.Viewport, sb.Offset = 300, 100, 200
+	sb.SetBounds(Rect{X: 10, Y: 0, W: 120, H: 8})
+	r := sb.ThumbRect()
+	if r.W >= 120 || r.X+r.W != 130 {
+		t.Fatalf("horizontal thumb at max offset should reach the right edge: %+v", r)
+	}
+}
+
+func TestScrollbarDrawAndInert(t *testing.T) {
+	sb := NewScrollbar()
+	sb.Total, sb.Viewport, sb.Offset = 200, 100, 40
+	sb.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
+	buf := makeSurface(8, 100)
+	sb.Draw(newP(buf, 8), DefaultLight())
+	// The thumb (Border ink) must have painted some non-track pixels.
+	painted := false
+	for _, b := range buf {
+		if b != 0 {
+			painted = true
+			break
+		}
+	}
+	if !painted {
+		t.Fatal("scrollbar drew nothing")
+	}
+	// Passive: it never swallows clicks, and a zero-size widget draws nothing.
+	if sb.HitTest(4, 40) {
+		t.Fatal("scrollbar must be click-through")
+	}
+	empty := NewScrollbar()
+	empty.Draw(newP(makeSurface(1, 1), 1), DefaultLight()) // no panic on zero bounds
+	if r := empty.ThumbRect(); r != (Rect{}) {
+		t.Fatalf("zero-bounds thumb should be empty: %+v", r)
+	}
+}
