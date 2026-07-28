@@ -10,10 +10,11 @@ import "github.com/go-widgets/painter"
 // search-prefix glyph and, when Text is non-empty, a trailing "clear"
 // affordance on the right. Think GTK's SearchEntry: an Entry whose
 // visual chrome hints at its role and offers a one-click reset. The
-// widget is intentionally passive about focus (no cursor, no caret) —
-// it simply appends printable characters, deletes on Backspace, and
-// clears on a click in the right-side X slot. Callers who need cursor
-// navigation or IME support should reach for Entry / TextView instead.
+// widget appends printable characters, deletes on Backspace, and clears
+// on a click in the right-side X slot. It draws a simple end-of-text
+// caret when Focused (set by the host), measured with its own font so it
+// always aligns; it has no cursor navigation or IME — callers needing
+// those should reach for Entry / TextView instead.
 //
 // An optional leading Icon lets the host paint a real magnifier (or any
 // glyph) in the left prefix slot instead of the "?" text stand-in. When
@@ -23,6 +24,7 @@ import "github.com/go-widgets/painter"
 type SearchEntry struct {
 	Base
 	Text     string
+	Focused  bool // when true, a text caret is drawn at the end of Text
 	OnChange func(s string)
 	Icon     func(p painter.Painter, r Rect, ink RGBA)
 }
@@ -73,7 +75,18 @@ func (s *SearchEntry) Draw(p painter.Painter, theme *Theme) {
 		s.drawText(p, prefixX, textY, searchEntryPrefix, theme.OnSurface)
 	}
 	// Middle text.
-	s.drawText(p, r.X+SearchEntryPadX+SearchEntryIconW, textY, s.Text, theme.OnSurface)
+	textX := r.X + SearchEntryPadX + SearchEntryIconW
+	s.drawText(p, textX, textY, s.Text, theme.OnSurface)
+	// Caret at the end of the text when focused. Measured with the widget's own
+	// font so it always aligns with the text the widget just drew — a host must not
+	// overlay its own caret with a different font engine.
+	if s.Focused {
+		caretW := s.glyphHeight() / 12
+		if caretW < 1 {
+			caretW = 1
+		}
+		fillRect(p, textX+s.textWidth(s.Text), textY, caretW, s.glyphHeight(), theme.OnSurface)
+	}
 	// Right clear slot only when there is text to clear.
 	if s.Text != "" {
 		clearX := r.X + r.W - SearchEntryPadX - SearchEntryIconW + (SearchEntryIconW-s.glyphAdvance())/2

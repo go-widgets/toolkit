@@ -5,10 +5,40 @@
 package toolkit
 
 import (
+	"bytes"
 	"testing"
 
 	"github.com/go-widgets/painter"
 )
+
+// assertFocusedCaret renders "hello" unfocused and focused and requires the
+// focused render to differ — i.e. the end-of-text caret painted something.
+func assertFocusedCaret(t *testing.T) {
+	t.Helper()
+	const w, h = 120, 24
+	theme := DefaultLight()
+	draw := func(focused bool) []byte {
+		s := NewSearchEntry("hello")
+		s.Focused = focused
+		s.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+		buf := makeSurface(w, h)
+		s.Draw(newP(buf, w), theme)
+		return buf
+	}
+	if bytes.Equal(draw(false), draw(true)) {
+		t.Fatal("focused caret produced no visible change")
+	}
+}
+
+// Bitmap font (glyph height < 12) exercises the caretW<1 clamp.
+func TestSearchEntryFocusedCaretBitmap(t *testing.T) { assertFocusedCaret(t) }
+
+// A taller TrueType font (glyph height ≥ 12) gives a caret wider than 1px.
+func TestSearchEntryFocusedCaretTrueType(t *testing.T) {
+	SetFont(newTTF(t, 16))
+	defer SetFont(nil)
+	assertFocusedCaret(t)
+}
 
 // --- Constructor ---------------------------------------------------------
 
