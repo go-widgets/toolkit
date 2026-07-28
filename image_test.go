@@ -103,21 +103,25 @@ func TestImageDrawGuards(t *testing.T) {
 	}
 }
 
-func TestFitRect(t *testing.T) {
+func TestFitBounds(t *testing.T) {
 	b := Rect{X: 0, Y: 0, W: 10, H: 10}
 	// Wide source: width-bound, letterboxed vertically.
-	if got := fitRect(4, 1, b); got != (Rect{X: 0, Y: 4, W: 10, H: 2}) {
+	if got := FitBounds(4, 1, b); got != (Rect{X: 0, Y: 4, W: 10, H: 2}) {
 		t.Fatalf("wide fit = %+v", got)
 	}
-	// Tall source: height-bound (exercises the h>b.H branch), pillarboxed.
-	if got := fitRect(1, 4, b); got != (Rect{X: 4, Y: 0, W: 2, H: 10}) {
+	// Tall source: height-bound (exercises the h>bounds.H branch), pillarboxed.
+	if got := FitBounds(1, 4, b); got != (Rect{X: 4, Y: 0, W: 2, H: 10}) {
 		t.Fatalf("tall fit = %+v", got)
 	}
 	// Degenerate aspects clamp to a 1px minimum (w<1 and h<1 guards).
-	if got := fitRect(1, 1000, b); got.W != 1 {
+	if got := FitBounds(1, 1000, b); got.W != 1 {
 		t.Fatalf("ultra-tall W = %d, want 1", got.W)
 	}
-	if got := fitRect(1000, 1, b); got.H != 1 {
+	if got := FitBounds(1000, 1, b); got.H != 1 {
 		t.Fatalf("ultra-wide H = %d, want 1", got.H)
+	}
+	// Unknown aspect (non-positive dims) → bounds unchanged.
+	if got := FitBounds(0, 5, b); got != b {
+		t.Fatalf("zero-width src = %+v, want bounds", got)
 	}
 }

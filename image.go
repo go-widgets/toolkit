@@ -54,7 +54,7 @@ func (i *Image) Draw(p painter.Painter, theme *Theme) {
 		return
 	}
 	if i.Scale == ScaleFit {
-		dst = fitRect(i.W, i.H, dst)
+		dst = FitBounds(i.W, i.H, dst)
 	}
 	for dy := 0; dy < dst.H; dy++ {
 		sy := dy * i.H / dst.H
@@ -67,14 +67,20 @@ func (i *Image) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
-// fitRect returns the largest rect of source aspect (sw:sh) that fits within b,
-// centred in b. sw/sh are assumed positive (Draw guards W/H > 0).
-func fitRect(sw, sh int, b Rect) Rect {
-	w := b.W
-	h := sh * w / sw
-	if h > b.H {
-		h = b.H
-		w = sw * h / sh
+// FitBounds returns the largest rect of source aspect (srcW:srcH) that fits
+// entirely within bounds, centred in it — the geometry [ScaleFit] paints into.
+// Consumers can call it to size/lay out an image area (e.g. grow a box to the
+// image's fitted height) before drawing. When srcW or srcH is non-positive the
+// aspect is unknown and bounds is returned unchanged.
+func FitBounds(srcW, srcH int, bounds Rect) Rect {
+	if srcW <= 0 || srcH <= 0 {
+		return bounds
+	}
+	w := bounds.W
+	h := srcH * w / srcW
+	if h > bounds.H {
+		h = bounds.H
+		w = srcW * h / srcH
 	}
 	if w < 1 {
 		w = 1
@@ -82,5 +88,5 @@ func fitRect(sw, sh int, b Rect) Rect {
 	if h < 1 {
 		h = 1
 	}
-	return Rect{X: b.X + (b.W-w)/2, Y: b.Y + (b.H-h)/2, W: w, H: h}
+	return Rect{X: bounds.X + (bounds.W-w)/2, Y: bounds.Y + (bounds.H-h)/2, W: w, H: h}
 }
