@@ -89,5 +89,26 @@ func (s *Scrollbar) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, radius, theme.SurfaceAlt)
 	t := s.ThumbRect()
-	fillRoundRect(p, t.X, t.Y, t.W, t.H, radius, theme.Border)
+	// The thumb is a muted grey (OnSurface blended toward the track) rather than
+	// the faint Border, so it stays clearly visible even when the surrounding
+	// surface is itself SurfaceAlt (e.g. a sidebar) where a Border thumb vanishes.
+	fillRoundRect(p, t.X, t.Y, t.W, t.H, radius, blendRGBA(theme.OnSurface, theme.SurfaceAlt, scrollbarThumbMix))
+}
+
+// scrollbarThumbMix is how far the thumb colour sits from the track toward the
+// foreground: 0 = track colour, 1 = full OnSurface. ~0.45 reads as a clear
+// medium grey on both light and dark themes.
+const scrollbarThumbMix = 0.45
+
+// blendRGBA mixes a over b at t in [0,1] (t=1 yields a, t=0 yields b), producing
+// an opaque colour.
+func blendRGBA(a, b RGBA, t float64) RGBA {
+	if t < 0 {
+		t = 0
+	}
+	if t > 1 {
+		t = 1
+	}
+	mix := func(x, y uint8) uint8 { return uint8(float64(x)*t + float64(y)*(1-t) + 0.5) }
+	return RGBA{R: mix(a.R, b.R), G: mix(a.G, b.G), B: mix(a.B, b.B), A: 255}
 }

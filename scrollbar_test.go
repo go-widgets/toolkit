@@ -73,6 +73,51 @@ func TestScrollbarHorizontal(t *testing.T) {
 	}
 }
 
+func TestScrollbarTinyTrack(t *testing.T) {
+	// A track shorter than the minimum thumb: the min-thumb bump would exceed the
+	// track, so the thumb clamps back down to the track length.
+	sb := NewScrollbar()
+	sb.Total, sb.Viewport = 1000, 100
+	sb.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 12}) // 12 < scrollbarMinThumb (24)
+	if r := sb.ThumbRect(); r.H != 12 {
+		t.Fatalf("thumb should clamp to the tiny track height 12, got %d", r.H)
+	}
+}
+
+func TestBlendRGBA(t *testing.T) {
+	a := RGBA{R: 200, G: 200, B: 200, A: 255}
+	b := RGBA{R: 0, G: 0, B: 0, A: 255}
+	if got := blendRGBA(a, b, 1.5); got != a {
+		t.Fatalf("t>1 should clamp to a, got %+v", got)
+	}
+	if got := blendRGBA(a, b, -1); got != b {
+		t.Fatalf("t<0 should clamp to b, got %+v", got)
+	}
+	if mid := blendRGBA(a, b, 0.5); mid.R != 100 || mid.A != 255 {
+		t.Fatalf("mid blend = %+v, want R≈100 opaque", mid)
+	}
+}
+
+func TestScrollbarHorizontalDraw(t *testing.T) {
+	// A horizontal bar exercises the r.H < r.W radius branch in Draw.
+	sb := NewScrollbar()
+	sb.Horizontal = true
+	sb.Total, sb.Viewport, sb.Offset = 300, 100, 50
+	sb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 8})
+	buf := makeSurface(120, 8)
+	sb.Draw(newP(buf, 120), DefaultLight())
+	painted := false
+	for _, v := range buf {
+		if v != 0 {
+			painted = true
+			break
+		}
+	}
+	if !painted {
+		t.Fatal("horizontal scrollbar drew nothing")
+	}
+}
+
 func TestScrollbarDrawAndInert(t *testing.T) {
 	sb := NewScrollbar()
 	sb.Total, sb.Viewport, sb.Offset = 200, 100, 40
