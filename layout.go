@@ -86,6 +86,117 @@ func boxCells(total, spacing int, children []boxChild) []int {
 	return sizes
 }
 
+// --- box alignment (Sencha hbox/vbox align + pack) -----------------------
+
+// BoxAlign controls how HBox/VBox position each child on the CROSS axis (the axis
+// perpendicular to the flow: vertical for HBox, horizontal for VBox). The zero
+// value BoxStretch fills the cross axis — the historical behaviour — so existing
+// layouts are unchanged. The others place the child at its natural cross size
+// (reported via the optional Measurer, else its current cross Bounds) against the
+// start, centre, or end of the box. Mirrors Sencha's box `align: stretch|start|
+// center|end`.
+type BoxAlign int
+
+const (
+	BoxStretch     BoxAlign = iota // fill the cross axis (default)
+	BoxAlignStart                  // pin to the top (HBox) / left (VBox)
+	BoxAlignCenter                 // centre on the cross axis
+	BoxAlignEnd                    // pin to the bottom (HBox) / right (VBox)
+)
+
+// BoxPack controls how HBox/VBox distribute SLACK on the MAIN axis (the flow axis)
+// when the children do not fill it — i.e. when no flex child absorbs the space.
+// The zero value PackStart leaves the slack after the last child (historical).
+// PackCenter splits it either side; PackEnd puts it all before the first child.
+// Mirrors Sencha's box `pack: start|center|end`. With any flex child the slack is
+// zero, so Pack has no visible effect (as in Ext JS).
+type BoxPack int
+
+const (
+	PackStart  BoxPack = iota // flush to the start (default)
+	PackCenter                // centre the group in the box
+	PackEnd                   // flush to the end
+)
+
+// Measurer is an optional interface a widget may implement to advertise its
+// natural size — the analog of an Ext JS component's getSize(). Box layouts
+// consult it for cross-axis alignment (Align != BoxStretch); widgets that do not
+// implement it fall back to their current cross Bounds, and failing that stretch
+// to fill. availW/availH is the space the box can offer the child on each axis.
+type Measurer interface {
+	Measure(availW, availH int) (w, h int)
+}
+
+// boxSlack is the leftover main-axis space: the total minus the children's cell
+// sizes and the inter-child gaps, floored at 0 (a flex child consumes the
+// remainder, so this is ~0 whenever one is present).
+func boxSlack(total, spacing int, sizes []int) int {
+	used := spacing * (len(sizes) - 1)
+	for _, s := range sizes {
+		used += s
+	}
+	if slack := total - used; slack > 0 {
+		return slack
+	}
+	return 0
+}
+
+// boxLead is the main-axis offset of the first child for the given pack and slack.
+func boxLead(pack BoxPack, slack int) int {
+	if slack <= 0 {
+		return 0
+	}
+	switch pack {
+	case PackCenter:
+		return slack / 2
+	case PackEnd:
+		return slack
+	default: // PackStart
+		return 0
+	}
+}
+
+// naturalCross reports a child's natural cross-axis extent: from Measurer if it
+// implements one, else its current Bounds cross dimension. For HBox (horizontal)
+// the cross axis is height; for VBox it is width.
+func naturalCross(w Widget, mainSize, crossAvail int, horizontal bool) int {
+	if m, ok := w.(Measurer); ok {
+		if horizontal { // HBox: main = width, cross = height
+			_, mh := m.Measure(mainSize, crossAvail)
+			return mh
+		}
+		mw, _ := m.Measure(crossAvail, mainSize)
+		return mw
+	}
+	if horizontal {
+		return w.Bounds().H
+	}
+	return w.Bounds().W
+}
+
+// boxCross returns a child's cross-axis offset + size within a band of extent
+// cross starting at base, honouring align. BoxStretch (or a child with no usable
+// natural size) fills the band; otherwise the child keeps its natural cross size
+// and is pinned start/centre/end. mainSize is the child's main-axis size (offered
+// to Measurer).
+func boxCross(w Widget, align BoxAlign, base, cross, mainSize int, horizontal bool) (off, size int) {
+	if align == BoxStretch {
+		return base, cross
+	}
+	nat := naturalCross(w, mainSize, cross, horizontal)
+	if nat <= 0 || nat >= cross {
+		return base, cross // nothing sensible to align against → fill
+	}
+	switch align {
+	case BoxAlignCenter:
+		return base + (cross-nat)/2, nat
+	case BoxAlignEnd:
+		return base + (cross - nat), nat
+	default: // BoxAlignStart
+		return base, nat
+	}
+}
+
 // --- HBox ----------------------------------------------------------------
 
 // HBox is a horizontal flow container. Children are laid out left-to-right;
@@ -99,7 +210,12 @@ type HBox struct {
 	Base
 	// Spacing is the gap in pixels between adjacent children. Defaults to 4 when
 	// left at zero (negative values are clamped to zero at layout time).
-	Spacing  int
+	Spacing int
+	// Align positions each child on the cross (vertical) axis; the zero value
+	// BoxStretch fills the height (the historical behaviour). Pack distributes
+	// leftover width when the children do not fill the box (no flex child).
+	Align    BoxAlign
+	Pack     BoxPack
 	children []boxChild
 }
 
@@ -138,9 +254,10 @@ func (h *HBox) SetBounds(r Rect) {
 	}
 	sp := boxSpacing(h.Spacing)
 	sizes := boxCells(r.W, sp, h.children)
-	x := r.X
+	x := r.X + boxLead(h.Pack, boxSlack(r.W, sp, sizes))
 	for i, c := range h.children {
-		c.w.SetBounds(Rect{X: x, Y: r.Y, W: sizes[i], H: r.H})
+		y, ch := boxCross(c.w, h.Align, r.Y, r.H, sizes[i], true)
+		c.w.SetBounds(Rect{X: x, Y: y, W: sizes[i], H: ch})
 		x += sizes[i] + sp
 	}
 }
@@ -173,7 +290,12 @@ type VBox struct {
 	Base
 	// Spacing is the gap in pixels between adjacent children; same semantics as
 	// HBox.Spacing.
-	Spacing  int
+	Spacing int
+	// Align positions each child on the cross (horizontal) axis; the zero value
+	// BoxStretch fills the width. Pack distributes leftover height when the
+	// children do not fill the box (no flex child). Same semantics as HBox.
+	Align    BoxAlign
+	Pack     BoxPack
 	children []boxChild
 }
 
@@ -212,9 +334,10 @@ func (v *VBox) SetBounds(r Rect) {
 	}
 	sp := boxSpacing(v.Spacing)
 	sizes := boxCells(r.H, sp, v.children)
-	y := r.Y
+	y := r.Y + boxLead(v.Pack, boxSlack(r.H, sp, sizes))
 	for i, c := range v.children {
-		c.w.SetBounds(Rect{X: r.X, Y: y, W: r.W, H: sizes[i]})
+		x, cw := boxCross(c.w, v.Align, r.X, r.W, sizes[i], false)
+		c.w.SetBounds(Rect{X: x, Y: y, W: cw, H: sizes[i]})
 		y += sizes[i] + sp
 	}
 }
