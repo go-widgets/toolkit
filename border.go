@@ -23,6 +23,25 @@ type Border struct {
 	Base
 	North, South, East, West, Center         Widget
 	NorthSize, SouthSize, EastSize, WestSize int
+
+	// NorthSplit/… add a draggable splitter between that edge region and the
+	// centre (Ext's region `split: true`). The app drives the drag — like Paned —
+	// via SplitHandleAt (which handle a point is on) and ResizeSplit (set the new
+	// size); OnResize fires after each resize.
+	NorthSplit, SouthSplit, EastSplit, WestSplit bool
+	OnResize                                     func(side DockSide, size int)
+
+	handles []splitHandle
+}
+
+// BorderSplitW is the pixel thickness of a Border splitter handle (matches
+// PanedHandleW).
+const BorderSplitW = 6
+
+// splitHandle records a drawn splitter's edge and rectangle for hit-testing.
+type splitHandle struct {
+	side DockSide
+	rect Rect
 }
 
 // NewBorder builds an empty Border; assign the region fields and their sizes
@@ -33,8 +52,9 @@ func NewBorder() *Border { return &Border{} }
 // Center fills the remainder), reusing dockCarve for each edge.
 func (b *Border) SetBounds(r Rect) {
 	b.Base.SetBounds(r)
+	b.handles = b.handles[:0]
 	avail := r
-	place := func(w Widget, side DockSide, size int) {
+	place := func(w Widget, side DockSide, size int, split bool) {
 		if w == nil {
 			return
 		}
@@ -44,13 +64,63 @@ func (b *Border) SetBounds(r Rect) {
 		var bar Rect
 		bar, avail = dockCarve(side, size, avail)
 		w.SetBounds(bar)
+		if split {
+			var handle Rect
+			handle, avail = dockCarve(side, BorderSplitW, avail)
+			b.handles = append(b.handles, splitHandle{side: side, rect: handle})
+		}
 	}
-	place(b.North, DockTop, b.NorthSize)
-	place(b.South, DockBottom, b.SouthSize)
-	place(b.West, DockLeft, b.WestSize)
-	place(b.East, DockRight, b.EastSize)
+	place(b.North, DockTop, b.NorthSize, b.NorthSplit)
+	place(b.South, DockBottom, b.SouthSize, b.SouthSplit)
+	place(b.West, DockLeft, b.WestSize, b.WestSplit)
+	place(b.East, DockRight, b.EastSize, b.EastSplit)
 	if b.Center != nil {
 		b.Center.SetBounds(avail)
+	}
+}
+
+// SplitHandleAt reports which splitter handle (if any) contains the surface point
+// (px,py) — the app calls it on mouse-down to start a region resize drag.
+func (b *Border) SplitHandleAt(px, py int) (side DockSide, ok bool) {
+	for _, h := range b.handles {
+		if h.rect.Contains(px, py) {
+			return h.side, true
+		}
+	}
+	return 0, false
+}
+
+// ResizeSplit sets the given edge region's size (clamped to [0, the border's
+// extent on that axis]), re-lays out, and fires OnResize. The app computes size
+// from the drag — e.g. NorthSize + dy for the north handle.
+func (b *Border) ResizeSplit(side DockSide, size int) {
+	if size < 0 {
+		size = 0
+	}
+	r := b.Bounds()
+	switch side {
+	case DockTop, DockBottom:
+		if size > r.H {
+			size = r.H
+		}
+	default: // DockLeft, DockRight
+		if size > r.W {
+			size = r.W
+		}
+	}
+	switch side {
+	case DockTop:
+		b.NorthSize = size
+	case DockBottom:
+		b.SouthSize = size
+	case DockLeft:
+		b.WestSize = size
+	default: // DockRight
+		b.EastSize = size
+	}
+	b.SetBounds(r)
+	if b.OnResize != nil {
+		b.OnResize(side, size)
 	}
 }
 
@@ -65,10 +135,13 @@ func (b *Border) regions() []Widget {
 	return out
 }
 
-// Draw paints every non-nil region.
+// Draw paints every non-nil region, then any splitter handles over the seams.
 func (b *Border) Draw(p painter.Painter, theme *Theme) {
 	for _, w := range b.regions() {
 		w.Draw(p, theme)
+	}
+	for _, h := range b.handles {
+		fillRect(p, h.rect.X, h.rect.Y, h.rect.W, h.rect.H, theme.SurfaceAlt)
 	}
 }
 
