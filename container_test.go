@@ -138,6 +138,62 @@ func TestCardLayout(t *testing.T) {
 	}
 }
 
+// TestNewBoxLayoutAndZeroValueSpacing covers the new spacing semantics for the
+// container BoxLayout: NewBoxLayout seeds DefaultBoxSpacing while the zero-value
+// BoxLayout{} keeps a literal flush (0-gap) axis.
+func TestNewBoxLayoutAndZeroValueSpacing(t *testing.T) {
+	if NewBoxLayout().Spacing != DefaultBoxSpacing {
+		t.Fatalf("NewBoxLayout Spacing = %d, want %d", NewBoxLayout().Spacing, DefaultBoxSpacing)
+	}
+	// Zero-value BoxLayout{} → flush: two equal children each 50 of 100, no gap.
+	a, b := &dockProbe{}, &dockProbe{}
+	c := NewContainer(&BoxLayout{})
+	c.AddWidget(a).AddWidget(b)
+	c.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 10})
+	if a.Bounds() != (Rect{X: 0, Y: 0, W: 50, H: 10}) || b.Bounds() != (Rect{X: 50, Y: 0, W: 50, H: 10}) {
+		t.Fatalf("zero-value BoxLayout flush: a=%+v b=%+v", a.Bounds(), b.Bounds())
+	}
+}
+
+// TestBoxLayoutEmptyRectCollapses asserts a box layout handed an empty rect
+// collapses every item to Rect{}.
+func TestBoxLayoutEmptyRectCollapses(t *testing.T) {
+	a, b := &dockProbe{}, &dockProbe{}
+	a.SetBounds(Rect{X: 1, Y: 1, W: 9, H: 9})
+	b.SetBounds(Rect{X: 2, Y: 2, W: 9, H: 9})
+	(&BoxLayout{}).Arrange(Rect{X: 3, Y: 3, W: 0, H: 5}, []Item{{Widget: a}, {Widget: b}})
+	if a.Bounds() != (Rect{}) || b.Bounds() != (Rect{}) {
+		t.Fatalf("box layout empty collapse: a=%+v b=%+v", a.Bounds(), b.Bounds())
+	}
+}
+
+// TestCardLayoutCollapsesLeafDescendants is the leaf-collapse invariant: after a
+// CardLayout activates card B, card A (a VBox) and its leaf children must all
+// report empty Bounds — no stale non-empty leaf survives the collapse.
+func TestCardLayoutCollapsesLeafDescendants(t *testing.T) {
+	leafA, leafB := &dockProbe{}, &dockProbe{}
+	cardA, cardB := NewVBox(), NewVBox()
+	cardA.Append(leafA)
+	cardB.Append(leafB)
+	card := &CardLayout{Active: 0}
+	c := NewContainer(card)
+	c.AddWidget(cardA).AddWidget(cardB)
+	c.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 40})
+	// Card A active: its leaf fills; B's leaf is collapsed.
+	if leafA.Bounds() != (Rect{X: 0, Y: 0, W: 40, H: 40}) {
+		t.Fatalf("card A leaf should fill: %+v", leafA.Bounds())
+	}
+	// Switch to card B and re-lay out.
+	card.Active = 1
+	c.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 40})
+	if leafA.Bounds() != (Rect{}) {
+		t.Fatalf("card A leaf must collapse to empty, got %+v", leafA.Bounds())
+	}
+	if leafB.Bounds() != (Rect{X: 0, Y: 0, W: 40, H: 40}) {
+		t.Fatalf("card B leaf should fill, got %+v", leafB.Bounds())
+	}
+}
+
 // TestContainerSetItems covers replacing and clearing the item list.
 func TestContainerSetItems(t *testing.T) {
 	a, b, c2 := &dockProbe{}, &dockProbe{}, &dockProbe{}

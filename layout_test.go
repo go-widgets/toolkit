@@ -340,6 +340,137 @@ func TestGridDrawFansOut(t *testing.T) {
 	}
 }
 
+// TestGridZeroConfigUnchanged pins the backward-compatible equal-cell layout: no
+// Spacing, no fixed tracks → exactly the historical total/n cells at col*cell.
+func TestGridZeroConfigUnchanged(t *testing.T) {
+	g := NewGrid(2, 2)
+	a, b := &spyWidget{}, &spyWidget{}
+	g.Attach(a, 0, 0)
+	g.Attach(b, 1, 1)
+	g.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 80})
+	if a.Bounds() != (Rect{X: 0, Y: 0, W: 50, H: 40}) {
+		t.Fatalf("zero-config (0,0) = %+v", a.Bounds())
+	}
+	if b.Bounds() != (Rect{X: 50, Y: 40, W: 50, H: 40}) {
+		t.Fatalf("zero-config (1,1) = %+v", b.Bounds())
+	}
+}
+
+// TestGridSpacingGutters checks the inter-cell gutter on both axes.
+func TestGridSpacingGutters(t *testing.T) {
+	g := NewGrid(2, 2)
+	g.Spacing = 10
+	c := &spyWidget{}
+	g.Attach(c, 1, 1)
+	// cols: avail = 100-10 = 90, flex 45 each; col1 off = 45+10 = 55.
+	// rows: avail = 100-10 = 90, flex 45 each; row1 off = 55.
+	g.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	if c.Bounds() != (Rect{X: 55, Y: 55, W: 45, H: 45}) {
+		t.Fatalf("gutter cell = %+v, want {55,55,45,45}", c.Bounds())
+	}
+}
+
+// TestGridNegativeSpacingClamped clamps a negative Spacing to zero (flush).
+func TestGridNegativeSpacingClamped(t *testing.T) {
+	g := NewGrid(2, 1)
+	g.Spacing = -5
+	c := &spyWidget{}
+	g.Attach(c, 1, 0)
+	g.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 10})
+	if c.Bounds() != (Rect{X: 50, Y: 0, W: 50, H: 10}) {
+		t.Fatalf("negative-spacing clamp = %+v, want {50,0,50,10}", c.Bounds())
+	}
+}
+
+// TestGridFixedAndFlexTracks mixes fixed and flexible tracks on both axes plus a
+// gutter, exercising trackFixed (in-range) and the fixed-track branch of gridTracks.
+func TestGridFixedAndFlexTracks(t *testing.T) {
+	g := NewGrid(3, 2)
+	g.Spacing = 10
+	g.ColWidths = []int{20, 0, 0} // col0 fixed 20, col1/col2 flex
+	g.RowHeights = []int{0, 40}   // row0 flex, row1 fixed 40
+	first, last := &spyWidget{}, &spyWidget{}
+	g.Attach(first, 0, 0)
+	g.Attach(last, 2, 1)
+	// cols W=140: avail = 140 - 10*2 - 20 = 100, flex 50 each.
+	//   col0: 20 @0; col1: 50 @30; col2: 50 @90.
+	// rows H=100: avail = 100 - 10*1 - 40 = 50, one flex → 50.
+	//   row0: 50 @0; row1: 40 @60.
+	g.SetBounds(Rect{X: 0, Y: 0, W: 140, H: 100})
+	if first.Bounds() != (Rect{X: 0, Y: 0, W: 20, H: 50}) {
+		t.Fatalf("fixed/flex (0,0) = %+v, want {0,0,20,50}", first.Bounds())
+	}
+	if last.Bounds() != (Rect{X: 90, Y: 60, W: 50, H: 40}) {
+		t.Fatalf("fixed/flex (2,1) = %+v, want {90,60,50,40}", last.Bounds())
+	}
+}
+
+// TestGridAllFixedOverflow covers the all-fixed case (no flexible tracks) whose
+// fixed sizes exceed the extent, exercising the avail<0 clamp and flexCount==0.
+func TestGridAllFixedOverflow(t *testing.T) {
+	g := NewGrid(2, 1)
+	g.ColWidths = []int{80, 80} // sum 160 > 100
+	c := &spyWidget{}
+	g.Attach(c, 1, 0)
+	g.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 10})
+	// Fixed tracks keep their size regardless; col1 offset = 80.
+	if c.Bounds() != (Rect{X: 80, Y: 0, W: 80, H: 10}) {
+		t.Fatalf("all-fixed overflow = %+v, want {80,0,80,10}", c.Bounds())
+	}
+}
+
+// TestGridEmptyRectCollapsesChildren asserts a Grid handed an empty rect collapses
+// every attached child to Rect{} (the leaf-collapse invariant).
+func TestGridEmptyRectCollapsesChildren(t *testing.T) {
+	g := NewGrid(2, 2)
+	c := &spyWidget{}
+	g.Attach(c, 1, 1)
+	g.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 80}) // real bounds first
+	g.SetBounds(Rect{})                          // now collapse
+	if c.Bounds() != (Rect{}) {
+		t.Fatalf("empty grid should collapse child, got %+v", c.Bounds())
+	}
+}
+
+// TestBoxSpacingLiteralAndDefaults pins the new spacing semantics: the constructors
+// seed DefaultBoxSpacing, and a literal Spacing = 0 now yields a flush box.
+func TestBoxSpacingLiteralAndDefaults(t *testing.T) {
+	if NewHBox().Spacing != DefaultBoxSpacing || NewVBox().Spacing != DefaultBoxSpacing {
+		t.Fatalf("constructors must seed DefaultBoxSpacing (%d)", DefaultBoxSpacing)
+	}
+	// Literal zero → flush: two equal children each 50 of 100 with no gap.
+	v := NewVBox()
+	v.Spacing = 0
+	c1, c2 := &spyWidget{}, &spyWidget{}
+	v.Append(c1)
+	v.Append(c2)
+	v.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 100})
+	if c1.Bounds().H != 50 || c2.Bounds().Y != 50 {
+		t.Fatalf("Spacing=0 should be flush: c1.H=%d c2.Y=%d, want 50/50", c1.Bounds().H, c2.Bounds().Y)
+	}
+}
+
+// TestBoxEmptyRectCollapses asserts HBox/VBox handed an empty rect collapse their
+// children to Rect{} (the leaf-collapse invariant, independent of CardLayout).
+func TestBoxEmptyRectCollapses(t *testing.T) {
+	h := NewHBox()
+	hc := &spyWidget{}
+	h.Append(hc)
+	h.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 20})
+	h.SetBounds(Rect{X: 1, Y: 2, W: 0, H: 20}) // W<=0
+	if hc.Bounds() != (Rect{}) {
+		t.Fatalf("HBox empty collapse: %+v", hc.Bounds())
+	}
+	v := NewVBox()
+	vc := &spyWidget{}
+	v.Append(vc)
+	v.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 40})
+	v.SetBounds(Rect{X: 1, Y: 2, W: 20, H: 0}) // H<=0
+	if vc.Bounds() != (Rect{}) {
+		t.Fatalf("VBox empty collapse: %+v", vc.Bounds())
+	}
+}
+
 // --- Frame ---------------------------------------------------------------
 
 func TestFrameDrawBorderAtCorners(t *testing.T) {
