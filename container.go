@@ -199,6 +199,15 @@ func (c *Container) AddWidget(w Widget) *Container { return c.Add(Item{Widget: w
 // Items returns the container's items in insertion order.
 func (c *Container) Items() []Item { return c.items }
 
+// SetItems replaces every item and re-arranges — the seam a data-driven view uses
+// to rebuild its children (e.g. an mvvm ObservableList binding). SetItems() with
+// no arguments clears the container. Returns the container for chaining.
+func (c *Container) SetItems(items ...Item) *Container {
+	c.items = items
+	c.relayout()
+	return c
+}
+
 // relayout re-runs the layout over the current bounds (a no-op with no layout).
 func (c *Container) relayout() {
 	if c.Layout != nil {

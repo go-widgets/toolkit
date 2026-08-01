@@ -138,6 +138,25 @@ func TestCardLayout(t *testing.T) {
 	}
 }
 
+// TestContainerSetItems covers replacing and clearing the item list.
+func TestContainerSetItems(t *testing.T) {
+	a, b, c2 := &dockProbe{}, &dockProbe{}, &dockProbe{}
+	c := NewContainer(FitLayout{})
+	c.AddWidget(a)
+	c.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
+
+	// Replace the single item with two new ones — both get laid out (filled).
+	c.SetItems(Item{Widget: b}, Item{Widget: c2})
+	if len(c.Items()) != 2 || b.Bounds() != (Rect{X: 0, Y: 0, W: 10, H: 10}) {
+		t.Fatalf("SetItems replace: items=%d b=%+v", len(c.Items()), b.Bounds())
+	}
+	// Clear.
+	c.SetItems()
+	if len(c.Items()) != 0 {
+		t.Fatalf("SetItems() should clear: %d", len(c.Items()))
+	}
+}
+
 // TestContainerDrawEventsAndNilLayout covers Draw skipping empty items, event
 // routing to a visible item / skipping empty ones / missing all, Items(), and a
 // nil-layout container.
