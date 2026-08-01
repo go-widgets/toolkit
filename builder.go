@@ -5,8 +5,8 @@
 package toolkit
 
 // This file is the Go-native declarative view builder: describe a UI as a tree of
-// Node values — the type-safe analog of an Ext JS component config ({xtype,
-// layout, items:[…]}) — and Build() instantiates the Container/widget tree. No
+// Node values — a type-safe component-config tree ({widget,
+// layout, children:[…]}) — and Build() instantiates the Container/widget tree. No
 // JSON, no reflection, no string xtypes: the tree is ordinary Go values, so it is
 // checked by the compiler and you keep direct references to the leaf widgets you
 // pass in.
@@ -71,7 +71,7 @@ func (n Node) Sized(size int) Node { n.Size = size; return n }
 func (n Node) At(region Region) Node { n.Region = region; return n }
 
 // Ref tags this node with a lookup name so a ViewController built from the tree
-// can retrieve its widget by name (Ext's reference/lookupReference). Empty names
+// can retrieve its widget by name (a named reference). Empty names
 // are ignored.
 func (n Node) Ref(name string) Node { n.ref = name; return n }
 

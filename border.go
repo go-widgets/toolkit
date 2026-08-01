@@ -7,7 +7,7 @@ package toolkit
 import "github.com/go-widgets/painter"
 
 // Border arranges up to five named regions — North, South, West, East and
-// Center — the classic Ext JS border layout for application shells. North and
+// Center — the classic five-region border layout for application shells. North and
 // South span the full width and take a fixed height; West and East then span the
 // height that remains between them and take a fixed width; Center fills whatever
 // is left. The precedence is structural, so regions may be assigned in any order
@@ -25,7 +25,7 @@ type Border struct {
 	NorthSize, SouthSize, EastSize, WestSize int
 
 	// NorthSplit/… add a draggable splitter between that edge region and the
-	// centre (Ext's region `split: true`). The app drives the drag — like Paned —
+	// centre (with an optional resizable split). The app drives the drag — like Paned —
 	// via SplitHandleAt (which handle a point is on) and ResizeSplit (set the new
 	// size); OnResize fires after each resize.
 	NorthSplit, SouthSplit, EastSplit, WestSplit bool
