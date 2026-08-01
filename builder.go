@@ -32,20 +32,32 @@ type Node struct {
 	Flex   int    // parent box layout: proportional weight
 	Size   int    // parent box layout: fixed main-axis size; border: band thickness
 	Region Region // parent border layout: which region this node occupies
+
+	ref string // lookup name for a ViewController (see Ref)
 }
 
 // Build instantiates the node into a Widget: a leaf returns its Widget as-is; a
 // non-leaf builds a *Container with the node's Layout and its recursively-built
 // children (each added with its parent-layout config).
-func (n Node) Build() Widget {
+func (n Node) Build() Widget { return n.build(nil) }
+
+// build is Build with an optional reference sink: when refs is non-nil, every
+// node carrying a Ref name records its built widget there (used by ViewController).
+func (n Node) build(refs map[string]Widget) Widget {
+	var w Widget
 	if n.Widget != nil {
-		return n.Widget
+		w = n.Widget
+	} else {
+		c := NewContainer(n.Layout)
+		for _, ch := range n.Children {
+			c.Add(Item{Widget: ch.build(refs), Flex: ch.Flex, Size: ch.Size, Region: ch.Region})
+		}
+		w = c
 	}
-	c := NewContainer(n.Layout)
-	for _, ch := range n.Children {
-		c.Add(Item{Widget: ch.Build(), Flex: ch.Flex, Size: ch.Size, Region: ch.Region})
+	if refs != nil && n.ref != "" {
+		refs[n.ref] = w
 	}
-	return c
+	return w
 }
 
 // Flexed sets this node's parent-box flex weight and returns it (fluent).
@@ -57,6 +69,11 @@ func (n Node) Sized(size int) Node { n.Size = size; return n }
 
 // At sets this node's border region and returns it (fluent).
 func (n Node) At(region Region) Node { n.Region = region; return n }
+
+// Ref tags this node with a lookup name so a ViewController built from the tree
+// can retrieve its widget by name (Ext's reference/lookupReference). Empty names
+// are ignored.
+func (n Node) Ref(name string) Node { n.ref = name; return n }
 
 // Leaf wraps a widget as a leaf node.
 func Leaf(w Widget) Node { return Node{Widget: w} }
