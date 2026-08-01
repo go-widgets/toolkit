@@ -187,6 +187,34 @@ func (l *CardLayout) Arrange(r Rect, items []Item) {
 	}
 }
 
+// FlowLayout places items left-to-right and wraps to a new row when the next item
+// would overflow the container width — a wrapping row of pills/tags/buttons. Each
+// item's width is its Item.Size (or, when unset, its widget's current Bounds
+// width); every row is RowHeight tall, with HGap between items on a row and VGap
+// between rows.
+type FlowLayout struct {
+	RowHeight int
+	HGap      int
+	VGap      int
+}
+
+// Arrange flows the items, wrapping on overflow.
+func (l *FlowLayout) Arrange(r Rect, items []Item) {
+	x, y := r.X, r.Y
+	for _, it := range items {
+		w := it.Size
+		if w <= 0 {
+			w = it.Widget.Bounds().W
+		}
+		if x > r.X && x+w > r.X+r.W {
+			x = r.X
+			y += l.RowHeight + l.VGap
+		}
+		it.Widget.SetBounds(Rect{X: x, Y: y, W: w, H: l.RowHeight})
+		x += w + l.HGap
+	}
+}
+
 // Container holds a list of Items and positions them via its Layout. It is a
 // Widget: Draw paints every item with a non-empty rectangle (so a CardLayout's
 // inactive cards and collapsed box cells are skipped), and OnEvent routes by
