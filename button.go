@@ -21,6 +21,11 @@ type Button struct {
 	OnClick func()
 	Style   ButtonStyle // resting appearance; default is ButtonDefault
 
+	// Selected is a sticky, app-managed "active" state (a pill in a selector, the
+	// current tab/provider): when true the button fills with Accent regardless of
+	// Style. The app sets it from its own model; the button never flips it itself.
+	Selected bool
+
 	hovered bool
 	pressed bool
 }
@@ -39,7 +44,13 @@ const (
 	// ButtonSecondary is filled with SurfaceAlt -- a muted grey key that sits
 	// between Default and Prominent (e.g. a calculator's C / +/- / % keys).
 	ButtonSecondary
+	// ButtonDanger is a Surface-faced button with a red border + red label -- a
+	// destructive action (Delete, Remove).
+	ButtonDanger
 )
+
+// dangerInk is the red used for a ButtonDanger's border + label.
+var dangerInk = RGB(0xD0, 0x30, 0x30)
 
 // buttonRadius is the corner radius for the button + text-entry body, giving
 // the WhiteSur / macOS soft-rectangle look.
@@ -76,14 +87,21 @@ func (b *Button) SetPressed(v bool) { b.pressed = v }
 // Background so the label stays legible against the Accent face.
 func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
-	// Resting face/ink from the style.
+	// Resting face/ink/border from the style.
 	face := theme.Surface
 	ink := theme.OnSurface
+	border := theme.Border
 	switch b.Style {
 	case ButtonProminent:
 		face, ink = theme.Accent, accentFg(theme)
 	case ButtonSecondary:
 		face = theme.SurfaceAlt
+	case ButtonDanger:
+		ink, border = dangerInk, dangerInk
+	}
+	// A sticky selection fills with Accent regardless of style.
+	if b.Selected {
+		face, ink = theme.Accent, accentFg(theme)
 	}
 	// Interaction states override the resting fill.
 	switch {
@@ -94,7 +112,7 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 		face = theme.SurfaceAlt
 	}
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
-	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Border)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
 	if b.Label != "" {
 		tw := b.textWidth(b.Label)
 		tx := r.X + (r.W-tw)/2
