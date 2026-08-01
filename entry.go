@@ -22,6 +22,15 @@ type Entry struct {
 	OnChange func(text string)
 	OnSubmit func(text string)
 
+	// Placeholder is shown in the muted tone when Text is empty and no IME
+	// composition is in flight (a hint like "search…" or "client id").
+	Placeholder string
+
+	// Mask, when non-zero, is the rune each character is displayed as (e.g. '•')
+	// instead of the real text — for secrets/passwords. Text/Value keep the real
+	// contents; only the display is masked.
+	Mask rune
+
 	// Composition holds the in-progress IME preview string (dead-key
 	// output, CJK candidate, …). Non-empty while an IME composition is
 	// active; cleared on EventCompositionEnd. Mirrors TextView's field
@@ -43,6 +52,19 @@ func NewEntry(initial string) *Entry {
 // directly, so a FormField wrapping an Entry can be validated.
 func (e *Entry) Value() string { return e.Text }
 
+// display is the text as rendered: each rune replaced by Mask when Mask is set
+// (secret fields), else Text verbatim. Value/Text keep the real contents.
+func (e *Entry) display() string {
+	if e.Mask == 0 {
+		return e.Text
+	}
+	runes := []rune(e.Text)
+	for i := range runes {
+		runes[i] = e.Mask
+	}
+	return string(runes)
+}
+
 // Draw paints the border, fill, text + (when Focused) a 1-px cursor
 // stroke at the cursor's pixel position.
 func (e *Entry) Draw(p painter.Painter, theme *Theme) {
@@ -54,9 +76,20 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Surface)
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
 	textY := r.Y + (r.H-e.glyphHeight())/2
-	e.drawText(p, r.X+4, textY, e.Text, theme.OnSurface)
+	shown := e.display()
+	if shown == "" && e.Composition == "" && e.Placeholder != "" {
+		e.drawText(p, r.X+4, textY, e.Placeholder, theme.SurfaceAlt)
+	} else {
+		e.drawText(p, r.X+4, textY, shown, theme.OnSurface)
+	}
 	if e.Focused {
-		cx := r.X + 4 + e.Cursor*e.glyphAdvance()
+		// Caret x measured from the shown text up to the cursor, so it lands
+		// correctly under a proportional / CJK font (not a fixed advance).
+		runes := []rune(shown)
+		if e.Cursor > len(runes) {
+			e.Cursor = len(runes)
+		}
+		cx := r.X + 4 + e.textWidth(string(runes[:e.Cursor]))
 		if e.Composition != "" {
 			// IME composition preview: render the pending string in
 			// the muted SurfaceAlt tone right at the cursor, ghosted +
