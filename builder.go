@@ -81,12 +81,16 @@ func Leaf(w Widget) Node { return Node{Widget: w} }
 // FitNode builds a container node whose children each fill it (FitLayout).
 func FitNode(children ...Node) Node { return Node{Layout: FitLayout{}, Children: children} }
 
-// HBoxNode builds a horizontal box container node.
-func HBoxNode(children ...Node) Node { return Node{Layout: &BoxLayout{}, Children: children} }
+// HBoxNode builds a horizontal box container node. Like NewHBox it seeds the
+// DefaultBoxSpacing gutter (via NewBoxLayout).
+func HBoxNode(children ...Node) Node { return Node{Layout: NewBoxLayout(), Children: children} }
 
-// VBoxNode builds a vertical box container node.
+// VBoxNode builds a vertical box container node. Like NewVBox it seeds the
+// DefaultBoxSpacing gutter.
 func VBoxNode(children ...Node) Node {
-	return Node{Layout: &BoxLayout{Vertical: true}, Children: children}
+	l := NewBoxLayout()
+	l.Vertical = true
+	return Node{Layout: l, Children: children}
 }
 
 // BorderNode builds a border container node; children carry their Region via At.

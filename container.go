@@ -69,6 +69,10 @@ func (FitLayout) Arrange(r Rect, items []Item) {
 // BoxLayout stacks items along one axis (horizontal by default; set Vertical for
 // a column), honouring per-item Flex/Size and the Align/Pack options — Ext's
 // hbox/vbox. It reuses the same sizing/alignment primitives as HBox/VBox.
+//
+// Spacing is taken LITERALLY (negatives clamped to 0), matching HBox/VBox: the
+// zero-value BoxLayout{} therefore has a flush, zero-gap axis. Use NewBoxLayout
+// to get a layout pre-seeded with the DefaultBoxSpacing (4px) gap.
 type BoxLayout struct {
 	Vertical bool
 	Spacing  int
@@ -76,9 +80,22 @@ type BoxLayout struct {
 	Pack     BoxPack
 }
 
-// Arrange lays the items out along the box axis.
+// NewBoxLayout returns a *BoxLayout with Spacing seeded to DefaultBoxSpacing, the
+// constructor analogue of NewHBox/NewVBox. The zero-value BoxLayout{} keeps a
+// literal 0-gap axis; set fields on the returned value to configure it further.
+func NewBoxLayout() *BoxLayout { return &BoxLayout{Spacing: DefaultBoxSpacing} }
+
+// Arrange lays the items out along the box axis. An empty rect (W<=0 or H<=0)
+// collapses every item to Rect{} so a hidden box container leaves no leaf with
+// stale non-empty bounds.
 func (l *BoxLayout) Arrange(r Rect, items []Item) {
 	if len(items) == 0 {
+		return
+	}
+	if r.W <= 0 || r.H <= 0 {
+		for _, it := range items {
+			it.Widget.SetBounds(Rect{})
+		}
 		return
 	}
 	children := make([]boxChild, len(items))
@@ -90,7 +107,7 @@ func (l *BoxLayout) Arrange(r Rect, items []Item) {
 	if l.Vertical {
 		total = r.H
 	}
-	sp := boxSpacing(l.Spacing)
+	sp := clampSpacing(l.Spacing)
 	sizes := boxCells(total, sp, children)
 	pos := r.X
 	if l.Vertical {

@@ -6,16 +6,18 @@ package toolkit
 
 import "github.com/go-widgets/painter"
 
-// defaultSpacing is the inter-child gap (in pixels) HBox + VBox apply
-// when their Spacing field is left at its zero value. Picked to match
-// the 4-pixel rhythm the rest of the toolkit uses (Frame.Padding, the
-// Button border inset, ...). Containers expose Spacing as a public
-// field so apps that want a tighter or looser layout can override it
-// before the first SetBounds call.
-const defaultSpacing = 4
+// DefaultBoxSpacing is the inter-child gap (in pixels) the box constructors
+// NewHBox/NewVBox/NewBoxLayout seed into their Spacing field. Picked to match the
+// 4-pixel rhythm the rest of the toolkit uses (Frame.Padding, the Button border
+// inset, ...). Because the default lives in the constructor rather than the layout
+// math, Spacing is honoured LITERALLY: a caller who wants a flush, zero-gap box
+// sets Spacing = 0 explicitly; only negative values are clamped (to 0). Containers
+// expose Spacing as a public field so apps can override it before the first
+// SetBounds call.
+const DefaultBoxSpacing = 4
 
 // defaultPadding is Frame's interior inset between its border and the
-// child widget. Same 4-pixel rationale as defaultSpacing.
+// child widget. Same 4-pixel rationale as DefaultBoxSpacing.
 const defaultPadding = 4
 
 // translateEvent rewrites a parent-local event into the child's
@@ -45,11 +47,12 @@ type boxChild struct {
 	size int // used when flex == 0
 }
 
-// boxSpacing normalises a container's Spacing (0 → default, negative → 0).
-func boxSpacing(s int) int {
-	if s == 0 {
-		return defaultSpacing
-	}
+// clampSpacing takes a box's Spacing literally, clamping only negative values to
+// zero. The default gap lives in the constructors (NewHBox/NewVBox/NewBoxLayout,
+// which seed DefaultBoxSpacing), so a literal Spacing = 0 means a flush, zero-gap
+// box; a Spacing = -1 (the pre-DefaultBoxSpacing idiom for "no gap") still yields
+// 0, so old call sites keep working.
+func clampSpacing(s int) int {
 	if s < 0 {
 		return 0
 	}
@@ -208,8 +211,9 @@ func boxCross(w Widget, align BoxAlign, base, cross, mainSize int, horizontal bo
 // child Bounds, translating coordinates into the matched child's local space.
 type HBox struct {
 	Base
-	// Spacing is the gap in pixels between adjacent children. Defaults to 4 when
-	// left at zero (negative values are clamped to zero at layout time).
+	// Spacing is the gap in pixels between adjacent children. NewHBox seeds it to
+	// DefaultBoxSpacing (4); it is then honoured literally, so setting it to 0
+	// yields a flush box and negative values are clamped to zero at layout time.
 	Spacing int
 	// Align positions each child on the cross (vertical) axis; the zero value
 	// BoxStretch fills the height (the historical behaviour). Pack distributes
@@ -219,8 +223,9 @@ type HBox struct {
 	children []boxChild
 }
 
-// NewHBox constructs an empty HBox. Add children via Append/AddFlex/AddFixed.
-func NewHBox() *HBox { return &HBox{} }
+// NewHBox constructs an empty HBox with Spacing seeded to DefaultBoxSpacing. Add
+// children via Append/AddFlex/AddFixed.
+func NewHBox() *HBox { return &HBox{Spacing: DefaultBoxSpacing} }
 
 // Append adds w with flex weight 1 (an equal share of the width).
 func (h *HBox) Append(w Widget) { h.add(w, 1, 0) }
@@ -246,13 +251,21 @@ func (h *HBox) add(w Widget, flex, size int) {
 	h.SetBounds(h.Bounds())
 }
 
-// SetBounds positions the HBox + lays out its children across the width.
+// SetBounds positions the HBox + lays out its children across the width. An empty
+// incoming rect (W<=0 or H<=0) collapses every child to Rect{} so a hidden box
+// (e.g. an inactive CardLayout item) leaves no leaf with stale non-empty bounds.
 func (h *HBox) SetBounds(r Rect) {
 	h.Base.SetBounds(r)
 	if len(h.children) == 0 {
 		return
 	}
-	sp := boxSpacing(h.Spacing)
+	if r.W <= 0 || r.H <= 0 {
+		for _, c := range h.children {
+			c.w.SetBounds(Rect{})
+		}
+		return
+	}
+	sp := clampSpacing(h.Spacing)
 	sizes := boxCells(r.W, sp, h.children)
 	x := r.X + boxLead(h.Pack, boxSlack(r.W, sp, sizes))
 	for i, c := range h.children {
@@ -289,7 +302,8 @@ func (h *HBox) OnEvent(ev Event) {
 type VBox struct {
 	Base
 	// Spacing is the gap in pixels between adjacent children; same semantics as
-	// HBox.Spacing.
+	// HBox.Spacing (NewVBox seeds DefaultBoxSpacing, honoured literally, negatives
+	// clamped to 0).
 	Spacing int
 	// Align positions each child on the cross (horizontal) axis; the zero value
 	// BoxStretch fills the width. Pack distributes leftover height when the
@@ -299,8 +313,8 @@ type VBox struct {
 	children []boxChild
 }
 
-// NewVBox constructs an empty VBox.
-func NewVBox() *VBox { return &VBox{} }
+// NewVBox constructs an empty VBox with Spacing seeded to DefaultBoxSpacing.
+func NewVBox() *VBox { return &VBox{Spacing: DefaultBoxSpacing} }
 
 // Append adds w with flex weight 1 (an equal share of the height).
 func (v *VBox) Append(w Widget) { v.add(w, 1, 0) }
@@ -326,13 +340,20 @@ func (v *VBox) add(w Widget, flex, size int) {
 	v.SetBounds(v.Bounds())
 }
 
-// SetBounds positions the VBox + stacks its children down the height.
+// SetBounds positions the VBox + stacks its children down the height. An empty
+// incoming rect (W<=0 or H<=0) collapses every child to Rect{} — see HBox.SetBounds.
 func (v *VBox) SetBounds(r Rect) {
 	v.Base.SetBounds(r)
 	if len(v.children) == 0 {
 		return
 	}
-	sp := boxSpacing(v.Spacing)
+	if r.W <= 0 || r.H <= 0 {
+		for _, c := range v.children {
+			c.w.SetBounds(Rect{})
+		}
+		return
+	}
+	sp := clampSpacing(v.Spacing)
 	sizes := boxCells(r.H, sp, v.children)
 	y := r.Y + boxLead(v.Pack, boxSlack(r.H, sp, sizes))
 	for i, c := range v.children {
@@ -370,16 +391,81 @@ type gridChild struct {
 	col, row int
 }
 
-// Grid lays children out in a fixed cols x rows table. Each cell is
-// the same size (container W/cols, H/rows). Children are placed via
+// Grid lays children out in a fixed cols x rows table. Children are placed via
 // Attach(child, col, row); a cell with no attached child stays empty.
 //
-// Grid is a Widget: Draw fans out to every attached child + OnEvent
-// hit-tests then forwards.
+// By default every cell is the same size (container W/cols, H/rows) with no gutter
+// — the historical, zero-config behaviour. Two additive fields refine that:
+//
+//   - Spacing adds an inter-cell gutter (in pixels) on BOTH axes. The gutters are
+//     subtracted from the extent before the cells are sized. Default 0 = flush.
+//   - ColWidths/RowHeights pin individual tracks to a fixed pixel size. An entry
+//     of 0 (or a track index past the slice) is a FLEXIBLE track: after the fixed
+//     tracks and gutters are removed, the remaining space is split equally among
+//     the flexible tracks. An absent/empty slice makes every track flexible, i.e.
+//     the all-equal historical layout.
+//
+// Grid is a Widget: Draw fans out to every attached child + OnEvent hit-tests then
+// forwards.
 type Grid struct {
 	Base
+	// Spacing is the inter-cell gutter in pixels applied on both axes (negatives
+	// clamped to 0 at layout time). Default 0 keeps the historical flush grid.
+	Spacing int
+	// ColWidths/RowHeights pin individual tracks to a fixed pixel size; a 0 entry
+	// (or a missing index) is a flexible track sharing the remaining space equally.
+	// Absent/empty = all-flexible (the historical equal-cell layout).
+	ColWidths  []int
+	RowHeights []int
 	cols, rows int
 	children   []gridChild
+}
+
+// trackFixed returns the fixed size of track i from a ColWidths/RowHeights slice,
+// or 0 (flexible) when the index is past the slice.
+func trackFixed(fixed []int, i int) int {
+	if i < len(fixed) {
+		return fixed[i]
+	}
+	return 0
+}
+
+// gridTracks computes each track's pixel size and start offset along one axis:
+// total is the axis extent, n the track count (>=1), spacing the inter-track
+// gutter, and fixed the per-track fixed sizes (a >0 entry pins the track; 0 or a
+// missing index is flexible). Fixed tracks keep their size; the space left after
+// the gutters and fixed tracks is divided equally among the flexible tracks. Both
+// returned slices have length n. With spacing 0 and no fixed tracks this yields
+// exactly the historical total/n cells at col*cell offsets.
+func gridTracks(total, n, spacing int, fixed []int) (sizes, offsets []int) {
+	sizes = make([]int, n)
+	offsets = make([]int, n)
+	fixedSum, flexCount := 0, 0
+	for i := 0; i < n; i++ {
+		if f := trackFixed(fixed, i); f > 0 {
+			sizes[i] = f
+			fixedSum += f
+		} else {
+			flexCount++
+		}
+	}
+	avail := total - spacing*(n-1) - fixedSum
+	if avail < 0 {
+		avail = 0
+	}
+	flexSize := 0
+	if flexCount > 0 {
+		flexSize = avail / flexCount
+	}
+	off := 0
+	for i := 0; i < n; i++ {
+		if trackFixed(fixed, i) <= 0 {
+			sizes[i] = flexSize
+		}
+		offsets[i] = off
+		off += sizes[i] + spacing
+	}
+	return sizes, offsets
 }
 
 // NewGrid constructs an empty cols x rows grid. cols + rows must be
@@ -415,21 +501,30 @@ func (g *Grid) Attach(w Widget, col, row int) {
 	g.SetBounds(g.Bounds())
 }
 
-// SetBounds positions the Grid + sizes every attached child to its
-// (col, row) cell.
+// SetBounds positions the Grid + sizes every attached child to its (col, row)
+// cell, honouring Spacing gutters and any fixed ColWidths/RowHeights tracks. An
+// empty incoming rect (W<=0 or H<=0) collapses every child to Rect{} so a hidden
+// grid leaves no leaf with stale bounds.
 func (g *Grid) SetBounds(r Rect) {
 	g.Base.SetBounds(r)
 	if len(g.children) == 0 {
 		return
 	}
-	cellW := r.W / g.cols
-	cellH := r.H / g.rows
+	if r.W <= 0 || r.H <= 0 {
+		for _, c := range g.children {
+			c.w.SetBounds(Rect{})
+		}
+		return
+	}
+	sp := clampSpacing(g.Spacing)
+	colSizes, colOff := gridTracks(r.W, g.cols, sp, g.ColWidths)
+	rowSizes, rowOff := gridTracks(r.H, g.rows, sp, g.RowHeights)
 	for _, c := range g.children {
 		c.w.SetBounds(Rect{
-			X: r.X + c.col*cellW,
-			Y: r.Y + c.row*cellH,
-			W: cellW,
-			H: cellH,
+			X: r.X + colOff[c.col],
+			Y: r.Y + rowOff[c.row],
+			W: colSizes[c.col],
+			H: rowSizes[c.row],
 		})
 	}
 }
