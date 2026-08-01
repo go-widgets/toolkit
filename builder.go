@@ -41,21 +41,22 @@ type Node struct {
 // children (each added with its parent-layout config).
 func (n Node) Build() Widget { return n.build(nil) }
 
-// build is Build with an optional reference sink: when refs is non-nil, every
-// node carrying a Ref name records its built widget there (used by ViewController).
-func (n Node) build(refs map[string]Widget) Widget {
+// build is Build with an optional reference sink: when collect is non-nil, every
+// node carrying a Ref name reports its built widget through it (used by
+// ViewController, which records both the widget and the ref order).
+func (n Node) build(collect func(name string, w Widget)) Widget {
 	var w Widget
 	if n.Widget != nil {
 		w = n.Widget
 	} else {
 		c := NewContainer(n.Layout)
 		for _, ch := range n.Children {
-			c.Add(Item{Widget: ch.build(refs), Flex: ch.Flex, Size: ch.Size, Region: ch.Region})
+			c.Add(Item{Widget: ch.build(collect), Flex: ch.Flex, Size: ch.Size, Region: ch.Region})
 		}
 		w = c
 	}
-	if refs != nil && n.ref != "" {
-		refs[n.ref] = w
+	if collect != nil && n.ref != "" {
+		collect(n.ref, w)
 	}
 	return w
 }

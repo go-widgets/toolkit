@@ -21,15 +21,21 @@ package toolkit
 //	}
 //	vc.Root().SetBounds(screen)
 type ViewController struct {
-	root Widget
-	refs map[string]Widget
+	root  Widget
+	refs  map[string]Widget
+	order []string // ref names in build order, for deterministic RefAt
 }
 
 // NewViewController builds root and collects every Ref-tagged widget in the tree.
 func NewViewController(root Node) *ViewController {
-	refs := map[string]Widget{}
-	w := root.build(refs)
-	return &ViewController{root: w, refs: refs}
+	vc := &ViewController{refs: map[string]Widget{}}
+	vc.root = root.build(func(name string, w Widget) {
+		if _, dup := vc.refs[name]; !dup {
+			vc.order = append(vc.order, name)
+		}
+		vc.refs[name] = w
+	})
+	return vc
 }
 
 // Root is the built root widget — call SetBounds/Draw/OnEvent on it.
@@ -43,4 +49,17 @@ func (vc *ViewController) Lookup(name string) Widget { return vc.refs[name] }
 func LookupAs[T Widget](vc *ViewController, name string) (val T, ok bool) {
 	val, ok = vc.refs[name].(T)
 	return val, ok
+}
+
+// RefAt returns the name of the Ref-tagged widget whose Bounds contains the
+// surface point (px,py) — hit-testing by reference. Refs are scanned in reverse
+// build order, so a later (typically deeper or on-top) ref shadows an earlier one
+// when they overlap. ok is false when no ref-tagged widget covers the point.
+func (vc *ViewController) RefAt(px, py int) (name string, ok bool) {
+	for i := len(vc.order) - 1; i >= 0; i-- {
+		if vc.refs[vc.order[i]].Bounds().Contains(px, py) {
+			return vc.order[i], true
+		}
+	}
+	return "", false
 }
