@@ -6,12 +6,12 @@ package toolkit
 
 import "github.com/go-widgets/painter"
 
-// This file brings Sencha's container/layout operating model to the toolkit: a
+// This file provides the toolkit's container/layout model: a
 // Container holds a list of Items and delegates their placement to a swappable
 // Layout, so the same children can be arranged as a fit, a box, a border, or a
-// card stack by changing one field — the way Ext JS separates Ext.container.
-// Container from its layout config. The existing HBox/VBox/Border/Dock stay; this
-// is the composable, config-driven alternative built on the same primitives.
+// card stack by changing one field — the container (which holds the items) stays
+// separate from its layout (which positions them). The existing HBox/VBox/Border/
+// Dock stay; this is the composable, config-driven alternative on the same primitives.
 
 // Region names a Border layout edge (or the centre) an Item occupies. The zero
 // value RegionCenter fills what the edge regions leave.
@@ -56,7 +56,7 @@ type Layout interface {
 }
 
 // FitLayout sizes every item to fill the container (typically one item, e.g. a
-// card body). Ext's fit layout.
+// card body). The fit layout.
 type FitLayout struct{}
 
 // Arrange fills each item to the container bounds.
@@ -67,8 +67,8 @@ func (FitLayout) Arrange(r Rect, items []Item) {
 }
 
 // BoxLayout stacks items along one axis (horizontal by default; set Vertical for
-// a column), honouring per-item Flex/Size and the Align/Pack options — Ext's
-// hbox/vbox. It reuses the same sizing/alignment primitives as HBox/VBox.
+// a column), honouring per-item Flex/Size and the Align/Pack options — the same
+// horizontal/vertical box. It reuses the same sizing/alignment primitives as HBox/VBox.
 //
 // Spacing is taken LITERALLY (negatives clamped to 0), matching HBox/VBox: the
 // zero-value BoxLayout{} therefore has a flush, zero-gap axis. Use NewBoxLayout
@@ -128,7 +128,7 @@ func (l *BoxLayout) Arrange(r Rect, items []Item) {
 
 // BorderLayout arranges items by Region: North/South span the full width, then
 // West/East span the height between them, then Center fills the rest. Item.Size
-// is the edge band's thickness. Ext's border layout, over the shared dockCarve.
+// is the edge band's thickness. The border layout, over the shared dockCarve.
 type BorderLayout struct{}
 
 // regionSide maps a border Region to the Dock edge dockCarve understands.
@@ -170,7 +170,7 @@ func (BorderLayout) Arrange(r Rect, items []Item) {
 }
 
 // CardLayout shows exactly one item — the one at Active — filling the container,
-// and collapses the rest to an empty rectangle so the Container skips them. Ext's
+// and collapses the rest to an empty rectangle so the Container skips them. The
 // card layout (wizards, tab bodies, view switching).
 type CardLayout struct {
 	Active int

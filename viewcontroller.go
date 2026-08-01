@@ -4,7 +4,7 @@
 
 package toolkit
 
-// ViewController is the Go-native analog of Ext.app.ViewController: it builds a
+// ViewController builds a
 // declarative Node tree once and then lets logic reach the widgets that matter by
 // name, instead of threading pointers through the construction code. Tag nodes
 // with Node.Ref("name"); the controller collects those widgets while building and
@@ -39,7 +39,7 @@ func (vc *ViewController) Root() Widget { return vc.root }
 func (vc *ViewController) Lookup(name string) Widget { return vc.refs[name] }
 
 // LookupAs returns the widget tagged with Ref(name) as type T. ok is false when
-// the name is absent or the widget is not a T — the typed lookupReference.
+// the name is absent or the widget is not a T — the typed lookup by name.
 func LookupAs[T Widget](vc *ViewController, name string) (val T, ok bool) {
 	val, ok = vc.refs[name].(T)
 	return val, ok

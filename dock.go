@@ -25,7 +25,7 @@ type dockItem struct {
 }
 
 // Dock arranges bars against the edges of its bounds and lets a single body
-// widget fill whatever space is left in the centre — Sencha's panel dockedItems
+// widget fill whatever space is left in the centre — a docked-items
 // model. Bars are docked in insertion order, so a top bar added before a left bar
 // spans the full width above the left bar, and the left bar only gets the height
 // that remains. Any edge may hold several bars, which stack inward in order.

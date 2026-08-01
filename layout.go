@@ -39,8 +39,8 @@ func translateEvent(ev Event, parentRect, childRect Rect) Event {
 // boxChild pairs a widget with its main-axis sizing spec: a flex weight (a
 // proportional share of the space left after fixed children + gaps) or a fixed
 // pixel size. Append gives flex 1 (all-equal, the historical behaviour);
-// AddFlex sets an explicit weight; AddFixed a fixed size — the Sencha
-// vbox/hbox model (flex + fixed items).
+// AddFlex sets an explicit weight; AddFixed a fixed size — a flex + fixed
+// box model.
 type boxChild struct {
 	w    Widget
 	flex int // >0 => proportional; 0 => fixed
@@ -89,15 +89,15 @@ func boxCells(total, spacing int, children []boxChild) []int {
 	return sizes
 }
 
-// --- box alignment (Sencha hbox/vbox align + pack) -----------------------
+// --- box alignment (cross-axis align + main-axis pack) -----------------------
 
 // BoxAlign controls how HBox/VBox position each child on the CROSS axis (the axis
 // perpendicular to the flow: vertical for HBox, horizontal for VBox). The zero
 // value BoxStretch fills the cross axis — the historical behaviour — so existing
 // layouts are unchanged. The others place the child at its natural cross size
 // (reported via the optional Measurer, else its current cross Bounds) against the
-// start, centre, or end of the box. Mirrors Sencha's box `align: stretch|start|
-// center|end`.
+// start, centre, or end of the box. The box `align` model:
+// stretch | start | center | end.
 type BoxAlign int
 
 const (
@@ -111,8 +111,8 @@ const (
 // when the children do not fill it — i.e. when no flex child absorbs the space.
 // The zero value PackStart leaves the slack after the last child (historical).
 // PackCenter splits it either side; PackEnd puts it all before the first child.
-// Mirrors Sencha's box `pack: start|center|end`. With any flex child the slack is
-// zero, so Pack has no visible effect (as in Ext JS).
+// The box `pack` model (start|center|end). With any flex child the slack is
+// zero, so Pack has no visible effect then.
 type BoxPack int
 
 const (
@@ -122,7 +122,7 @@ const (
 )
 
 // Measurer is an optional interface a widget may implement to advertise its
-// natural size — the analog of an Ext JS component's getSize(). Box layouts
+// natural size — an optional natural-size query. Box layouts
 // consult it for cross-axis alignment (Align != BoxStretch); widgets that do not
 // implement it fall back to their current cross Bounds, and failing that stretch
 // to fill. availW/availH is the space the box can offer the child on each axis.
