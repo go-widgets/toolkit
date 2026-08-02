@@ -58,7 +58,7 @@ every native target Go ships.
 | Family       | Widgets                                                            |
 | ------------ | ------------------------------------------------------------------ |
 | Base         | `Widget`, `Base`, `Rect`, `Event` (+ IME composition), `Theme`, `RGBA` |
-| Text         | bitmap 5x7 + anti-aliased `NewTrueTypeFont`, global `SetFont` + per-widget `Base.Font`, `DrawText`, `TextWidth`, `Label` |
+| Text         | bitmap 5x7 + anti-aliased `NewTrueTypeFont`, one-call AA default `UseOpenTypeText`, global `SetFont` + per-widget `Base.Font`, `DrawText`, `TextWidth`, `Label` |
 | Action       | `Button`, `ToggleButton`, `CheckButton`, `RadioButton` + `Group`   |
 | Input        | `Entry`, `TextView` + `Selection` + IME preview + optional `Highlighter` (syntax spans) + `ShowLineNumbers` gutter, `SpinButton`, `Scale`, `RangeSlider` |
 | Terminal     | `TerminalView` (Cols×Rows `TermCell` grid, block cursor, wrap/scroll, per-cell FG/BG) |
@@ -173,6 +173,17 @@ model, not the widget catalogue:
   widget its own face/size — e.g. a 10px badge next to a 22px title —
   while every other widget keeps the global `SetFont` font. A widget
   with no `Font` set (the default, `nil`) renders exactly as before.
+  Since **v0.77**, `UseOpenTypeText()` turns on anti-aliased, shaped
+  text for the whole UI in **one call** — it installs the bundled
+  Atkinson Hyperlegible face (from `github.com/go-opentype/fonts`, no
+  extra imports, `js/wasm`-safe) as the active font, so consumers get
+  crisp AA/multi-script glyphs without sourcing a face of their own.
+  Use `UseOpenTypeTextSize(px)` for a specific size, or
+  `DefaultOpenTypeFont(px)` to compose the default face into a
+  `NewFallbackFont` chain (add a CJK/Arabic face) before `SetFont`. The
+  5x7 bitmap stays the compiled-in default (so existing pixel/metric
+  tests keep their geometry); AA is an explicit opt-in, and `SetFont(nil)`
+  restores the bitmap.
 - ~~**First-class drag-and-drop event kinds**~~ — **done (v0.16)**:
   `EventDragStart` / `EventDragMove` / `EventDragLeave` / `EventDrop`,
   plus a `DragSource` / `DropTarget` interface pair and
