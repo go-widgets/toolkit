@@ -25,6 +25,14 @@ type Chip struct {
 	Text     string
 	Closable bool
 	OnClose  func()
+	// Dot is an optional leading swatch colour. When Dot.A != 0 the
+	// widget draws a small filled circle near the left edge (vertically
+	// centred) and shifts the Text right so it does not overlap the
+	// swatch -- handy for prefixing a chip with a category/source colour
+	// (e.g. a coloured dot before "Reddit · golang"). The zero value
+	// (A == 0) draws no dot and reproduces the original layout exactly,
+	// so the field is fully backward-compatible.
+	Dot RGBA
 }
 
 // Chip sizing constants. PadX / PadY are the inner insets from the
@@ -37,6 +45,11 @@ const (
 	ChipPadY     = 2
 	ChipCloseW   = 12
 	ChipCloseGap = 4
+	// ChipDotD is the diameter in pixels of the optional leading swatch
+	// circle (kept modest to match the chip's compact scale); ChipDotGap
+	// is the pixel gap between that swatch and the start of the Text.
+	ChipDotD   = 6
+	ChipDotGap = 4
 )
 
 // NewChip constructs a passive (non-closable) Chip carrying the given
@@ -54,15 +67,22 @@ func NewClosableChip(text string, onClose func()) *Chip {
 	return &Chip{Text: text, Closable: true, OnClose: onClose}
 }
 
-// Draw paints the pill body + text + optional close affordance. Auto-
-// sizes Bounds when W is zero. The pill body is a filled SurfaceAlt
-// rectangle stroked with a Border outline; the Text is drawn left-
+// Draw paints the pill body + optional leading dot + text + optional
+// close affordance. Auto-sizes Bounds when W is zero (adding ChipDotD +
+// ChipDotGap when a dot is present). The pill body is a filled
+// SurfaceAlt rectangle stroked with a Border outline; when Dot.A != 0 a
+// small filled circle in Dot colour is drawn at the left inset and the
+// Text is shifted right past it; the Text is otherwise drawn left-
 // aligned inside the pad, and (when Closable) an "x" glyph in Border
 // colour marks the close slot at the right edge.
 func (c *Chip) Draw(p painter.Painter, theme *Theme) {
+	hasDot := c.Dot.A != 0
 	r := c.Bounds()
 	if r.W == 0 {
 		r.W = c.textWidth(c.Text) + 2*ChipPadX
+		if hasDot {
+			r.W += ChipDotD + ChipDotGap
+		}
 		if c.Closable {
 			r.W += ChipCloseGap + ChipCloseW
 		}
@@ -74,6 +94,11 @@ func (c *Chip) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	tx := r.X + ChipPadX
+	if hasDot {
+		dotY := r.Y + (r.H-ChipDotD)/2
+		fillRoundRect(p, r.X+ChipPadX, dotY, ChipDotD, ChipDotD, ChipDotD/2, c.Dot)
+		tx += ChipDotD + ChipDotGap
+	}
 	ty := r.Y + (r.H-c.glyphHeight())/2
 	c.drawText(p, tx, ty, c.Text, theme.OnSurface)
 	if c.Closable {
