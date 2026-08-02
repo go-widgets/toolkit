@@ -50,10 +50,28 @@ type TerminalView struct {
 	// (key down/up, char, click, …) so the host can feed a shell.
 	OnKey func(ev Event)
 
-	// cellW / cellH are the per-cell pixel size, recomputed from the
-	// active font each SetBounds. Exposed read-only via CellWidth /
-	// CellHeight for hosts that map pixel coordinates back to cells.
+	// CellW / CellH, when positive, pin an explicit per-cell pixel size
+	// that OVERRIDES the font-derived metrics — the escape hatch a host
+	// needs to lock a fixed cell geometry (e.g. a terminal that sizes its
+	// grid to an exact character box) without swapping in a metrics-only
+	// font shim. A zero value on an axis means "derive that axis from the
+	// active font", so leaving both unset reproduces the original
+	// font-metric behaviour exactly. Set them via SetCellSize (which
+	// recomputes immediately when bounds are already established) or by
+	// assigning the fields before the first SetBounds.
+	CellW, CellH int
+
+	// cellW / cellH are the resolved per-cell pixel size — the CellW /
+	// CellH override when set, otherwise the active font's metrics —
+	// recomputed each SetBounds (and each SetCellSize once bounded).
+	// Exposed read-only via CellWidth / CellHeight for hosts that map
+	// pixel coordinates back to cells.
 	cellW, cellH int
+
+	// bounded records that SetBounds has run at least once, so a later
+	// SetCellSize can recompute the resolved size immediately while Draw
+	// stays a no-op until the placement is known.
+	bounded bool
 }
 
 // NewTerminalView allocates a blank cols×rows grid with the cursor
@@ -188,12 +206,47 @@ func (t *TerminalView) ScrollUp(n int) {
 }
 
 // SetBounds records the placement and recomputes the per-cell pixel
-// size from the active font's metrics (advance × height), so the grid
-// tracks a font change.
+// size: the CellW / CellH override on each axis where it is positive,
+// otherwise the active font's metrics (advance × height), so the grid
+// tracks a font change while honouring any pinned geometry.
 func (t *TerminalView) SetBounds(r Rect) {
 	t.Base.SetBounds(r)
-	t.cellW = t.glyphAdvance()
-	t.cellH = t.glyphHeight()
+	t.bounded = true
+	t.cellW = t.resolveCellW()
+	t.cellH = t.resolveCellH()
+}
+
+// SetCellSize pins an explicit per-cell pixel size, overriding the
+// font-derived metrics. A non-positive value on an axis clears that
+// axis's override, restoring derivation from the active font. When
+// bounds are already established the resolved size updates immediately
+// (so CellWidth / CellHeight and the next Draw reflect it at once);
+// otherwise it takes effect at the first SetBounds.
+func (t *TerminalView) SetCellSize(w, h int) {
+	t.CellW = w
+	t.CellH = h
+	if t.bounded {
+		t.cellW = t.resolveCellW()
+		t.cellH = t.resolveCellH()
+	}
+}
+
+// resolveCellW is the effective cell width: the CellW override when
+// positive, else the active font's advance.
+func (t *TerminalView) resolveCellW() int {
+	if t.CellW > 0 {
+		return t.CellW
+	}
+	return t.glyphAdvance()
+}
+
+// resolveCellH is the effective cell height: the CellH override when
+// positive, else the active font's glyph-box height.
+func (t *TerminalView) resolveCellH() int {
+	if t.CellH > 0 {
+		return t.CellH
+	}
+	return t.glyphHeight()
 }
 
 // CellWidth is the pixel width of one cell (0 before SetBounds).
@@ -202,11 +255,21 @@ func (t *TerminalView) CellWidth() int { return t.cellW }
 // CellHeight is the pixel height of one cell (0 before SetBounds).
 func (t *TerminalView) CellHeight() int { return t.cellH }
 
-// Draw blits the grid: it fills the bounds with the default background,
-// then paints each cell's background and glyph. When CursorVisible the
+// Draw blits the grid: a single span-fill clears the whole bounds to
+// the default background (covering every default-background cell and any
+// margin the grid does not tile), then each cell whose resolved
+// background DIFFERS from that clear colour is over-filled with a rect
+// span and every non-blank glyph is stamped. When CursorVisible the
 // cursor cell is drawn inverted (foreground/background swapped), which
-// reads as a block cursor over both empty and occupied cells. Draw is
-// a no-op until SetBounds has established a positive cell size.
+// reads as a block cursor over both empty and occupied cells.
+//
+// This is one background pass, not two: the earlier form redundantly
+// span-filled every cell on top of an already-painted whole-bounds
+// clear, doubling the background cost for the common all-default grid.
+// Skipping cells that match the clear colour is pixel-identical — those
+// pixels already hold that exact colour — while non-default cells still
+// get their own span so the final image is unchanged. Draw is a no-op
+// until SetBounds has established a positive cell size.
 func (t *TerminalView) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	if t.cellW <= 0 || t.cellH <= 0 {
@@ -237,7 +300,11 @@ func (t *TerminalView) Draw(p painter.Painter, theme *Theme) {
 			}
 			x := r.X + col*t.cellW
 			y := r.Y + row*t.cellH
-			fillRect(p, x, y, t.cellW, t.cellH, bg)
+			if bg != defBG {
+				// Only cells that diverge from the clear colour need
+				// their own span; the rest are already painted.
+				fillRect(p, x, y, t.cellW, t.cellH, bg)
+			}
 			if cell.Rune != 0 && cell.Rune != ' ' {
 				t.drawText(p, x, y, string(cell.Rune), fg)
 			}
