@@ -158,6 +158,20 @@ type Table struct {
 	editRow, editCol int
 	editor           *Entry
 
+	// GroupBy, when in [0,len(Columns)), turns on row grouping: consecutive
+	// rows sharing that column's value are gathered under a clickable group
+	// header (value + member count + a disclosure triangle) that collapses
+	// its members. -1 (the default, seeded by NewTable) is ungrouped -- the
+	// body then renders byte-identically to a Table that never had this
+	// field. Grouping assumes Rows are already ordered by the group column
+	// (consecutive runs); it does not sort. Drag-to-reorder is suppressed
+	// while grouped (a cross-group move has no well-defined meaning).
+	GroupBy int
+	// collapsed records which group values are folded shut (keyed by the
+	// group column's value). Lazily created on the first toggle; a nil map
+	// reads as "nothing collapsed".
+	collapsed map[string]bool
+
 	// Reorderable opts the Table into drag-to-reorder BODY rows: it makes
 	// the Table both a DragSource (a press on a body row becomes a
 	// draggable "tablerow:<index>" payload -- see DragData) and a
@@ -269,6 +283,7 @@ func NewTable(cols []TableColumn, rows [][]string) *Table {
 		dropIndicator: -1,
 		editRow:       -1,
 		editCol:       -1,
+		GroupBy:       -1,
 	}
 }
 
@@ -290,7 +305,7 @@ const tableRowDragPrefix = "tablerow:"
 // dragRow left over after Rows shrinks collapses to "" the same
 // defensive way Draw collapses an out-of-range Selected.
 func (t *Table) DragData() string {
-	if !t.Reorderable || t.dragRow < 0 || t.dragRow >= len(t.Rows) {
+	if !t.reorderActive() || t.dragRow < 0 || t.dragRow >= len(t.Rows) {
 		return ""
 	}
 	return tableRowDragPrefix + strconv.Itoa(t.dragRow)
@@ -302,7 +317,7 @@ func (t *Table) DragData() string {
 // (a different scheme, or garbage) is always rejected, including while
 // Reorderable is false.
 func (t *Table) AcceptsDrop(payload string) bool {
-	if !t.Reorderable {
+	if !t.reorderActive() {
 		return false
 	}
 	_, ok := parseTableRowDragPayload(payload)
@@ -390,8 +405,8 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// so this loop paints identically to the un-windowed original.
 	scroll := t.clampScrollRow()
 	end := scroll + t.bodyVisibleRows()
-	if end > len(t.Rows) {
-		end = len(t.Rows)
+	if end > t.lineCount() {
+		end = t.lineCount()
 	}
 	// Clip the body to its own rect before painting rows. bodyVisibleRows
 	// rounds UP, so when Bounds().H isn't an exact multiple of
@@ -406,50 +421,26 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	if canClip {
 		clr.PushClip(Rect{X: r.X, Y: bodyY, W: r.W, H: r.Y + r.H - bodyY})
 	}
-	for i := scroll; i < end; i++ {
-		row := t.Rows[i]
-		y := bodyY + (i-scroll)*TableRowHeight
-		bg := theme.Surface
-		ink := theme.OnSurface
-		// Highlighted covers both the single-row anchor (always) and,
-		// while MultiSelect is on, any row in the multi-row selection
-		// set. With MultiSelect false the second half short-circuits,
-		// so this collapses to exactly the pre-MultiSelect condition.
-		highlighted := i == selRow || (t.MultiSelect && t.IsRowSelected(i))
-		switch {
-		case highlighted:
-			bg = theme.Accent
-			ink = onAccent
-		case i%2 == 1:
-			// Zebra keyed on the row's ABSOLUTE index i (not its
-			// on-screen position) so scrolling never shifts which rows
-			// read as odd/even.
-			bg = theme.Background
+	if t.grouped() {
+		// Grouped body: walk the visual-line list, painting a group header
+		// band for header lines and a normal cell row (via the shared
+		// drawDataRow) for data lines. end is already clamped to lineCount().
+		lines := t.lines()
+		for vi := scroll; vi < end; vi++ {
+			ln := lines[vi]
+			y := bodyY + (vi-scroll)*TableRowHeight
+			if ln.header {
+				t.drawGroupHeader(p, theme, r, y, ln)
+				continue
+			}
+			t.drawDataRow(p, theme, r, widths, gutter, y, ln.dataRow, selRow, onAccent)
 		}
-		fillRect(p, r.X, y, r.W, TableRowHeight, bg)
-		cx := r.X
-		cty := y + (TableRowHeight-t.glyphHeight())/2
-		for j, col := range t.Columns {
-			cellX, cellW := cx, widths[j]
-			// The first column reserves a leading gutter for this row's
-			// icon whenever RowIcon is set (gutter > 0): paint the icon
-			// in the row's ink, then shift the cell's text region right
-			// by the gutter so it clears the glyph. With RowIcon nil
-			// gutter is 0 and this whole block is skipped, so cellX/cellW
-			// stay cx/widths[j] and the text lands byte-identically to
-			// before.
-			if j == 0 && gutter > 0 {
-				if draw, ok := t.resolveRowIcon(i); ok {
-					iconY := y + (TableRowHeight-TableIconSize)/2
-					draw(p, Rect{X: cx + TableCellPadX, Y: iconY, W: TableIconSize, H: TableIconSize}, ink)
-				}
-				cellX += gutter
-				cellW -= gutter
-			}
-			if j < len(row) {
-				t.drawText(p, cellTextX(&t.Base, cellX, cellW, row[j], col.Align), cty, row[j], ink)
-			}
-			cx += widths[j]
+	} else {
+		// Ungrouped body: one line per row, on-screen position == index.
+		// Byte-identical to the pre-grouping loop.
+		for i := scroll; i < end; i++ {
+			y := bodyY + (i-scroll)*TableRowHeight
+			t.drawDataRow(p, theme, r, widths, gutter, y, i, selRow, onAccent)
 		}
 	}
 	// Drag-to-reorder insertion indicator: a thin Accent-coloured line
@@ -458,7 +449,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// EventDragLeave / a fresh drop reset it to -1, and NewTable seeds
 	// it there too). Drawn inside the same clip as the body rows so it
 	// never spills past Bounds() any more than a row itself would.
-	if t.Reorderable && t.dropIndicator >= 0 && t.dropIndicator <= len(t.Rows) {
+	if t.reorderActive() && t.dropIndicator >= 0 && t.dropIndicator <= len(t.Rows) {
 		iy := bodyY + (t.dropIndicator-scroll)*TableRowHeight
 		fillRect(p, r.X, iy-1, r.W, 2, theme.Accent)
 	}
@@ -491,9 +482,71 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// visible. cellRect tracks ScrollRow, so scrolling moves the editor with
 	// its row (off-view rows simply draw outside the buffer, harmlessly).
 	if t.editRow >= 0 && t.editor != nil {
-		t.editor.SetBounds(t.cellRect(t.editRow, t.editCol))
-		t.editor.Draw(p, theme)
+		if vi := t.visualIndex(t.editRow); vi >= 0 {
+			t.editor.SetBounds(t.cellRect(t.editRow, t.editCol))
+			t.editor.Draw(p, theme)
+		}
 	}
+}
+
+// drawDataRow paints one body data row (background + zebra/selection tint +
+// per-column text and optional leading icon) at on-surface y for data-row
+// index i. It is the shared cell-painting body of Draw, called by both the
+// grouped and ungrouped loops so the two render rows identically.
+func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []int, gutter, y, i, selRow int, onAccent RGBA) {
+	row := t.Rows[i]
+	bg := theme.Surface
+	ink := theme.OnSurface
+	// Highlighted covers both the single-row anchor (always) and, while
+	// MultiSelect is on, any row in the multi-row selection set. With
+	// MultiSelect false the second half short-circuits, so this collapses to
+	// exactly the pre-MultiSelect condition.
+	highlighted := i == selRow || (t.MultiSelect && t.IsRowSelected(i))
+	switch {
+	case highlighted:
+		bg = theme.Accent
+		ink = onAccent
+	case i%2 == 1:
+		// Zebra keyed on the row's ABSOLUTE index i (not its on-screen
+		// position) so scrolling never shifts which rows read as odd/even.
+		bg = theme.Background
+	}
+	fillRect(p, r.X, y, r.W, TableRowHeight, bg)
+	cx := r.X
+	cty := y + (TableRowHeight-t.glyphHeight())/2
+	for j, col := range t.Columns {
+		cellX, cellW := cx, widths[j]
+		// The first column reserves a leading gutter for this row's icon
+		// whenever RowIcon is set (gutter > 0): paint the icon in the row's
+		// ink, then shift the cell's text region right by the gutter so it
+		// clears the glyph. With RowIcon nil gutter is 0 and this whole block
+		// is skipped, so cellX/cellW stay cx/widths[j] and the text lands
+		// byte-identically to before.
+		if j == 0 && gutter > 0 {
+			if draw, ok := t.resolveRowIcon(i); ok {
+				iconY := y + (TableRowHeight-TableIconSize)/2
+				draw(p, Rect{X: cx + TableCellPadX, Y: iconY, W: TableIconSize, H: TableIconSize}, ink)
+			}
+			cellX += gutter
+			cellW -= gutter
+		}
+		if j < len(row) {
+			t.drawText(p, cellTextX(&t.Base, cellX, cellW, row[j], col.Align), cty, row[j], ink)
+		}
+		cx += widths[j]
+	}
+}
+
+// drawGroupHeader paints a group-header band at on-surface y: a SurfaceAlt
+// stripe spanning the width, a disclosure chevron (▼ open / ▶ collapsed) and
+// the group value with its member count, "value (n)".
+func (t *Table) drawGroupHeader(p painter.Painter, theme *Theme, r Rect, y int, ln tableLine) {
+	fillRect(p, r.X, y, r.W, TableRowHeight, theme.SurfaceAlt)
+	chevX := r.X + TableCellPadX + 4
+	drawDisclosureChevron(p, chevX, y+TableRowHeight/2, !ln.collapsed, theme.OnSurface)
+	tx := r.X + TableCellPadX + TableIconSize
+	ty := y + (TableRowHeight-t.glyphHeight())/2
+	t.drawText(p, tx, ty, ln.group+" ("+strconv.Itoa(ln.count)+")", theme.OnSurface)
 }
 
 // tableScrollbarThumbMin is the pixel floor a scrollbar thumb is
@@ -514,7 +567,7 @@ func (t *Table) drawScrollbar(p painter.Painter, theme *Theme, r Rect, bodyY, sc
 	trackX := r.X + r.W - scrollbarWidth
 	trackH := r.Y + r.H - bodyY
 	fillRect(p, trackX, bodyY, scrollbarWidth, trackH, theme.SurfaceAlt)
-	contentH := len(t.Rows) * TableRowHeight
+	contentH := t.lineCount() * TableRowHeight
 	thumbH := trackH * trackH / contentH
 	if thumbH < tableScrollbarThumbMin {
 		thumbH = tableScrollbarThumbMin
@@ -762,7 +815,7 @@ func (t *Table) bodyVisibleRows() int {
 // scrollbar track to occupy.
 func (t *Table) bodyOverflows() bool {
 	vis := t.bodyVisibleRows()
-	return vis > 0 && len(t.Rows) > vis
+	return vis > 0 && t.lineCount() > vis
 }
 
 // maxScrollRow is the highest legal ScrollRow: enough rows short of
@@ -771,11 +824,113 @@ func (t *Table) bodyOverflows() bool {
 // case) -- exactly the "[0, max(0, len(Rows)-visibleRows)]" range
 // ScrollRow's doc promises.
 func (t *Table) maxScrollRow() int {
-	max := len(t.Rows) - t.bodyVisibleRows()
+	max := t.lineCount() - t.bodyVisibleRows()
 	if max < 0 {
 		max = 0
 	}
 	return max
+}
+
+// grouped reports whether row grouping is active: GroupBy must name a real
+// column. The ungrouped default (-1) short-circuits every grouping branch so
+// the body renders exactly as before this feature existed.
+func (t *Table) grouped() bool {
+	return t.GroupBy >= 0 && t.GroupBy < len(t.Columns)
+}
+
+// reorderActive reports whether drag-to-reorder is in effect: opted in via
+// Reorderable AND not grouped. A cross-group row move has no well-defined
+// target (the insertion index is over visual lines that interleave headers),
+// so grouping suppresses reordering entirely.
+func (t *Table) reorderActive() bool {
+	return t.Reorderable && !t.grouped()
+}
+
+// tableLine is one on-screen line of the body when grouping is active: either
+// a group header (header==true, carrying the group value, its member count and
+// whether it is collapsed) or a data line pointing at a row in t.Rows.
+type tableLine struct {
+	header    bool
+	group     string // group value (header lines)
+	count     int    // members in the group (header lines)
+	collapsed bool   // whether the group is folded (header lines)
+	dataRow   int    // index into t.Rows (data lines)
+}
+
+// groupValue returns row r's value in the GroupBy column, or "" when the row
+// is too short to have that cell (which then forms its own "" group).
+func (t *Table) groupValue(r int) string {
+	if t.GroupBy < len(t.Rows[r]) {
+		return t.Rows[r][t.GroupBy]
+	}
+	return ""
+}
+
+// lines builds the ordered visual-line list for the grouped body: for each run
+// of consecutive rows sharing a GroupBy value it emits a header line followed
+// (unless the group is collapsed) by that run's data lines. It returns nil when
+// ungrouped, the signal every geometry helper uses to fall back to the plain
+// one-line-per-row model. Runs are consecutive: lines assumes Rows are already
+// ordered by the group column and does not sort.
+func (t *Table) lines() []tableLine {
+	if !t.grouped() {
+		return nil
+	}
+	var out []tableLine
+	i := 0
+	for i < len(t.Rows) {
+		val := t.groupValue(i)
+		j := i + 1
+		for j < len(t.Rows) && t.groupValue(j) == val {
+			j++
+		}
+		collapsed := t.collapsed[val]
+		out = append(out, tableLine{header: true, group: val, count: j - i, collapsed: collapsed})
+		if !collapsed {
+			for k := i; k < j; k++ {
+				out = append(out, tableLine{dataRow: k})
+			}
+		}
+		i = j
+	}
+	return out
+}
+
+// lineCount is the number of on-screen body lines: len(Rows) when ungrouped,
+// or the grouped line count (headers + expanded rows) when grouping is on. It
+// is what the scroll geometry (maxScrollRow / bodyOverflows / the scrollbar)
+// measures the body against.
+func (t *Table) lineCount() int {
+	if !t.grouped() {
+		return len(t.Rows)
+	}
+	return len(t.lines())
+}
+
+// visualIndex maps a data-row index to its on-screen line position (so the
+// inline editor can be placed over the right line). Ungrouped it is the
+// identity; grouped it scans the line list. A row inside a collapsed group has
+// no visible line and yields -1.
+func (t *Table) visualIndex(dataRow int) int {
+	if !t.grouped() {
+		return dataRow
+	}
+	for vi, ln := range t.lines() {
+		if !ln.header && ln.dataRow == dataRow {
+			return vi
+		}
+	}
+	return -1
+}
+
+// toggleGroup folds or unfolds the group with the given value, lazily creating
+// the collapsed map on first use.
+func (t *Table) toggleGroup(val string) {
+	if t.collapsed == nil {
+		t.collapsed = map[string]bool{}
+	}
+	t.collapsed[val] = !t.collapsed[val]
+	t.ScrollRow = t.clampScrollRow()
 }
 
 // clampScrollRow returns ScrollRow collapsed into [0, maxScrollRow()]
@@ -950,11 +1105,36 @@ func (t *Table) rowAt(localY int) int {
 	if localY < TableHeaderHeight {
 		return -1
 	}
-	row := t.clampScrollRow() + (localY-TableHeaderHeight)/TableRowHeight
-	if row < 0 || row >= len(t.Rows) {
+	vi := t.clampScrollRow() + (localY-TableHeaderHeight)/TableRowHeight
+	if !t.grouped() {
+		if vi < 0 || vi >= len(t.Rows) {
+			return -1
+		}
+		return vi
+	}
+	// Grouped: the visual line at vi is either a header (no data row) or a
+	// data line pointing at t.Rows.
+	lines := t.lines()
+	if vi < 0 || vi >= len(lines) || lines[vi].header {
 		return -1
 	}
-	return row
+	return lines[vi].dataRow
+}
+
+// lineAt returns the visual line under a Table-local y, and false when y is in
+// the header strip, above/below the body lines, or the Table is ungrouped (so
+// there are no group headers to hit). It is how a click discovers a group
+// header to toggle.
+func (t *Table) lineAt(localY int) (tableLine, bool) {
+	if localY < TableHeaderHeight || !t.grouped() {
+		return tableLine{}, false
+	}
+	vi := t.clampScrollRow() + (localY-TableHeaderHeight)/TableRowHeight
+	lines := t.lines()
+	if vi < 0 || vi >= len(lines) {
+		return tableLine{}, false
+	}
+	return lines[vi], true
 }
 
 // cellRect returns the on-surface rectangle a body cell occupies, in the
@@ -967,7 +1147,7 @@ func (t *Table) rowAt(localY int) int {
 func (t *Table) cellRect(row, col int) Rect {
 	r := t.Bounds()
 	widths := t.columnWidths(t.contentWidth())
-	y := r.Y + TableHeaderHeight + (row-t.clampScrollRow())*TableRowHeight
+	y := r.Y + TableHeaderHeight + (t.visualIndex(row)-t.clampScrollRow())*TableRowHeight
 	cellX := r.X
 	for j := 0; j < col; j++ {
 		cellX += widths[j]
@@ -1201,6 +1381,12 @@ func (t *Table) OnEvent(ev Event) {
 			}
 			return
 		}
+		// A click on a group header toggles its collapse (grouped only) and
+		// never selects or edits.
+		if ln, ok := t.lineAt(ev.Y); ok && ln.header {
+			t.toggleGroup(ln.group)
+			return
+		}
 		row := t.rowAt(ev.Y)
 		// A click on an Editable cell opens an inline editor over it
 		// (and takes precedence over row selection/drag for that cell).
@@ -1210,10 +1396,10 @@ func (t *Table) OnEvent(ev Event) {
 				return
 			}
 		}
-		// A body-row press starts a potential row drag whenever
-		// Reorderable is on -- independent of MultiSelect, so
-		// drag-to-reorder works on a passive-viewer Table too.
-		if t.Reorderable && row >= 0 {
+		// A body-row press starts a potential row drag whenever reordering
+		// is active -- independent of MultiSelect, so drag-to-reorder works
+		// on a passive-viewer Table too. Grouping suppresses it.
+		if t.reorderActive() && row >= 0 {
 			t.dragRow = row
 		}
 		if !t.MultiSelect {
@@ -1244,7 +1430,7 @@ func (t *Table) OnEvent(ev Event) {
 	case EventMouseUp:
 		t.resizing = false
 	case EventDragMove:
-		if !t.Reorderable {
+		if !t.reorderActive() {
 			return
 		}
 		t.dropIndicator = t.rowInsertIndexAt(ev.Y)
@@ -1252,7 +1438,7 @@ func (t *Table) OnEvent(ev Event) {
 		t.dropIndicator = -1
 	case EventDrop:
 		t.dropIndicator = -1
-		if !t.Reorderable {
+		if !t.reorderActive() {
 			return
 		}
 		from, ok := parseTableRowDragPayload(ev.Code)
