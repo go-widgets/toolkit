@@ -6,7 +6,23 @@ package toolkit
 
 import "github.com/go-widgets/painter"
 
-import "strings"
+import (
+	"strconv"
+	"strings"
+)
+
+// TextSpan is a coloured run within a single line, in half-open rune
+// coordinates [Start, End). A TextView.Highlighter returns a slice of
+// these to paint syntax-highlighted source: any rune not covered by a
+// span keeps the default ink. Spans may overlap — a later span in the
+// slice wins for the runes it covers. Start/End are clamped to the
+// line's rune length at paint time, so a highlighter need not worry
+// about off-by-one bounds. Color reuses the toolkit's RGBA (a painter
+// colour), so a highlighter composes theme colours directly.
+type TextSpan struct {
+	Start, End int
+	Color      RGBA
+}
 
 // TextView is the multi-line cousin of Entry. Lines are stored as a
 // []string (one element per visible line); Cursor is a (line, col)
@@ -41,6 +57,27 @@ type TextView struct {
 	// text, so downstream logic (search, syntax, autosave) never
 	// operates on half-formed input.
 	Composition string
+
+	// Highlighter, when non-nil, turns each line into coloured runs at
+	// paint time: Draw calls Highlighter(lineIndex, line) and paints
+	// the returned TextSpans in their colours, with any uncovered runes
+	// falling back to the default ink (theme.OnSurface). When nil (the
+	// zero value) Draw paints every line in a single ink exactly as it
+	// always has — a host adds syntax highlighting by setting this hook
+	// without the widget growing a lexer of its own.
+	Highlighter func(lineIndex int, line string) []TextSpan
+
+	// ShowLineNumbers, when true, reserves a left gutter sized to the
+	// widest line number and paints right-aligned 1-based line numbers
+	// there; the text, caret and selection all shift right by the
+	// gutter width. When false (the zero value) there is no gutter and
+	// layout is byte-identical to before this field existed.
+	ShowLineNumbers bool
+
+	// GutterColor is the ink for the line-number gutter. The zero value
+	// (a fully-transparent RGBA, A==0) means "unset": Draw then falls
+	// back to a muted tone (dimInk) that reads on any theme.
+	GutterColor RGBA
 
 	// undo/redo hold point-in-time snapshots taken before each
 	// mutating edit (see pushUndo). Ports the go-widgets/tui
@@ -163,12 +200,28 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, border)
 	lineH := t.glyphHeight() + 4 // 1-pixel-line font + 4 px line spacing
+	gutterW := t.gutterWidth()
+	textX := r.X + 4 + gutterW
+	gutterInk := t.GutterColor
+	if gutterInk.A == 0 {
+		gutterInk = dimInk(theme)
+	}
 	for i, line := range t.Lines {
 		y := r.Y + 4 + i*lineH
-		t.drawText(p, r.X+4, y, line, theme.OnSurface)
+		if t.ShowLineNumbers {
+			num := strconv.Itoa(i + 1)
+			// Right-align the number against the text's left margin.
+			nx := textX - 4 - t.textWidth(num)
+			t.drawText(p, nx, y, num, gutterInk)
+		}
+		if t.Highlighter == nil {
+			t.drawText(p, textX, y, line, theme.OnSurface)
+			continue
+		}
+		t.drawSpans(p, textX, y, line, t.Highlighter(i, line), theme.OnSurface)
 	}
 	if t.Focused {
-		cx := r.X + 4 + t.CursorCol*t.glyphAdvance()
+		cx := textX + t.CursorCol*t.glyphAdvance()
 		cy := r.Y + 4 + t.CursorLine*lineH
 		fillRect(p, cx, cy-1, 1, t.glyphHeight()+2, theme.OnSurface)
 		// IME composition preview: render the pending string in the
@@ -335,6 +388,57 @@ func (t *TextView) cursorRight() {
 	if t.CursorLine < len(t.Lines)-1 {
 		t.CursorLine++
 		t.CursorCol = 0
+	}
+}
+
+// gutterWidth is the pixel width reserved for the line-number gutter,
+// or 0 when ShowLineNumbers is false. It sizes to the widest number
+// (the last line's) plus 8 px of padding, so the number column never
+// jitters as the cursor moves between rows of different index widths.
+func (t *TextView) gutterWidth() int {
+	if !t.ShowLineNumbers {
+		return 0
+	}
+	widest := strconv.Itoa(len(t.Lines))
+	return t.textWidth(widest) + 8
+}
+
+// drawSpans paints line at (x, y) as coloured runs: every rune starts
+// at the base ink, spans overwrite the runes they cover (later spans
+// win), and consecutive same-colour runes are coalesced into a single
+// drawText so proportional fonts stay correctly kerned within a run.
+// Out-of-range span bounds are clamped, so a highlighter can be sloppy
+// about edges without corrupting the paint.
+func (t *TextView) drawSpans(p painter.Painter, x, y int, line string, spans []TextSpan, base RGBA) {
+	runes := []rune(line)
+	if len(runes) == 0 {
+		return
+	}
+	colors := make([]RGBA, len(runes))
+	for i := range colors {
+		colors[i] = base
+	}
+	for _, sp := range spans {
+		s, e := sp.Start, sp.End
+		if s < 0 {
+			s = 0
+		}
+		if e > len(runes) {
+			e = len(runes)
+		}
+		for j := s; j < e; j++ {
+			colors[j] = sp.Color
+		}
+	}
+	cx := x
+	runStart := 0
+	for i := 1; i <= len(runes); i++ {
+		if i == len(runes) || colors[i] != colors[runStart] {
+			seg := string(runes[runStart:i])
+			t.drawText(p, cx, y, seg, colors[runStart])
+			cx += t.textWidth(seg)
+			runStart = i
+		}
 	}
 }
 

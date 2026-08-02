@@ -60,7 +60,8 @@ every native target Go ships.
 | Base         | `Widget`, `Base`, `Rect`, `Event` (+ IME composition), `Theme`, `RGBA` |
 | Text         | bitmap 5x7 + anti-aliased `NewTrueTypeFont`, global `SetFont` + per-widget `Base.Font`, `DrawText`, `TextWidth`, `Label` |
 | Action       | `Button`, `ToggleButton`, `CheckButton`, `RadioButton` + `Group`   |
-| Input        | `Entry`, `TextView` + `Selection` + IME preview, `SpinButton`, `Scale`, `RangeSlider` |
+| Input        | `Entry`, `TextView` + `Selection` + IME preview + optional `Highlighter` (syntax spans) + `ShowLineNumbers` gutter, `SpinButton`, `Scale`, `RangeSlider` |
+| Terminal     | `TerminalView` (Cols×Rows `TermCell` grid, block cursor, wrap/scroll, per-cell FG/BG) |
 | Selection    | `ListBox`, `TreeView`, `DropDown`                                  |
 | Layout       | `HBox`, `VBox`, `Grid`, `Frame`, `Stack`, `Overlay`, `Paned`, `Expander` |
 | Tabs         | `Notebook`                                                         |
