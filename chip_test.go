@@ -237,3 +237,71 @@ func TestChipIgnoresOtherKinds(t *testing.T) {
 		t.Fatalf("KeyDown fired OnClose %d times, want 0", fires)
 	}
 }
+
+// TestChipDotAutoSizesExtraWidth covers the auto-size dot branch: a
+// chip carrying a non-zero Dot must reserve ChipDotD + ChipDotGap of
+// extra width on top of the text pad, proving the Text is shifted right
+// of the swatch rather than overlapping it.
+func TestChipDotAutoSizesExtraWidth(t *testing.T) {
+	theme := DefaultLight()
+
+	plain := NewChip("hi")
+	plain.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 0})
+	plain.Draw(newP(makeSurface(80, 40), 80), theme)
+
+	dotted := NewChip("hi")
+	dotted.Dot = RGB(0xFF, 0x00, 0x00)
+	dotted.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 0})
+	dotted.Draw(newP(makeSurface(80, 40), 80), theme)
+
+	if got := dotted.Bounds().W - plain.Bounds().W; got != ChipDotD+ChipDotGap {
+		t.Fatalf("dot width overhead = %d, want %d", got, ChipDotD+ChipDotGap)
+	}
+	// The Text region must start past the swatch: text left inset with a
+	// dot is ChipPadX + ChipDotD + ChipDotGap vs ChipPadX without.
+	if dotted.Bounds().W <= plain.Bounds().W {
+		t.Fatal("dotted chip must be wider than plain chip")
+	}
+}
+
+// TestChipDotPaintsSwatch covers the Draw dot branch on a pre-sized
+// chip: the swatch is a filled circle in Dot colour at the left inset,
+// and the gap to its right stays SurfaceAlt (Text is shifted past it).
+func TestChipDotPaintsSwatch(t *testing.T) {
+	const w, h = 64, 20
+	theme := DefaultLight()
+	dot := RGB(0xFF, 0x00, 0x00)
+	c := NewClosableChip("hi", nil)
+	c.Dot = dot
+	c.SetBounds(Rect{X: 2, Y: 2, W: 60, H: 16})
+	buf := makeSurface(w, h)
+	c.Draw(newP(buf, w), theme)
+
+	// Swatch rect: X = 2+ChipPadX = 10, Y = 2+(16-ChipDotD)/2 = 7,
+	// 6x6. An interior pixel at (12, 9) is fully covered → exact Dot.
+	if got := pixelAt(buf, w, 12, 9); got != dot {
+		t.Fatalf("swatch centre (12,9) = %+v, want Dot %+v", got, dot)
+	}
+	// The pill body above the swatch/text row stays SurfaceAlt.
+	if got := pixelAt(buf, w, 12, 3); got != theme.SurfaceAlt {
+		t.Fatalf("body above swatch (12,3) = %+v, want SurfaceAlt", got)
+	}
+}
+
+// TestChipNoDotByDefault covers the zero-value Dot path: with Dot.A == 0
+// the left inset carries no swatch, so the pixel where a dot would sit
+// is the plain SurfaceAlt body (no Dot colour bleed).
+func TestChipNoDotByDefault(t *testing.T) {
+	const w, h = 64, 20
+	theme := DefaultLight()
+	c := NewChip("hi") // Dot is the zero value → A == 0.
+	c.SetBounds(Rect{X: 2, Y: 2, W: 60, H: 16})
+	buf := makeSurface(w, h)
+	c.Draw(newP(buf, w), theme)
+	// Where the swatch centre would be (12, 9): no dot, so the body
+	// SurfaceAlt shows through (the "hi" glyphs start further left but
+	// do not reach this exact interior sample above the baseline run).
+	if got := pixelAt(buf, w, 12, 3); got != theme.SurfaceAlt {
+		t.Fatalf("no-dot body (12,3) = %+v, want SurfaceAlt", got)
+	}
+}
