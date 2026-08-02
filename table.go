@@ -147,6 +147,17 @@ type Table struct {
 	// clamped pixel width now in effect.
 	OnColumnResize func(col, newWidth int)
 
+	// OnCellEdit fires when an inline cell edit is committed (Enter): the
+	// Table has already written the new value into Rows[row][col]. Nil is
+	// safe. Only cells in a column with Editable set can be edited.
+	OnCellEdit func(row, col int, value string)
+
+	// editRow/editCol point at the cell whose inline editor is open (both
+	// -1 = none; NewTable seeds them). editor is the live text field while
+	// an edit is in progress. See beginEdit/commitEdit/cancelEdit.
+	editRow, editCol int
+	editor           *Entry
+
 	// Reorderable opts the Table into drag-to-reorder BODY rows: it makes
 	// the Table both a DragSource (a press on a body row becomes a
 	// draggable "tablerow:<index>" payload -- see DragData) and a
@@ -209,6 +220,10 @@ type TableColumn struct {
 	// value (false) makes a header click a no-op, so existing callers
 	// that never set it keep the original passive-viewer behaviour.
 	Sortable bool
+	// Editable opts this column's body cells into inline editing: a click
+	// on such a cell opens a text editor over it (see Table.OnCellEdit).
+	// The zero value (false) keeps the original read-only behaviour.
+	Editable bool
 }
 
 // TableIconFunc paints a Table's optional per-row leading icon into the
@@ -252,6 +267,8 @@ func NewTable(cols []TableColumn, rows [][]string) *Table {
 		SortColumn:    -1,
 		dragRow:       -1,
 		dropIndicator: -1,
+		editRow:       -1,
+		editCol:       -1,
 	}
 }
 
@@ -465,6 +482,17 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// as the pre-feature Table never painting one.
 	if overflow {
 		t.drawScrollbar(p, theme, r, bodyY, scroll)
+	}
+
+	// Inline cell editor overlay, on top of everything: when an edit is in
+	// progress (beginEdit) the Entry is positioned over its cell via cellRect
+	// -- the same geometry Draw laid the cell text out with -- and drawn last
+	// so it covers the underlying (now stale) cell content and the cursor is
+	// visible. cellRect tracks ScrollRow, so scrolling moves the editor with
+	// its row (off-view rows simply draw outside the buffer, harmlessly).
+	if t.editRow >= 0 && t.editor != nil {
+		t.editor.SetBounds(t.cellRect(t.editRow, t.editCol))
+		t.editor.Draw(p, theme)
 	}
 }
 
@@ -929,6 +957,77 @@ func (t *Table) rowAt(localY int) int {
 	return row
 }
 
+// cellRect returns the on-surface rectangle a body cell occupies, in the
+// same absolute coordinate space Draw paints into (Bounds()-relative). It
+// mirrors the Draw body geometry exactly: the row band is bodyY +
+// (row-clampScrollRow)*TableRowHeight tall by TableRowHeight, and the column
+// span is the cumulative columnWidths, with the first column's icon gutter
+// (if any) carved off the left so the editor sits over the text area. It is
+// what positions the inline cell editor.
+func (t *Table) cellRect(row, col int) Rect {
+	r := t.Bounds()
+	widths := t.columnWidths(t.contentWidth())
+	y := r.Y + TableHeaderHeight + (row-t.clampScrollRow())*TableRowHeight
+	cellX := r.X
+	for j := 0; j < col; j++ {
+		cellX += widths[j]
+	}
+	cellW := widths[col]
+	if col == 0 {
+		if g := t.iconGutter(); g > 0 {
+			cellX += g
+			cellW -= g
+		}
+	}
+	return Rect{X: cellX, Y: y, W: cellW, H: TableRowHeight}
+}
+
+// beginEdit opens an inline text editor over cell (row,col), seeded with the
+// cell's current value and focused so keystrokes land in it. It is a no-op
+// for an out-of-range cell or a column that is not Editable. Committing
+// (Enter) writes the value back and fires OnCellEdit; Escape cancels.
+func (t *Table) beginEdit(row, col int) {
+	if row < 0 || row >= len(t.Rows) || col < 0 || col >= len(t.Columns) {
+		return
+	}
+	if !t.Columns[col].Editable {
+		return
+	}
+	val := ""
+	if col < len(t.Rows[row]) {
+		val = t.Rows[row][col]
+	}
+	e := NewEntry(val)
+	e.Focused = true
+	e.Font = t.Font // inherit the table's face so CJK/complex text edits legibly
+	e.OnSubmit = func(string) { t.commitEdit() }
+	t.editRow, t.editCol, t.editor = row, col, e
+}
+
+// commitEdit writes the open editor's text back into Rows, fires OnCellEdit
+// (nil-safe) and closes the editor. It is a no-op when no edit is in
+// progress. A cell whose row is shorter than editCol (a ragged Row) is left
+// untouched -- there is no slot to write.
+func (t *Table) commitEdit() {
+	if t.editRow < 0 || t.editor == nil {
+		return
+	}
+	r, c, v := t.editRow, t.editCol, t.editor.Text
+	if r < len(t.Rows) && c < len(t.Rows[r]) {
+		t.Rows[r][c] = v
+	}
+	t.editRow, t.editCol, t.editor = -1, -1, nil
+	if t.OnCellEdit != nil {
+		t.OnCellEdit(r, c, v)
+	}
+}
+
+// cancelEdit discards the open editor without touching Rows or firing
+// OnCellEdit. It is a no-op when no edit is in progress.
+func (t *Table) cancelEdit() {
+	t.editRow, t.editCol, t.editor = -1, -1, nil
+}
+
 // rowInsertIndexAt returns the drag-to-reorder insertion index for a
 // Table-local y coordinate: 0..len(Rows) inclusive, where len(Rows)
 // means "after the last row". Unlike rowAt (which answers "which row's
@@ -1061,6 +1160,30 @@ func (t *Table) toggleSort(col int) {
 // anchor, so repeated Shift-clicks keep ranging from the same
 // origin). A click past the last row (rowAt returns -1) is ignored.
 func (t *Table) OnEvent(ev Event) {
+	// While an inline cell editor is open it owns the keyboard: characters
+	// and edit keys route to it, Enter commits (via the editor's OnSubmit),
+	// and Escape cancels. A click inside the editing cell is left to the
+	// editor (cursor placement); a click anywhere else commits first, then
+	// falls through so it selects/edits the newly-clicked cell normally.
+	if t.editRow >= 0 && t.editor != nil {
+		switch ev.Kind {
+		case EventChar:
+			t.editor.OnEvent(ev)
+			return
+		case EventKeyDown:
+			if ev.Code == "Escape" {
+				t.cancelEdit()
+				return
+			}
+			t.editor.OnEvent(ev)
+			return
+		case EventClick:
+			if t.rowAt(ev.Y) == t.editRow && t.columnAt(ev.X) == t.editCol {
+				return
+			}
+			t.commitEdit()
+		}
+	}
 	switch ev.Kind {
 	case EventClick:
 		if ev.Y < 0 {
@@ -1079,6 +1202,14 @@ func (t *Table) OnEvent(ev Event) {
 			return
 		}
 		row := t.rowAt(ev.Y)
+		// A click on an Editable cell opens an inline editor over it
+		// (and takes precedence over row selection/drag for that cell).
+		if row >= 0 {
+			if col := t.columnAt(ev.X); col >= 0 && col < len(t.Columns) && t.Columns[col].Editable {
+				t.beginEdit(row, col)
+				return
+			}
+		}
 		// A body-row press starts a potential row drag whenever
 		// Reorderable is on -- independent of MultiSelect, so
 		// drag-to-reorder works on a passive-viewer Table too.
