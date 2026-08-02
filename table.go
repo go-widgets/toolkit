@@ -123,6 +123,22 @@ type Table struct {
 	// itself clamped, unlike a raw assignment.
 	ScrollRow int
 
+	// FrozenColumns is the number of leading columns pinned in place while
+	// the rest scroll horizontally (see ScrollX). Clamped into
+	// [0, len(Columns)]. Meaningful only when the columns are all
+	// fixed-width and overflow the viewport (hScrollable); with any
+	// auto-width column the table fits to width and never scrolls
+	// horizontally, so this is inert. The zero value (0) pins nothing --
+	// byte-identical to before this field existed.
+	FrozenColumns int
+
+	// ScrollX is the horizontal pixel offset of the SCROLLABLE (non-frozen)
+	// columns. Read through clampScrollX, so an out-of-range value never
+	// scrolls past the content. The zero value (0) shows the columns from
+	// their left edge. Inert unless hScrollable (fixed columns wider than
+	// the viewport); use ScrollXTo / ScrollXBy to move it clamped.
+	ScrollX int
+
 	// SortColumn is the 0-indexed column currently sorted, or -1 (or
 	// any out-of-range value) for "no sort" -- Draw skips the ▲/▼
 	// indicator and OnEvent treats every header click as a fresh sort.
@@ -369,14 +385,29 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	if t.SortColumn >= 0 && t.SortColumn < len(t.Columns) {
 		sortCol = t.SortColumn
 	}
-	hx := r.X
 	hty := r.Y + (TableHeaderHeight-t.glyphHeight())/2
-	for i, col := range t.Columns {
-		t.drawText(p, cellTextX(&t.Base, hx, widths[i], col.Title, col.Align), hty, col.Title, theme.OnBackground)
-		if i == sortCol {
-			drawSortIndicator(p, hx+widths[i]-8, r.Y+TableHeaderHeight/2, t.SortAsc, theme.OnBackground)
+	hmid := r.Y + TableHeaderHeight/2
+	if !t.hScrollable() {
+		hx := r.X
+		for i := range t.Columns {
+			t.paintHeaderCell(p, theme, widths, hx, hty, hmid, i, sortCol)
+			hx += widths[i]
 		}
-		hx += widths[i]
+	} else {
+		// Frozen/scrolled split: scrolled headers clipped to the region
+		// right of the frozen block, then frozen headers painted at their
+		// pinned positions.
+		f := t.frozenCount()
+		fx := r.X + t.frozenWidth(widths)
+		right := r.X + t.contentWidth()
+		withClip(p, Rect{X: fx, Y: r.Y, W: right - fx, H: TableHeaderHeight}, func() {
+			for i := f; i < len(t.Columns); i++ {
+				t.paintHeaderCell(p, theme, widths, t.columnScreenX(r.X, widths, i), hty, hmid, i, sortCol)
+			}
+		})
+		for i := 0; i < f; i++ {
+			t.paintHeaderCell(p, theme, widths, t.columnScreenX(r.X, widths, i), hty, hmid, i, sortCol)
+		}
 	}
 
 	// --- Body ------------------------------------------------------
@@ -461,10 +492,32 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// One 1-px vertical stroke between adjacent columns, spanning the
 	// full widget height (header + body). No stroke on the outer left
 	// or right edge -- the widget's parent frame owns those.
-	sepX := r.X
-	for i := 0; i < len(t.Columns)-1; i++ {
-		sepX += widths[i]
-		fillRect(p, sepX, r.Y, 1, r.H, theme.Border)
+	if !t.hScrollable() {
+		sepX := r.X
+		for i := 0; i < len(t.Columns)-1; i++ {
+			sepX += widths[i]
+			fillRect(p, sepX, r.Y, 1, r.H, theme.Border)
+		}
+	} else {
+		// Frozen separators stay pinned; scrolled separators shift with the
+		// content and are clipped to the scrollable region; a slightly
+		// stronger stroke marks the frozen/scrolled boundary.
+		f := t.frozenCount()
+		fx := r.X + t.frozenWidth(widths)
+		right := r.X + t.contentWidth()
+		sepX := r.X
+		for i := 0; i < f-1; i++ {
+			sepX += widths[i]
+			fillRect(p, sepX, r.Y, 1, r.H, theme.Border)
+		}
+		withClip(p, Rect{X: fx, Y: r.Y, W: right - fx, H: r.H}, func() {
+			for i := f; i < len(t.Columns)-1; i++ {
+				fillRect(p, t.columnScreenX(r.X, widths, i+1), r.Y, 1, r.H, theme.Border)
+			}
+		})
+		if f > 0 {
+			fillRect(p, fx, r.Y, 1, r.H, theme.Border)
+		}
 	}
 
 	// --- Vertical scrollbar (right edge, body only) -----------------
@@ -473,6 +526,13 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// as the pre-feature Table never painting one.
 	if overflow {
 		t.drawScrollbar(p, theme, r, bodyY, scroll)
+	}
+
+	// --- Horizontal scrollbar (bottom edge) -------------------------
+	// Drawn only while the columns overflow the viewport (hScrollable);
+	// otherwise skipped entirely, so a fit-to-width table is unchanged.
+	if t.hScrollable() {
+		t.drawHScrollbar(p, theme, r, widths)
 	}
 
 	// Inline cell editor overlay, on top of everything: when an edit is in
@@ -512,28 +572,71 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 		bg = theme.Background
 	}
 	fillRect(p, r.X, y, r.W, TableRowHeight, bg)
-	cx := r.X
 	cty := y + (TableRowHeight-t.glyphHeight())/2
-	for j, col := range t.Columns {
-		cellX, cellW := cx, widths[j]
-		// The first column reserves a leading gutter for this row's icon
-		// whenever RowIcon is set (gutter > 0): paint the icon in the row's
-		// ink, then shift the cell's text region right by the gutter so it
-		// clears the glyph. With RowIcon nil gutter is 0 and this whole block
-		// is skipped, so cellX/cellW stay cx/widths[j] and the text lands
-		// byte-identically to before.
-		if j == 0 && gutter > 0 {
-			if draw, ok := t.resolveRowIcon(i); ok {
-				iconY := y + (TableRowHeight-TableIconSize)/2
-				draw(p, Rect{X: cx + TableCellPadX, Y: iconY, W: TableIconSize, H: TableIconSize}, ink)
-			}
-			cellX += gutter
-			cellW -= gutter
+	if !t.hScrollable() {
+		cx := r.X
+		for j := range t.Columns {
+			t.paintCell(p, widths, gutter, cx, cty, y, i, j, ink, row)
+			cx += widths[j]
 		}
-		if j < len(row) {
-			t.drawText(p, cellTextX(&t.Base, cellX, cellW, row[j], col.Align), cty, row[j], ink)
+		return
+	}
+	// Frozen/scrolled split: paint scrolled cells clipped to the region
+	// right of the frozen block (so they never bleed over the pinned
+	// columns or the vertical-scrollbar gutter), then the frozen cells at
+	// their pinned positions on top.
+	f := t.frozenCount()
+	fx := r.X + t.frozenWidth(widths)
+	right := r.X + t.contentWidth()
+	withClip(p, Rect{X: fx, Y: y, W: right - fx, H: TableRowHeight}, func() {
+		for j := f; j < len(t.Columns); j++ {
+			t.paintCell(p, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
 		}
-		cx += widths[j]
+	})
+	for j := 0; j < f; j++ {
+		t.paintCell(p, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
+	}
+}
+
+// paintCell paints one body cell of row i, column j: its optional leading icon
+// (column 0 only, when a RowIcon gutter is reserved) and its text, left edge at
+// cellX. Shared by the plain and frozen/scrolled body passes.
+func (t *Table) paintCell(p painter.Painter, widths []int, gutter, cellX, cty, y, i, j int, ink RGBA, row []string) {
+	cellW := widths[j]
+	if j == 0 && gutter > 0 {
+		if draw, ok := t.resolveRowIcon(i); ok {
+			iconY := y + (TableRowHeight-TableIconSize)/2
+			draw(p, Rect{X: cellX + TableCellPadX, Y: iconY, W: TableIconSize, H: TableIconSize}, ink)
+		}
+		cellX += gutter
+		cellW -= gutter
+	}
+	if j < len(row) {
+		t.drawText(p, cellTextX(&t.Base, cellX, cellW, row[j], t.Columns[j].Align), cty, row[j], ink)
+	}
+}
+
+// paintHeaderCell paints one header cell of column i: its title (aligned) and,
+// when it is the sorted column, the ▲/▼ indicator. Shared by the plain and
+// frozen/scrolled header passes.
+func (t *Table) paintHeaderCell(p painter.Painter, theme *Theme, widths []int, x, hty, hmid, i, sortCol int) {
+	col := t.Columns[i]
+	t.drawText(p, cellTextX(&t.Base, x, widths[i], col.Title, col.Align), hty, col.Title, theme.OnBackground)
+	if i == sortCol {
+		drawSortIndicator(p, x+widths[i]-8, hmid, t.SortAsc, theme.OnBackground)
+	}
+}
+
+// withClip runs fn with clip rect pushed onto p when p supports clipping,
+// otherwise runs fn unclipped -- the same graceful degradation the body-row
+// clip already relies on for painters that can't clip.
+func withClip(p painter.Painter, clip Rect, fn func()) {
+	if clr, ok := p.(painter.Clipper); ok {
+		clr.PushClip(clip)
+		fn()
+		clr.PopClip()
+	} else {
+		fn()
 	}
 }
 
@@ -580,6 +683,28 @@ func (t *Table) drawScrollbar(p painter.Painter, theme *Theme, r Rect, bodyY, sc
 	// below positive too.
 	thumbY := bodyY + scroll*TableRowHeight*(trackH-thumbH)/(contentH-trackH)
 	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
+}
+
+// drawHScrollbar paints the bottom-edge horizontal scrollbar over the
+// scrollable (non-frozen) region: the track spans [frozenWidth, contentWidth)
+// and the thumb is sized/positioned by the same pixel-proportion formula as
+// the vertical scrollbar, substituting the scrollable content/viewport widths
+// for the row-pixel heights. Only called while hScrollable, which guarantees
+// contentW > trackW (naturalWidth > contentWidth) so the denominator below is
+// positive.
+func (t *Table) drawHScrollbar(p painter.Painter, theme *Theme, r Rect, widths []int) {
+	fw := t.frozenWidth(widths)
+	trackX := r.X + fw
+	trackY := r.Y + r.H - scrollbarWidth
+	trackW := t.contentWidth() - fw
+	fillRect(p, trackX, trackY, trackW, scrollbarWidth, theme.SurfaceAlt)
+	contentW := t.naturalWidth() - fw
+	thumbW := trackW * trackW / contentW
+	if thumbW < tableScrollbarThumbMin {
+		thumbW = tableScrollbarThumbMin
+	}
+	thumbX := trackX + t.clampScrollX()*(trackW-thumbW)/(contentW-trackW)
+	fillRect(p, thumbX, trackY, thumbW, scrollbarWidth, theme.Accent)
 }
 
 // columnWidths distributes the total pixel budget across every column.
@@ -742,12 +867,32 @@ const tableSeparatorHitTolerance = 3
 // widget's Bounds().
 func (t *Table) columnAt(localX int) int {
 	widths := t.columnWidths(t.contentWidth())
+	if !t.hScrollable() {
+		x := 0
+		for i, w := range widths {
+			if localX >= x && localX < x+w {
+				return i
+			}
+			x += w
+		}
+		return -1
+	}
+	// A click left of the frozen block hit-tests the frozen columns at their
+	// natural (pinned) offset [0, f); a click in the scrollable region is
+	// shifted by clampScrollX back into natural space and hit-tests the
+	// non-frozen columns [f, n). Both walk the same cumulative natural x.
+	f := t.frozenCount()
+	fw := t.frozenWidth(widths)
+	nat, lo := localX, 0
+	if localX >= fw {
+		nat, lo = localX+t.clampScrollX(), f
+	}
 	x := 0
-	for i, w := range widths {
-		if localX >= x && localX < x+w {
+	for i := 0; i < len(widths); i++ {
+		if i >= lo && nat >= x && nat < x+widths[i] {
 			return i
 		}
-		x += w
+		x += widths[i]
 	}
 	return -1
 }
@@ -762,10 +907,27 @@ func (t *Table) ColumnSeparatorAt(localX int) int {
 		return -1
 	}
 	widths := t.columnWidths(t.contentWidth())
-	x := 0
+	if !t.hScrollable() {
+		x := 0
+		for i := 0; i < len(widths)-1; i++ {
+			x += widths[i]
+			if localX >= x-tableSeparatorHitTolerance && localX <= x+tableSeparatorHitTolerance {
+				return i
+			}
+		}
+		return -1
+	}
+	// The separator after column i sits at column i+1's on-screen left edge;
+	// a scrolled separator is only hittable while it lies within the visible
+	// scrollable region [frozenWidth, contentWidth).
+	fw := t.frozenWidth(widths)
+	right := t.contentWidth()
 	for i := 0; i < len(widths)-1; i++ {
-		x += widths[i]
-		if localX >= x-tableSeparatorHitTolerance && localX <= x+tableSeparatorHitTolerance {
+		sx := t.columnScreenX(0, widths, i+1)
+		if i+1 > t.frozenCount() && (sx < fw || sx > right) {
+			continue
+		}
+		if localX >= sx-tableSeparatorHitTolerance && localX <= sx+tableSeparatorHitTolerance {
 			return i
 		}
 	}
@@ -969,6 +1131,118 @@ func (t *Table) contentWidth() int {
 	return w
 }
 
+// hasAutoColumn reports whether any column is auto-width (Width <= 0). Auto
+// columns make columnWidths fit the table to the viewport, which is
+// incompatible with horizontal scrolling -- so their presence disables it.
+func (t *Table) hasAutoColumn() bool {
+	for _, c := range t.Columns {
+		if c.Width <= 0 {
+			return true
+		}
+	}
+	return false
+}
+
+// naturalWidth is the columns' unfitted total pixel width -- the sum of the
+// resolved column widths. With no auto columns (the only case it is consulted
+// for) columnWidths returns the declared widths verbatim, so this is their
+// plain sum regardless of the viewport.
+func (t *Table) naturalWidth() int {
+	total := 0
+	for _, w := range t.columnWidths(t.contentWidth()) {
+		total += w
+	}
+	return total
+}
+
+// hScrollable reports whether horizontal scrolling is active: the columns are
+// all fixed-width AND their natural total exceeds the horizontal budget
+// (contentWidth, which already reserves the vertical scrollbar's gutter). When
+// false every horizontal-scroll branch is inert and the body renders exactly
+// as it did before this feature.
+func (t *Table) hScrollable() bool {
+	return len(t.Columns) > 0 && !t.hasAutoColumn() && t.naturalWidth() > t.contentWidth()
+}
+
+// frozenCount is FrozenColumns clamped into [0, len(Columns)] and forced to 0
+// unless horizontal scrolling is active (pinning columns is meaningless when
+// nothing scrolls past them).
+func (t *Table) frozenCount() int {
+	if !t.hScrollable() {
+		return 0
+	}
+	f := t.FrozenColumns
+	if f < 0 {
+		f = 0
+	}
+	if f > len(t.Columns) {
+		f = len(t.Columns)
+	}
+	return f
+}
+
+// frozenWidth is the summed pixel width of the frozen leading columns.
+func (t *Table) frozenWidth(widths []int) int {
+	fw := 0
+	for i := 0; i < t.frozenCount() && i < len(widths); i++ {
+		fw += widths[i]
+	}
+	return fw
+}
+
+// maxScrollX is the highest legal ScrollX: enough that the last column's right
+// edge lines up with the viewport's right edge. Consulted only through
+// clampScrollX (which first checks hScrollable, i.e. naturalWidth >
+// contentWidth), so the difference is always positive here.
+func (t *Table) maxScrollX() int {
+	return t.naturalWidth() - t.contentWidth()
+}
+
+// clampScrollX returns ScrollX collapsed into [0, maxScrollX()], read-only
+// (like clampScrollRow). Zero whenever horizontal scrolling is inactive.
+func (t *Table) clampScrollX() int {
+	if !t.hScrollable() {
+		return 0
+	}
+	s := t.ScrollX
+	if s < 0 {
+		s = 0
+	}
+	if m := t.maxScrollX(); s > m {
+		s = m
+	}
+	return s
+}
+
+// ScrollXTo sets ScrollX to px, clamped into [0, maxScrollX()] -- the direct
+// entry point a horizontal scrollbar drag or a wheel handler drives.
+func (t *Table) ScrollXTo(px int) {
+	t.ScrollX = px
+	t.ScrollX = t.clampScrollX()
+}
+
+// ScrollXBy adjusts ScrollX by delta pixels (positive scrolls right), clamped
+// the same way as ScrollXTo.
+func (t *Table) ScrollXBy(delta int) {
+	t.ScrollXTo(t.ScrollX + delta)
+}
+
+// columnScreenX returns column j's on-surface left edge given the resolved
+// widths: frozen columns sit at their natural offset, scrolled columns are
+// shifted left by clampScrollX. When horizontal scrolling is inactive
+// frozenCount is 0 and clampScrollX is 0, so this is just the natural offset
+// r.X + sum(widths[:j]) -- identical to the pre-feature geometry.
+func (t *Table) columnScreenX(rx int, widths []int, j int) int {
+	x := rx
+	for k := 0; k < j && k < len(widths); k++ {
+		x += widths[k]
+	}
+	if j >= t.frozenCount() {
+		x -= t.clampScrollX()
+	}
+	return x
+}
+
 // ScrollTo sets ScrollRow to row, clamped into [0, maxScrollRow()] --
 // the direct, host-callable entry point a scrollbar drag or a
 // PageUp/PageDown key handler drives, mirroring how SetColumnWidth is
@@ -1148,10 +1422,7 @@ func (t *Table) cellRect(row, col int) Rect {
 	r := t.Bounds()
 	widths := t.columnWidths(t.contentWidth())
 	y := r.Y + TableHeaderHeight + (t.visualIndex(row)-t.clampScrollRow())*TableRowHeight
-	cellX := r.X
-	for j := 0; j < col; j++ {
-		cellX += widths[j]
-	}
+	cellX := t.columnScreenX(r.X, widths, col)
 	cellW := widths[col]
 	if col == 0 {
 		if g := t.iconGutter(); g > 0 {
@@ -1422,10 +1693,10 @@ func (t *Table) OnEvent(ev Event) {
 			return
 		}
 		widths := t.columnWidths(t.contentWidth())
-		left := 0
-		for i := 0; i < t.resizingCol; i++ {
-			left += widths[i]
-		}
+		// The column's on-screen left edge (events are Table-local, so rx=0).
+		// columnScreenX folds in the frozen/scroll offset; with no h-scroll it
+		// is just the natural cumulative left, byte-identical to before.
+		left := t.columnScreenX(0, widths, t.resizingCol)
 		t.SetColumnWidth(t.resizingCol, ev.X-left)
 	case EventMouseUp:
 		t.resizing = false
