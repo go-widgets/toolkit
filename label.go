@@ -20,12 +20,17 @@ const (
 )
 
 // VAlign is a widget's vertical text alignment within its bounds height. The
-// zero value is VTop, so an unset VAlign keeps the original top-anchored layout.
+// zero value VAuto preserves the label's original layout (centred when the bounds
+// are taller than the text, else top-anchored), so existing labels are unchanged;
+// VTop/VMiddle/VBottom force a specific edge.
 type VAlign int
 
 const (
-	// VTop anchors text to the top edge (the default).
-	VTop VAlign = iota
+	// VAuto keeps the original behaviour: vertically centred when Bounds.H
+	// exceeds the glyph height, otherwise top-anchored. The default.
+	VAuto VAlign = iota
+	// VTop anchors text to the top edge.
+	VTop
 	// VMiddle centres text vertically within the bounds height.
 	VMiddle
 	// VBottom anchors text to the bottom edge.
@@ -34,8 +39,8 @@ const (
 
 // Label is a passive widget that displays Text in the theme's OnSurface colour,
 // drawn with the toolkit's 5x7 bitmap font. It is horizontally aligned per
-// Align (left by default) and vertically aligned per VAlign (top by default);
-// set VMiddle to centre the text within a taller box. When Ellipsis is set,
+// Align (left by default) and vertically aligned per VAlign (VAuto keeps the
+// original centre-when-taller layout by default). When Ellipsis is set,
 // over-wide text is truncated with a trailing "…" to fit the bounds width.
 //
 // Label is non-interactive: HitTest returns false so clicks pass
@@ -46,8 +51,8 @@ type Label struct {
 	Text  string
 	Align Align
 	// VAlign is the vertical alignment of the text within the Label's bounds
-	// height. The zero value VTop anchors the text to the top edge; VMiddle
-	// centres it and VBottom anchors it to the bottom.
+	// height. The zero value VAuto keeps the original layout (centred when taller than the
+	// text, else top); VTop/VMiddle/VBottom force a specific edge.
 	VAlign VAlign
 	// Ellipsis truncates the text with a trailing "…" when it is wider than the
 	// Label's bounds width. The zero value false renders the full text, which
@@ -68,7 +73,7 @@ func NewLabel(text string) *Label { return &Label{Text: text} }
 func (l *Label) HitTest(_, _ int) bool { return false }
 
 // Draw paints the Label's text with the toolkit's bitmap font. The text is
-// positioned vertically per VAlign (top by default, else centred or bottom)
+// positioned vertically per VAlign (VAuto keeps the original centre-when-taller)
 // and horizontally per Align. When Ellipsis is set and the text is wider than
 // the bounds it is truncated with a trailing "…" so it fits the width.
 func (l *Label) Draw(p painter.Painter, theme *Theme) {
@@ -82,6 +87,11 @@ func (l *Label) Draw(p painter.Painter, theme *Theme) {
 
 	ty := r.Y // VTop: anchored to the top edge.
 	switch l.VAlign {
+	case VAuto:
+		// Original behaviour: centre when the box is taller than the text.
+		if r.H > gh {
+			ty = r.Y + (r.H-gh)/2
+		}
 	case VMiddle:
 		ty = r.Y + (r.H-gh)/2
 	case VBottom:

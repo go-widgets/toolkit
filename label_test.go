@@ -132,10 +132,19 @@ func TestLabelVAlign(t *testing.T) {
 		t.Fatalf("VBottom top row = %d, want %d", botRow, h-gh)
 	}
 
-	// The zero value (VTop, Ellipsis:false) must match an explicit VTop render.
+	// The zero value VAuto keeps the original behaviour: centred when the box is
+	// taller than the text — identical to VMiddle here.
 	zero := drawLabel(w, h, func(l *Label) { l.Text = "Hi" })
-	if !bytes.Equal(zero, top) {
-		t.Fatal("zero-value VAlign must render identically to explicit VTop")
+	if !bytes.Equal(zero, mid) {
+		t.Fatal("zero-value VAuto must centre in a taller box (match VMiddle)")
+	}
+	// VAuto in a box no taller than the glyph height stays top-anchored.
+	tight := NewLabel("").glyphHeight()
+	if !bytes.Equal(
+		drawLabel(w, tight, func(l *Label) { l.Text = "Hi" }),
+		drawLabel(w, tight, func(l *Label) { l.Text = "Hi"; l.VAlign = VTop }),
+	) {
+		t.Fatal("zero-value VAuto in a tight box must top-anchor (match VTop)")
 	}
 }
 
