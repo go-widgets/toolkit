@@ -5,8 +5,11 @@
 package toolkit
 
 import (
+	"bytes"
 	"fmt"
 	"testing"
+
+	"github.com/go-widgets/painter"
 )
 
 // makeTableSurface allocates a w*h RGBA byte slice pre-filled with a
@@ -1712,7 +1715,7 @@ func TestTableReorderDropMovesRowDownSelectionFollowsAndFiresOnReorder(t *testin
 		[][]string{{"r0"}, {"r1"}, {"r2"}, {"r3"}, {"r4"}})
 	tb.Reorderable = true
 	tb.MultiSelect = true
-	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 5 * TableRowHeight + TableHeaderHeight})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 5*TableRowHeight + TableHeaderHeight})
 
 	// Press + pre-select row 0 (anchor), row 2 (falls INSIDE the
 	// insertion window (from, final] -- it must shift left by one to
@@ -1761,7 +1764,7 @@ func TestTableReorderDropMovesRowUpAndShiftsIntermediateSelection(t *testing.T) 
 		[][]string{{"r0"}, {"r1"}, {"r2"}, {"r3"}, {"r4"}})
 	tb.Reorderable = true
 	tb.Selected = 2 // an intermediate row, in the shifted range [to, from)
-	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 5 * TableRowHeight + TableHeaderHeight})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 5*TableRowHeight + TableHeaderHeight})
 
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(4)})
 	if got := tb.DragData(); got != "tablerow:4" {
@@ -1967,5 +1970,273 @@ func TestTableScrollToSelectedScrollsUpAndDown(t *testing.T) {
 	tb.scrollToSelected()
 	if tb.ScrollRow != 2 {
 		t.Fatalf("ScrollRow after in-window scrollToSelected = %d, want unchanged 2", tb.ScrollRow)
+	}
+}
+
+// --- RowIcon: leading per-row icon column --------------------------------
+
+// fillIconRect is a TableIconFunc that floods its whole rect with ink, so
+// a test can detect exactly where (and in what colour) a row icon landed
+// without depending on the sparse-stroke shape of a stock DrawIconXxx.
+func fillIconRect(p painter.Painter, r Rect, ink RGBA) {
+	fillRect(p, r.X, r.Y, r.W, r.H, ink)
+}
+
+// leftmostInkX scans the pixel region [x0,x1) x [y0,y1) and returns the
+// smallest x holding any pixel != bg, or -1 if the whole region is bg. It
+// is how the shift tests locate where a column's text actually starts.
+func leftmostInkX(buf []byte, w, x0, x1, y0, y1 int, bg RGBA) int {
+	for x := x0; x < x1; x++ {
+		for y := y0; y < y1; y++ {
+			if pixelAt(buf, w, x, y) != bg {
+				return x
+			}
+		}
+	}
+	return -1
+}
+
+// TestTableIconGutter pins the two states of the gutter reservation: 0
+// (byte-identical no-icon path) while RowIcon is nil, and
+// TableCellPadX+TableIconSize once it is set.
+func TestTableIconGutter(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, nil)
+	if g := tb.iconGutter(); g != 0 {
+		t.Fatalf("iconGutter with RowIcon nil = %d, want 0", g)
+	}
+	tb.RowIcon = func(int) (TableIconFunc, bool) { return fillIconRect, true }
+	if g, want := tb.iconGutter(), TableCellPadX+TableIconSize; g != want {
+		t.Fatalf("iconGutter with RowIcon set = %d, want %d", g, want)
+	}
+}
+
+// TestTableResolveRowIcon covers every collapse branch: a false ok, a nil
+// painter with ok true, and a genuine painter.
+func TestTableResolveRowIcon(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A"}}, nil)
+
+	tb.RowIcon = func(int) (TableIconFunc, bool) { return fillIconRect, false }
+	if draw, ok := tb.resolveRowIcon(0); ok || draw != nil {
+		t.Fatalf("resolveRowIcon with ok=false = (%v,%v), want (nil,false)", draw != nil, ok)
+	}
+
+	tb.RowIcon = func(int) (TableIconFunc, bool) { return nil, true }
+	if draw, ok := tb.resolveRowIcon(0); ok || draw != nil {
+		t.Fatalf("resolveRowIcon with nil painter = (%v,%v), want (nil,false)", draw != nil, ok)
+	}
+
+	tb.RowIcon = func(int) (TableIconFunc, bool) { return fillIconRect, true }
+	if draw, ok := tb.resolveRowIcon(0); !ok || draw == nil {
+		t.Fatalf("resolveRowIcon with real painter = (%v,%v), want (non-nil,true)", draw != nil, ok)
+	}
+}
+
+// TestTableDrawRowIconPaintsAndShifts proves the icon lands in the
+// reserved gutter and column 0's text is pushed right by exactly the
+// gutter width vs the same table with no RowIcon.
+func TestTableDrawRowIconPaintsAndShifts(t *testing.T) {
+	newTable := func() *Table {
+		tb := NewTable([]TableColumn{
+			{Title: "Name", Width: 100},
+			{Title: "Size", Width: 60},
+		}, [][]string{{"file", "10"}})
+		tb.SetBounds(Rect{X: 0, Y: 0, W: 160, H: 80})
+		return tb
+	}
+	theme := DefaultLight()
+
+	// Baseline: no RowIcon.
+	base := newTable()
+	bufBase := makeTableSurface(160, 80)
+	base.Draw(newP(bufBase, 160), theme)
+
+	// With RowIcon flooding the gutter square with a sentinel ink.
+	sentinel := RGBA{R: 1, G: 2, B: 3, A: 255}
+	withIcon := newTable()
+	withIcon.RowIcon = func(int) (TableIconFunc, bool) {
+		return func(p painter.Painter, r Rect, _ RGBA) { fillRect(p, r.X, r.Y, r.W, r.H, sentinel) }, true
+	}
+	bufIcon := makeTableSurface(160, 80)
+	withIcon.Draw(newP(bufIcon, 160), theme)
+
+	// Icon square painted at x=cx+TableCellPadX (=4), vertically centred
+	// in row 0's band -> sample its centre.
+	iconCx := TableCellPadX + TableIconSize/2
+	iconCy := TableHeaderHeight + (TableRowHeight-TableIconSize)/2 + TableIconSize/2
+	if px := pixelAt(bufIcon, 160, iconCx, iconCy); px != sentinel {
+		t.Fatalf("icon pixel = %+v, want sentinel %+v", px, sentinel)
+	}
+	// The baseline (no icon) left that same spot painted with the plain
+	// row background, never the sentinel.
+	if px := pixelAt(bufBase, 160, iconCx, iconCy); px == sentinel {
+		t.Fatalf("baseline unexpectedly painted an icon at (%d,%d)", iconCx, iconCy)
+	}
+
+	// Column-0 text shift: compare the first inked x in column 0's text
+	// band. The icon render floods [4,20) so scan begins past the gutter
+	// to isolate the TEXT start; the baseline scan starts at 0.
+	yTop := TableHeaderHeight + 1
+	yBot := TableHeaderHeight + TableRowHeight - 1
+	baseLeft := leftmostInkX(bufBase, 160, 0, 100, yTop, yBot, theme.Surface)
+	iconTextLeft := leftmostInkX(bufIcon, 160, TableCellPadX+TableIconSize, 100, yTop, yBot, theme.Surface)
+	if baseLeft < 0 || iconTextLeft < 0 {
+		t.Fatalf("no text ink found (base=%d, icon=%d)", baseLeft, iconTextLeft)
+	}
+	if diff := iconTextLeft - baseLeft; diff != TableCellPadX+TableIconSize {
+		t.Fatalf("column-0 text shift = %d, want gutter %d", diff, TableCellPadX+TableIconSize)
+	}
+}
+
+// TestTableDrawRowIconMixed proves a per-row (nil painter / ok=false) row
+// reserves the gutter (keeping text aligned with icon rows) yet paints no
+// glyph, while a sibling row does.
+func TestTableDrawRowIconMixed(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "Name", Width: 120}},
+		[][]string{{"has"}, {"none"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
+	theme := DefaultLight()
+	sentinel := RGBA{R: 9, G: 8, B: 7, A: 255}
+	tb.RowIcon = func(row int) (TableIconFunc, bool) {
+		if row == 0 {
+			return func(p painter.Painter, r Rect, _ RGBA) { fillRect(p, r.X, r.Y, r.W, r.H, sentinel) }, true
+		}
+		return nil, false // row 1: gutter reserved, no icon
+	}
+	buf := makeTableSurface(120, 100)
+	tb.Draw(newP(buf, 120), theme)
+
+	iconCx := TableCellPadX + TableIconSize/2
+	row0Cy := TableHeaderHeight + (TableRowHeight-TableIconSize)/2 + TableIconSize/2
+	row1Cy := TableHeaderHeight + TableRowHeight + (TableRowHeight-TableIconSize)/2 + TableIconSize/2
+	if px := pixelAt(buf, 120, iconCx, row0Cy); px != sentinel {
+		t.Fatalf("row 0 icon = %+v, want sentinel %+v", px, sentinel)
+	}
+	// Row 1 (odd -> Background zebra) has NO icon: the gutter is plain bg.
+	if px := pixelAt(buf, 120, iconCx, row1Cy); px == sentinel {
+		t.Fatalf("row 1 unexpectedly painted an icon")
+	}
+	if px := pixelAt(buf, 120, iconCx, row1Cy); px != theme.Background {
+		t.Fatalf("row 1 gutter = %+v, want Background %+v", px, theme.Background)
+	}
+}
+
+// TestTableDrawRowIconSelectedInk proves the icon paints in the row's own
+// ink -- accent-inverted (accentInk) on the selected row.
+func TestTableDrawRowIconSelectedInk(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
+		[][]string{{"r0"}, {"r1"}})
+	tb.Selected = 1
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	theme := DefaultLight()
+	var gotInk RGBA
+	tb.RowIcon = func(int) (TableIconFunc, bool) {
+		return func(p painter.Painter, r Rect, ink RGBA) { gotInk = ink; fillRect(p, r.X, r.Y, r.W, r.H, ink) }, true
+	}
+	buf := makeTableSurface(100, 100)
+	tb.Draw(newP(buf, 100), theme)
+	if want := accentInk(theme); gotInk != want {
+		t.Fatalf("selected-row icon ink = %+v, want accentInk %+v", gotInk, want)
+	}
+	// And the selected row's cell background is still Accent (the gutter
+	// is carved from column 0's interior, it doesn't disturb the fill).
+	if px := tableRowCentrePixel(buf, 100, 60, 0, 1); px != theme.Accent {
+		t.Fatalf("selected row fill w/ icon = %+v, want Accent %+v", px, theme.Accent)
+	}
+}
+
+// TestTableDrawRowIconStockDrawFunc wires a real DrawIconXxx from
+// icons.go straight into RowIcon -- the compile-time proof that the stock
+// painters satisfy TableIconFunc, plus a runtime check that it painted.
+func TestTableDrawRowIconStockDrawFunc(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "Name", Width: 120}}, [][]string{{"folder"}})
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 80})
+	theme := DefaultLight()
+	tb.RowIcon = func(int) (TableIconFunc, bool) { return DrawIconOpen, true }
+	buf := makeTableSurface(120, 80)
+	tb.Draw(newP(buf, 120), theme)
+	// DrawIconOpen strokes an outline in OnSurface somewhere inside the
+	// gutter square; assert at least one such pixel exists.
+	yTop := TableHeaderHeight
+	yBot := TableHeaderHeight + TableRowHeight
+	if leftmostInkX(buf, 120, 0, TableCellPadX+TableIconSize, yTop, yBot, theme.Surface) < 0 {
+		t.Fatal("DrawIconOpen painted nothing in the icon gutter")
+	}
+}
+
+// TestTableDrawNoIconByteIdentical proves the RowIcon field is inert while
+// nil: a table renders the exact same bytes whether or not RowIcon was
+// ever assigned, as long as it is nil at Draw time. (Setting it changes
+// the output; clearing it back reproduces the original bytes exactly.)
+func TestTableDrawNoIconByteIdentical(t *testing.T) {
+	newTable := func() *Table {
+		tb := NewTable([]TableColumn{
+			{Title: "Name", Width: 90},
+			{Title: "Size", Width: 40, Align: AlignRight},
+		}, [][]string{{"a", "1"}, {"b", "2"}, {"c", "3"}})
+		tb.Selected = 1
+		tb.SetBounds(Rect{X: 0, Y: 0, W: 130, H: 120})
+		return tb
+	}
+	theme := DefaultLight()
+
+	tb := newTable()
+	bufNil := makeTableSurface(130, 120)
+	tb.Draw(newP(bufNil, 130), theme)
+
+	// Set an icon -> output MUST differ (feature has a visible effect).
+	tb.RowIcon = func(int) (TableIconFunc, bool) { return fillIconRect, true }
+	bufIcon := makeTableSurface(130, 120)
+	tb.Draw(newP(bufIcon, 130), theme)
+	if bytes.Equal(bufNil, bufIcon) {
+		t.Fatal("RowIcon set produced byte-identical output -- feature had no effect")
+	}
+
+	// Clear it back to nil -> output MUST be byte-identical to bufNil.
+	tb.RowIcon = nil
+	bufCleared := makeTableSurface(130, 120)
+	tb.Draw(newP(bufCleared, 130), theme)
+	if !bytes.Equal(bufNil, bufCleared) {
+		t.Fatal("RowIcon nil render is NOT byte-identical to the pre-feature render")
+	}
+}
+
+// TestTableDrawRowIconWithScrollAndMultiColumn exercises the icon gutter
+// together with vertical scrolling + a multi-column body: the icon must
+// follow the windowed top row, and only column 0 (j==0) reserves the
+// gutter -- later columns are untouched.
+func TestTableDrawRowIconWithScroll(t *testing.T) {
+	rows := make([][]string, 20)
+	for i := range rows {
+		rows[i] = []string{fmt.Sprintf("n%d", i), fmt.Sprintf("%d", i)}
+	}
+	tb := NewTable([]TableColumn{
+		{Title: "Name", Width: 100},
+		{Title: "Size", Width: 60},
+	}, rows)
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 160, H: TableHeaderHeight + 3*TableRowHeight})
+	tb.ScrollTo(5)
+	theme := DefaultLight()
+	// Icon only on absolute row 6 -> it should appear on the SECOND
+	// visible band (rows 5,6,7 visible; 6 is the middle one).
+	sentinel := RGBA{R: 4, G: 5, B: 6, A: 255}
+	tb.RowIcon = func(row int) (TableIconFunc, bool) {
+		if row == 6 {
+			return func(p painter.Painter, r Rect, _ RGBA) { fillRect(p, r.X, r.Y, r.W, r.H, sentinel) }, true
+		}
+		return nil, false
+	}
+	buf := makeTableSurface(160, TableHeaderHeight+3*TableRowHeight)
+	tb.Draw(newP(buf, 160), theme)
+
+	iconCx := TableCellPadX + TableIconSize/2
+	band1Cy := TableHeaderHeight + TableRowHeight + (TableRowHeight-TableIconSize)/2 + TableIconSize/2
+	if px := pixelAt(buf, 160, iconCx, band1Cy); px != sentinel {
+		t.Fatalf("scrolled icon (abs row 6) = %+v, want sentinel %+v at band 1", px, sentinel)
+	}
+	// Column 1 keeps its geometry -- the separator between col0/col1 sits
+	// at x=100 regardless of the gutter (the gutter is interior to col0).
+	sepPx := pixelAt(buf, 160, 100, TableHeaderHeight+TableRowHeight/2)
+	if sepPx != theme.Border {
+		t.Fatalf("column separator w/ icons = %+v, want Border %+v", sepPx, theme.Border)
 	}
 }

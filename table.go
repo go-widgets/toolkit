@@ -59,6 +59,32 @@ type Table struct {
 	// it is still the ONLY row painted while MultiSelect is false.
 	Selected int
 
+	// RowIcon, when non-nil, supplies an optional leading icon for each
+	// body row -- the missing piece for file-list-style views (a
+	// per-row file-type glyph before the name) that previously forced a
+	// host to hand-compose custom rows instead of using Table directly.
+	// It is called with a 0-indexed body row and returns the icon's
+	// painter (any of the stock DrawIconXxx functions in icons.go, or a
+	// caller's own of the same TableIconFunc signature) plus an ok flag;
+	// returning ok == false (or a nil painter) means "this row has no
+	// icon" while still reserving the gutter, so text stays aligned down
+	// the first column whether or not a given row carries a glyph.
+	//
+	// When RowIcon is set, Draw reserves a fixed leading gutter
+	// (TableCellPadX + TableIconSize) inside the FIRST column, paints the
+	// row's icon there in the row's own ink (accent-inverted on the
+	// selected row, OnSurface otherwise), and shifts that column's text
+	// right by the gutter. Column boundaries, separators, sort, scroll
+	// and row/column hit-testing are all unchanged -- the gutter is
+	// carved out of column 0's interior, so a click on the icon still
+	// resolves to column 0 and to its row exactly as a click on the text
+	// would.
+	//
+	// The zero value (nil) is the original, pre-feature behaviour: no
+	// gutter is reserved and Draw renders byte-for-byte identically to
+	// before this field existed.
+	RowIcon func(row int) (draw TableIconFunc, ok bool)
+
 	// MultiSelect switches body-row clicks (handled by OnEvent) from
 	// inert to selection-driving: a plain click selects only that row
 	// (clearing any other selection, moving the Selected anchor to
@@ -185,6 +211,21 @@ type TableColumn struct {
 	Sortable bool
 }
 
+// TableIconFunc paints a Table's optional per-row leading icon into the
+// square rect r using ink. It is deliberately the exact signature of the
+// stock DrawIconXxx painters in icons.go (DrawIconOpen, DrawIconNew,
+// ...), so a caller wires any of those straight into Table.RowIcon --
+// e.g. `func(row int) (toolkit.TableIconFunc, bool) { return
+// toolkit.DrawIconOpen, true }` -- or supplies its own painter of the
+// same shape for a file-type glyph the stock set doesn't cover.
+type TableIconFunc func(p painter.Painter, r Rect, ink RGBA)
+
+// TableIconSize is the pixel width+height of the square rect a per-row
+// leading icon (see Table.RowIcon) is painted into -- sized to sit
+// comfortably inside a TableRowHeight-tall body row with a little
+// vertical breathing room.
+const TableIconSize = 16
+
 // TableHeaderHeight is the pixel height of the header row.
 const TableHeaderHeight = 24
 
@@ -279,6 +320,10 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	}
 	overflow := t.bodyOverflows()
 	widths := t.columnWidths(t.contentWidth())
+	// gutter is the leading space reserved inside column 0 for a per-row
+	// icon; 0 (so every gutter branch below is inert) while RowIcon is
+	// nil -- keeping the no-icon path byte-identical to before.
+	gutter := t.iconGutter()
 
 	// --- Header row ------------------------------------------------
 	fillRect(p, r.X, r.Y, r.W, TableHeaderHeight, theme.SurfaceAlt)
@@ -368,8 +413,24 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		cx := r.X
 		cty := y + (TableRowHeight-t.glyphHeight())/2
 		for j, col := range t.Columns {
+			cellX, cellW := cx, widths[j]
+			// The first column reserves a leading gutter for this row's
+			// icon whenever RowIcon is set (gutter > 0): paint the icon
+			// in the row's ink, then shift the cell's text region right
+			// by the gutter so it clears the glyph. With RowIcon nil
+			// gutter is 0 and this whole block is skipped, so cellX/cellW
+			// stay cx/widths[j] and the text lands byte-identically to
+			// before.
+			if j == 0 && gutter > 0 {
+				if draw, ok := t.resolveRowIcon(i); ok {
+					iconY := y + (TableRowHeight-TableIconSize)/2
+					draw(p, Rect{X: cx + TableCellPadX, Y: iconY, W: TableIconSize, H: TableIconSize}, ink)
+				}
+				cellX += gutter
+				cellW -= gutter
+			}
 			if j < len(row) {
-				t.drawText(p, cellTextX(&t.Base, cx, widths[j], row[j], col.Align), cty, row[j], ink)
+				t.drawText(p, cellTextX(&t.Base, cellX, cellW, row[j], col.Align), cty, row[j], ink)
 			}
 			cx += widths[j]
 		}
@@ -518,6 +579,35 @@ func cellTextX(b *Base, cellX, cellW int, text string, align Align) int {
 	default: // AlignLeft
 		return cellX + TableCellPadX
 	}
+}
+
+// iconGutter is the leading pixel gutter reserved inside the first
+// column for a per-row icon: TableCellPadX (the icon's own left inset,
+// matching a cell's normal text inset) plus TableIconSize. It is 0 --
+// and every gutter-aware branch in Draw a no-op -- while RowIcon is nil,
+// which is what keeps the no-icon render byte-identical to before this
+// feature existed.
+func (t *Table) iconGutter() int {
+	if t.RowIcon == nil {
+		return 0
+	}
+	return TableCellPadX + TableIconSize
+}
+
+// resolveRowIcon reports the icon painter for body row i, collapsing
+// "no icon for this row" to (nil, false) the same defensive way Draw
+// collapses an out-of-range Selected/ScrollRow: a caller's RowIcon that
+// returns ok == false, OR one that returns a nil painter, both yield no
+// icon (the gutter is still reserved by iconGutter regardless, so the
+// column stays aligned). It is only ever called while RowIcon != nil
+// (Draw guards on iconGutter() > 0), so it dereferences RowIcon
+// directly.
+func (t *Table) resolveRowIcon(i int) (TableIconFunc, bool) {
+	draw, ok := t.RowIcon(i)
+	if !ok || draw == nil {
+		return nil, false
+	}
+	return draw, true
 }
 
 // accentInk returns the ink colour to draw ON a Theme.Accent field.
