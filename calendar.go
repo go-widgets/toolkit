@@ -127,7 +127,6 @@ func WeekdayOfFirst(year, month int) int {
 func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	// Header: month / year.
 	hdr := monthName(c.Month) + " " + itoa(c.Year)
 	hx := r.X + (r.W-c.textWidth(hdr))/2
@@ -162,6 +161,11 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 		txt := itoa(d)
 		c.drawText(p, cx+(CalendarCellW-c.textWidth(txt))/2, cy+(CalendarCellH-c.glyphHeight())/2, txt, ink)
 	}
+	// Border LAST, so day-cell fills (which start at r.X for the first column
+	// and can reach the right/bottom edges) never erase the frame — the
+	// previous order stroked the border first and the col-0 cells painted over
+	// the left border in the grid rows.
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 }
 
 // OnEvent dispatches a click on a day cell to OnSelect.
