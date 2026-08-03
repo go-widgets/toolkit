@@ -6,20 +6,44 @@ package toolkit
 
 import "github.com/go-widgets/painter"
 
-// AgendaEvent is one appointment drawn on the week grid as a coloured block.
-// Title labels the block and is clipped inside it. Day is the weekday column,
-// an index in [0, len(DayNames)); events whose Day falls outside that range are
-// skipped (no column to place them in). StartMin and EndMin are minutes-from-
-// midnight (0..1440) bounding the block vertically as the half-open range
-// [StartMin, EndMin), so EndMin must be greater than StartMin. Fill is the
-// block colour — its zero value falls back to the theme's Accent so an event
-// added without an explicit colour still paints in the app's palette.
+// AgendaEvent is one appointment. In the week view (AgendaWeek) it draws as a
+// coloured block: Title labels it, Day is the weekday column — an index in
+// [0, len(DayNames)); events whose Day falls outside that range are skipped (no
+// column to place them in) — and StartMin/EndMin are minutes-from-midnight
+// (0..1440) bounding the block vertically as the half-open range
+// [StartMin, EndMin), so EndMin must be greater than StartMin. In the calendar
+// views (AgendaMonth/AgendaQuarter/AgendaYear) the event is placed by its
+// absolute date instead: Y is the year, M the month (1..12) and D the
+// day-of-month (1..31); Day/StartMin/EndMin are ignored there. Fill is the
+// block/chip/dot colour — its zero value falls back to the theme's Accent so an
+// event added without an explicit colour still paints in the app's palette.
 type AgendaEvent struct {
 	Title            string
 	Day              int
 	StartMin, EndMin int
+	Y, M, D          int
 	Fill             RGBA
 }
+
+// AgendaView selects which of the four calendar layouts an Agenda draws. The
+// zero value AgendaWeek keeps the original day/time week grid (so a zero-value
+// Agenda is byte-identical to before this type existed); the other three plot
+// events by their absolute Y/M/D date.
+type AgendaView int
+
+const (
+	// AgendaWeek is the day-column × hour-row week grid (the default).
+	AgendaWeek AgendaView = iota
+	// AgendaMonth is a single month grid: a weekday header, up to six week
+	// rows of day cells, event chips per day and a "+N" overflow marker.
+	AgendaMonth
+	// AgendaQuarter is three compact month grids (Month, Month+1, Month+2)
+	// side by side, each dotting the days that carry events.
+	AgendaQuarter
+	// AgendaYear is twelve very compact month grids for Year in a 4×3 layout,
+	// each dotting the days that carry events.
+	AgendaYear
+)
 
 // Agenda is a week view of events: a top header row of day names, a left gutter
 // of hour labels, and a day-column × hour-row grid on which each AgendaEvent
@@ -41,6 +65,14 @@ type Agenda struct {
 	StartHour, EndHour int
 	OnSelect           func(i int)
 	Selected           int
+
+	// View selects the layout (week/month/quarter/year); zero = AgendaWeek.
+	View AgendaView
+	// Year and Month are the focused period for the calendar views. When a
+	// needed field is zero it is derived from the first dated event (see
+	// focusYM/focusYear); if none is available the calendar grid stays empty.
+	Year  int
+	Month int // 1..12
 }
 
 // Agenda sizing constants, exported like TableRowHeight / GanttHeaderH so a host
@@ -48,13 +80,29 @@ type Agenda struct {
 // AgendaHourH gives the natural height and AgendaGutterW is the fixed hour-label
 // gutter width.
 const (
-	// AgendaHeaderH is the pixel height of the day-name header row.
+	// AgendaHeaderH is the pixel height of the day-name header row (also the
+	// weekday header in the month view).
 	AgendaHeaderH = 24
 	// AgendaHourH is the pixel height of one hour row in the grid.
 	AgendaHourH = 32
 	// AgendaGutterW is the pixel width of the left hour-label gutter.
 	AgendaGutterW = 48
+	// AgendaDayCellH is the pixel height of one day cell in the month view.
+	AgendaDayCellH = 56
+	// AgendaMiniMonthGap is the pixel gap between mini month grids in the
+	// quarter and year views.
+	AgendaMiniMonthGap = 12
 )
+
+// agendaChipH is the pixel height of one event chip in a month-view day cell.
+const agendaChipH = 12
+
+// agendaChipRadius is the corner radius of a month-view event chip.
+const agendaChipRadius = 2
+
+// agendaDotR is the radius of the event marker dot in the quarter/year mini
+// months.
+const agendaDotR = 2
 
 // agendaBlockPadX is the horizontal inset between a day column's edges and the
 // event block inside it, so adjacent-column blocks never touch the separator.
@@ -155,13 +203,27 @@ func (a *Agenda) blockRect(ox, oy int, ev AgendaEvent) (Rect, bool) {
 	return Rect{X: x0, Y: y0, W: w, H: h}, true
 }
 
-// Draw paints the surface, the day-name header band, the hour-label gutter, the
-// day-column × hour-row grid, and one rounded block per event positioned at its
-// Day column and spanning its [StartMin, EndMin) range clamped to the visible
-// hours. The Selected event is tinted and gets an accent border. The header,
-// gutter and grid are each clipped so a long day name, hour label, title or an
-// over-long block never bleeds across their boundaries.
+// Draw dispatches to the active View's painter. AgendaWeek (the zero value)
+// draws the original week grid unchanged; the calendar views draw a month,
+// quarter or year of dated events.
 func (a *Agenda) Draw(p painter.Painter, theme *Theme) {
+	switch a.View {
+	case AgendaMonth:
+		a.drawMonth(p, theme)
+	case AgendaQuarter, AgendaYear:
+		a.drawMini(p, theme)
+	default:
+		a.drawWeek(p, theme)
+	}
+}
+
+// drawWeek paints the surface, the day-name header band, the hour-label gutter,
+// the day-column × hour-row grid, and one rounded block per event positioned at
+// its Day column and spanning its [StartMin, EndMin) range clamped to the
+// visible hours. The Selected event is tinted and gets an accent border. The
+// header, gutter and grid are each clipped so a long day name, hour label,
+// title or an over-long block never bleeds across their boundaries.
+func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 	r := a.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 
@@ -238,22 +300,407 @@ func (a *Agenda) Draw(p painter.Painter, theme *Theme) {
 	})
 }
 
-// OnEvent selects the event block under an EventClick and fires OnSelect
-// (nil-safe) with its index. Clicks in the header, gutter, grid dead-space or
-// anywhere off a block are no-ops, as is any non-click event. Overlapping
-// blocks resolve to the visually-topmost (last-drawn) one.
+// OnEvent selects the event under an EventClick in whatever View is active and
+// fires OnSelect (nil-safe) with its index. Each view has a hit-test that shares
+// its paint geometry so the two can't drift: hitWeek walks the day/time blocks,
+// hitMonth the day-cell chips, hitMini the mini-month day cells. Clicks that
+// land on no event — headers, gutters, dead-space, "+N" markers — and any
+// non-click event are no-ops. Overlapping candidates resolve to the
+// visually-topmost (last-drawn) one.
 func (a *Agenda) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
 	}
+	var i int
+	switch a.View {
+	case AgendaMonth:
+		i = a.hitMonth(ev.X, ev.Y)
+	case AgendaQuarter, AgendaYear:
+		i = a.hitMini(ev.X, ev.Y)
+	default:
+		i = a.hitWeek(ev.X, ev.Y)
+	}
+	if i < 0 {
+		return
+	}
+	a.Selected = i
+	if a.OnSelect != nil {
+		a.OnSelect(i)
+	}
+}
+
+// hitWeek returns the index of the topmost week-view block under (x, y) in
+// widget-local coordinates, or -1 when the point hits no block.
+func (a *Agenda) hitWeek(x, y int) int {
 	for i := len(a.Events) - 1; i >= 0; i-- {
 		br, ok := a.blockRect(0, 0, a.Events[i])
-		if ok && br.Contains(ev.X, ev.Y) {
-			a.Selected = i
-			if a.OnSelect != nil {
-				a.OnSelect(i)
-			}
-			return
+		if ok && br.Contains(x, y) {
+			return i
 		}
 	}
+	return -1
+}
+
+// --- shared calendar helpers ---------------------------------------------
+
+// focusYM resolves the (year, month) the month and quarter views centre on: the
+// explicit Year/Month when both are set, else the date of the first event that
+// carries one, else ok=false so the caller draws an empty grid.
+func (a *Agenda) focusYM() (year, month int, ok bool) {
+	if a.Year != 0 && a.Month >= 1 && a.Month <= 12 {
+		return a.Year, a.Month, true
+	}
+	for _, ev := range a.Events {
+		if ev.Y != 0 && ev.M >= 1 && ev.M <= 12 {
+			return ev.Y, ev.M, true
+		}
+	}
+	return 0, 0, false
+}
+
+// focusYear resolves the year the year view spans: the explicit Year, else the
+// first event's year, else ok=false for an empty grid.
+func (a *Agenda) focusYear() (year int, ok bool) {
+	if a.Year != 0 {
+		return a.Year, true
+	}
+	for _, ev := range a.Events {
+		if ev.Y != 0 {
+			return ev.Y, true
+		}
+	}
+	return 0, false
+}
+
+// addMonth advances (year, month) by delta months (delta >= 0), rolling the
+// year forward as the month passes December.
+func addMonth(year, month, delta int) (int, int) {
+	t := month - 1 + delta
+	return year + t/12, t%12 + 1
+}
+
+// prevMonth returns the (year, month) immediately before (year, month).
+func prevMonth(year, month int) (int, int) {
+	if month == 1 {
+		return year - 1, 12
+	}
+	return year, month - 1
+}
+
+// dayEvent reports whether any event falls on (y, m, d) and returns the fill of
+// the first such event (its zero value left for the caller to resolve against
+// the theme accent).
+func (a *Agenda) dayEvent(y, m, d int) (RGBA, bool) {
+	for _, ev := range a.Events {
+		if ev.Y == y && ev.M == m && ev.D == d {
+			return ev.Fill, true
+		}
+	}
+	return RGBA{}, false
+}
+
+// resolveFill returns fill unless it is the zero value, in which case it falls
+// back to the theme accent — the same rule the week blocks use.
+func resolveFill(fill RGBA, theme *Theme) RGBA {
+	if fill == (RGBA{}) {
+		return theme.Accent
+	}
+	return fill
+}
+
+// --- month view -----------------------------------------------------------
+
+// agendaChip is one event chip in the month view: idx indexes into Events and
+// rect is its pixel rectangle. monthChips builds them so drawMonth and hitMonth
+// share one geometry.
+type agendaChip struct {
+	idx  int
+	rect Rect
+}
+
+// agendaOverflow is a "+N" marker drawn when a day holds more events than its
+// cell can show as chips.
+type agendaOverflow struct {
+	rect Rect
+	n    int
+}
+
+// monthColX returns the x of month-grid column c (0..7) for a grid whose left
+// edge is ox and whose total width is w, matching the week view's integer
+// column maths so cells tile without gaps.
+func monthColX(ox, w, c int) int { return ox + c*w/7 }
+
+// monthChips computes the event chips and overflow markers for the focused
+// month with the grid's top-left origin at (ox, oy). It returns nothing when no
+// month is in focus. Chips stack from the top of each day cell below the day
+// number; when a day has more events than fit, the last slot becomes a "+N"
+// overflow marker. Draw passes the surface origin; hitMonth passes (0, 0).
+func (a *Agenda) monthChips(ox, oy int) (chips []agendaChip, overflows []agendaOverflow) {
+	y, m, ok := a.focusYM()
+	if !ok {
+		return nil, nil
+	}
+	w := a.Bounds().W
+	first := WeekdayOfFirst(y, m)
+	dim := DaysInMonth(y, m)
+	cellsY := oy + AgendaHeaderH
+	top := a.glyphHeight() + 4
+	slot := agendaChipH + 2
+	maxSlots := (AgendaDayCellH - top) / slot
+
+	byDay := make([][]int, dim+1)
+	for i, ev := range a.Events {
+		if ev.Y == y && ev.M == m && ev.D >= 1 && ev.D <= dim {
+			byDay[ev.D] = append(byDay[ev.D], i)
+		}
+	}
+	for day := 1; day <= dim; day++ {
+		evs := byDay[day]
+		if len(evs) == 0 {
+			continue
+		}
+		idx := first + day - 1
+		col, row := idx%7, idx/7
+		cellX := monthColX(ox, w, col)
+		cellW := monthColX(ox, w, col+1) - cellX
+		cellY := cellsY + row*AgendaDayCellH
+		shown, ofN := len(evs), 0
+		if shown > maxSlots {
+			shown = maxSlots - 1
+			ofN = len(evs) - shown
+		}
+		for k := 0; k < shown; k++ {
+			cy := cellY + top + k*slot
+			chips = append(chips, agendaChip{idx: evs[k], rect: Rect{X: cellX + 2, Y: cy, W: cellW - 4, H: agendaChipH}})
+		}
+		if ofN > 0 {
+			cy := cellY + top + shown*slot
+			overflows = append(overflows, agendaOverflow{rect: Rect{X: cellX + 2, Y: cy, W: cellW - 4, H: agendaChipH}, n: ofN})
+		}
+	}
+	return chips, overflows
+}
+
+// drawMonth paints the month view: a weekday header row, up to six week rows of
+// day cells (leading/trailing days from the adjacent months dimmed), each day's
+// event chips and a "+N" overflow marker. With no month in focus it draws just
+// the surface and the weekday header. The grid is clipped so chips and numbers
+// never bleed past it.
+func (a *Agenda) drawMonth(p painter.Painter, theme *Theme) {
+	r := a.Bounds()
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+
+	// Weekday header band + labels.
+	fillRect(p, r.X, r.Y, r.W, AgendaHeaderH, theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y+AgendaHeaderH-1, r.W, 1, theme.Border)
+	hy := r.Y + (AgendaHeaderH-a.glyphHeight())/2
+	withClip(p, Rect{X: r.X, Y: r.Y, W: r.W, H: AgendaHeaderH}, func() {
+		for c := 0; c < 7; c++ {
+			name := ""
+			if c < len(a.DayNames) {
+				name = a.DayNames[c]
+			}
+			cx := monthColX(r.X, r.W, c)
+			cw := monthColX(r.X, r.W, c+1) - cx
+			a.drawText(p, cx+(cw-a.textWidth(name))/2, hy, name, theme.OnSurface)
+		}
+	})
+
+	y, m, ok := a.focusYM()
+	if !ok {
+		return
+	}
+	first := WeekdayOfFirst(y, m)
+	dim := DaysInMonth(y, m)
+	rows := (first + dim + 6) / 7
+	cellsY := r.Y + AgendaHeaderH
+	py, pm := prevMonth(y, m)
+	pdim := DaysInMonth(py, pm)
+
+	gridRect := Rect{X: r.X, Y: cellsY, W: r.W, H: rows * AgendaDayCellH}
+	withClip(p, gridRect, func() {
+		for row := 0; row < rows; row++ {
+			for col := 0; col < 7; col++ {
+				idx := row*7 + col
+				cellX := monthColX(r.X, r.W, col)
+				cellW := monthColX(r.X, r.W, col+1) - cellX
+				cellY := cellsY + row*AgendaDayCellH
+				strokeRect(p, cellX, cellY, cellW, AgendaDayCellH, theme.Border)
+				var num int
+				ink := theme.OnSurface
+				switch {
+				case idx < first:
+					num = pdim - first + 1 + idx
+					ink = dimInk(theme)
+				case idx >= first+dim:
+					num = idx - (first + dim) + 1
+					ink = dimInk(theme)
+				default:
+					num = idx - first + 1
+				}
+				a.drawText(p, cellX+3, cellY+2, itoa(num), ink)
+			}
+		}
+		chips, overflows := a.monthChips(r.X, r.Y)
+		for _, c := range chips {
+			ev := a.Events[c.idx]
+			fill := resolveFill(ev.Fill, theme)
+			if a.Selected == c.idx {
+				fill = agendaSelectInk(fill, theme)
+			}
+			fillRoundRect(p, c.rect.X, c.rect.Y, c.rect.W, c.rect.H, agendaChipRadius, fill)
+			if a.Selected == c.idx {
+				strokeRoundRect(p, c.rect.X, c.rect.Y, c.rect.W, c.rect.H, agendaChipRadius, theme.Accent)
+			}
+			withClip(p, c.rect, func() {
+				a.drawText(p, c.rect.X+2, c.rect.Y+(agendaChipH-a.glyphHeight())/2, ev.Title, theme.Background)
+			})
+		}
+		for _, o := range overflows {
+			withClip(p, o.rect, func() {
+				a.drawText(p, o.rect.X+2, o.rect.Y+(agendaChipH-a.glyphHeight())/2, "+"+itoa(o.n), dimInk(theme))
+			})
+		}
+	})
+}
+
+// hitMonth returns the index of the topmost chip under (x, y) in widget-local
+// coordinates, or -1. "+N" overflow markers are not selectable.
+func (a *Agenda) hitMonth(x, y int) int {
+	chips, _ := a.monthChips(0, 0)
+	for i := len(chips) - 1; i >= 0; i-- {
+		if chips[i].rect.Contains(x, y) {
+			return chips[i].idx
+		}
+	}
+	return -1
+}
+
+// --- quarter & year views (mini months) -----------------------------------
+
+// miniSpec is one mini month in the quarter/year grid.
+type miniSpec struct {
+	y, m int
+}
+
+// miniLayout returns the mini months to draw and the (cols, rows) they tile
+// into: three-across for the quarter view starting at the focused month, and a
+// 4×3 grid of the twelve months for the year view. It returns no specs when no
+// period is in focus.
+func (a *Agenda) miniLayout() (specs []miniSpec, cols, rows int) {
+	if a.View == AgendaYear {
+		yy, ok := a.focusYear()
+		if !ok {
+			return nil, 4, 3
+		}
+		for m := 1; m <= 12; m++ {
+			specs = append(specs, miniSpec{y: yy, m: m})
+		}
+		return specs, 4, 3
+	}
+	y, m, ok := a.focusYM()
+	if !ok {
+		return nil, 3, 1
+	}
+	for d := 0; d < 3; d++ {
+		yy, mm := addMonth(y, m, d)
+		specs = append(specs, miniSpec{y: yy, m: mm})
+	}
+	return specs, 3, 1
+}
+
+// miniMonthBox returns the pixel rectangle of the idx-th mini month, tiled left
+// to right then top to bottom over cols×rows with AgendaMiniMonthGap between
+// them, with the region's top-left at (ox, oy).
+func (a *Agenda) miniMonthBox(ox, oy, idx, cols, rows int) Rect {
+	W, H := a.Bounds().W, a.Bounds().H
+	gap := AgendaMiniMonthGap
+	mw := (W - (cols-1)*gap) / cols
+	mh := (H - (rows-1)*gap) / rows
+	c, row := idx%cols, idx/cols
+	return Rect{X: ox + c*(mw+gap), Y: oy + row*(mh+gap), W: mw, H: mh}
+}
+
+// drawMini paints the quarter or year view: a grid of mini months, each with a
+// centred month title, its day numbers and a coloured dot on every day that
+// carries an event. Each mini month is clipped to its box.
+func (a *Agenda) drawMini(p painter.Painter, theme *Theme) {
+	r := a.Bounds()
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+	specs, cols, rows := a.miniLayout()
+	for i, sp := range specs {
+		box := a.miniMonthBox(r.X, r.Y, i, cols, rows)
+		withClip(p, box, func() {
+			a.drawMiniMonth(p, theme, box, sp)
+		})
+	}
+}
+
+// drawMiniMonth paints one mini month inside box: title, day numbers, event
+// dots.
+func (a *Agenda) drawMiniMonth(p painter.Painter, theme *Theme, box Rect, sp miniSpec) {
+	titleH := a.glyphHeight() + 6
+	title := monthName(sp.m)
+	a.drawText(p, box.X+(box.W-a.textWidth(title))/2, box.Y+3, title, theme.OnSurface)
+
+	first := WeekdayOfFirst(sp.y, sp.m)
+	dim := DaysInMonth(sp.y, sp.m)
+	gridTop := box.Y + titleH
+	cellW := box.W / 7
+	cellH := (box.H - titleH) / 6
+	for day := 1; day <= dim; day++ {
+		idx := first + day - 1
+		col, row := idx%7, idx/7
+		cx := box.X + col*cellW
+		cy := gridTop + row*cellH
+		a.drawText(p, cx+(cellW-a.textWidth(itoa(day)))/2, cy, itoa(day), theme.OnSurface)
+		if fill, has := a.dayEvent(sp.y, sp.m, day); has {
+			// Sit the marker just under the day number so it reads as
+			// belonging to this cell rather than crowding the next row.
+			dx := cx + cellW/2 - agendaDotR
+			dy := cy + a.glyphHeight() + 1
+			fillRoundRect(p, dx, dy, 2*agendaDotR, 2*agendaDotR, agendaDotR, resolveFill(fill, theme))
+		}
+	}
+}
+
+// hitMini returns the index of the topmost event on the mini-month day cell
+// under (x, y) in widget-local coordinates, or -1 when the point hits no dated
+// day cell.
+func (a *Agenda) hitMini(x, y int) int {
+	specs, cols, rows := a.miniLayout()
+	for i, sp := range specs {
+		box := a.miniMonthBox(0, 0, i, cols, rows)
+		if !box.Contains(x, y) {
+			continue
+		}
+		titleH := a.glyphHeight() + 6
+		gridTop := box.Y + titleH
+		cellW := box.W / 7
+		cellH := (box.H - titleH) / 6
+		if cellW <= 0 || cellH <= 0 || y < gridTop {
+			return -1
+		}
+		// box.Contains guarantees x >= box.X and the y < gridTop guard above
+		// keeps y >= gridTop, so col and row are non-negative here; only the
+		// far edges (remainder columns/rows past the 7×6 grid) can overshoot.
+		col := (x - box.X) / cellW
+		row := (y - gridTop) / cellH
+		if col > 6 || row > 5 {
+			return -1
+		}
+		idx := row*7 + col
+		day := idx - WeekdayOfFirst(sp.y, sp.m) + 1
+		if day < 1 || day > DaysInMonth(sp.y, sp.m) {
+			return -1
+		}
+		for j := len(a.Events) - 1; j >= 0; j-- {
+			ev := a.Events[j]
+			if ev.Y == sp.y && ev.M == sp.m && ev.D == day {
+				return j
+			}
+		}
+		return -1
+	}
+	return -1
 }
