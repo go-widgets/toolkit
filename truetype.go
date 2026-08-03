@@ -30,10 +30,26 @@ import (
 type truetypeFont struct {
 	face    *opentype.Face
 	parsed  *opentype.Font // the parsed font, for per-rune glyph-coverage queries
+	data    []byte         // the original sfnt bytes, retained for the painter.Face seam
+	sizePx  int            // the em size the face was built at, in pixels
 	advance int            // width of a space — the fallback monospace-ish step
 	height  int            // line height (ascent + descent + line gap)
 	ascent  int            // baseline offset from the text top
 }
+
+// FontData returns the original TrueType/OpenType sfnt bytes, implementing
+// painter.Face so a vector back-end can embed the true font for selectable text.
+// The slice is the caller's original blob; it must not be mutated.
+func (f *truetypeFont) FontData() []byte { return f.data }
+
+// SizePx returns the em size the face was built at, in pixels — the size widgets
+// laid their text out against. Implements painter.Face.
+func (f *truetypeFont) SizePx() int { return f.sizePx }
+
+// Ascent returns the baseline offset from the text top, in pixels, so a
+// baseline-origin back-end (PDF) can place the run from the toolkit's top-left
+// convention. Implements painter.Face.
+func (f *truetypeFont) Ascent() int { return f.ascent }
 
 // covers reports whether this font has a glyph for r (used by fallbackFont to
 // route each rune to a font that can render it).
@@ -61,6 +77,8 @@ func NewTrueTypeFont(ttf []byte, sizePx int) (Font, error) {
 	return &truetypeFont{
 		face:    face,
 		parsed:  parsed,
+		data:    ttf,
+		sizePx:  sizePx,
 		advance: face.Measure(" "),
 		height:  m.Height,
 		ascent:  m.Ascent,
@@ -104,10 +122,17 @@ func (f *truetypeFont) Measure(text string) int {
 // colour with its alpha scaled by the mask coverage, so the painter's src-over
 // PutPixel blends glyph edges into partial-coverage pixels.
 //
-// On any other painter (a CellPainter for a TUI, an SvgPainter for vector
-// output) pixel coverage — and glyph indices — are meaningless, so it reorders
-// the text into visual order (bidi only, no GID shaping) and delegates to that
-// painter's own rune-based Text primitive, mirroring the bitmap font.
+// On any other painter (a CellPainter for a TUI, an SvgPainter or a PDF vector
+// painter) pixel coverage — and glyph masks — are meaningless, so the text is
+// reordered into visual order (bidi only, no GID blitting) and handed off:
+//
+//   - A painter.FacePainter (a vector/recording back-end that can embed a font)
+//     receives the run PLUS this face, so it emits real, selectable text in the
+//     true font at the true size — go-pdfkit turns a TrueType-font widget label
+//     into selectable PDF text this way, instead of a rasterised image.
+//   - Any other painter falls back to the plain rune-based Text primitive
+//     (one rune per cell for a TUI, the painter's own font for a plain vector
+//     back-end), mirroring the bitmap font.
 //
 // Glyphs the font cannot map (control characters, unassigned code points shape
 // to .notdef, index 0) are not painted, matching the bitmap font's
@@ -115,9 +140,15 @@ func (f *truetypeFont) Measure(text string) int {
 func (f *truetypeFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
 	pix, isPixel := p.(*painter.PixelPainter)
 	if !isPixel {
-		// Non-pixel painter: no glyph-index blitting is possible, so fall back
-		// to the bidi visual-order reorder and hand runes to the painter.
-		p.Text(x, y, visualText(text), ink)
+		visual := visualText(text)
+		// A face-aware back-end embeds this face and renders real text; the
+		// pixel scan-conversion below is only for raster painters.
+		if fp, ok := p.(painter.FacePainter); ok {
+			fp.TextFace(x, y, visual, f, ink)
+			return
+		}
+		// Non-face painter: hand the reordered runes to the plain Text primitive.
+		p.Text(x, y, visual, ink)
 		return
 	}
 	f.drawShaped(pix, x, y+f.ascent, text, ink)

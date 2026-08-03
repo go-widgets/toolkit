@@ -209,6 +209,73 @@ func TestTrueTypeDrawDelegatesOnNonPixelPainter(t *testing.T) {
 	}
 }
 
+// --- painter.Face seam ----------------------------------------------------
+
+// A truetypeFont exposes its sfnt bytes, em size and ascent through the
+// painter.Face contract, so a vector back-end can embed the true font.
+func TestTrueTypeImplementsFace(t *testing.T) {
+	f := newTTFace(t, testFontTTF, 20)
+	var face painter.Face = f // compile-time: *truetypeFont satisfies painter.Face
+	if !bytes.Equal(face.FontData(), testFontTTF) {
+		t.Error("FontData() did not return the original sfnt bytes")
+	}
+	if face.SizePx() != 20 {
+		t.Errorf("SizePx() = %d, want 20", face.SizePx())
+	}
+	if face.Ascent() != f.ascent || face.Ascent() <= 0 {
+		t.Errorf("Ascent() = %d, want the face ascent (>0): %d", face.Ascent(), f.ascent)
+	}
+}
+
+// facePainterRecorder is a non-pixel painter that also implements
+// painter.FacePainter, so Draw must route text through TextFace (with the face)
+// rather than the plain Text primitive.
+type facePainterRecorder struct {
+	faceCalls  int
+	textCalls  int
+	lastString string
+	lastFace   painter.Face
+	lastX      int
+	lastY      int
+}
+
+func (r *facePainterRecorder) FillRect(painter.Rect, RGBA)                  {}
+func (r *facePainterRecorder) StrokeRect(painter.Rect, RGBA, int)           {}
+func (r *facePainterRecorder) FillRoundRect(painter.Rect, int, RGBA)        {}
+func (r *facePainterRecorder) StrokeRoundRect(painter.Rect, int, RGBA, int) {}
+func (r *facePainterRecorder) PutPixel(int, int, RGBA)                      {}
+func (r *facePainterRecorder) Size() (int, int)                             { return 100, 100 }
+func (r *facePainterRecorder) Text(x, y int, s string, _ RGBA) {
+	r.textCalls++
+	r.lastString = s
+}
+func (r *facePainterRecorder) TextFace(x, y int, s string, face painter.Face, _ RGBA) {
+	r.faceCalls++
+	r.lastString = s
+	r.lastFace = face
+	r.lastX, r.lastY = x, y
+}
+
+// On a FacePainter, Draw hands off the run + the face (not the plain Text
+// primitive) so the back-end can render real selectable text in the true face.
+func TestTrueTypeDrawUsesFacePainter(t *testing.T) {
+	tt := newTTFace(t, testFontTTF, 16)
+	rec := &facePainterRecorder{}
+	tt.Draw(rec, 5, 7, "Hi", RGB(0x10, 0x20, 0x30))
+	if rec.faceCalls != 1 || rec.textCalls != 0 {
+		t.Fatalf("faceCalls=%d textCalls=%d, want exactly one TextFace and no Text", rec.faceCalls, rec.textCalls)
+	}
+	if rec.lastString != "Hi" {
+		t.Errorf("TextFace string = %q, want %q (visual order)", rec.lastString, "Hi")
+	}
+	if rec.lastFace != painter.Face(tt) {
+		t.Error("TextFace received a different face than the drawing font")
+	}
+	if rec.lastX != 5 || rec.lastY != 7 {
+		t.Errorf("TextFace position = (%d,%d), want (5,7)", rec.lastX, rec.lastY)
+	}
+}
+
 // End-to-end through the toolkit's SetFont / DrawText façade: swapping in a
 // TrueType font routes DrawText through it and produces AA output, proving the
 // whole-UI font swap works without touching a widget.
