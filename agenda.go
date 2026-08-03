@@ -518,6 +518,12 @@ func (a *Agenda) drawMonth(p painter.Painter, theme *Theme) {
 	pdim := DaysInMonth(py, pm)
 
 	gridRect := Rect{X: r.X, Y: cellsY, W: r.W, H: rows * AgendaDayCellH}
+	// Never let the grid clip (and thus the cells) extend past the widget's
+	// own bottom edge: a box shorter than the natural six-row height must clip
+	// the overflowing rows, not paint outside Bounds().
+	if bottom := r.Y + r.H; gridRect.Y+gridRect.H > bottom {
+		gridRect.H = bottom - gridRect.Y
+	}
 	withClip(p, gridRect, func() {
 		for row := 0; row < rows; row++ {
 			for col := 0; col < 7; col++ {

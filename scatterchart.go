@@ -107,6 +107,11 @@ func (c *ScatterChart) Draw(p painter.Painter, theme *Theme) {
 		col := c.seriesColor(si)
 		for _, pt := range s {
 			x, y := c.project(pt, xr, yr)
+			// Keep the whole ScatterDot×ScatterDot marker inside Bounds(): a
+			// point projected onto the right/bottom plot edge would otherwise
+			// spill one dot-width past r.
+			x = clampInt(x, r.X, r.X+r.W-ScatterDot)
+			y = clampInt(y, r.Y, r.Y+r.H-ScatterDot)
 			fillRect(p, x, y, ScatterDot, ScatterDot, col)
 		}
 	}

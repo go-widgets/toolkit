@@ -114,6 +114,10 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 			} else {
 				lw := s.textWidth(lab)
 				lx := x + (StepBoxW-lw)/2
+				// A caption wider than its badge is centred under it and would
+				// poke past the left edge on the first step (or the right edge
+				// on the last); keep it within Bounds().
+				lx = clampInt(lx, r.X, r.X+r.W-lw)
 				ly := y + StepBoxH + StepLabelGap
 				s.drawText(p, lx, ly, lab, theme.OnBackground)
 			}

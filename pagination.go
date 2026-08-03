@@ -73,18 +73,23 @@ func (pg *Pagination) Draw(p painter.Painter, theme *Theme) {
 	if pg.Total <= 0 || r.W < PaginationBtnW || r.H < PaginationBtnH {
 		return
 	}
-	slots := pg.slots()
-	x := r.X
-	// Prev button.
-	pg.drawStep(p, theme, x, r.Y, "<", pg.Current > 1)
-	x += PaginationBtnW + PaginationGap
-	// Numeric / ellipsis buttons.
-	for _, slot := range slots {
-		pg.drawSlot(p, theme, x, r.Y, slot)
+	// The prev + slots + next strip has a natural width (set by the slot
+	// count) that a narrow box can't hold; clip it to Bounds() so it truncates
+	// on the right instead of spilling past the edge.
+	withClip(p, r, func() {
+		slots := pg.slots()
+		x := r.X
+		// Prev button.
+		pg.drawStep(p, theme, x, r.Y, "<", pg.Current > 1)
 		x += PaginationBtnW + PaginationGap
-	}
-	// Next button.
-	pg.drawStep(p, theme, x, r.Y, ">", pg.Current < pg.Total)
+		// Numeric / ellipsis buttons.
+		for _, slot := range slots {
+			pg.drawSlot(p, theme, x, r.Y, slot)
+			x += PaginationBtnW + PaginationGap
+		}
+		// Next button.
+		pg.drawStep(p, theme, x, r.Y, ">", pg.Current < pg.Total)
+	})
 }
 
 // drawStep paints one of the "<" / ">" step buttons. enabled=false
