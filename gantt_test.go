@@ -215,3 +215,135 @@ func TestGanttRenderPNGDemo(t *testing.T) {
 		t.Fatalf("write demo PNG: %v", err)
 	}
 }
+
+// ganttEditFixture builds a two-task chart with an explicit 10-unit axis and a
+// 400px surface, returning it ready for drag dispatch (events are in
+// widget-local coords; bounds origin is 0,0 so local == surface).
+func ganttEditFixture() *Gantt {
+	g := NewGantt([]GanttTask{
+		{Label: "A", Start: 1, End: 4},
+		{Label: "B", Start: 0, End: 2},
+	})
+	g.Units = 10
+	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: GanttHeaderH + 2*GanttRowH})
+	return g
+}
+
+// TestGanttDragMove grabs the middle of task 0's bar and drags it right: the
+// span is preserved, Start/End shift, and OnTaskChange fires with the new span.
+func TestGanttDragMove(t *testing.T) {
+	g := ganttEditFixture()
+	changed := [3]int{-9, -9, -9}
+	g.OnTaskChange = func(i, s, e int) { changed = [3]int{i, s, e} }
+
+	rowY := GanttHeaderH + 2
+	midX := (g.barXLocal(1) + g.barXLocal(4)) / 2
+	g.OnEvent(Event{Kind: EventClick, X: midX, Y: rowY})
+	if !g.editing || g.editMode != ganttMove {
+		t.Fatalf("grab: editing=%v mode=%d, want move", g.editing, g.editMode)
+	}
+	g.OnEvent(Event{Kind: EventMouseDrag, X: g.barXLocal(6), Y: rowY})
+	g.OnEvent(Event{Kind: EventMouseUp, X: g.barXLocal(6), Y: rowY})
+
+	if g.editing {
+		t.Fatalf("still editing after release")
+	}
+	if got := g.Tasks[0]; got.End-got.Start != 3 {
+		t.Fatalf("span changed on move: %+v (want span 3)", got)
+	}
+	if g.Tasks[0].Start <= 1 {
+		t.Fatalf("bar did not move right: Start=%d", g.Tasks[0].Start)
+	}
+	if changed[0] != 0 || changed[1] != g.Tasks[0].Start || changed[2] != g.Tasks[0].End {
+		t.Fatalf("OnTaskChange = %v, want [0 %d %d]", changed, g.Tasks[0].Start, g.Tasks[0].End)
+	}
+}
+
+// TestGanttDragResizeStart grabs task 1's left edge and drags past its End; the
+// Start clamps to End-1 and End stays put.
+func TestGanttDragResizeStart(t *testing.T) {
+	g := ganttEditFixture()
+	rowY := GanttHeaderH + GanttRowH + 2 // task 1
+	g.OnEvent(Event{Kind: EventClick, X: g.barXLocal(0), Y: rowY})
+	if g.editMode != ganttResizeStart {
+		t.Fatalf("mode = %d, want resizeStart", g.editMode)
+	}
+	g.OnEvent(Event{Kind: EventMouseDrag, X: g.barXLocal(8), Y: rowY}) // way past End=2
+	if g.Tasks[1].Start != g.Tasks[1].End-1 {
+		t.Fatalf("Start=%d End=%d, want Start==End-1 (clamped)", g.Tasks[1].Start, g.Tasks[1].End)
+	}
+	g.OnEvent(Event{Kind: EventMouseUp, X: g.barXLocal(8), Y: rowY})
+}
+
+// TestGanttDragResizeEnd grabs task 0's right edge and drags left past its
+// Start; End clamps to Start+1.
+func TestGanttDragResizeEnd(t *testing.T) {
+	g := ganttEditFixture()
+	rowY := GanttHeaderH + 2 // task 0, Start 1 End 4
+	g.OnEvent(Event{Kind: EventClick, X: g.barXLocal(4), Y: rowY})
+	if g.editMode != ganttResizeEnd {
+		t.Fatalf("mode = %d, want resizeEnd", g.editMode)
+	}
+	g.OnEvent(Event{Kind: EventMouseDrag, X: g.barXLocal(0), Y: rowY}) // left of Start
+	if g.Tasks[0].End != g.Tasks[0].Start+1 {
+		t.Fatalf("End=%d Start=%d, want End==Start+1 (clamped)", g.Tasks[0].End, g.Tasks[0].Start)
+	}
+	g.OnEvent(Event{Kind: EventMouseUp, X: g.barXLocal(0), Y: rowY})
+}
+
+// TestGanttMoveClamps drives applyDrag's move-mode clamp: dragging far right
+// pins the bar's End at the axis end (Start = units - span).
+func TestGanttMoveClamps(t *testing.T) {
+	g := ganttEditFixture()
+	rowY := GanttHeaderH + 2
+	midX := (g.barXLocal(1) + g.barXLocal(4)) / 2
+	g.OnEvent(Event{Kind: EventClick, X: midX, Y: rowY})
+	g.OnEvent(Event{Kind: EventMouseDrag, X: 100000, Y: rowY})
+	if g.Tasks[0].End != g.Units || g.Tasks[0].Start != g.Units-3 {
+		t.Fatalf("clamp: %+v, want End=%d Start=%d", g.Tasks[0], g.Units, g.Units-3)
+	}
+}
+
+// TestGanttClickOutsideBar covers the default (non-drag) branch: a click in a
+// task row but in the empty axis area selects the row without arming a drag.
+func TestGanttClickOutsideBar(t *testing.T) {
+	g := ganttEditFixture()
+	rowY := GanttHeaderH + 2
+	g.OnEvent(Event{Kind: EventClick, X: g.barXLocal(9), Y: rowY}) // right of task-0 bar
+	if g.editing {
+		t.Fatalf("armed a drag in empty axis area")
+	}
+	if g.Selected != 0 {
+		t.Fatalf("Selected = %d, want 0", g.Selected)
+	}
+}
+
+// TestGanttEventGuards covers the header/past-last click guards, the "not
+// editing" drag/up guards, and the nil OnTaskChange release branch.
+func TestGanttEventGuards(t *testing.T) {
+	g := ganttEditFixture()
+	g.OnEvent(Event{Kind: EventClick, X: 10, Y: GanttHeaderH - 1})            // header
+	g.OnEvent(Event{Kind: EventClick, X: 10, Y: GanttHeaderH + 99*GanttRowH}) // past last
+	if g.editing || g.Selected >= 0 {
+		t.Fatalf("guarded clicks armed/selected: editing=%v sel=%d", g.editing, g.Selected)
+	}
+	g.OnEvent(Event{Kind: EventMouseDrag, X: 50, Y: GanttHeaderH + 2}) // not editing
+	g.OnEvent(Event{Kind: EventMouseUp, X: 50, Y: GanttHeaderH + 2})   // not editing
+
+	// A move drag with no OnTaskChange listener exercises the nil release branch.
+	g.OnTaskChange = nil
+	rowY := GanttHeaderH + 2
+	midX := (g.barXLocal(1) + g.barXLocal(4)) / 2
+	g.OnEvent(Event{Kind: EventClick, X: midX, Y: rowY})
+	g.OnEvent(Event{Kind: EventMouseDrag, X: g.barXLocal(5), Y: rowY})
+	g.OnEvent(Event{Kind: EventMouseUp, X: g.barXLocal(5), Y: rowY})
+}
+
+// TestGanttUnitAtLocalDegenerate covers unitAtLocal's zero-width-axis guard.
+func TestGanttUnitAtLocalDegenerate(t *testing.T) {
+	g := ganttEditFixture()
+	g.SetBounds(Rect{X: 0, Y: 0, W: GanttLabelW, H: 100}) // axisW == 0
+	if got := g.unitAtLocal(50); got != 0 {
+		t.Fatalf("unitAtLocal on zero-width axis = %d, want 0", got)
+	}
+}

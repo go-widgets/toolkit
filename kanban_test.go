@@ -183,3 +183,153 @@ func TestKanbanDrawNoSelection(t *testing.T) {
 		t.Fatalf("RenderImage: %v", err)
 	}
 }
+
+// TestKanbanDragMovesCard exercises the full drag lifecycle: EventClick grabs
+// a card, EventMouseDrag marks the gesture and tracks the pointer, a mid-drag
+// Draw paints the overlay, and EventMouseUp drops the card at the target
+// column/slot -- mutating Columns and firing OnCardMove with the landing spot.
+func TestKanbanDragMovesCard(t *testing.T) {
+	theme := DefaultLight()
+	k := sampleBoard()
+	k.SetBounds(Rect{X: 0, Y: 0, W: 600, H: 300})
+	colW := (600 - 2*KanbanColGap) / 3
+
+	moves := [4]int{-9, -9, -9, -9}
+	k.OnCardMove = func(fc, fcd, tc, ti int) { moves = [4]int{fc, fcd, tc, ti} }
+
+	lr := k.cardLocalRect(0, 0, colW) // grab "Design"
+	k.OnEvent(Event{Kind: EventClick, X: lr.X + 4, Y: lr.Y + 4})
+	if !k.dragging || k.moved {
+		t.Fatalf("after grab: dragging=%v moved=%v, want true/false", k.dragging, k.moved)
+	}
+
+	target := k.cardLocalRect(2, 0, colW) // into column 2, slot 0
+	k.OnEvent(Event{Kind: EventMouseDrag, X: target.X + 4, Y: target.Y + 4})
+	if !k.moved || k.dragX != target.X+4 || k.dragY != target.Y+4 {
+		t.Fatalf("after drag: moved=%v drag=(%d,%d)", k.moved, k.dragX, k.dragY)
+	}
+
+	if _, err := RenderImage(k, 600, 300, theme); err != nil { // paints the overlay
+		t.Fatalf("RenderImage mid-drag: %v", err)
+	}
+
+	k.OnEvent(Event{Kind: EventMouseUp, X: target.X + 4, Y: target.Y + 4})
+	if k.dragging {
+		t.Fatalf("still dragging after mouse up")
+	}
+	if got := k.Columns[2].Cards[0].Title; got != "Design" {
+		t.Fatalf("col2 card0 = %q, want Design", got)
+	}
+	if len(k.Columns[0].Cards) != 1 || k.Columns[0].Cards[0].Title != "Research" {
+		t.Fatalf("col0 after move = %+v", k.Columns[0].Cards)
+	}
+	if moves != [4]int{0, 0, 2, 0} {
+		t.Fatalf("OnCardMove args = %v, want [0 0 2 0]", moves)
+	}
+}
+
+// TestKanbanDragReleaseInPlace: a grab immediately released (no EventMouseDrag)
+// is a plain click -- no card moves and OnCardMove never fires. Also covers the
+// EventMouseDrag/EventMouseUp "not dragging" guards.
+func TestKanbanDragReleaseInPlace(t *testing.T) {
+	k := sampleBoard()
+	k.SetBounds(Rect{X: 0, Y: 0, W: 600, H: 300})
+	colW := (600 - 2*KanbanColGap) / 3
+
+	fired := false
+	k.OnCardMove = func(int, int, int, int) { fired = true }
+
+	// Guards: events before any grab are no-ops.
+	k.OnEvent(Event{Kind: EventMouseDrag, X: 10, Y: 40})
+	k.OnEvent(Event{Kind: EventMouseUp, X: 10, Y: 40})
+
+	lr := k.cardLocalRect(1, 0, colW)
+	k.OnEvent(Event{Kind: EventClick, X: lr.X + 3, Y: lr.Y + 3})
+	k.OnEvent(Event{Kind: EventMouseUp, X: lr.X + 3, Y: lr.Y + 3})
+	if fired {
+		t.Fatalf("OnCardMove fired for a press-release in place")
+	}
+	if len(k.Columns[1].Cards) != 1 || k.Columns[1].Cards[0].Title != "Build" {
+		t.Fatalf("column 1 changed on a plain click: %+v", k.Columns[1].Cards)
+	}
+	if k.dragging {
+		t.Fatalf("dragging still set after release")
+	}
+}
+
+// TestKanbanColumnAt covers columnAt's middle-return, last-column fall-through
+// and both clamps.
+func TestKanbanColumnAt(t *testing.T) {
+	k := sampleBoard()
+	k.SetBounds(Rect{X: 0, Y: 0, W: 600, H: 300})
+	colW := (600 - 2*KanbanColGap) / 3
+	if got := k.columnAt(-50); got != 0 {
+		t.Fatalf("columnAt(-50) = %d, want 0", got)
+	}
+	if got := k.columnAt(k.colLocalX(1, colW) + 2); got != 1 {
+		t.Fatalf("columnAt(col1) = %d, want 1", got)
+	}
+	if got := k.columnAt(100000); got != 2 {
+		t.Fatalf("columnAt(huge) = %d, want 2", got)
+	}
+}
+
+// TestKanbanDropIndexAt covers dropIndexAt's above-first, mid-slot rounding and
+// past-end clamp.
+func TestKanbanDropIndexAt(t *testing.T) {
+	k := sampleBoard()
+	k.SetBounds(Rect{X: 0, Y: 0, W: 600, H: 300})
+	slot := KanbanCardH + KanbanCardGap
+	if got := k.dropIndexAt(0, KanbanHeaderH-1); got != 0 {
+		t.Fatalf("above first = %d, want 0", got)
+	}
+	if got := k.dropIndexAt(0, KanbanHeaderH+KanbanCardGap+slot); got != 1 {
+		t.Fatalf("second slot = %d, want 1", got)
+	}
+	if got := k.dropIndexAt(0, 100000); got != 2 { // col0 has 2 cards
+		t.Fatalf("past end = %d, want 2 (clamped)", got)
+	}
+}
+
+// TestKanbanMoveCard covers moveCard's invalid-source guard, same-column
+// downward shift (toIdx decrement), cross-column append with a > len clamp, and
+// the toIdx < 0 clamp.
+func TestKanbanMoveCard(t *testing.T) {
+	k := sampleBoard()
+	k.SetBounds(Rect{X: 0, Y: 0, W: 600, H: 300})
+
+	k.moveCard(0, 99, 1, 0) // invalid source: no-op
+	if len(k.Columns[0].Cards) != 2 {
+		t.Fatalf("invalid source mutated col0: %+v", k.Columns[0].Cards)
+	}
+
+	k.moveCard(0, 0, 0, 2) // Design to end of col0 -> [Research, Design]
+	if got := []string{k.Columns[0].Cards[0].Title, k.Columns[0].Cards[1].Title}; got[0] != "Research" || got[1] != "Design" {
+		t.Fatalf("same-col move = %v, want [Research Design]", got)
+	}
+
+	k.moveCard(0, 0, 1, 99) // Research -> col1 end (clamped)
+	last := k.Columns[1].Cards[len(k.Columns[1].Cards)-1].Title
+	if last != "Research" {
+		t.Fatalf("cross-col append last = %q, want Research", last)
+	}
+
+	k.moveCard(2, 0, 0, -5) // Ship -> col0 front (toIdx clamped up to 0)
+	if k.Columns[0].Cards[0].Title != "Ship" {
+		t.Fatalf("neg toIdx front = %q, want Ship", k.Columns[0].Cards[0].Title)
+	}
+}
+
+// TestKanbanDragOverlayStaleCard covers drawDragOverlay's stale-dragCard guard:
+// a drag flagged with an out-of-range card still paints the drop indicator but
+// skips the ghost, without panicking or painting outside Bounds.
+func TestKanbanDragOverlayStaleCard(t *testing.T) {
+	theme := DefaultLight()
+	k := sampleBoard()
+	k.dragging, k.moved = true, true
+	k.dragCol, k.dragCard = 0, 99 // stale
+	k.dragX, k.dragY = 50, 120
+	if _, err := RenderImage(k, 600, 300, theme); err != nil {
+		t.Fatalf("RenderImage stale-card drag: %v", err)
+	}
+}
