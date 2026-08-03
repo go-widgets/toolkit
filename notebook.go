@@ -64,18 +64,37 @@ func (n *Notebook) stripRect() Rect {
 	}
 }
 
+// tabW is the per-tab width for the horizontal (Top/Bottom) strips: the
+// nominal NotebookTabWidth, shrunk so that ALL tabs fit within the notebook's
+// width when there are too many to fit at the nominal width. Without this the
+// strip laid tabs at a fixed 80px each and overflowed the widget's box once
+// nTabs*80 exceeded Bounds().W (e.g. 4 tabs in a ~296px notebook).
+func (n *Notebook) tabW() int {
+	nt := len(n.Tabs)
+	if nt == 0 {
+		return NotebookTabWidth
+	}
+	tw := NotebookTabWidth
+	if fit := n.Bounds().W / nt; fit < tw {
+		tw = fit
+	}
+	return tw
+}
+
 // tabRect is the i-th tab's rect (in surface coordinates).
 func (n *Notebook) tabRect(i int) Rect {
 	r := n.Bounds()
 	switch n.TabSide {
 	case TabBottom:
-		return Rect{X: r.X + i*NotebookTabWidth, Y: r.Y + r.H - NotebookTabStripH, W: NotebookTabWidth, H: NotebookTabStripH}
+		tw := n.tabW()
+		return Rect{X: r.X + i*tw, Y: r.Y + r.H - NotebookTabStripH, W: tw, H: NotebookTabStripH}
 	case TabLeft:
 		return Rect{X: r.X, Y: r.Y + i*NotebookTabStripH, W: NotebookTabWidth, H: NotebookTabStripH}
 	case TabRight:
 		return Rect{X: r.X + r.W - NotebookTabWidth, Y: r.Y + i*NotebookTabStripH, W: NotebookTabWidth, H: NotebookTabStripH}
 	default: // TabTop
-		return Rect{X: r.X + i*NotebookTabWidth, Y: r.Y, W: NotebookTabWidth, H: NotebookTabStripH}
+		tw := n.tabW()
+		return Rect{X: r.X + i*tw, Y: r.Y, W: tw, H: NotebookTabStripH}
 	}
 }
 
@@ -128,35 +147,40 @@ func (n *Notebook) AddTab(label string, page Widget) {
 	n.Tabs = append(n.Tabs, NotebookTab{Label: label, Page: page})
 }
 
-// Draw paints the strip (on the chosen side) + the active page.
+// Draw paints the strip (on the chosen side) + the active page. The whole
+// render is clipped to Bounds() so nothing ever escapes the widget's box (a
+// defence-in-depth over tabW's fit-to-width), and the active page is clipped to
+// its body rect so an oversized page cannot paint over the tab strip.
 func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
-	strip := n.stripRect()
-	fillRect(p, strip.X, strip.Y, strip.W, strip.H, theme.SurfaceAlt)
-	for i, tab := range n.Tabs {
-		tr := n.tabRect(i)
-		fill := theme.SurfaceAlt
-		if i == n.Active {
-			fill = theme.Surface
+	withClip(p, n.Bounds(), func() {
+		strip := n.stripRect()
+		fillRect(p, strip.X, strip.Y, strip.W, strip.H, theme.SurfaceAlt)
+		for i, tab := range n.Tabs {
+			tr := n.tabRect(i)
+			fill := theme.SurfaceAlt
+			if i == n.Active {
+				fill = theme.Surface
+			}
+			fillRect(p, tr.X, tr.Y, tr.W, tr.H, fill)
+			// Label centred in the tab.
+			tw := n.textWidth(tab.Label)
+			textX := tr.X + (tr.W-tw)/2
+			textY := tr.Y + (tr.H-n.glyphHeight())/2
+			n.drawText(p, textX, textY, tab.Label, theme.OnSurface)
+			if i == n.Active {
+				n.drawActiveEdge(p, tr, theme.Accent)
+			}
 		}
-		fillRect(p, tr.X, tr.Y, tr.W, tr.H, fill)
-		// Label centred in the tab.
-		tw := n.textWidth(tab.Label)
-		textX := tr.X + (tr.W-tw)/2
-		textY := tr.Y + (tr.H-n.glyphHeight())/2
-		n.drawText(p, textX, textY, tab.Label, theme.OnSurface)
-		if i == n.Active {
-			n.drawActiveEdge(p, tr, theme.Accent)
+		// Active page in the body area, clipped to it.
+		if n.Active >= 0 && n.Active < len(n.Tabs) {
+			page := n.Tabs[n.Active].Page
+			if page != nil {
+				body := n.bodyRect()
+				page.SetBounds(body)
+				withClip(p, body, func() { page.Draw(p, theme) })
+			}
 		}
-	}
-	// Active page in the body area.
-	if n.Active >= 0 && n.Active < len(n.Tabs) {
-		page := n.Tabs[n.Active].Page
-		if page != nil {
-			body := n.bodyRect()
-			page.SetBounds(body)
-			page.Draw(p, theme)
-		}
-	}
+	})
 }
 
 // OnEvent: a click on a tab (any side) selects it; a click in the body — or any
