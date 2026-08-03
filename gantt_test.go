@@ -347,3 +347,18 @@ func TestGanttUnitAtLocalDegenerate(t *testing.T) {
 		t.Fatalf("unitAtLocal on zero-width axis = %d, want 0", got)
 	}
 }
+
+// TestGanttClickNoDragNoChange: a press on a bar arms editing but, released
+// without any EventMouseDrag, must not fire OnTaskChange (nothing was edited).
+func TestGanttClickNoDragNoChange(t *testing.T) {
+	g := ganttEditFixture()
+	fired := false
+	g.OnTaskChange = func(int, int, int) { fired = true }
+	rowY := GanttHeaderH + 2
+	midX := (g.barXLocal(1) + g.barXLocal(4)) / 2
+	g.OnEvent(Event{Kind: EventClick, X: midX, Y: rowY}) // arms editing (move)
+	g.OnEvent(Event{Kind: EventMouseUp, X: midX, Y: rowY})
+	if fired {
+		t.Fatalf("OnTaskChange fired for a press-release with no drag")
+	}
+}
