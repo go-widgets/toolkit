@@ -60,6 +60,18 @@ type ListBox struct {
 	OnActivate  func(idx int)
 	MultiSelect bool // enable Ctrl/Shift multi-row selection
 
+	// ItemRenderer, when non-nil, draws each row's CONTENT instead of the
+	// default single line of text. It is handed the row's content rectangle
+	// rc (full row height, minus the scrollbar gutter), the row index, the
+	// item string, whether the row is selected, and the resolved text ink
+	// (theme.OnSurface, or theme.Background when selected). The ListBox still
+	// paints the row background (selection highlight) and owns scrolling,
+	// selection and drag-reorder -- the renderer only fills in the content, so
+	// a host can draw an icon + multi-line text, badges, a progress bar, etc.
+	// This is the DataView seam. The zero value (nil) keeps the original
+	// one-line text render, byte-identical to before this field existed.
+	ItemRenderer func(p painter.Painter, theme *Theme, rc Rect, index int, item string, selected bool, ink RGBA)
+
 	// Reorderable enables drag-to-reorder (see the type doc). Default
 	// false leaves the ListBox exactly as it behaved before this feature
 	// existed.
@@ -195,9 +207,14 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 			ink = theme.Background
 		}
 		fillRect(p, cr.X, y, cr.W, l.RowHeight, bg)
-		// Vertically centre the 7-px glyph inside the row.
-		textY := y + (l.RowHeight-l.glyphHeight())/2
-		l.drawText(p, cr.X+4, textY, item, ink)
+		if l.ItemRenderer != nil {
+			// DataView seam: hand the whole row content rect to the host.
+			l.ItemRenderer(p, theme, Rect{X: cr.X, Y: y, W: cr.W, H: l.RowHeight}, i, item, hi, ink)
+		} else {
+			// Vertically centre the 7-px glyph inside the row.
+			textY := y + (l.RowHeight-l.glyphHeight())/2
+			l.drawText(p, cr.X+4, textY, item, ink)
+		}
 	}
 
 	if l.Reorderable && l.dropIndicator >= 0 {
