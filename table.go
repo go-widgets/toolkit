@@ -174,6 +174,18 @@ type Table struct {
 	editRow, editCol int
 	editor           *Entry
 
+	// ShowSummary, when true, appends a grand-total footer line (a distinct
+	// SurfaceAlt band, drawn as the LAST visual line of the body) that shows
+	// each column's aggregate over every row -- blank for a column whose
+	// Aggregate is AggregateNone. When GroupBy is also active, a per-group
+	// summary line is additionally emitted after each (expanded) group's rows,
+	// aggregating just that group's members. The footer folds into the same
+	// visual-line model group headers use, so lineCount/rowAt/scrollbar stay
+	// consistent. The zero value (false) is the original, pre-feature
+	// behaviour: no summary line is emitted and, ungrouped, the body renders
+	// byte-for-byte as it did before this field existed.
+	ShowSummary bool
+
 	// GroupBy, when in [0,len(Columns)), turns on row grouping: consecutive
 	// rows sharing that column's value are gathered under a clickable group
 	// header (value + member count + a disclosure triangle) that collapses
@@ -254,7 +266,36 @@ type TableColumn struct {
 	// on such a cell opens a text editor over it (see Table.OnCellEdit).
 	// The zero value (false) keeps the original read-only behaviour.
 	Editable bool
+	// Aggregate selects how this column's cells are reduced to a single
+	// value on a summary line (see Table.ShowSummary). The zero value
+	// (AggregateNone) leaves the column blank on every summary line, so a
+	// column that opts out is byte-identical to before this field existed.
+	Aggregate TableAggregate
 }
+
+// TableAggregate names the reduction applied to a column's cells on a
+// summary line (see TableColumn.Aggregate + Table.ShowSummary). The zero
+// value AggregateNone means "no aggregate" -- the column stays blank on
+// summary lines.
+type TableAggregate int
+
+const (
+	// AggregateNone is the default: the column contributes nothing to a
+	// summary line (it renders blank there).
+	AggregateNone TableAggregate = iota
+	// AggregateSum totals the column's numeric cells (non-numeric cells are
+	// skipped; strconv.ParseFloat decides what parses).
+	AggregateSum
+	// AggregateAvg is the mean of the column's numeric cells.
+	AggregateAvg
+	// AggregateCount is the number of rows covered by the summary line,
+	// regardless of whether their cells are numeric.
+	AggregateCount
+	// AggregateMin is the smallest of the column's numeric cells.
+	AggregateMin
+	// AggregateMax is the largest of the column's numeric cells.
+	AggregateMax
+)
 
 // TableIconFunc paints a Table's optional per-row leading icon into the
 // square rect r using ink. It is deliberately the exact signature of the
@@ -452,19 +493,23 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	if canClip {
 		clr.PushClip(Rect{X: r.X, Y: bodyY, W: r.W, H: r.Y + r.H - bodyY})
 	}
-	if t.grouped() {
-		// Grouped body: walk the visual-line list, painting a group header
-		// band for header lines and a normal cell row (via the shared
-		// drawDataRow) for data lines. end is already clamped to lineCount().
+	if t.useLineModel() {
+		// Line-model body: walk the visual-line list, painting a group header
+		// band for header lines, an aggregate footer band for summary lines,
+		// and a normal cell row (via the shared drawDataRow) for data lines.
+		// end is already clamped to lineCount().
 		lines := t.lines()
 		for vi := scroll; vi < end; vi++ {
 			ln := lines[vi]
 			y := bodyY + (vi-scroll)*TableRowHeight
-			if ln.header {
+			switch {
+			case ln.header:
 				t.drawGroupHeader(p, theme, r, y, ln)
-				continue
+			case ln.summary:
+				t.drawSummaryRow(p, theme, r, widths, gutter, y, ln)
+			default:
+				t.drawDataRow(p, theme, r, widths, gutter, y, ln.dataRow, selRow, onAccent)
 			}
-			t.drawDataRow(p, theme, r, widths, gutter, y, ln.dataRow, selRow, onAccent)
 		}
 	} else {
 		// Ungrouped body: one line per row, on-screen position == index.
@@ -650,6 +695,49 @@ func (t *Table) drawGroupHeader(p painter.Painter, theme *Theme, r Rect, y int, 
 	tx := r.X + TableCellPadX + TableIconSize
 	ty := y + (TableRowHeight-t.glyphHeight())/2
 	t.drawText(p, tx, ty, ln.group+" ("+strconv.Itoa(ln.count)+")", theme.OnSurface)
+}
+
+// drawSummaryRow paints an aggregate summary band at on-surface y: a distinct
+// SurfaceAlt stripe spanning the width, then each column's aggregate text
+// (blank for AggregateNone, aligned like the column's cells) over the rows the
+// line covers ([sumStart,sumEnd)). It mirrors drawDataRow's frozen/scrolled
+// geometry so a summary line lines up with the data columns under horizontal
+// scroll, and honours the same column-0 icon gutter so its first cell aligns
+// with the rows above.
+func (t *Table) drawSummaryRow(p painter.Painter, theme *Theme, r Rect, widths []int, gutter, y int, ln tableLine) {
+	fillRect(p, r.X, y, r.W, TableRowHeight, theme.SurfaceAlt)
+	cty := y + (TableRowHeight-t.glyphHeight())/2
+	paint := func(j, cellX int) {
+		text := t.aggregate(t.Columns[j].Aggregate, j, ln.sumStart, ln.sumEnd)
+		if text == "" {
+			return
+		}
+		cellW := widths[j]
+		if j == 0 && gutter > 0 {
+			cellX += gutter
+			cellW -= gutter
+		}
+		t.drawText(p, cellTextX(&t.Base, cellX, cellW, text, t.Columns[j].Align), cty, text, theme.OnSurface)
+	}
+	if !t.hScrollable() {
+		cx := r.X
+		for j := range t.Columns {
+			paint(j, cx)
+			cx += widths[j]
+		}
+		return
+	}
+	f := t.frozenCount()
+	fx := r.X + t.frozenWidth(widths)
+	right := r.X + t.contentWidth()
+	withClip(p, Rect{X: fx, Y: y, W: right - fx, H: TableRowHeight}, func() {
+		for j := f; j < len(t.Columns); j++ {
+			paint(j, t.columnScreenX(r.X, widths, j))
+		}
+	})
+	for j := 0; j < f; j++ {
+		paint(j, t.columnScreenX(r.X, widths, j))
+	}
 }
 
 // tableScrollbarThumbMin is the pixel floor a scrollbar thumb is
@@ -1000,6 +1088,16 @@ func (t *Table) grouped() bool {
 	return t.GroupBy >= 0 && t.GroupBy < len(t.Columns)
 }
 
+// useLineModel reports whether the body is rendered from the explicit
+// visual-line list (lines()) rather than the plain one-line-per-row fast path.
+// It is true whenever grouping is active OR a summary footer is requested --
+// the two features that deviate from the 1:1 row-to-line mapping. When false
+// every lines()-based helper falls back to the identity model, so the body
+// renders byte-for-byte as it did before either feature existed.
+func (t *Table) useLineModel() bool {
+	return t.grouped() || t.ShowSummary
+}
+
 // reorderActive reports whether drag-to-reorder is in effect: opted in via
 // Reorderable AND not grouped. A cross-group row move has no well-defined
 // target (the insertion index is over visual lines that interleave headers),
@@ -1008,15 +1106,81 @@ func (t *Table) reorderActive() bool {
 	return t.Reorderable && !t.grouped()
 }
 
-// tableLine is one on-screen line of the body when grouping is active: either
-// a group header (header==true, carrying the group value, its member count and
-// whether it is collapsed) or a data line pointing at a row in t.Rows.
+// tableLine is one on-screen line of the body when the visual-line model is
+// active (see useLineModel): a group header (header==true, carrying the group
+// value, its member count and whether it is collapsed), a summary line
+// (summary==true, aggregating rows [sumStart,sumEnd)), or a data line pointing
+// at a row in t.Rows.
 type tableLine struct {
 	header    bool
 	group     string // group value (header lines)
 	count     int    // members in the group (header lines)
 	collapsed bool   // whether the group is folded (header lines)
 	dataRow   int    // index into t.Rows (data lines)
+	summary   bool   // whether this is an aggregate summary line
+	sumStart  int    // first row (inclusive) a summary line aggregates
+	sumEnd    int    // one past the last row a summary line aggregates
+}
+
+// aggregate reduces column col over the contiguous row range [start,end) to a
+// display string per agg: "" for AggregateNone, the row count for
+// AggregateCount, and the sum/mean/min/max of the range's numeric cells (cells
+// that fail strconv.ParseFloat, or that a ragged row omits, are skipped) for
+// the numeric kinds. A numeric aggregate with no numeric cell in range yields
+// "" so an all-text column reads blank rather than "0".
+func (t *Table) aggregate(agg TableAggregate, col, start, end int) string {
+	switch agg {
+	case AggregateNone:
+		return ""
+	case AggregateCount:
+		return strconv.Itoa(end - start)
+	}
+	var sum, min, max float64
+	count := 0
+	for r := start; r < end; r++ {
+		if col >= len(t.Rows[r]) {
+			continue
+		}
+		v, err := strconv.ParseFloat(t.Rows[r][col], 64)
+		if err != nil {
+			continue
+		}
+		if count == 0 {
+			min, max = v, v
+		} else {
+			if v < min {
+				min = v
+			}
+			if v > max {
+				max = v
+			}
+		}
+		sum += v
+		count++
+	}
+	if count == 0 {
+		return ""
+	}
+	switch agg {
+	case AggregateSum:
+		return formatAggregate(sum)
+	case AggregateAvg:
+		return formatAggregate(sum / float64(count))
+	case AggregateMin:
+		return formatAggregate(min)
+	default: // AggregateMax
+		return formatAggregate(max)
+	}
+}
+
+// formatAggregate renders an aggregate float with a sensible number format: a
+// value that is exactly integral prints without a fractional part, otherwise
+// it prints with two decimal places.
+func formatAggregate(f float64) string {
+	if i := int64(f); float64(i) == f {
+		return strconv.FormatInt(i, 10)
+	}
+	return strconv.FormatFloat(f, 'f', 2, 64)
 }
 
 // groupValue returns row r's value in the GroupBy column, or "" when the row
@@ -1035,25 +1199,43 @@ func (t *Table) groupValue(r int) string {
 // one-line-per-row model. Runs are consecutive: lines assumes Rows are already
 // ordered by the group column and does not sort.
 func (t *Table) lines() []tableLine {
-	if !t.grouped() {
+	if !t.useLineModel() {
 		return nil
 	}
 	var out []tableLine
-	i := 0
-	for i < len(t.Rows) {
-		val := t.groupValue(i)
-		j := i + 1
-		for j < len(t.Rows) && t.groupValue(j) == val {
-			j++
-		}
-		collapsed := t.collapsed[val]
-		out = append(out, tableLine{header: true, group: val, count: j - i, collapsed: collapsed})
-		if !collapsed {
-			for k := i; k < j; k++ {
-				out = append(out, tableLine{dataRow: k})
+	if t.grouped() {
+		i := 0
+		for i < len(t.Rows) {
+			val := t.groupValue(i)
+			j := i + 1
+			for j < len(t.Rows) && t.groupValue(j) == val {
+				j++
 			}
+			collapsed := t.collapsed[val]
+			out = append(out, tableLine{header: true, group: val, count: j - i, collapsed: collapsed})
+			if !collapsed {
+				for k := i; k < j; k++ {
+					out = append(out, tableLine{dataRow: k})
+				}
+				// Per-group summary line, aggregating just this group's rows,
+				// after its (expanded) members. Suppressed while collapsed so a
+				// folded group hides its summary along with its rows.
+				if t.ShowSummary {
+					out = append(out, tableLine{summary: true, sumStart: i, sumEnd: j})
+				}
+			}
+			i = j
 		}
-		i = j
+	} else {
+		for k := range t.Rows {
+			out = append(out, tableLine{dataRow: k})
+		}
+	}
+	// Grand-total footer as the final line, aggregating every row. Only when
+	// there is at least one row -- an empty Table renders its "(no data)"
+	// placeholder instead (Draw returns before the body loop).
+	if t.ShowSummary && len(t.Rows) > 0 {
+		out = append(out, tableLine{summary: true, sumStart: 0, sumEnd: len(t.Rows)})
 	}
 	return out
 }
@@ -1063,7 +1245,7 @@ func (t *Table) lines() []tableLine {
 // is what the scroll geometry (maxScrollRow / bodyOverflows / the scrollbar)
 // measures the body against.
 func (t *Table) lineCount() int {
-	if !t.grouped() {
+	if !t.useLineModel() {
 		return len(t.Rows)
 	}
 	return len(t.lines())
@@ -1074,11 +1256,11 @@ func (t *Table) lineCount() int {
 // identity; grouped it scans the line list. A row inside a collapsed group has
 // no visible line and yields -1.
 func (t *Table) visualIndex(dataRow int) int {
-	if !t.grouped() {
+	if !t.useLineModel() {
 		return dataRow
 	}
 	for vi, ln := range t.lines() {
-		if !ln.header && ln.dataRow == dataRow {
+		if !ln.header && !ln.summary && ln.dataRow == dataRow {
 			return vi
 		}
 	}
@@ -1380,16 +1562,16 @@ func (t *Table) rowAt(localY int) int {
 		return -1
 	}
 	vi := t.clampScrollRow() + (localY-TableHeaderHeight)/TableRowHeight
-	if !t.grouped() {
+	if !t.useLineModel() {
 		if vi < 0 || vi >= len(t.Rows) {
 			return -1
 		}
 		return vi
 	}
-	// Grouped: the visual line at vi is either a header (no data row) or a
-	// data line pointing at t.Rows.
+	// Line model: the visual line at vi is a header (no data row), a summary
+	// line (no data row) or a data line pointing at t.Rows.
 	lines := t.lines()
-	if vi < 0 || vi >= len(lines) || lines[vi].header {
+	if vi < 0 || vi >= len(lines) || lines[vi].header || lines[vi].summary {
 		return -1
 	}
 	return lines[vi].dataRow
