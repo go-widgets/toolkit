@@ -341,6 +341,13 @@ func (a *Agenda) OnEvent(ev Event) {
 	}
 }
 
+// DayAt maps widget-local (x, y) to the in-month day cell under it in the month
+// view, returning the focused (year, month, day) and ok=true; ok=false for the
+// header, outside the grid, or a spill cell. Exposed so a host can hit-test a
+// right-click and offer an "add event here" menu. Only meaningful when
+// View == AgendaMonth.
+func (a *Agenda) DayAt(x, y int) (year, month, day int, ok bool) { return a.monthDayAt(x, y) }
+
 // monthDayAt maps widget-local (x, y) to the in-month day cell under it,
 // returning the focused (year, month, day) and ok=true. It returns ok=false
 // for the weekday header band, points outside the day grid, columns that miss

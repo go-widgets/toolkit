@@ -375,6 +375,19 @@ func (k *Kanban) moveCard(fromCol, fromCard, toCol, toIdx int) {
 	k.SelectedCol, k.SelectedCard = toCol, toIdx
 }
 
+// CardAt maps widget-local (x, y) to the (column, card) it lands on, or
+// (-1, -1) for a header, gap or dead space. Exposed so a host can hit-test a
+// right-click and build a context menu for the card under the cursor.
+func (k *Kanban) CardAt(x, y int) (col, card int) { return k.cardAt(x, y) }
+
+// MoveCard removes the card at (fromCol, fromCard) and re-inserts it at toIdx
+// in toCol, updating Selected* to its landing spot (out-of-range sources are
+// ignored; toIdx is clamped). Exposed so a host can drive the same move a drag
+// performs from a menu action.
+func (k *Kanban) MoveCard(fromCol, fromCard, toCol, toIdx int) {
+	k.moveCard(fromCol, fromCard, toCol, toIdx)
+}
+
 // OnEvent drives selection and card drag-and-drop. On EventClick it grabs the
 // card under the pointer (selecting it and firing OnCardClick); on
 // EventMouseDrag it tracks the pointer and marks the gesture a drag; on

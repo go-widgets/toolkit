@@ -221,6 +221,20 @@ func (g *Gantt) unitAtLocal(localX int) int {
 	return clampInt(u, 0, units)
 }
 
+// TaskAt returns the index of the task row under widget-local (x, y), or -1 for
+// the header band or empty space past the last task. Exposed so a host can
+// hit-test a right-click and build a context menu for that task.
+func (g *Gantt) TaskAt(x, y int) int {
+	if y < GanttHeaderH {
+		return -1
+	}
+	row := (y - GanttHeaderH) / GanttRowH
+	if row < 0 || row >= len(g.Tasks) {
+		return -1
+	}
+	return row
+}
+
 // OnEvent drives selection and bar editing. On EventClick it selects the task
 // row (firing OnSelect) and, from where in the bar the press landed, arms a
 // drag: near the left/right edge resizes Start/End, inside the bar moves the
@@ -230,11 +244,8 @@ func (g *Gantt) unitAtLocal(localX int) int {
 func (g *Gantt) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
-		if ev.Y < GanttHeaderH {
-			return
-		}
-		row := (ev.Y - GanttHeaderH) / GanttRowH
-		if row >= len(g.Tasks) {
+		row := g.TaskAt(ev.X, ev.Y)
+		if row < 0 {
 			return
 		}
 		g.Selected = row
