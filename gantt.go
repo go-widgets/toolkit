@@ -53,6 +53,7 @@ type Gantt struct {
 	// the pointer-unit-minus-Start offset captured at grab time (move only) so
 	// the bar tracks the pointer without jumping.
 	editing  bool
+	edited   bool
 	editIdx  int
 	editMode ganttDragMode
 	editGrab int
@@ -241,6 +242,7 @@ func (g *Gantt) OnEvent(ev Event) {
 			g.OnSelect(row)
 		}
 		tk := g.Tasks[row]
+		g.edited = false
 		startX, endX := g.barXLocal(tk.Start), g.barXLocal(tk.End)
 		switch {
 		case ev.X >= startX-ganttEdgeGrab && ev.X <= startX+ganttEdgeGrab:
@@ -256,14 +258,18 @@ func (g *Gantt) OnEvent(ev Event) {
 	case EventMouseDrag:
 		if g.editing {
 			g.applyDrag(g.unitAtLocal(ev.X))
+			g.edited = true
 		}
 	case EventMouseUp:
 		if !g.editing {
 			return
 		}
-		i := g.editIdx
-		g.editing = false
-		if g.OnTaskChange != nil {
+		i, edited := g.editIdx, g.edited
+		g.editing, g.edited = false, false
+		// Only a press that actually dragged edited the span; a plain click on
+		// a bar arms editing but changes nothing, so it must not fire the
+		// change callback.
+		if edited && g.OnTaskChange != nil {
 			g.OnTaskChange(i, g.Tasks[i].Start, g.Tasks[i].End)
 		}
 	}
