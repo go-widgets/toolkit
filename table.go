@@ -244,6 +244,23 @@ type Table struct {
 	// mistaken for "dragging separator 0".
 	resizing    bool
 	resizingCol int
+
+	// RowDetail, when non-nil, opts each body row into an expander: a leading
+	// disclosure ▶/▼ appears at the left of column 0, and clicking it toggles
+	// that row's expansion. An expanded row shows a detail line (one
+	// TableRowHeight-tall band, its text supplied by RowDetail(row), indented)
+	// inserted right after the row via the same visual-line model group
+	// headers use, so all geometry (rowAt/visualIndex/scrollbar/cellRect)
+	// keeps working. Clicking the disclosure toggles expansion; a click on the
+	// cell itself still selects/edits as before. The zero value (nil) is the
+	// original, pre-feature behaviour: no gutter is reserved, no row can
+	// expand, and Draw renders byte-for-byte as before this field existed.
+	RowDetail func(row int) string
+
+	// expanded records which body rows are currently expanded (keyed by row
+	// index). Lazily created on the first toggle; a nil map reads as "nothing
+	// expanded". Only meaningful while RowDetail is non-nil.
+	expanded map[int]bool
 }
 
 // TableColumn is one column definition: a header title + an optional
@@ -409,10 +426,11 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	}
 	overflow := t.bodyOverflows()
 	widths := t.columnWidths(t.contentWidth())
-	// gutter is the leading space reserved inside column 0 for a per-row
-	// icon; 0 (so every gutter branch below is inert) while RowIcon is
-	// nil -- keeping the no-icon path byte-identical to before.
-	gutter := t.iconGutter()
+	// gutter is the leading space reserved inside column 0 for a row's
+	// disclosure chevron (RowDetail) and per-row icon (RowIcon); 0 (so every
+	// gutter branch below is inert) while both are nil -- keeping that path
+	// byte-identical to before either feature existed.
+	gutter := t.leadGutter()
 
 	// --- Header row ------------------------------------------------
 	fillRect(p, r.X, r.Y, r.W, TableHeaderHeight, theme.SurfaceAlt)
@@ -495,9 +513,10 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	}
 	if t.useLineModel() {
 		// Line-model body: walk the visual-line list, painting a group header
-		// band for header lines, an aggregate footer band for summary lines,
-		// and a normal cell row (via the shared drawDataRow) for data lines.
-		// end is already clamped to lineCount().
+		// band for header lines, an aggregate footer band for summary lines, an
+		// indented detail band for detail lines, and a normal cell row (via the
+		// shared drawDataRow) for data lines. end is already clamped to
+		// lineCount().
 		lines := t.lines()
 		for vi := scroll; vi < end; vi++ {
 			ln := lines[vi]
@@ -507,6 +526,8 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 				t.drawGroupHeader(p, theme, r, y, ln)
 			case ln.summary:
 				t.drawSummaryRow(p, theme, r, widths, gutter, y, ln)
+			case ln.detail:
+				t.drawDetailRow(p, theme, r, y, ln)
 			default:
 				t.drawDataRow(p, theme, r, widths, gutter, y, ln.dataRow, selRow, onAccent)
 			}
@@ -643,17 +664,29 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 	}
 }
 
-// paintCell paints one body cell of row i, column j: its optional leading icon
-// (column 0 only, when a RowIcon gutter is reserved) and its text, left edge at
-// cellX. Shared by the plain and frozen/scrolled body passes.
+// paintCell paints one body cell of row i, column j: column 0's optional
+// leading disclosure chevron (RowDetail) and per-row icon (RowIcon), then the
+// cell text, left edge at cellX. The leading gutter is laid out
+// disclosure-then-icon, each carved from the left of column 0; gutter is the
+// combined width (t.leadGutter()) so cellW shrinks by exactly the reserved
+// space. Shared by the plain and frozen/scrolled body passes. With neither
+// feature set gutter is 0 and this renders byte-identically to before; with
+// only RowIcon set the disclosure branch is inert, leaving the icon layout
+// unchanged.
 func (t *Table) paintCell(p painter.Painter, widths []int, gutter, cellX, cty, y, i, j int, ink RGBA, row []string) {
 	cellW := widths[j]
 	if j == 0 && gutter > 0 {
-		if draw, ok := t.resolveRowIcon(i); ok {
-			iconY := y + (TableRowHeight-TableIconSize)/2
-			draw(p, Rect{X: cellX + TableCellPadX, Y: iconY, W: TableIconSize, H: TableIconSize}, ink)
+		if dg := t.disclosureGutter(); dg > 0 {
+			drawDisclosureChevron(p, cellX+TableCellPadX+4, y+TableRowHeight/2, t.expanded[i], ink)
+			cellX += dg
 		}
-		cellX += gutter
+		if t.iconGutter() > 0 {
+			if draw, ok := t.resolveRowIcon(i); ok {
+				iconY := y + (TableRowHeight-TableIconSize)/2
+				draw(p, Rect{X: cellX + TableCellPadX, Y: iconY, W: TableIconSize, H: TableIconSize}, ink)
+			}
+			cellX += t.iconGutter()
+		}
 		cellW -= gutter
 	}
 	if j < len(row) {
@@ -738,6 +771,18 @@ func (t *Table) drawSummaryRow(p painter.Painter, theme *Theme, r Rect, widths [
 	for j := 0; j < f; j++ {
 		paint(j, t.columnScreenX(r.X, widths, j))
 	}
+}
+
+// drawDetailRow paints an expander detail band at on-surface y: a distinct
+// SurfaceAlt stripe spanning the width, then the row's detail text (from
+// RowDetail) indented past the leading gutter so it reads as nested under its
+// parent row. Reached only for detail lines, which lines() emits solely while
+// RowDetail is non-nil, so RowDetail is safe to call here.
+func (t *Table) drawDetailRow(p painter.Painter, theme *Theme, r Rect, y int, ln tableLine) {
+	fillRect(p, r.X, y, r.W, TableRowHeight, theme.SurfaceAlt)
+	tx := r.X + t.leadGutter() + TableCellPadX
+	ty := y + (TableRowHeight-t.glyphHeight())/2
+	t.drawText(p, tx, ty, t.RowDetail(ln.dataRow), theme.OnSurface)
 }
 
 // tableScrollbarThumbMin is the pixel floor a scrollbar thumb is
@@ -886,6 +931,27 @@ func (t *Table) iconGutter() int {
 		return 0
 	}
 	return TableCellPadX + TableIconSize
+}
+
+// disclosureGutter is the leading pixel gutter reserved inside the first
+// column for a row's expander disclosure chevron: the same TableCellPadX +
+// TableIconSize a per-row icon claims. It is 0 -- and every disclosure branch
+// inert -- while RowDetail is nil, keeping the no-expander render
+// byte-identical to before this feature existed.
+func (t *Table) disclosureGutter() int {
+	if t.RowDetail == nil {
+		return 0
+	}
+	return TableCellPadX + TableIconSize
+}
+
+// leadGutter is the total leading gutter carved from column 0: the disclosure
+// chevron's gutter (RowDetail) followed by the per-row icon's (RowIcon). Draw
+// reserves it once and threads it through drawDataRow/drawSummaryRow/cellRect
+// so cells, summaries and the inline editor all shift right by the same space.
+// With neither feature set it is 0, the byte-identical pre-feature layout.
+func (t *Table) leadGutter() int {
+	return t.disclosureGutter() + t.iconGutter()
 }
 
 // resolveRowIcon reports the icon painter for body row i, collapsing
@@ -1090,36 +1156,56 @@ func (t *Table) grouped() bool {
 
 // useLineModel reports whether the body is rendered from the explicit
 // visual-line list (lines()) rather than the plain one-line-per-row fast path.
-// It is true whenever grouping is active OR a summary footer is requested --
-// the two features that deviate from the 1:1 row-to-line mapping. When false
-// every lines()-based helper falls back to the identity model, so the body
-// renders byte-for-byte as it did before either feature existed.
+// It is true whenever grouping is active, a summary footer is requested, OR a
+// row is expanded -- the three features that deviate from the 1:1
+// row-to-line mapping. When false every lines()-based helper falls back to the
+// identity model, so the body renders byte-for-byte as it did before any of
+// them existed.
 func (t *Table) useLineModel() bool {
-	return t.grouped() || t.ShowSummary
+	return t.grouped() || t.ShowSummary || t.hasExpanded()
+}
+
+// hasExpanded reports whether any row is currently expanded into a detail line
+// -- true only while RowDetail is set (a detail line has no text source
+// otherwise) AND the expanded set holds at least one row. toggleExpand deletes
+// an entry when folding a row shut, so a non-empty set always means a live
+// expansion.
+func (t *Table) hasExpanded() bool {
+	return t.RowDetail != nil && len(t.expanded) > 0
+}
+
+// rowExpanded reports whether row is currently expanded (and expandable at all,
+// i.e. RowDetail is set). It is the single test lines() uses to decide whether
+// to emit a detail line after a data row.
+func (t *Table) rowExpanded(row int) bool {
+	return t.RowDetail != nil && t.expanded[row]
 }
 
 // reorderActive reports whether drag-to-reorder is in effect: opted in via
-// Reorderable AND not grouped. A cross-group row move has no well-defined
-// target (the insertion index is over visual lines that interleave headers),
-// so grouping suppresses reordering entirely.
+// Reorderable AND the plain row-to-line model is in force (not grouped, no
+// summary footer, nothing expanded). Any of those interleaves non-row lines
+// the flat rowInsertIndexAt math can't place a drop against, so they suppress
+// reordering entirely.
 func (t *Table) reorderActive() bool {
-	return t.Reorderable && !t.grouped()
+	return t.Reorderable && !t.useLineModel()
 }
 
 // tableLine is one on-screen line of the body when the visual-line model is
 // active (see useLineModel): a group header (header==true, carrying the group
 // value, its member count and whether it is collapsed), a summary line
-// (summary==true, aggregating rows [sumStart,sumEnd)), or a data line pointing
+// (summary==true, aggregating rows [sumStart,sumEnd)), a detail line
+// (detail==true, carrying its parent row in dataRow), or a data line pointing
 // at a row in t.Rows.
 type tableLine struct {
 	header    bool
 	group     string // group value (header lines)
 	count     int    // members in the group (header lines)
 	collapsed bool   // whether the group is folded (header lines)
-	dataRow   int    // index into t.Rows (data lines)
+	dataRow   int    // index into t.Rows (data + detail lines)
 	summary   bool   // whether this is an aggregate summary line
 	sumStart  int    // first row (inclusive) a summary line aggregates
 	sumEnd    int    // one past the last row a summary line aggregates
+	detail    bool   // whether this is an expander detail line (see dataRow)
 }
 
 // aggregate reduces column col over the contiguous row range [start,end) to a
@@ -1192,15 +1278,26 @@ func (t *Table) groupValue(r int) string {
 	return ""
 }
 
-// lines builds the ordered visual-line list for the grouped body: for each run
-// of consecutive rows sharing a GroupBy value it emits a header line followed
-// (unless the group is collapsed) by that run's data lines. It returns nil when
-// ungrouped, the signal every geometry helper uses to fall back to the plain
-// one-line-per-row model. Runs are consecutive: lines assumes Rows are already
-// ordered by the group column and does not sort.
+// lines builds the ordered visual-line list for the line-model body. Grouped,
+// it emits for each run of consecutive rows sharing a GroupBy value a header
+// line, then (unless collapsed) that run's data lines and an optional per-group
+// summary. Ungrouped, it emits one data line per row. In both cases an expanded
+// row is followed by its detail line, and a grand-total summary footer closes
+// the list when ShowSummary is set. It returns nil when the plain
+// one-line-per-row model is in force (see useLineModel), the signal every
+// geometry helper uses to fall back to it. Runs are consecutive: lines assumes
+// Rows are already ordered by the group column and does not sort.
 func (t *Table) lines() []tableLine {
 	if !t.useLineModel() {
 		return nil
+	}
+	// emitRow appends row k's data line and, if it is expanded, its detail line.
+	emitRow := func(out []tableLine, k int) []tableLine {
+		out = append(out, tableLine{dataRow: k})
+		if t.rowExpanded(k) {
+			out = append(out, tableLine{detail: true, dataRow: k})
+		}
+		return out
 	}
 	var out []tableLine
 	if t.grouped() {
@@ -1215,7 +1312,7 @@ func (t *Table) lines() []tableLine {
 			out = append(out, tableLine{header: true, group: val, count: j - i, collapsed: collapsed})
 			if !collapsed {
 				for k := i; k < j; k++ {
-					out = append(out, tableLine{dataRow: k})
+					out = emitRow(out, k)
 				}
 				// Per-group summary line, aggregating just this group's rows,
 				// after its (expanded) members. Suppressed while collapsed so a
@@ -1228,7 +1325,7 @@ func (t *Table) lines() []tableLine {
 		}
 	} else {
 		for k := range t.Rows {
-			out = append(out, tableLine{dataRow: k})
+			out = emitRow(out, k)
 		}
 	}
 	// Grand-total footer as the final line, aggregating every row. Only when
@@ -1260,7 +1357,7 @@ func (t *Table) visualIndex(dataRow int) int {
 		return dataRow
 	}
 	for vi, ln := range t.lines() {
-		if !ln.header && !ln.summary && ln.dataRow == dataRow {
+		if !ln.header && !ln.summary && !ln.detail && ln.dataRow == dataRow {
 			return vi
 		}
 	}
@@ -1275,6 +1372,36 @@ func (t *Table) toggleGroup(val string) {
 	}
 	t.collapsed[val] = !t.collapsed[val]
 	t.ScrollRow = t.clampScrollRow()
+}
+
+// toggleExpand flips row's expansion, lazily creating the expanded map on first
+// use and deleting an entry when folding a row shut (so a non-empty map always
+// means a live expansion -- see hasExpanded). An out-of-range row is a no-op.
+// It reclamps ScrollRow the same way toggleGroup does, since the line count
+// changed under the current window.
+func (t *Table) toggleExpand(row int) {
+	if row < 0 || row >= len(t.Rows) {
+		return
+	}
+	if t.expanded == nil {
+		t.expanded = map[int]bool{}
+	}
+	if t.expanded[row] {
+		delete(t.expanded, row)
+	} else {
+		t.expanded[row] = true
+	}
+	t.ScrollRow = t.clampScrollRow()
+}
+
+// onDisclosure reports whether a Table-local x lands on column 0's disclosure
+// gutter -- the leading strip an expander chevron occupies (see
+// disclosureGutter). It is 0-wide (and so always false) while RowDetail is nil,
+// so a click there falls through to normal cell selection/editing.
+func (t *Table) onDisclosure(localX int) bool {
+	widths := t.columnWidths(t.contentWidth())
+	left := t.columnScreenX(0, widths, 0)
+	return localX >= left && localX < left+t.disclosureGutter()
 }
 
 // clampScrollRow returns ScrollRow collapsed into [0, maxScrollRow()]
@@ -1571,7 +1698,7 @@ func (t *Table) rowAt(localY int) int {
 	// Line model: the visual line at vi is a header (no data row), a summary
 	// line (no data row) or a data line pointing at t.Rows.
 	lines := t.lines()
-	if vi < 0 || vi >= len(lines) || lines[vi].header || lines[vi].summary {
+	if vi < 0 || vi >= len(lines) || lines[vi].header || lines[vi].summary || lines[vi].detail {
 		return -1
 	}
 	return lines[vi].dataRow
@@ -1597,9 +1724,9 @@ func (t *Table) lineAt(localY int) (tableLine, bool) {
 // same absolute coordinate space Draw paints into (Bounds()-relative). It
 // mirrors the Draw body geometry exactly: the row band is bodyY +
 // (row-clampScrollRow)*TableRowHeight tall by TableRowHeight, and the column
-// span is the cumulative columnWidths, with the first column's icon gutter
-// (if any) carved off the left so the editor sits over the text area. It is
-// what positions the inline cell editor.
+// span is the cumulative columnWidths, with the first column's leading gutter
+// (disclosure + icon, if any) carved off the left so the editor sits over the
+// text area. It is what positions the inline cell editor.
 func (t *Table) cellRect(row, col int) Rect {
 	r := t.Bounds()
 	widths := t.columnWidths(t.contentWidth())
@@ -1607,7 +1734,7 @@ func (t *Table) cellRect(row, col int) Rect {
 	cellX := t.columnScreenX(r.X, widths, col)
 	cellW := widths[col]
 	if col == 0 {
-		if g := t.iconGutter(); g > 0 {
+		if g := t.leadGutter(); g > 0 {
 			cellX += g
 			cellW -= g
 		}
@@ -1841,6 +1968,15 @@ func (t *Table) OnEvent(ev Event) {
 			return
 		}
 		row := t.rowAt(ev.Y)
+		// A click on a data row's disclosure gutter toggles its expansion and
+		// never selects or edits -- it takes precedence over the Editable-cell
+		// and selection branches so the chevron area stays a pure toggle even in
+		// an Editable first column. Inert (onDisclosure false) while RowDetail
+		// is nil, so the pre-feature behaviour is unchanged.
+		if row >= 0 && t.onDisclosure(ev.X) {
+			t.toggleExpand(row)
+			return
+		}
 		// A click on an Editable cell opens an inline editor over it
 		// (and takes precedence over row selection/drag for that cell).
 		if row >= 0 {
