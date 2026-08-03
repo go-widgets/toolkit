@@ -274,3 +274,123 @@ func TestLabelAlignWithTruncation(t *testing.T) {
 		t.Fatal("AlignRight overflow must clamp its start to the left edge")
 	}
 }
+
+// --- FontSize override ----------------------------------------------------
+
+// TestLabelFontSizeScalesTrueType proves a positive FontSize re-renders the
+// label's TrueType base face at that pixel size: metrics (glyph height + text
+// width) and the painted glyphs all grow, while an unset FontSize keeps the
+// base face untouched.
+func TestLabelFontSizeScalesTrueType(t *testing.T) {
+	base := newTTF(t, 14)
+	big := newTTF(t, 40)
+
+	small := NewLabel("Clock")
+	small.SetFont(base)
+	if small.faceFor().Height() != base.Height() {
+		t.Fatalf("FontSize=0 must keep the base height %d, got %d", base.Height(), small.faceFor().Height())
+	}
+
+	large := NewLabel("Clock")
+	large.SetFont(base)
+	if got := large.SetFontSize(40); got != large {
+		t.Fatal("SetFontSize should return the label for chaining")
+	}
+	if large.FontSize != 40 {
+		t.Fatalf("FontSize = %d, want 40", large.FontSize)
+	}
+	// The resized face's metrics match a 40px face built directly.
+	if large.faceFor().Height() != big.Height() {
+		t.Fatalf("FontSize=40 height = %d, want %d", large.faceFor().Height(), big.Height())
+	}
+	if large.faceFor().Measure("Clock") != big.Measure("Clock") {
+		t.Fatal("FontSize=40 text width must match a direct 40px face")
+	}
+	// And it is strictly larger than the 14px base.
+	if large.faceFor().Height() <= base.Height() {
+		t.Fatal("40px face should stand taller than the 14px base")
+	}
+
+	// Draw at 40px into a tall surface: the painted glyph band must reach
+	// deeper than the 14px label's would.
+	const w, h = 200, 60
+	theme := DefaultLight()
+	large.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	large.VAlign = VTop
+	buf := makeSurface(w, h)
+	large.Draw(newP(buf, w), theme)
+	deepest := -1
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if pixelAt(buf, w, x, y) == theme.OnSurface {
+				deepest = y
+			}
+		}
+	}
+	if deepest < base.Height() {
+		t.Fatalf("40px glyphs only reached y=%d, expected past the 14px height %d", deepest, base.Height())
+	}
+}
+
+// TestLabelFontSizeCacheReused draws twice and asserts faceFor returns the very
+// same cached face the second time (no re-parse) — covering the cache-hit path.
+func TestLabelFontSizeCacheReused(t *testing.T) {
+	l := NewLabel("x")
+	l.SetFont(newTTF(t, 12))
+	l.FontSize = 24
+	first := l.faceFor()
+	second := l.faceFor()
+	if first != second {
+		t.Fatal("faceFor should return the cached resized face on the second call")
+	}
+	// Changing the size invalidates the cache: a new face is built.
+	l.FontSize = 30
+	if third := l.faceFor(); third == first {
+		t.Fatal("changing FontSize must rebuild the resized face")
+	}
+}
+
+// TestLabelFontSizeIgnoredOnBitmap proves FontSize over the built-in bitmap
+// font (no outline to scale) is a no-op: the render is byte-identical to a
+// label with FontSize unset.
+func TestLabelFontSizeIgnoredOnBitmap(t *testing.T) {
+	const w, h = 80, 20
+	theme := DefaultLight()
+
+	plain := NewLabel("Hi")
+	plain.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	plainBuf := makeSurface(w, h)
+	plain.Draw(newP(plainBuf, w), theme)
+
+	sized := NewLabel("Hi")
+	sized.FontSize = 48 // ignored: bitmap font has no FontData
+	sized.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	sizedBuf := makeSurface(w, h)
+	sized.Draw(newP(sizedBuf, w), theme)
+
+	if !bytes.Equal(plainBuf, sizedBuf) {
+		t.Fatal("FontSize over the bitmap font must render byte-identically")
+	}
+	// faceFor returns the bitmap base face itself.
+	if sized.faceFor() != CurrentFont() {
+		t.Fatal("FontSize on a bitmap base must fall back to the active font")
+	}
+}
+
+// fontDataStub is a Font that advertises sfnt bytes (FontData) but hands back
+// junk, so NewTrueTypeFont fails — exercising faceFor's parse-error fallback.
+type fontDataStub struct{ Font }
+
+func (fontDataStub) FontData() []byte { return []byte("not a font") }
+
+// TestLabelFontSizeParseErrorFallsBack covers faceFor's error branch: a base
+// face whose FontData is unparseable falls back to that base face.
+func TestLabelFontSizeParseErrorFallsBack(t *testing.T) {
+	stub := fontDataStub{Font: CurrentFont()}
+	l := NewLabel("x")
+	l.SetFont(stub)
+	l.FontSize = 20
+	if l.faceFor() != Font(stub) {
+		t.Fatal("a parse failure must fall back to the base face")
+	}
+}

@@ -47,6 +47,18 @@ const (
 // ActionLabel + Action to render a small button inside the pill's
 // right edge. Leaving ActionLabel empty (the zero value) opts out --
 // the pill renders + sizes exactly as a plain message toast.
+//
+// Three optional enrichments layer on top without disturbing the plain
+// path (Icon nil, Lines empty, Actions empty renders byte-identically to
+// the original single-line / single-action Toast):
+//
+//   - Icon: an [IconFunc] vector glyph or an RGBA image ([Pixels]/[IW]/[IH])
+//     painted, vertically centred, to the LEFT of the text.
+//   - Lines: distinct message rows (e.g. a bold-reading title line plus a
+//     body line) stacked instead of a single joined Text.
+//   - Actions: a slice of ([ToastAction]) buttons (each a label + callback)
+//     laid out right-to-left along the pill's right edge, superseding the
+//     single ActionLabel/Action pair.
 type Toast struct {
 	Base
 	Text    string
@@ -64,11 +76,40 @@ type Toast struct {
 	// right-aligned inside the pill (e.g. "Undo") and makes OnEvent
 	// route clicks landing in that button to Action. Empty (the zero
 	// value) means "no action" -- Draw + AnchorIn behave exactly as a
-	// pre-action Toast.
+	// pre-action Toast. Superseded by Actions when that slice is non-empty.
 	ActionLabel string
 	// Action is invoked when the action button is clicked. Nil-safe:
 	// clicking the button still dismisses the toast when Action is nil.
 	Action func()
+
+	// Lines, when non-empty, supplies the message as distinct rows (a title
+	// line plus one or more body lines) stacked top-to-bottom, instead of the
+	// single joined Text. The zero value (nil/empty) falls back to Text, so a
+	// one-line toast is unchanged.
+	Lines []string
+
+	// Actions, when non-empty, supplies several action buttons (superseding
+	// the single ActionLabel/Action pair). Buttons are laid out along the
+	// right edge in slice order, each with its own divider + label. The zero
+	// value (nil/empty) falls back to the ActionLabel/Action pair.
+	Actions []ToastAction
+
+	// Icon paints a vector glyph to the left of the text when Pixels is not a
+	// valid image. May be nil (no icon).
+	Icon IconFunc
+	// Pixels is an optional RGBA image (IW*IH*4 bytes) drawn to the left of the
+	// text instead of Icon, aspect-preserved + centred. IW/IH are its source
+	// dimensions.
+	Pixels []byte
+	IW, IH int
+}
+
+// ToastAction is one button in a multi-action Toast: a Label the user clicks
+// and a Callback run on click. Callback is nil-safe (the toast still dismisses
+// when it is nil), matching the legacy single-Action contract.
+type ToastAction struct {
+	Label    string
+	Callback func()
 }
 
 // ToastPadX / ToastPadY are the internal margin between the pill
@@ -81,6 +122,9 @@ const (
 	// edges; ToastGap is the vertical space between stacked toasts.
 	ToastMargin = 12
 	ToastGap    = 6
+	// ToastLineGap is the vertical space between stacked message lines in a
+	// multi-line (Lines) toast. Irrelevant to a single-line toast.
+	ToastLineGap = 2
 )
 
 // NewToast builds a hidden Toast with the given text + kind. The host
@@ -109,43 +153,105 @@ func toastFace(kind ToastKind, theme *Theme) RGBA {
 	}
 }
 
-// actionSlotW returns the pixel width of the action-button zone -- a
-// ToastPadX gap from the message text, a 1-px divider, then the
-// button's own ToastPadX padding on both sides of ActionLabel -- or 0
-// when ActionLabel is empty. AnchorIn folds it into the toast's total
-// width; Draw + OnEvent both derive the button's on-pill position from
-// it, so sizing, painting + hit-testing always agree on the same box.
-func (t *Toast) actionSlotW() int {
-	if t.ActionLabel == "" {
-		return 0
+// lines returns the message rows: Lines when non-empty, else a single-element
+// slice holding Text (the backward-compatible default).
+func (t *Toast) lines() []string {
+	if len(t.Lines) > 0 {
+		return t.Lines
 	}
-	return 3*ToastPadX + 1 + t.textWidth(t.ActionLabel)
+	return []string{t.Text}
 }
 
-// AnchorIn sizes the toast to its Text (+ action button, when present) and
-// positions it at corner of host, stacked at row index (0 = the row nearest
-// the docked edge). Top corners stack downward, bottom corners upward, so a
-// host can lay out a column of toasts by calling AnchorIn once per visible
-// toast with an increasing index.
-func (t *Toast) AnchorIn(host Rect, corner Corner, index int) {
-	w := t.textWidth(t.Text) + 2*ToastPadX
-	if t.ActionLabel != "" {
-		// The action slot's own trailing ToastPadX already plays the
-		// role of the pill's plain right-edge padding, so only the
-		// slot's extra width (gap + divider + button padding + label)
-		// is added on top of the base two-sided text padding.
-		w += t.actionSlotW() - ToastPadX
+// acts returns the action buttons: Actions when non-empty, else a single-element
+// slice from the legacy ActionLabel/Action pair when ActionLabel is set, else
+// nil (a plain, action-less toast).
+func (t *Toast) acts() []ToastAction {
+	if len(t.Actions) > 0 {
+		return t.Actions
 	}
-	h := t.glyphHeight() + 2*ToastPadY
+	if t.ActionLabel != "" {
+		return []ToastAction{{Label: t.ActionLabel, Callback: t.Action}}
+	}
+	return nil
+}
+
+// hasImage reports whether Pixels is a usable RGBA buffer for the source dims.
+func (t *Toast) hasImage() bool {
+	return t.IW > 0 && t.IH > 0 && len(t.Pixels) >= t.IW*t.IH*4
+}
+
+// hasIcon reports whether the toast paints a leading icon (image or vector).
+func (t *Toast) hasIcon() bool { return t.hasImage() || t.Icon != nil }
+
+// iconSlotW is the pixel width reserved left of the text for the icon (a square
+// the glyph-line tall plus a ToastPadX gap), or 0 when no icon is set.
+func (t *Toast) iconSlotW() int {
+	if !t.hasIcon() {
+		return 0
+	}
+	return t.glyphHeight() + ToastPadX
+}
+
+// actionsW is the total pixel width of the action-button zone: a leading
+// ToastPadX gap from the message text, then per button a 1-px divider plus the
+// button's own ToastPadX padding on both sides of its label. Returns 0 when
+// there are no actions. For a single button this equals the pre-multi-action
+// slot width (3*ToastPadX + 1 + label), keeping the legacy layout byte-exact.
+func (t *Toast) actionsW() int {
+	a := t.acts()
+	if len(a) == 0 {
+		return 0
+	}
+	w := ToastPadX // leading gap from the message text
+	for _, act := range a {
+		w += 1 + 2*ToastPadX + t.textWidth(act.Label)
+	}
+	return w
+}
+
+// linesW is the widest message row, in pixels.
+func (t *Toast) linesW() int {
+	w := 0
+	for _, ln := range t.lines() {
+		if lw := t.textWidth(ln); lw > w {
+			w = lw
+		}
+	}
+	return w
+}
+
+// contentH is the pill's inner text-block height: N line boxes plus the gaps
+// between them. For a single line this is exactly glyphHeight (no gap), so the
+// pill height reduces to the pre-multi-line value.
+func (t *Toast) contentH() int {
+	n := len(t.lines())
+	return n*t.glyphHeight() + (n-1)*ToastLineGap
+}
+
+// AnchorIn sizes the toast to its content (icon + text lines + action buttons,
+// each present) and positions it at corner of host, stacked at row index (0 =
+// the row nearest the docked edge). Top corners stack downward, bottom corners
+// upward, so a host can lay out a column of toasts by calling AnchorIn once per
+// visible toast with an increasing index.
+func (t *Toast) AnchorIn(host Rect, corner Corner, index int) {
+	w := t.iconSlotW() + t.linesW() + 2*ToastPadX
+	if t.actionsW() > 0 {
+		// The action zone's own trailing ToastPadX already plays the
+		// role of the pill's plain right-edge padding, so only the
+		// zone's extra width (gap + dividers + button padding + labels)
+		// is added on top of the base two-sided text padding.
+		w += t.actionsW() - ToastPadX
+	}
+	h := t.contentH() + 2*ToastPadY
 	offset := index * (h + ToastGap)
 	t.SetBounds(anchorCorner(host, w, h, corner, ToastMargin, offset))
 }
 
-// Draw paints the pill when Visible. Filled Kind-coloured panel with a
-// 1-px Border stroke; Text in the accent-inverted ink so it stays
-// legible against every Kind's face. When ActionLabel is set, a 1-px
-// Border divider + the action label (same accent-inverted ink) are
-// painted right-aligned inside the pill. Nothing drawn when hidden.
+// Draw paints the pill when Visible. Filled Kind-coloured panel with a 1-px
+// Border stroke; the icon (when set) at the left, then the message line(s) in
+// the accent-inverted ink so they stay legible against every Kind's face. Each
+// action button is a 1-px Border divider plus its label, laid out along the
+// right edge in Actions order. Nothing drawn when hidden.
 func (t *Toast) Draw(p painter.Painter, theme *Theme) {
 	if !t.Visible {
 		return
@@ -155,32 +261,59 @@ func (t *Toast) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	ink := accentInk(theme)
-	t.drawText(p, r.X+ToastPadX, r.Y+ToastPadY, t.Text, ink)
 
-	if t.ActionLabel != "" {
-		aw := t.actionSlotW()
-		ax := r.X + r.W - aw
-		fillRect(p, ax+ToastPadX, r.Y, 1, r.H, theme.Border)
-		t.drawText(p, ax+2*ToastPadX+1, r.Y+ToastPadY, t.ActionLabel, ink)
+	textX := r.X + ToastPadX
+	if t.hasIcon() {
+		sz := t.glyphHeight()
+		iconR := Rect{X: r.X + ToastPadX, Y: r.Y + (r.H-sz)/2, W: sz, H: sz}
+		if t.hasImage() {
+			img := Image{Pixels: t.Pixels, W: t.IW, H: t.IH, Scale: ScaleFit}
+			img.SetBounds(iconR)
+			img.Draw(p, theme)
+		} else {
+			t.Icon(p, iconR, ink)
+		}
+		textX += t.iconSlotW()
+	}
+
+	gh := t.glyphHeight()
+	for i, ln := range t.lines() {
+		ly := r.Y + ToastPadY + i*(gh+ToastLineGap)
+		t.drawText(p, textX, ly, ln, ink)
+	}
+
+	if aw := t.actionsW(); aw > 0 {
+		bx := r.X + r.W - aw + ToastPadX // skip the leading text-gap
+		by := r.Y + (r.H-gh)/2
+		for _, act := range t.acts() {
+			fillRect(p, bx, r.Y, 1, r.H, theme.Border)
+			t.drawText(p, bx+1+ToastPadX, by, act.Label, ink)
+			bx += 1 + 2*ToastPadX + t.textWidth(act.Label)
+		}
 	}
 }
 
-// OnEvent runs Action + hides the toast when a click lands inside the
-// action button; a click anywhere else in the pill (or when
-// ActionLabel is empty) is a no-op. ev.X is widget-local, matching
-// SplitButton's arrow-slot convention. Action is nil-checked, so an
-// action-less callback still dismisses the toast on click.
+// OnEvent runs the clicked button's Callback + hides the toast when a click
+// lands inside an action button; a click anywhere else in the pill (or when
+// there are no actions) is a no-op. ev.X is widget-local. The Callback is
+// nil-checked, so an action-less button still dismisses the toast on click.
 func (t *Toast) OnEvent(ev Event) {
-	if ev.Kind != EventClick || t.ActionLabel == "" {
+	a := t.acts()
+	if ev.Kind != EventClick || len(a) == 0 {
 		return
 	}
 	r := t.Bounds()
-	btnW := t.actionSlotW() - ToastPadX // slot minus the leading text-gap
-	if ev.X >= r.W-btnW {
-		if t.Action != nil {
-			t.Action()
+	bx := r.W - t.actionsW() + ToastPadX // local x of the first button
+	for _, act := range a {
+		seg := 1 + 2*ToastPadX + t.textWidth(act.Label)
+		if ev.X >= bx && ev.X < bx+seg {
+			if act.Callback != nil {
+				act.Callback()
+			}
+			t.Visible = false
+			return
 		}
-		t.Visible = false
+		bx += seg
 	}
 }
 

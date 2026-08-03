@@ -14,6 +14,11 @@ import "github.com/go-widgets/painter"
 // Calendar takes no time-source dep; the host must pass it the
 // current year/month/day. A "today" pill can be drawn by setting
 // Today (year/month/day); set to (0, 0, 0) to disable it.
+//
+// The header carries prev/next arrows ("<" / ">"): clicking them steps
+// the viewed month (wrapping the year at the Dec/Jan boundary) and fires
+// OnMonthChange with the new (year, month). PrevMonth / NextMonth expose
+// the same navigation programmatically.
 type Calendar struct {
 	Base
 	Year     int
@@ -23,6 +28,9 @@ type Calendar struct {
 	TodayM   int
 	TodayD   int
 	OnSelect func(y, m, d int)
+	// OnMonthChange fires after PrevMonth / NextMonth (or a header-arrow click)
+	// moves the view to a new (year, month). Nil-safe.
+	OnMonthChange func(y, m int)
 }
 
 // Sizing.
@@ -30,6 +38,9 @@ const (
 	CalendarHeaderH = 22
 	CalendarCellW   = 24
 	CalendarCellH   = 18
+	// CalendarNavW is the width of each header prev/next arrow hit-zone, at the
+	// left ("<") and right (">") ends of the header row.
+	CalendarNavW = 20
 )
 
 // NewCalendar builds a Calendar for the given (year, month, day).
@@ -53,6 +64,36 @@ func (c *Calendar) SetToday(y, m, d int) {
 	c.TodayY = y
 	c.TodayM = m
 	c.TodayD = d
+}
+
+// NextMonth advances the view one month, wrapping December to the next
+// January, re-clamps the selected day into the new month, and fires
+// OnMonthChange.
+func (c *Calendar) NextMonth() {
+	c.Month++
+	if c.Month > 12 {
+		c.Month = 1
+		c.Year++
+	}
+	c.clamp()
+	if c.OnMonthChange != nil {
+		c.OnMonthChange(c.Year, c.Month)
+	}
+}
+
+// PrevMonth steps the view one month back, wrapping January to the previous
+// December, re-clamps the selected day into the new month, and fires
+// OnMonthChange.
+func (c *Calendar) PrevMonth() {
+	c.Month--
+	if c.Month < 1 {
+		c.Month = 12
+		c.Year--
+	}
+	c.clamp()
+	if c.OnMonthChange != nil {
+		c.OnMonthChange(c.Year, c.Month)
+	}
 }
 
 // clamp keeps the month + day in legal ranges so a malformed payload
@@ -127,11 +168,13 @@ func WeekdayOfFirst(year, month int) int {
 func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	// Header: month / year.
+	// Header: month / year, centred, flanked by prev/next arrows.
 	hdr := monthName(c.Month) + " " + itoa(c.Year)
 	hx := r.X + (r.W-c.textWidth(hdr))/2
 	hy := r.Y + (CalendarHeaderH-c.glyphHeight())/2
 	c.drawText(p, hx, hy, hdr, theme.OnSurface)
+	c.drawText(p, r.X+(CalendarNavW-c.textWidth("<"))/2, hy, "<", theme.OnSurface)
+	c.drawText(p, r.X+r.W-CalendarNavW+(CalendarNavW-c.textWidth(">"))/2, hy, ">", theme.OnSurface)
 	// Weekday row.
 	weekdayY := r.Y + CalendarHeaderH
 	for i, label := range weekdayLabels {
@@ -168,9 +211,20 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 }
 
-// OnEvent dispatches a click on a day cell to OnSelect.
+// OnEvent dispatches a header-arrow click to Prev/NextMonth and a day-cell
+// click to OnSelect.
 func (c *Calendar) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
+		return
+	}
+	// Header row: prev/next month arrows.
+	if ev.Y < CalendarHeaderH {
+		w := c.Bounds().W
+		if ev.X < CalendarNavW {
+			c.PrevMonth()
+		} else if ev.X >= w-CalendarNavW {
+			c.NextMonth()
+		}
 		return
 	}
 	gridY := CalendarHeaderH + c.glyphHeight() + 4

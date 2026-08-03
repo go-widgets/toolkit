@@ -29,16 +29,65 @@ type PaletteCommand struct {
 // an outside-click anywhere); the panel is measured and centered inside that
 // frame, and incoming event coordinates are in that same surface frame.
 //
-// Selected always indexes into the FILTERED list (the indices returned by
-// filtered()), never into Commands directly, and is re-clamped after any
-// mutation to Query so it can never point past the end of a shrinking list.
+// The selection index always addresses the FILTERED list (the indices returned
+// by filtered()), never Commands directly, and is re-clamped after any mutation
+// to the query so it can never point past the end of a shrinking list.
+//
+// The query string and selection index are private so every mutation flows
+// through the clamping accessors (SetQuery / SetSelected / MoveSelection) or the
+// key-feed (HandleKey); this lets a host — e.g. the wasmdesk Spotlight — drive
+// and read the palette (Query, Selected, FilteredCommands) instead of
+// re-implementing the filter + navigation itself, while the invariant above
+// always holds.
 type CommandPalette struct {
 	Base
 	Commands  []PaletteCommand
-	Query     string
-	Selected  int
+	query     string
+	selected  int
 	Visible   bool
 	OnDismiss func()
+}
+
+// Query returns the current search text. Host-driver accessor: pair with
+// SetQuery to read/write the query without touching internal state.
+func (c *CommandPalette) Query() string { return c.query }
+
+// SetQuery replaces the search text and re-clamps the selection into the newly
+// filtered list, exactly as typing would. Use it to seed or override the query
+// from a host.
+func (c *CommandPalette) SetQuery(q string) {
+	c.query = q
+	c.clampSelected()
+}
+
+// Selected returns the current selection index within the FILTERED list.
+func (c *CommandPalette) Selected() int { return c.selected }
+
+// SetSelected sets the selection index (clamped into the filtered list).
+func (c *CommandPalette) SetSelected(i int) {
+	c.selected = i
+	c.clampSelected()
+}
+
+// MoveSelection shifts the selection by delta (negative = up, positive = down)
+// within the filtered list, clamped at both ends (no wraparound), matching the
+// ArrowUp/ArrowDown behaviour.
+func (c *CommandPalette) MoveSelection(delta int) {
+	c.selected += delta
+	c.clampSelected()
+}
+
+// FilteredCommands returns the commands currently visible under the query, in
+// display order — the exact list the result rows render. A host can read it to
+// mirror the palette's filtering (e.g. to show a live count) without duplicating
+// the match logic.
+func (c *CommandPalette) FilteredCommands() []PaletteCommand {
+	idx := c.filtered()
+	out := make([]PaletteCommand, len(idx))
+	for i, ci := range idx {
+		out[i] = c.Commands[ci]
+	}
+	return out
 }
 
 // PaletteMinW is the floor on the panel width so a palette of short labels
@@ -72,8 +121,8 @@ func NewCommandPalette(cmds []PaletteCommand) *CommandPalette {
 // reopens in a fresh state.
 func (c *CommandPalette) Open() {
 	c.Visible = true
-	c.Query = ""
-	c.Selected = 0
+	c.query = ""
+	c.selected = 0
 }
 
 // Dismiss hides the palette and resets its query + selection. It does NOT call
@@ -82,15 +131,15 @@ func (c *CommandPalette) Open() {
 // how ContextMenu keeps activation and cancellation on separate paths.
 func (c *CommandPalette) Dismiss() {
 	c.Visible = false
-	c.Query = ""
-	c.Selected = 0
+	c.query = ""
+	c.selected = 0
 }
 
 // filtered returns indices of Commands whose Label contains Query,
 // case-insensitively (substring match, not fuzzy/subsequence). An empty Query
 // matches everything.
 func (c *CommandPalette) filtered() []int {
-	q := strings.ToLower(c.Query)
+	q := strings.ToLower(c.query)
 	var out []int
 	for i, cmd := range c.Commands {
 		if q == "" || strings.Contains(strings.ToLower(cmd.Label), q) {
@@ -106,14 +155,14 @@ func (c *CommandPalette) filtered() []int {
 func (c *CommandPalette) clampSelected() {
 	n := len(c.filtered())
 	if n == 0 {
-		c.Selected = 0
+		c.selected = 0
 		return
 	}
-	if c.Selected < 0 {
-		c.Selected = 0
+	if c.selected < 0 {
+		c.selected = 0
 	}
-	if c.Selected >= n {
-		c.Selected = n - 1
+	if c.selected >= n {
+		c.selected = n - 1
 	}
 }
 
@@ -124,7 +173,7 @@ func (c *CommandPalette) clampSelected() {
 func (c *CommandPalette) panelBounds() Rect {
 	rows := c.filtered()
 	w := PaletteMinW
-	if lw := c.textWidth(c.Query+paletteCaret) + 2*PalettePadX; lw > w {
+	if lw := c.textWidth(c.query+paletteCaret) + 2*PalettePadX; lw > w {
 		w = lw
 	}
 	for _, i := range rows {
@@ -155,13 +204,13 @@ func (c *CommandPalette) Draw(p painter.Painter, theme *Theme) {
 	// Query row.
 	qy := pb.Y + palettePadY
 	textOff := (PaletteRowH - c.glyphHeight()) / 2
-	c.drawText(p, pb.X+PalettePadX, qy+textOff, c.Query+paletteCaret, theme.OnSurface)
+	c.drawText(p, pb.X+PalettePadX, qy+textOff, c.query+paletteCaret, theme.OnSurface)
 
 	// Result rows.
 	for row, i := range c.filtered() {
 		ry := pb.Y + palettePadY + (row+1)*PaletteRowH
 		ink := theme.OnSurface
-		if row == c.Selected {
+		if row == c.selected {
 			fillRect(p, pb.X+1, ry, pb.W-2, PaletteRowH, theme.Accent)
 			ink = theme.Background
 		}
@@ -179,16 +228,30 @@ func (c *CommandPalette) OnEvent(ev Event) {
 		return
 	}
 	switch ev.Kind {
+	case EventChar, EventKeyDown:
+		c.HandleKey(ev)
+	case EventClick:
+		c.onClick(ev)
+	}
+}
+
+// HandleKey feeds one keyboard event to the palette so a host can drive it
+// directly (the wasmdesk Spotlight forwards its key events here): a printable
+// EventChar extends the query + re-filters, Backspace trims it, ArrowUp/
+// ArrowDown move the selection, Enter activates the selected command, and
+// Escape dismisses (firing OnDismiss). Non-keyboard events are ignored. Unlike
+// OnEvent it does not gate on Visible, so a host managing its own visibility can
+// still feed keys; it is the exact keyboard path OnEvent routes through.
+func (c *CommandPalette) HandleKey(ev Event) {
+	switch ev.Kind {
 	case EventChar:
 		if ev.Code == "" {
 			return
 		}
-		c.Query += ev.Code
+		c.query += ev.Code
 		c.clampSelected()
 	case EventKeyDown:
 		c.onKey(ev.Code)
-	case EventClick:
-		c.onClick(ev)
 	}
 }
 
@@ -196,18 +259,18 @@ func (c *CommandPalette) OnEvent(ev Event) {
 func (c *CommandPalette) onKey(code string) {
 	switch code {
 	case "Backspace":
-		runes := []rune(c.Query)
+		runes := []rune(c.query)
 		if len(runes) > 0 {
-			c.Query = string(runes[:len(runes)-1])
+			c.query = string(runes[:len(runes)-1])
 			c.clampSelected()
 		}
 	case "ArrowDown":
-		if n := len(c.filtered()); c.Selected < n-1 {
-			c.Selected++
+		if n := len(c.filtered()); c.selected < n-1 {
+			c.selected++
 		}
 	case "ArrowUp":
-		if c.Selected > 0 {
-			c.Selected--
+		if c.selected > 0 {
+			c.selected--
 		}
 	case "Enter":
 		c.activate()
@@ -242,7 +305,7 @@ func (c *CommandPalette) onClick(ev Event) {
 	if row >= len(c.filtered()) {
 		return
 	}
-	c.Selected = row
+	c.selected = row
 	c.activate()
 }
 
@@ -251,8 +314,8 @@ func (c *CommandPalette) onClick(ev Event) {
 // Action: both simply dismiss without running anything.
 func (c *CommandPalette) activate() {
 	f := c.filtered()
-	if c.Selected < len(f) {
-		if action := c.Commands[f[c.Selected]].Action; action != nil {
+	if c.selected < len(f) {
+		if action := c.Commands[f[c.selected]].Action; action != nil {
 			action()
 		}
 	}
