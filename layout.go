@@ -564,18 +564,49 @@ type Frame struct {
 	// child. Defaults to 4 when left at zero; negative values are
 	// clamped to zero at layout time.
 	Padding int
-	child   Widget
+	// Title, when non-empty, draws a title bar across the top of the frame
+	// (inside the border), turning the plain group-box into a titled panel.
+	// The zero value "" keeps the original border-only box.
+	Title string
+	// Collapsible shows a ▼/▶ disclosure chevron in the title bar; a click
+	// on the bar toggles Collapsed (and fires OnCollapse). It forces a title
+	// bar even when Title is "".
+	Collapsible bool
+	// Collapsed hides the child, drawing only the title bar (Ext panel
+	// collapse). Meaningful only when a title bar is present.
+	Collapsed bool
+	// OnCollapse fires when a title-bar click toggles Collapsed; the new
+	// state is passed. Nil is safe.
+	OnCollapse func(collapsed bool)
+	child      Widget
 }
+
+// FrameTitleH is the pixel height of a Frame's optional title bar.
+const FrameTitleH = 22
 
 // NewFrame wraps child in a Frame. child may be nil (the Frame then
 // just draws its border + accepts no events).
 func NewFrame(child Widget) *Frame { return &Frame{child: child} }
 
+// headerH is the title-bar height: FrameTitleH when the frame is titled or
+// collapsible, else 0 (the plain border-only box, unchanged from before).
+func (f *Frame) headerH() int {
+	if f.Title != "" || f.Collapsible {
+		return FrameTitleH
+	}
+	return 0
+}
+
 // SetBounds positions the Frame + resizes its child to fit inside the
-// border + padding.
+// border, title bar (if any) + padding. A collapsed frame hides the child.
 func (f *Frame) SetBounds(r Rect) {
 	f.Base.SetBounds(r)
 	if f.child == nil {
+		return
+	}
+	hh := f.headerH()
+	if f.Collapsed && hh > 0 {
+		f.child.SetBounds(Rect{}) // hidden while collapsed
 		return
 	}
 	pad := f.Padding
@@ -585,28 +616,62 @@ func (f *Frame) SetBounds(r Rect) {
 	if pad < 0 {
 		pad = 0
 	}
-	// 1px border on each side plus pad on each side.
+	// 1px border on each side plus pad on each side; the title bar (hh)
+	// eats into the top only. With hh == 0 this is the original inset box.
 	inset := 1 + pad
+	top := r.Y + 1 + hh + pad
 	f.child.SetBounds(Rect{
 		X: r.X + inset,
-		Y: r.Y + inset,
+		Y: top,
 		W: r.W - 2*inset,
-		H: r.H - 2*inset,
+		H: r.Y + r.H - inset - top,
 	})
 }
 
-// Draw paints the 1-pixel border then the child (if any).
+// drawTitleBar paints the title-bar fill, the optional collapse chevron and
+// the title text.
+func (f *Frame) drawTitleBar(p painter.Painter, theme *Theme, r Rect, hh int) {
+	fillRect(p, r.X+1, r.Y+1, r.W-2, hh, theme.SurfaceAlt)
+	tx := r.X + 6
+	if f.Collapsible {
+		drawDisclosureChevron(p, r.X+6, r.Y+1+hh/2, !f.Collapsed, theme.OnSurface)
+		tx = r.X + 16
+	}
+	ty := r.Y + 1 + (hh-f.glyphHeight())/2
+	f.drawText(p, tx, ty, f.Title, theme.OnSurface)
+}
+
+// Draw paints the 1-pixel border, the title bar (if any) then the child. A
+// collapsed frame draws only the title bar + a border around it.
 func (f *Frame) Draw(p painter.Painter, theme *Theme) {
 	r := f.Bounds()
+	hh := f.headerH()
+	if f.Collapsed && hh > 0 {
+		strokeRect(p, r.X, r.Y, r.W, hh+2, theme.Border)
+		f.drawTitleBar(p, theme, r, hh)
+		return
+	}
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	if hh > 0 {
+		f.drawTitleBar(p, theme, r, hh)
+	}
 	if f.child != nil {
 		f.child.Draw(p, theme)
 	}
 }
 
-// OnEvent forwards to the child if the event lands inside its Bounds.
+// OnEvent toggles Collapsed on a title-bar click (when Collapsible), else
+// forwards to the child if the event lands inside its Bounds.
 func (f *Frame) OnEvent(ev Event) {
-	if f.child == nil {
+	hh := f.headerH()
+	if f.Collapsible && ev.Kind == EventClick && ev.Y >= 0 && ev.Y <= hh {
+		f.Collapsed = !f.Collapsed
+		if f.OnCollapse != nil {
+			f.OnCollapse(f.Collapsed)
+		}
+		return
+	}
+	if f.child == nil || (f.Collapsed && hh > 0) {
 		return
 	}
 	pr := f.Bounds()
