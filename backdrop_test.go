@@ -112,3 +112,66 @@ func TestBackdropDrawEmptyBounds(t *testing.T) {
 		}
 	}
 }
+
+func TestBackdropHitTestTransparentByDefault(t *testing.T) {
+	// A default (Interactive==false) full-cover Backdrop is event-transparent:
+	// HitTest returns false even for a point squarely inside its bounds, so a
+	// container routing by HitTest skips it and the click reaches the widget on
+	// top.
+	b := NewBackdrop(painter.RGB(0x11, 0x13, 0x1a), painter.RGB(0x17, 0x1a, 0x24), 8)
+	b.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 30})
+	if b.HitTest(20, 15) {
+		t.Fatalf("default Backdrop.HitTest(20,15) = true, want false (event-transparent)")
+	}
+	if b.HitTest(0, 0) {
+		t.Fatalf("default Backdrop.HitTest(0,0) = true, want false (event-transparent)")
+	}
+}
+
+func TestBackdropHitTestInteractive(t *testing.T) {
+	// With Interactive set, the Backdrop hit-tests against its Bounds like a
+	// normal widget: true inside, false outside.
+	b := NewBackdrop(painter.RGBA{}, painter.RGBA{}, 0)
+	b.Interactive = true
+	b.SetBounds(Rect{X: 5, Y: 5, W: 20, H: 20})
+	if !b.HitTest(10, 10) {
+		t.Errorf("interactive Backdrop.HitTest(10,10) = false, want true (inside bounds)")
+	}
+	if b.HitTest(0, 0) {
+		t.Errorf("interactive Backdrop.HitTest(0,0) = true, want false (outside bounds)")
+	}
+}
+
+func TestBackdropHitTestRoutesThroughOverlay(t *testing.T) {
+	// End-to-end: a default Backdrop as an Overlay layer under a Button lets a
+	// click reach the button; an Interactive backdrop swallows it. The Overlay
+	// routes to the topmost layer whose HitTest covers the point.
+	const w, h = 40, 20
+	clicked := false
+	btn := NewButton("ok", func() { clicked = true })
+
+	// Backdrop is the bottom layer, button the top layer; both full-cover.
+	back := NewBackdrop(painter.RGBA{}, painter.RGBA{}, 0)
+	ov := &Overlay{Layers: []Widget{back, btn}}
+	ov.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	back.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	btn.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	ov.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
+	if !clicked {
+		t.Fatalf("click did not reach the button over a transparent Backdrop")
+	}
+
+	// Now make the backdrop interactive: as the layer above the button it is the
+	// topmost hit, so it consumes the click and the button never fires.
+	clicked = false
+	scrim := NewBackdrop(painter.RGBA{}, painter.RGBA{}, 0)
+	scrim.Interactive = true
+	ov2 := &Overlay{Layers: []Widget{btn, scrim}}
+	ov2.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	scrim.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	btn.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	ov2.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
+	if clicked {
+		t.Fatalf("interactive Backdrop scrim did not swallow the click")
+	}
+}

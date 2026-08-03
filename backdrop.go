@@ -22,6 +22,16 @@ import "github.com/go-widgets/painter"
 // it renders identically on both the pixel and cell back-ends (a CellPainter
 // has no sub-cell stroke); the lines start at the top-left of Bounds and repeat
 // every Step, matching a host that draws a world-aligned grid from the origin.
+//
+// A Backdrop is event-transparent by default. It is typically the first,
+// full-cover child of a scene, over which a host composites the interactive
+// widgets. Because a container routes an event to the first child whose
+// HitTest covers the point (see Overlay), a full-cover Backdrop that reported
+// hits would intercept every click meant for a widget drawn on top of it. So
+// its HitTest returns false by default and pointer events pass THROUGH to the
+// siblings/content behind it — the same "decorative, non-interactive" idiom as
+// Label and Scrollbar. Set Interactive to opt back in (e.g. a modal scrim that
+// deliberately swallows clicks aimed at the content beneath it).
 type Backdrop struct {
 	Base
 	// Fill is the solid background colour. The zero value uses theme.Background.
@@ -30,6 +40,12 @@ type Backdrop struct {
 	Grid painter.RGBA
 	// Step is the grid spacing in painter units. Step <= 0 draws no grid.
 	Step int
+	// Interactive makes the Backdrop catch pointer events. The zero value
+	// (false) is event-transparent: HitTest returns false so clicks pass
+	// through to whatever is composited over the backdrop — the least-
+	// surprising default for a decorative ground. Set it true for a backdrop
+	// that should consume clicks (a modal scrim shielding the content beneath).
+	Interactive bool
 }
 
 // NewBackdrop builds a Backdrop with a solid fill and a grid every step units
@@ -37,6 +53,18 @@ type Backdrop struct {
 // theme's Background (fill) or Border (grid) at draw time.
 func NewBackdrop(fill, grid painter.RGBA, step int) *Backdrop {
 	return &Backdrop{Fill: fill, Grid: grid, Step: step}
+}
+
+// HitTest reports whether the Backdrop should receive a pointer event at
+// (px, py). It returns false unless Interactive is set, so by default a
+// full-cover backdrop lets clicks pass through to the widgets composited over
+// it (the Label/Scrollbar pass-through idiom). When Interactive is set it
+// behaves like any other widget, hit-testing against its Bounds.
+func (b *Backdrop) HitTest(px, py int) bool {
+	if !b.Interactive {
+		return false
+	}
+	return b.Bounds().Contains(px, py)
 }
 
 // Draw fills the bounds and overlays the grid. An empty rectangle paints
