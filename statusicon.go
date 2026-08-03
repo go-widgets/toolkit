@@ -151,6 +151,11 @@ type StatusArea struct {
 	Gap int
 	// IconSize is each cell's square dimension; zero selects StatusIconSize.
 	IconSize int
+	// Background, when its alpha is non-zero, is painted as a solid plate behind
+	// the whole icon row (the full area Bounds) before the icons draw — so a host
+	// gets a tray bar without drawing the plate itself. The zero value (A==0)
+	// keeps the original fully-transparent behaviour: only the icons paint.
+	Background RGBA
 }
 
 // NewStatusArea builds a StatusArea over the given icons (any number, including
@@ -195,8 +200,13 @@ func (a *StatusArea) SetBounds(r Rect) {
 	}
 }
 
-// Draw paints every icon in insertion order.
+// Draw paints the optional Background plate behind the row (when its alpha is
+// non-zero), then every icon in insertion order.
 func (a *StatusArea) Draw(p painter.Painter, theme *Theme) {
+	if a.Background.A != 0 {
+		r := a.Bounds()
+		fillRect(p, r.X, r.Y, r.W, r.H, a.Background)
+	}
 	for _, ic := range a.Icons {
 		ic.Draw(p, theme)
 	}

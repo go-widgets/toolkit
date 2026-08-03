@@ -210,3 +210,32 @@ func TestStatusAreaEmptyRoutingNoop(t *testing.T) {
 	a.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 20})
 	a.OnEvent(Event{Kind: EventClick, X: 5, Y: 5}) // must not panic
 }
+
+// TestStatusAreaBackgroundPlate covers the optional bar plate: a zero-alpha
+// Background leaves a corner pixel at the sentinel (transparent, icons only),
+// while a non-zero Background fills the whole area behind the icons.
+func TestStatusAreaBackgroundPlate(t *testing.T) {
+	const w, h = 60, 20
+	plate := RGB(0x30, 0x30, 0x40)
+
+	// (a) Default (zero Background): the top-left corner — clear of any icon
+	// glyph — keeps the makeSurface sentinel, proving nothing painted there.
+	off := NewStatusArea(NewStatusIcon(DrawIconSettings))
+	off.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	offBuf := makeSurface(w, h)
+	off.Draw(newP(offBuf, w), DefaultLight())
+	sentinel := RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}
+	if got := pixelAt(offBuf, w, w-1, h-1); got != sentinel {
+		t.Fatalf("transparent StatusArea painted the far corner: %+v", got)
+	}
+
+	// (b) With a Background, that same corner is the plate colour.
+	on := NewStatusArea(NewStatusIcon(DrawIconSettings))
+	on.Background = plate
+	on.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	onBuf := makeSurface(w, h)
+	on.Draw(newP(onBuf, w), DefaultLight())
+	if got := pixelAt(onBuf, w, w-1, h-1); got != plate {
+		t.Fatalf("plate corner = %+v, want %+v", got, plate)
+	}
+}

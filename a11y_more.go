@@ -250,7 +250,7 @@ func (c *ContextMenu) A11y() A11yInfo {
 }
 
 // A11y reports the CommandPalette as a dialog carrying its typed query.
-func (c *CommandPalette) A11y() A11yInfo { return A11yInfo{Role: RoleDialog, Value: c.Query} }
+func (c *CommandPalette) A11y() A11yInfo { return A11yInfo{Role: RoleDialog, Value: c.query} }
 
 // --- Feedback / status ---------------------------------------------------
 

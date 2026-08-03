@@ -220,7 +220,7 @@ func TestA11yContextMenuAndCommandPalette(t *testing.T) {
 	}
 
 	cp := NewCommandPalette([]PaletteCommand{{Label: "Open File"}})
-	cp.Query = "open"
+	cp.SetQuery("open")
 	if got := cp.A11y(); got != (A11yInfo{Role: RoleDialog, Value: "open"}) {
 		t.Errorf("CommandPalette A11y() = %+v", got)
 	}

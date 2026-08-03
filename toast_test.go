@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
 
 // --- Constructor ---------------------------------------------------------
 
@@ -261,17 +265,22 @@ func TestToastAnchorInWidthGrowsWithAction(t *testing.T) {
 	}
 }
 
-// TestToastActionSlotWEmpty covers actionSlotW's empty-label branch directly:
-// every in-widget caller guards on ActionLabel != "" before invoking it, so
-// the return-0 path is only reachable by a direct call — pin it so the helper
-// keeps its "0 when no action" contract (and the branch stays covered).
-func TestToastActionSlotWEmpty(t *testing.T) {
-	if got := (&Toast{}).actionSlotW(); got != 0 {
-		t.Fatalf("actionSlotW with empty ActionLabel = %d, want 0", got)
+// TestToastActionsWEmpty covers actionsW's no-action branch directly: a plain
+// toast (no ActionLabel, no Actions) has a zero action zone, while a legacy
+// single-ActionLabel toast has a positive one. Pins the "0 when no action"
+// contract and keeps the branch covered.
+func TestToastActionsWEmpty(t *testing.T) {
+	if got := (&Toast{}).actionsW(); got != 0 {
+		t.Fatalf("actionsW with no action = %d, want 0", got)
 	}
 	withLabel := &Toast{ActionLabel: "Undo"}
-	if got := withLabel.actionSlotW(); got <= 0 {
-		t.Fatalf("actionSlotW with a label = %d, want > 0", got)
+	if got := withLabel.actionsW(); got <= 0 {
+		t.Fatalf("actionsW with a label = %d, want > 0", got)
+	}
+	// The legacy single-ActionLabel width must equal the pre-multi-action slot
+	// (3*ToastPadX + 1 + textWidth("Undo")), proving byte-exact back-compat.
+	if got, want := withLabel.actionsW(), 3*ToastPadX+1+withLabel.textWidth("Undo"); got != want {
+		t.Fatalf("legacy single-action width = %d, want %d", got, want)
 	}
 }
 
@@ -451,5 +460,244 @@ func TestToastOnEventNoopWhenNoActionLabel(t *testing.T) {
 
 	if !tt.Visible {
 		t.Fatal("click on a no-action toast must not hide it")
+	}
+}
+
+// --- Icon: vector glyph painted left of the text -------------------------
+
+// TestToastVectorIconShiftsTextAndPaints proves a vector Icon reserves a slot
+// on the left (widening the pill + pushing the text right) and is actually
+// invoked during Draw.
+func TestToastVectorIconShiftsTextAndPaints(t *testing.T) {
+	theme := DefaultLight()
+	host := Rect{X: 0, Y: 0, W: 400, H: 300}
+
+	plain := NewToast("Hi", ToastInfo)
+	plain.AnchorIn(host, TopLeft, 0)
+
+	sentinel := RGB(0x11, 0x22, 0x33)
+	iconCalls := 0
+	withIcon := NewToast("Hi", ToastInfo)
+	withIcon.Icon = func(p painter.Painter, r Rect, _ RGBA) {
+		iconCalls++
+		fillRect(p, r.X, r.Y, r.W, r.H, sentinel)
+	}
+	withIcon.AnchorIn(host, TopLeft, 0)
+
+	// The icon slot = glyphHeight + ToastPadX wider than the plain pill.
+	if got, want := withIcon.Bounds().W-plain.Bounds().W, withIcon.glyphHeight()+ToastPadX; got != want {
+		t.Fatalf("icon slot width = %d, want %d", got, want)
+	}
+	if withIcon.iconSlotW() != withIcon.glyphHeight()+ToastPadX {
+		t.Fatalf("iconSlotW() = %d", withIcon.iconSlotW())
+	}
+
+	withIcon.SetBounds(Rect{X: 0, Y: 0, W: withIcon.Bounds().W, H: withIcon.Bounds().H})
+	withIcon.Visible = true
+	buf := makeSurface(withIcon.Bounds().W, withIcon.Bounds().H)
+	withIcon.Draw(newP(buf, withIcon.Bounds().W), theme)
+	if iconCalls != 1 {
+		t.Fatalf("Icon func called %d times, want 1", iconCalls)
+	}
+	// A sentinel-coloured pixel proves the icon painted inside its slot.
+	found := false
+	for y := 0; y < withIcon.Bounds().H && !found; y++ {
+		for x := 0; x < withIcon.Bounds().W; x++ {
+			if pixelAt(buf, withIcon.Bounds().W, x, y) == sentinel {
+				found = true
+				break
+			}
+		}
+	}
+	if !found {
+		t.Fatal("no sentinel icon pixel painted")
+	}
+}
+
+// TestToastImageIconBeatsVector proves a valid Pixels image is drawn (the
+// hasImage path) and takes precedence over a vector Icon.
+func TestToastImageIconBeatsVector(t *testing.T) {
+	theme := DefaultLight()
+	// 2x2 solid magenta image.
+	px := make([]byte, 2*2*4)
+	for i := 0; i+3 < len(px); i += 4 {
+		px[i], px[i+1], px[i+2], px[i+3] = 0xFF, 0x00, 0xFF, 0xFF
+	}
+	iconCalled := false
+	tt := NewToast("Hi", ToastInfo)
+	tt.Pixels, tt.IW, tt.IH = px, 2, 2
+	tt.Icon = func(painter.Painter, Rect, RGBA) { iconCalled = true }
+	if !tt.hasImage() || !tt.hasIcon() {
+		t.Fatal("hasImage/hasIcon should be true for a valid image")
+	}
+	tt.Visible = true
+	tt.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
+	buf := makeSurface(60, 20)
+	tt.Draw(newP(buf, 60), theme)
+	if iconCalled {
+		t.Fatal("a valid image must suppress the vector Icon")
+	}
+}
+
+// TestToastInvalidImageFallsToVector proves a too-short Pixels buffer is
+// ignored so the vector Icon draws instead.
+func TestToastInvalidImageFallsToVector(t *testing.T) {
+	tt := NewToast("Hi", ToastInfo)
+	tt.Pixels, tt.IW, tt.IH = []byte{1, 2, 3}, 2, 2 // too short
+	if tt.hasImage() {
+		t.Fatal("short buffer should not count as an image")
+	}
+	called := false
+	tt.Icon = func(painter.Painter, Rect, RGBA) { called = true }
+	tt.Visible = true
+	tt.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
+	tt.Draw(newP(make([]byte, 60*20*4), 60), DefaultLight())
+	if !called {
+		t.Fatal("invalid image should fall back to the vector Icon")
+	}
+}
+
+// --- Multi-line: distinct title + body rows ------------------------------
+
+// TestToastMultiLineGrowsHeightAndPaintsBoth checks Lines stacks each row,
+// growing the pill height, and that the widest row drives the width.
+func TestToastMultiLineGrowsHeightAndPaintsBoth(t *testing.T) {
+	host := Rect{X: 0, Y: 0, W: 400, H: 300}
+	single := NewToast("Title", ToastInfo)
+	single.AnchorIn(host, TopLeft, 0)
+
+	multi := NewToast("", ToastInfo)
+	multi.Lines = []string{"Title", "A longer body line"}
+	multi.AnchorIn(host, TopLeft, 0)
+
+	if len(multi.lines()) != 2 {
+		t.Fatalf("lines() = %d, want 2", len(multi.lines()))
+	}
+	wantH := multi.contentH() + 2*ToastPadY
+	if multi.Bounds().H != wantH {
+		t.Fatalf("multi-line H = %d, want %d", multi.Bounds().H, wantH)
+	}
+	if multi.Bounds().H <= single.Bounds().H {
+		t.Fatalf("multi-line pill %d should be taller than single %d", multi.Bounds().H, single.Bounds().H)
+	}
+	// Width tracks the widest line, not the empty Text.
+	if multi.Bounds().W != multi.linesW()+2*ToastPadX {
+		t.Fatalf("multi-line W = %d, want %d", multi.Bounds().W, multi.linesW()+2*ToastPadX)
+	}
+
+	multi.SetBounds(Rect{X: 0, Y: 0, W: multi.Bounds().W, H: multi.Bounds().H})
+	multi.Visible = true
+	theme := DefaultLight()
+	ink := accentInk(theme)
+	buf := makeSurface(multi.Bounds().W, multi.Bounds().H)
+	multi.Draw(newP(buf, multi.Bounds().W), theme)
+	// Count distinct rows carrying ink: expect >= 2 text bands.
+	rows := map[int]bool{}
+	for y := 0; y < multi.Bounds().H; y++ {
+		for x := 0; x < multi.Bounds().W; x++ {
+			if pixelAt(buf, multi.Bounds().W, x, y) == ink {
+				rows[y] = true
+				break
+			}
+		}
+	}
+	// Two text lines separated by a gap must occupy two non-contiguous bands.
+	bands, prev := 0, -2
+	ys := make([]int, 0, len(rows))
+	for y := range rows {
+		ys = append(ys, y)
+	}
+	sortInts(ys)
+	for _, y := range ys {
+		if y != prev+1 {
+			bands++
+		}
+		prev = y
+	}
+	if bands < 2 {
+		t.Fatalf("multi-line toast painted %d text bands, want >= 2", bands)
+	}
+}
+
+func sortInts(a []int) {
+	for i := 1; i < len(a); i++ {
+		for j := i; j > 0 && a[j-1] > a[j]; j-- {
+			a[j-1], a[j] = a[j], a[j-1]
+		}
+	}
+}
+
+// --- Multi-action: several buttons ---------------------------------------
+
+// TestToastMultiActionLayoutAndClicks lays out two action buttons and asserts
+// each one's click runs its own callback (and only that one), then hides.
+func TestToastMultiActionLayoutAndClicks(t *testing.T) {
+	host := Rect{X: 0, Y: 0, W: 400, H: 300}
+	var log []string
+	tt := NewToast("Deleted", ToastInfo)
+	tt.Actions = []ToastAction{
+		{Label: "Undo", Callback: func() { log = append(log, "undo") }},
+		{Label: "Dismiss", Callback: func() { log = append(log, "dismiss") }},
+	}
+	tt.AnchorIn(host, TopRight, 0)
+	if len(tt.acts()) != 2 {
+		t.Fatalf("acts() = %d, want 2", len(tt.acts()))
+	}
+
+	// Width folds in the whole action zone.
+	wantW := tt.linesW() + 2*ToastPadX + tt.actionsW() - ToastPadX
+	if tt.Bounds().W != wantW {
+		t.Fatalf("multi-action W = %d, want %d", tt.Bounds().W, wantW)
+	}
+
+	tt.SetBounds(Rect{X: 0, Y: 0, W: tt.Bounds().W, H: tt.Bounds().H})
+	tt.Visible = true
+	theme := DefaultLight()
+	buf := makeSurface(tt.Bounds().W, tt.Bounds().H)
+	tt.Draw(newP(buf, tt.Bounds().W), theme)
+	// Two dividers -> at least two Border columns in the action zone.
+	dividers := 0
+	zoneStart := tt.Bounds().W - tt.actionsW() + ToastPadX
+	for x := zoneStart; x < tt.Bounds().W; x++ {
+		if pixelAt(buf, tt.Bounds().W, x, tt.Bounds().H/2) == theme.Border {
+			dividers++
+		}
+	}
+	if dividers < 2 {
+		t.Fatalf("multi-action drew %d divider columns, want >= 2", dividers)
+	}
+
+	// Click the first button (just past its divider).
+	bx := tt.Bounds().W - tt.actionsW() + ToastPadX
+	tt.OnEvent(Event{Kind: EventClick, X: bx + 2, Y: tt.Bounds().H / 2})
+	if len(log) != 1 || log[0] != "undo" {
+		t.Fatalf("first-button click log = %v, want [undo]", log)
+	}
+	if tt.Visible {
+		t.Fatal("action click should hide the toast")
+	}
+
+	// Reset and click the second button.
+	tt.Visible = true
+	log = nil
+	seg0 := 1 + 2*ToastPadX + tt.textWidth("Undo")
+	tt.OnEvent(Event{Kind: EventClick, X: bx + seg0 + 2, Y: tt.Bounds().H / 2})
+	if len(log) != 1 || log[0] != "dismiss" {
+		t.Fatalf("second-button click log = %v, want [dismiss]", log)
+	}
+}
+
+// TestToastMultiActionClickOutsideNoOp clicks left of the first button and in
+// the message zone: no callback runs, the toast stays visible.
+func TestToastMultiActionClickOutsideNoOp(t *testing.T) {
+	fired := false
+	tt := NewToast("Msg", ToastInfo)
+	tt.Actions = []ToastAction{{Label: "Undo", Callback: func() { fired = true }}}
+	tt.AnchorIn(Rect{X: 0, Y: 0, W: 400, H: 300}, TopRight, 0)
+	tt.SetBounds(Rect{X: 0, Y: 0, W: tt.Bounds().W, H: tt.Bounds().H})
+	tt.Visible = true
+	tt.OnEvent(Event{Kind: EventClick, X: 0, Y: tt.Bounds().H / 2}) // message zone
+	if fired || !tt.Visible {
+		t.Fatal("click outside the action zone must be a no-op")
 	}
 }

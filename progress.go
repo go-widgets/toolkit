@@ -66,14 +66,37 @@ func (pb *ProgressBar) Draw(p painter.Painter, theme *Theme) {
 }
 
 // LevelBar is the discrete cousin of ProgressBar: Max equal cells,
-// the first Value cells filled in Accent + the rest in SurfaceAlt.
-// Useful for battery / signal-strength / VU-meter style indicators.
-// Orientation Horizontal (default) fills left→right; Vertical fills
-// bottom→top.
+// the first Value cells filled + the rest in SurfaceAlt. Useful for
+// battery / signal-strength / VU-meter style indicators. Orientation
+// Horizontal (default) fills left→right; Vertical fills bottom→top.
+//
+// Two optional refinements layer on without changing the default look
+// (no Label, no Thresholds renders exactly as before, filling in Accent):
+//
+//   - Label: a caption centred over the bar (horizontal orientation only,
+//     where it fits), in Theme.OnSurface ink — e.g. "72%".
+//   - Thresholds: value bands that recolour the filled cells (e.g. red when
+//     low, amber mid, green high). The band whose Min is the greatest value
+//     not exceeding Value wins; with no matching band (or none configured)
+//     the fill stays Theme.Accent.
 type LevelBar struct {
 	Base
 	Value, Max  int
 	Orientation Orientation
+	// Label, when non-empty, is centred over the bar (horizontal only) in
+	// Theme.OnSurface ink. The zero value draws no caption (the original look).
+	Label string
+	// Thresholds recolour the filled cells by value band. Empty (the default)
+	// keeps the Accent fill, so an unset LevelBar is byte-identical to before.
+	Thresholds []LevelThreshold
+}
+
+// LevelThreshold recolours a LevelBar's fill once Value reaches Min. Several
+// thresholds partition the range into coloured bands (e.g. {0,red}, {4,amber},
+// {8,green}); the band with the greatest Min not exceeding Value is applied.
+type LevelThreshold struct {
+	Min   int
+	Color RGBA
 }
 
 // NewLevelBar builds a LevelBar with the given Max (Value defaults
@@ -85,13 +108,30 @@ func NewLevelBar(max int) *LevelBar {
 	return &LevelBar{Max: max}
 }
 
-// Draw paints Max cells with a 1-px gap; the first Value cells use
-// Theme.Accent, the rest Theme.SurfaceAlt.
+// fillColor resolves the colour of the filled cells: the Color of the highest
+// Threshold whose Min does not exceed Value, or Theme.Accent when no threshold
+// matches (or none are configured) — preserving the original default fill.
+func (l *LevelBar) fillColor(theme *Theme) RGBA {
+	fill := theme.Accent
+	chosen := false
+	bestMin := 0
+	for _, th := range l.Thresholds {
+		if l.Value >= th.Min && (!chosen || th.Min >= bestMin) {
+			fill, bestMin, chosen = th.Color, th.Min, true
+		}
+	}
+	return fill
+}
+
+// Draw paints Max cells with a 1-px gap; the first Value cells use the
+// threshold fill (Theme.Accent by default), the rest Theme.SurfaceAlt. For the
+// horizontal orientation an optional Label is centred over the bar.
 func (l *LevelBar) Draw(p painter.Painter, theme *Theme) {
 	r := l.Bounds()
 	if l.Max < 1 {
 		return
 	}
+	lit := l.fillColor(theme)
 	if l.Orientation == Vertical {
 		cellH := (r.H - (l.Max - 1)) / l.Max
 		if cellH < 1 {
@@ -105,7 +145,7 @@ func (l *LevelBar) Draw(p painter.Painter, theme *Theme) {
 			}
 			fill := theme.SurfaceAlt
 			if i < l.Value {
-				fill = theme.Accent
+				fill = lit
 			}
 			fillRect(p, r.X, y, r.W, cellH, fill)
 		}
@@ -123,9 +163,14 @@ func (l *LevelBar) Draw(p painter.Painter, theme *Theme) {
 		}
 		fill := theme.SurfaceAlt
 		if i < l.Value {
-			fill = theme.Accent
+			fill = lit
 		}
 		fillRect(p, x, r.Y, cellW, r.H, fill)
 	}
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	if l.Label != "" {
+		tx := r.X + (r.W-l.textWidth(l.Label))/2
+		ty := r.Y + (r.H-l.glyphHeight())/2
+		l.drawText(p, tx, ty, l.Label, theme.OnSurface)
+	}
 }
