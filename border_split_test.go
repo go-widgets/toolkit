@@ -104,9 +104,15 @@ func TestBorderSplitDraw(t *testing.T) {
 	b.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 20})
 	buf := makeSurface(40, 20)
 	b.Draw(newP(buf, 40), DefaultLight())
-	// The handle column (X 10..16) should have painted the SurfaceAlt seam.
+	// The handle column (X 10..16) is painted with the distinct splitter tone;
+	// check an interior fill point (12,3) away from the centre grip + edges.
 	th := DefaultLight()
-	if px := pixelAt(buf, 40, 12, 10); px != th.SurfaceAlt {
-		t.Fatalf("handle not painted: %+v want %+v", px, th.SurfaceAlt)
+	want := blendRGBA(th.SurfaceAlt, th.Border, 0.45)
+	if px := pixelAt(buf, 40, 12, 3); px != want {
+		t.Fatalf("handle fill = %+v want splitter tone %+v", px, want)
+	}
+	// Left long edge is the Border delineator.
+	if px := pixelAt(buf, 40, 10, 3); px != th.Border {
+		t.Fatalf("handle left edge = %+v want Border", px)
 	}
 }

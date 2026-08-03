@@ -316,9 +316,15 @@ func TestPanedDrawHorizontal(t *testing.T) {
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 30})
 	buf := makeSurface(w, h)
 	p.Draw(newP(buf, w), theme)
-	// Handle at x=30..36 painted in SurfaceAlt.
-	if pixelAt(buf, w, 32, 15) != theme.SurfaceAlt {
-		t.Fatalf("horizontal handle = %+v", pixelAt(buf, w, 32, 15))
+	// Handle at x=30..36 painted with the distinct splitter tone (interior
+	// fill point (32,4), away from the centre grip + the Border edges).
+	want := blendRGBA(theme.SurfaceAlt, theme.Border, 0.45)
+	if got := pixelAt(buf, w, 32, 4); got != want {
+		t.Fatalf("horizontal handle fill = %+v, want splitter tone %+v", got, want)
+	}
+	// Left long edge is the Border delineator.
+	if got := pixelAt(buf, w, 30, 4); got != theme.Border {
+		t.Fatalf("horizontal handle left edge = %+v, want Border", got)
 	}
 }
 
@@ -329,9 +335,19 @@ func TestPanedDrawVertical(t *testing.T) {
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 60})
 	buf := makeSurface(w, h)
 	p.Draw(newP(buf, w), theme)
-	// Handle at y=30..36 painted in SurfaceAlt.
-	if pixelAt(buf, w, 30, 32) != theme.SurfaceAlt {
-		t.Fatalf("vertical handle = %+v", pixelAt(buf, w, 30, 32))
+	// Handle at y=30..36 painted with the distinct splitter tone (interior
+	// fill point (10,32), away from the centre grip + the Border edges).
+	want := blendRGBA(theme.SurfaceAlt, theme.Border, 0.45)
+	if got := pixelAt(buf, w, 10, 32); got != want {
+		t.Fatalf("vertical handle fill = %+v, want splitter tone %+v", got, want)
+	}
+	// Top long edge is the Border delineator.
+	if got := pixelAt(buf, w, 10, 30); got != theme.Border {
+		t.Fatalf("vertical handle top edge = %+v, want Border", got)
+	}
+	// Centre grip dot is OnSurface.
+	if got := pixelAt(buf, w, 30, 33); got != theme.OnSurface {
+		t.Fatalf("vertical handle centre grip = %+v, want OnSurface", got)
 	}
 }
 
