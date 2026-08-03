@@ -353,6 +353,56 @@ func (t *TreeView) drawScrollbar(p painter.Painter, theme *Theme, r Rect, wr, to
 	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
 }
 
+// NodeAt returns the TreeNode at widget-local (x, y) in the current
+// visible-flattened, scrolled layout, or nil for empty space below the last
+// row. It does not mutate ScrollRow (unlike OnEvent). Exposed so a host can
+// hit-test a right-click and build a context menu for that node.
+func (t *TreeView) NodeAt(x, y int) *TreeNode {
+	if y < 0 {
+		return nil
+	}
+	t.flatten()
+	rh := t.rowHeight()
+	total := len(t.rows)
+	wr := t.windowRows()
+	localIdx := y / rh
+	if wr > 0 && total > wr && localIdx >= wr {
+		return nil
+	}
+	idx := localIdx + t.clampScrollRow(t.ScrollRow, total, wr)
+	if idx < 0 || idx >= total {
+		return nil
+	}
+	return t.rows[idx].node
+}
+
+// Remove detaches node n from the tree, removing it from its parent's Children.
+// It returns true when n was found and removed; false for a nil node, an empty
+// tree, or an attempt to remove the Root (which has no parent). Exposed so a
+// host can implement a "delete node" menu action without threading parent
+// pointers (TreeNode has none).
+func (t *TreeView) Remove(n *TreeNode) bool {
+	if n == nil || t.Root == nil || n == t.Root {
+		return false
+	}
+	return removeTreeChild(t.Root, n)
+}
+
+// removeTreeChild removes target from parent's subtree (depth-first), returning
+// whether it was found.
+func removeTreeChild(parent, target *TreeNode) bool {
+	for i, c := range parent.Children {
+		if c == target {
+			parent.Children = append(parent.Children[:i], parent.Children[i+1:]...)
+			return true
+		}
+		if removeTreeChild(c, target) {
+			return true
+		}
+	}
+	return false
+}
+
 // OnEvent: a click on the chevron toggles Expanded; a click anywhere
 // else on the row selects the node + fires OnActivate. Y is mapped
 // through ScrollRow back to the flattened index it targets.
