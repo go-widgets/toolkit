@@ -141,7 +141,8 @@ func (b *Border) Draw(p painter.Painter, theme *Theme) {
 		w.Draw(p, theme)
 	}
 	for _, h := range b.handles {
-		fillRect(p, h.rect.X, h.rect.Y, h.rect.W, h.rect.H, theme.SurfaceAlt)
+		// West/East handles are thin vertical bars; North/South are horizontal.
+		drawSplitterBar(p, h.rect, h.side == DockLeft || h.side == DockRight, theme)
 	}
 }
 

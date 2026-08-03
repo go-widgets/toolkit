@@ -104,6 +104,32 @@ func (p *Paned) layout() {
 }
 
 // Draw paints both children + the handle.
+// drawSplitterBar paints a splitter / separator bar (a Paned handle or a Border
+// split handle) with a DISTINCT background — a tone blended from SurfaceAlt
+// toward Border so the bar stands out against the Surface/SurfaceAlt panels it
+// sits between (the Sencha splitter look) — plus a 1px Border delineator on the
+// bar's two long edges and a centred three-dot grip so it reads as draggable.
+// vertical=true for a thin vertical bar (horizontal split), false for a thin
+// horizontal bar (vertical split).
+func drawSplitterBar(p painter.Painter, r Rect, vertical bool, theme *Theme) {
+	fillRect(p, r.X, r.Y, r.W, r.H, blendRGBA(theme.SurfaceAlt, theme.Border, 0.45))
+	if vertical {
+		fillRect(p, r.X, r.Y, 1, r.H, theme.Border)
+		fillRect(p, r.X+r.W-1, r.Y, 1, r.H, theme.Border)
+	} else {
+		fillRect(p, r.X, r.Y, r.W, 1, theme.Border)
+		fillRect(p, r.X, r.Y+r.H-1, r.W, 1, theme.Border)
+	}
+	cx, cy := r.X+r.W/2, r.Y+r.H/2
+	for k := -1; k <= 1; k++ {
+		if vertical {
+			fillRect(p, cx-1, cy+k*4-1, 2, 2, theme.OnSurface)
+		} else {
+			fillRect(p, cx+k*4-1, cy-1, 2, 2, theme.OnSurface)
+		}
+	}
+}
+
 func (pd *Paned) Draw(p painter.Painter, theme *Theme) {
 	if pd.First != nil {
 		pd.First.Draw(p, theme)
@@ -113,9 +139,9 @@ func (pd *Paned) Draw(p painter.Painter, theme *Theme) {
 	}
 	r := pd.Bounds()
 	if pd.Orientation == PanedHorizontal {
-		fillRect(p, r.X+pd.Position, r.Y, PanedHandleW, r.H, theme.SurfaceAlt)
+		drawSplitterBar(p, Rect{X: r.X + pd.Position, Y: r.Y, W: PanedHandleW, H: r.H}, true, theme)
 	} else {
-		fillRect(p, r.X, r.Y+pd.Position, r.W, PanedHandleW, theme.SurfaceAlt)
+		drawSplitterBar(p, Rect{X: r.X, Y: r.Y + pd.Position, W: r.W, H: PanedHandleW}, false, theme)
 	}
 }
 
