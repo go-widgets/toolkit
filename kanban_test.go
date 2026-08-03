@@ -333,3 +333,23 @@ func TestKanbanDragOverlayStaleCard(t *testing.T) {
 		t.Fatalf("RenderImage stale-card drag: %v", err)
 	}
 }
+
+// TestKanbanExportedHitAndMove covers the exported CardAt / MoveCard wrappers a
+// host uses to build a right-click context menu and drive a move from it.
+func TestKanbanExportedHitAndMove(t *testing.T) {
+	k := sampleBoard()
+	k.SetBounds(Rect{X: 0, Y: 0, W: 600, H: 300})
+	colW := (600 - 2*KanbanColGap) / 3
+
+	lr := k.cardLocalRect(0, 1, colW) // "Research"
+	if col, card := k.CardAt(lr.X+3, lr.Y+3); col != 0 || card != 1 {
+		t.Fatalf("CardAt = (%d,%d), want (0,1)", col, card)
+	}
+	if col, _ := k.CardAt(5, 2); col != -1 { // header
+		t.Fatalf("CardAt(header) col = %d, want -1", col)
+	}
+	k.MoveCard(0, 0, 2, 0) // "Design" -> Done, slot 0
+	if k.Columns[2].Cards[0].Title != "Design" {
+		t.Fatalf("MoveCard did not move Design to column 2: %+v", k.Columns[2].Cards)
+	}
+}

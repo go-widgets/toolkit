@@ -359,3 +359,17 @@ func TestAgendaMonthDayAtBranches(t *testing.T) {
 		t.Fatalf("monthDayAt(day 15) = (%d,%d,%d,%v), want (2026,7,15,true)", yy, m, d, ok)
 	}
 }
+
+// TestAgendaExportedDayAt covers the exported DayAt wrapper used for right-click
+// hit-testing in the month view.
+func TestAgendaExportedDayAt(t *testing.T) {
+	a := agendaMonthFixture()
+	x, y := dayCellCenter(a, 12)
+	yy, m, d, ok := a.DayAt(x, y)
+	if !ok || yy != 2026 || m != 7 || d != 12 {
+		t.Fatalf("DayAt(day 12) = (%d,%d,%d,%v), want (2026,7,12,true)", yy, m, d, ok)
+	}
+	if _, _, _, ok := a.DayAt(100, AgendaHeaderH-1); ok {
+		t.Fatalf("DayAt(header) returned ok")
+	}
+}
