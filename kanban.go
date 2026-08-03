@@ -53,6 +53,22 @@ type Kanban struct {
 	// collapses a stale Selected.
 	SelectedCol  int
 	SelectedCard int
+	// OnCardMove fires when a drag drops a card at a new position, with the
+	// source (fromCol, fromCard) and the destination (toCol, toIdx) the card
+	// now occupies. Nil is safe -- the board still updates Columns in place.
+	OnCardMove func(fromCol, fromCard, toCol, toIdx int)
+
+	// Drag state, following the toolkit's grab-on-EventClick / track-on-
+	// EventMouseDrag / release-on-EventMouseUp convention (as Table's column
+	// resize and RangeSlider do): dragging is true between grabbing a card and
+	// releasing it, dragCol/dragCard is the grabbed card, dragX/dragY the
+	// latest pointer in widget-local coords, and moved guards OnCardMove so a
+	// press-release in place stays a plain click rather than a no-op "move".
+	dragging     bool
+	moved        bool
+	dragCol      int
+	dragCard     int
+	dragX, dragY int
 }
 
 // KanbanCard is one card in a column: a bold Title over a muted
@@ -185,6 +201,37 @@ func (k *Kanban) Draw(p painter.Painter, theme *Theme) {
 			}
 		})
 	}
+
+	// While a card is being dragged, overlay a drop indicator at the target
+	// slot and a floating ghost of the grabbed card under the pointer.
+	if k.dragging && k.moved {
+		k.drawDragOverlay(p, theme, r, colW)
+	}
+}
+
+// drawDragOverlay paints the in-flight drag feedback: a 2px accent insertion
+// bar spanning the target column at the drop slot, and a selected-tint ghost
+// of the grabbed card centred on the pointer. Both are clamped/clipped to the
+// widget so the overlay never paints outside Bounds().
+func (k *Kanban) drawDragOverlay(p painter.Painter, theme *Theme, r Rect, colW int) {
+	toCol := k.columnAt(k.dragX)
+	toIdx := k.dropIndexAt(toCol, k.dragY)
+	colX := r.X + k.colLocalX(toCol, colW)
+	slot := KanbanCardH + KanbanCardGap
+	indY := r.Y + KanbanHeaderH + KanbanCardGap + toIdx*slot - KanbanCardGap/2
+	bodyY := r.Y + KanbanHeaderH + 1
+	withClip(p, Rect{X: colX, Y: bodyY, W: colW, H: r.Y + r.H - bodyY}, func() {
+		fillRect(p, colX+KanbanCardGap, indY, colW-2*KanbanCardGap, 2, theme.Accent)
+	})
+	if k.dragCol < len(k.Columns) && k.dragCard < len(k.Columns[k.dragCol].Cards) {
+		card := k.Columns[k.dragCol].Cards[k.dragCard]
+		gw := colW - 2*KanbanCardGap
+		gx := clampInt(r.X+k.dragX-gw/2, r.X, r.X+r.W-gw)
+		gy := clampInt(r.Y+k.dragY-KanbanCardH/2, r.Y, r.Y+r.H-KanbanCardH)
+		withClip(p, r, func() {
+			k.drawCard(p, theme, Rect{X: gx, Y: gy, W: gw, H: KanbanCardH}, card, true)
+		})
+	}
 }
 
 // drawCountBadge paints the per-column card-count Badge, right-aligned in
@@ -265,19 +312,109 @@ func (k *Kanban) cardAt(localX, localY int) (int, int) {
 	return -1, -1
 }
 
-// OnEvent selects the clicked card and fires OnCardClick. Only EventClick
-// is handled; a click that misses every card (header, gap, dead space)
-// leaves the selection untouched. OnCardClick is nil-safe.
+// columnAt returns the column index whose horizontal span (including the gap
+// to its right) contains widget-local localX, clamped to [0, n-1] so a drag
+// released left of the board drops in the first column and right of it in the
+// last. Callers guard len(Columns) > 0.
+func (k *Kanban) columnAt(localX int) int {
+	n := len(k.Columns)
+	colW := k.colWidth()
+	for i := 0; i < n-1; i++ {
+		if localX < k.colLocalX(i, colW)+colW+KanbanColGap {
+			return i
+		}
+	}
+	return n - 1
+}
+
+// dropIndexAt returns the insertion index within column col for a card
+// released at widget-local localY: the number of card slots whose midline the
+// pointer has passed, clamped to [0, len(cards)]. It rounds to the nearest
+// slot boundary so dropping over the top half of a card inserts above it.
+func (k *Kanban) dropIndexAt(col, localY int) int {
+	cards := len(k.Columns[col].Cards)
+	rel := localY - (KanbanHeaderH + KanbanCardGap)
+	if rel < 0 {
+		return 0
+	}
+	slot := KanbanCardH + KanbanCardGap
+	idx := (rel + slot/2) / slot
+	if idx > cards {
+		idx = cards
+	}
+	return idx
+}
+
+// moveCard removes the card at (fromCol, fromCard) and re-inserts it at toIdx
+// in toCol, updating Selected* to its landing spot. Out-of-range sources are
+// ignored; toIdx is clamped to the destination's new length. When moving down
+// within the same column the removal shifts later slots up by one, so toIdx is
+// decremented to keep the visual drop position.
+func (k *Kanban) moveCard(fromCol, fromCard, toCol, toIdx int) {
+	if fromCol < 0 || fromCol >= len(k.Columns) ||
+		fromCard < 0 || fromCard >= len(k.Columns[fromCol].Cards) {
+		return
+	}
+	card := k.Columns[fromCol].Cards[fromCard]
+	src := k.Columns[fromCol].Cards
+	k.Columns[fromCol].Cards = append(src[:fromCard], src[fromCard+1:]...)
+	if toCol == fromCol && toIdx > fromCard {
+		toIdx--
+	}
+	dst := k.Columns[toCol].Cards
+	if toIdx < 0 {
+		toIdx = 0
+	}
+	if toIdx > len(dst) {
+		toIdx = len(dst)
+	}
+	dst = append(dst, KanbanCard{})
+	copy(dst[toIdx+1:], dst[toIdx:])
+	dst[toIdx] = card
+	k.Columns[toCol].Cards = dst
+	k.SelectedCol, k.SelectedCard = toCol, toIdx
+}
+
+// OnEvent drives selection and card drag-and-drop. On EventClick it grabs the
+// card under the pointer (selecting it and firing OnCardClick); on
+// EventMouseDrag it tracks the pointer and marks the gesture a drag; on
+// EventMouseUp it drops the grabbed card at the target column/slot, mutating
+// Columns and firing OnCardMove. A press-release with no intervening drag
+// leaves the board a plain click. Both callbacks are nil-safe.
 func (k *Kanban) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
-		return
-	}
-	col, card := k.cardAt(ev.X, ev.Y)
-	if col < 0 {
-		return
-	}
-	k.SelectedCol, k.SelectedCard = col, card
-	if k.OnCardClick != nil {
-		k.OnCardClick(col, card)
+	switch ev.Kind {
+	case EventClick:
+		col, card := k.cardAt(ev.X, ev.Y)
+		if col < 0 {
+			return
+		}
+		k.dragging, k.moved = true, false
+		k.dragCol, k.dragCard = col, card
+		k.dragX, k.dragY = ev.X, ev.Y
+		k.SelectedCol, k.SelectedCard = col, card
+		if k.OnCardClick != nil {
+			k.OnCardClick(col, card)
+		}
+	case EventMouseDrag:
+		if !k.dragging {
+			return
+		}
+		k.dragX, k.dragY = ev.X, ev.Y
+		k.moved = true
+	case EventMouseUp:
+		if !k.dragging {
+			return
+		}
+		fromCol, fromCard, wasMoved := k.dragCol, k.dragCard, k.moved
+		k.dragging, k.moved = false, false
+		if !wasMoved {
+			return
+		}
+		toCol := k.columnAt(ev.X)
+		toIdx := k.dropIndexAt(toCol, ev.Y)
+		k.moveCard(fromCol, fromCard, toCol, toIdx)
+		if k.OnCardMove != nil {
+			k.OnCardMove(fromCol, fromCard, toCol, k.SelectedCard)
+		}
 	}
 }

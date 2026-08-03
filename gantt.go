@@ -5,6 +5,7 @@
 package toolkit
 
 import (
+	"math"
 	"strconv"
 
 	"github.com/go-widgets/painter"
@@ -41,7 +42,36 @@ type Gantt struct {
 	Units    int
 	OnSelect func(i int)
 	Selected int
+	// OnTaskChange fires when a drag edits a task's span, with the task index
+	// and its new [start, end) columns. Nil is safe -- Tasks is still mutated
+	// in place, so the chart reflects the edit whether or not a host listens.
+	OnTaskChange func(i, start, end int)
+
+	// Edit/drag state, following the toolkit's grab-on-EventClick / track-on-
+	// EventMouseDrag / release-on-EventMouseUp convention. editMode records
+	// whether the grab moves the whole bar or resizes one edge; editGrab is
+	// the pointer-unit-minus-Start offset captured at grab time (move only) so
+	// the bar tracks the pointer without jumping.
+	editing  bool
+	editIdx  int
+	editMode ganttDragMode
+	editGrab int
 }
+
+// ganttDragMode is how an in-flight bar drag edits its task: shift the whole
+// bar, or drag its left/right edge to change Start/End.
+type ganttDragMode int
+
+const (
+	ganttNone ganttDragMode = iota
+	ganttMove
+	ganttResizeStart
+	ganttResizeEnd
+)
+
+// ganttEdgeGrab is the pixel hit-slop around a bar's left/right edge within
+// which a press starts an edge-resize rather than a whole-bar move.
+const ganttEdgeGrab = 5
 
 // Gantt sizing constants, exported like TableRowHeight / TableHeaderHeight so a
 // host can measure a chart before it has a surface (rows*GanttRowH +
@@ -170,22 +200,90 @@ func (g *Gantt) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
-// OnEvent selects the task row under an EventClick and fires OnSelect (nil-safe)
-// with its index. Clicks above the first row (in the header band) and clicks
-// past the last task are no-ops, as is any non-click event.
+// barXLocal is column c's pixel x in widget-local coordinates (0 at the
+// widget's left edge), the local-space twin of Draw's colX (which adds r.X).
+// Used to place bars for hit-testing an edge grab.
+func (g *Gantt) barXLocal(c int) int {
+	axisW := g.Bounds().W - GanttLabelW
+	return GanttLabelW + int(float64(c)/float64(g.axisUnits())*float64(axisW))
+}
+
+// unitAtLocal maps a widget-local x to the nearest axis column, clamped to
+// [0, units]. A degenerate (<=0) axis width collapses to column 0.
+func (g *Gantt) unitAtLocal(localX int) int {
+	axisW := g.Bounds().W - GanttLabelW
+	if axisW <= 0 {
+		return 0
+	}
+	units := g.axisUnits()
+	u := int(math.Round(float64(localX-GanttLabelW) / float64(axisW) * float64(units)))
+	return clampInt(u, 0, units)
+}
+
+// OnEvent drives selection and bar editing. On EventClick it selects the task
+// row (firing OnSelect) and, from where in the bar the press landed, arms a
+// drag: near the left/right edge resizes Start/End, inside the bar moves the
+// whole span, and elsewhere in the row is a plain select. EventMouseDrag
+// applies the edit live; EventMouseUp commits it and fires OnTaskChange. All
+// callbacks are nil-safe.
 func (g *Gantt) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
-		return
+	switch ev.Kind {
+	case EventClick:
+		if ev.Y < GanttHeaderH {
+			return
+		}
+		row := (ev.Y - GanttHeaderH) / GanttRowH
+		if row >= len(g.Tasks) {
+			return
+		}
+		g.Selected = row
+		if g.OnSelect != nil {
+			g.OnSelect(row)
+		}
+		tk := g.Tasks[row]
+		startX, endX := g.barXLocal(tk.Start), g.barXLocal(tk.End)
+		switch {
+		case ev.X >= startX-ganttEdgeGrab && ev.X <= startX+ganttEdgeGrab:
+			g.editing, g.editIdx, g.editMode = true, row, ganttResizeStart
+		case ev.X >= endX-ganttEdgeGrab && ev.X <= endX+ganttEdgeGrab:
+			g.editing, g.editIdx, g.editMode = true, row, ganttResizeEnd
+		case ev.X > startX && ev.X < endX:
+			g.editing, g.editIdx, g.editMode = true, row, ganttMove
+			g.editGrab = g.unitAtLocal(ev.X) - tk.Start
+		default:
+			g.editing = false
+		}
+	case EventMouseDrag:
+		if g.editing {
+			g.applyDrag(g.unitAtLocal(ev.X))
+		}
+	case EventMouseUp:
+		if !g.editing {
+			return
+		}
+		i := g.editIdx
+		g.editing = false
+		if g.OnTaskChange != nil {
+			g.OnTaskChange(i, g.Tasks[i].Start, g.Tasks[i].End)
+		}
 	}
-	if ev.Y < GanttHeaderH {
-		return
-	}
-	row := (ev.Y - GanttHeaderH) / GanttRowH
-	if row >= len(g.Tasks) {
-		return
-	}
-	g.Selected = row
-	if g.OnSelect != nil {
-		g.OnSelect(row)
+}
+
+// applyDrag edits the task being dragged so the grabbed feature tracks pointer
+// column u: a start/end edge is moved (keeping a minimum one-column span and
+// staying within [0, units]), or the whole bar is shifted (preserving its span
+// and clamping so neither edge leaves the axis).
+func (g *Gantt) applyDrag(u int) {
+	tk := &g.Tasks[g.editIdx]
+	units := g.axisUnits()
+	switch g.editMode {
+	case ganttResizeStart:
+		tk.Start = clampInt(u, 0, tk.End-1)
+	case ganttResizeEnd:
+		tk.End = clampInt(u, tk.Start+1, units)
+	case ganttMove:
+		span := tk.End - tk.Start
+		ns := clampInt(u-g.editGrab, 0, units-span)
+		tk.Start, tk.End = ns, ns+span
 	}
 }

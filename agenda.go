@@ -65,6 +65,10 @@ type Agenda struct {
 	StartHour, EndHour int
 	OnSelect           func(i int)
 	Selected           int
+	// OnDayActivate fires when a month-view click lands on an in-month day cell
+	// that is not an event chip, carrying that cell's (year, month, day). A
+	// host uses it to add an event on the clicked day. Nil is safe.
+	OnDayActivate func(year, month, day int)
 
 	// View selects the layout (week/month/quarter/year); zero = AgendaWeek.
 	View AgendaView
@@ -321,12 +325,60 @@ func (a *Agenda) OnEvent(ev Event) {
 		i = a.hitWeek(ev.X, ev.Y)
 	}
 	if i < 0 {
+		// A month-view click that hits no chip may still land on an in-month
+		// day cell: activate that day (a host adds an event there). Other
+		// views have no day-activate target.
+		if a.View == AgendaMonth && a.OnDayActivate != nil {
+			if yy, m, d, ok := a.monthDayAt(ev.X, ev.Y); ok {
+				a.OnDayActivate(yy, m, d)
+			}
+		}
 		return
 	}
 	a.Selected = i
 	if a.OnSelect != nil {
 		a.OnSelect(i)
 	}
+}
+
+// monthDayAt maps widget-local (x, y) to the in-month day cell under it,
+// returning the focused (year, month, day) and ok=true. It returns ok=false
+// for the weekday header band, points outside the day grid, columns that miss
+// every cell, and the leading/trailing spill cells that belong to the adjacent
+// month. It walks the same geometry drawMonth paints, in local coordinates
+// (origin at the widget's top-left), matching hitMonth.
+func (a *Agenda) monthDayAt(x, y int) (int, int, int, bool) {
+	yy, m, ok := a.focusYM()
+	if !ok {
+		return 0, 0, 0, false
+	}
+	if y < AgendaHeaderH {
+		return 0, 0, 0, false
+	}
+	W := a.Bounds().W
+	first := WeekdayOfFirst(yy, m)
+	dim := DaysInMonth(yy, m)
+	rows := (first + dim + 6) / 7
+	row := (y - AgendaHeaderH) / AgendaDayCellH
+	if row >= rows {
+		return 0, 0, 0, false
+	}
+	col := -1
+	for c := 0; c < 7; c++ {
+		cx := monthColX(0, W, c)
+		if x >= cx && x < monthColX(0, W, c+1) {
+			col = c
+			break
+		}
+	}
+	if col < 0 {
+		return 0, 0, 0, false
+	}
+	idx := row*7 + col
+	if idx < first || idx >= first+dim {
+		return 0, 0, 0, false
+	}
+	return yy, m, idx - first + 1, true
 }
 
 // hitWeek returns the index of the topmost week-view block under (x, y) in

@@ -269,3 +269,93 @@ func TestAgendaRenderPNGDemo(t *testing.T) {
 		t.Fatalf("write demo PNG: %v", err)
 	}
 }
+
+// agendaMonthFixture builds a month-view agenda focused on July 2026 with a
+// single event on the 3rd, sized so all six week rows fit.
+func agendaMonthFixture() *Agenda {
+	a := NewAgenda([]AgendaEvent{{Title: "E", Y: 2026, M: 7, D: 3}})
+	a.View, a.Year, a.Month = AgendaMonth, 2026, 7
+	a.DayNames = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
+	a.SetBounds(Rect{X: 0, Y: 0, W: 700, H: 500})
+	return a
+}
+
+// dayCellCenter returns a widget-local point at the centre of the given day's
+// month cell, mirroring drawMonth/monthDayAt geometry.
+func dayCellCenter(a *Agenda, day int) (int, int) {
+	first := WeekdayOfFirst(2026, 7)
+	idx := first + day - 1
+	row, col := idx/7, idx%7
+	W := a.Bounds().W
+	cx := monthColX(0, W, col)
+	cw := monthColX(0, W, col+1) - cx
+	return cx + cw/2, AgendaHeaderH + row*AgendaDayCellH + AgendaDayCellH/2
+}
+
+// TestAgendaMonthDayActivate: clicking an empty in-month day cell fires
+// OnDayActivate with that day; clicking the event chip selects it instead.
+func TestAgendaMonthDayActivate(t *testing.T) {
+	a := agendaMonthFixture()
+	got := [3]int{-9, -9, -9}
+	a.OnDayActivate = func(y, m, d int) { got = [3]int{y, m, d} }
+
+	x, y := dayCellCenter(a, 10) // day 10 has no event
+	a.OnEvent(Event{Kind: EventClick, X: x, Y: y})
+	if got != [3]int{2026, 7, 10} {
+		t.Fatalf("OnDayActivate = %v, want [2026 7 10]", got)
+	}
+}
+
+// TestAgendaMonthDayActivateNilAndNonMonth covers the two skip branches: a
+// month-view miss with no OnDayActivate set, and a non-month view (where a miss
+// never activates a day) even with the callback set.
+func TestAgendaMonthDayActivateNilAndNonMonth(t *testing.T) {
+	a := agendaMonthFixture()
+	x, y := dayCellCenter(a, 10)
+	a.OnEvent(Event{Kind: EventClick, X: x, Y: y}) // nil callback: no panic
+
+	fired := false
+	a.OnDayActivate = func(int, int, int) { fired = true }
+	a.View = AgendaWeek // a week-view miss must not activate a day
+	a.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
+	if fired {
+		t.Fatalf("OnDayActivate fired outside month view")
+	}
+}
+
+// TestAgendaMonthDayAtBranches drives monthDayAt's guards directly: no focus,
+// header band, below the grid, a column miss, a spill cell, and a valid cell.
+func TestAgendaMonthDayAtBranches(t *testing.T) {
+	a := agendaMonthFixture()
+
+	// No focus period -> ok=false.
+	noFocus := NewAgenda(nil)
+	noFocus.View = AgendaMonth
+	noFocus.SetBounds(Rect{X: 0, Y: 0, W: 700, H: 500})
+	if _, _, _, ok := noFocus.monthDayAt(100, 100); ok {
+		t.Fatalf("monthDayAt with no focus returned ok")
+	}
+
+	if _, _, _, ok := a.monthDayAt(100, AgendaHeaderH-1); ok {
+		t.Fatalf("header band returned ok")
+	}
+	if _, _, _, ok := a.monthDayAt(100, 100000); ok {
+		t.Fatalf("below grid returned ok")
+	}
+	if _, _, _, ok := a.monthDayAt(a.Bounds().W, AgendaHeaderH+10); ok {
+		t.Fatalf("column miss returned ok")
+	}
+	// Cell (row 0, col 0) is a leading spill cell when the month starts mid-week.
+	if first := WeekdayOfFirst(2026, 7); first > 0 {
+		cx := monthColX(0, a.Bounds().W, 0)
+		if _, _, _, ok := a.monthDayAt(cx+2, AgendaHeaderH+2); ok {
+			t.Fatalf("leading spill cell returned ok")
+		}
+	}
+	// A valid in-month cell.
+	x, y := dayCellCenter(a, 15)
+	yy, m, d, ok := a.monthDayAt(x, y)
+	if !ok || yy != 2026 || m != 7 || d != 15 {
+		t.Fatalf("monthDayAt(day 15) = (%d,%d,%d,%v), want (2026,7,15,true)", yy, m, d, ok)
+	}
+}
