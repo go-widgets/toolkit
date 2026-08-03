@@ -1684,6 +1684,13 @@ func (t *Table) SelectRowRange(a, b int) {
 // within the body is added to clampScrollRow() (not raw ScrollRow) so
 // a click always resolves to whatever row Draw actually painted at
 // that y, even with an out-of-range ScrollRow.
+// RowAt returns the data-row index under widget-local (x, y), or -1 for the
+// header band, a group-header/summary line, or empty space past the last row.
+// Exposed so a host can hit-test a right-click and build a context menu for the
+// row under the cursor (x is accepted for signature symmetry with the other
+// widgets' hit helpers; the row is determined by y).
+func (t *Table) RowAt(x, y int) int { return t.rowAt(y) }
+
 func (t *Table) rowAt(localY int) int {
 	if localY < TableHeaderHeight {
 		return -1

@@ -406,6 +406,22 @@ func (l *ListBox) OnEvent(ev Event) {
 // Every valid click also records idx as pressedRow (see DragData) --
 // unconditionally, regardless of Reorderable, since it costs nothing and
 // DragData itself already gates on Reorderable.
+// IndexAt returns the Items index under widget-local (x, y), accounting for the
+// scroll offset, or -1 for empty space past the last row (or a zero RowHeight).
+// Exposed so a host can hit-test a right-click and build a context menu for the
+// item under the cursor (x is accepted for signature symmetry; the row is
+// determined by y).
+func (l *ListBox) IndexAt(x, y int) int {
+	if l.RowHeight <= 0 || y < 0 {
+		return -1
+	}
+	idx := l.clampedScrollRow() + y/l.RowHeight
+	if idx < 0 || idx >= len(l.Items) {
+		return -1
+	}
+	return idx
+}
+
 func (l *ListBox) onClick(ev Event) {
 	if l.RowHeight <= 0 {
 		return
