@@ -353,6 +353,63 @@ func (t *TreeTable) drawScrollbar(p painter.Painter, theme *Theme, r Rect, bodyY
 // OnEvent: a click on the first column's disclosure glyph toggles that
 // node's Expanded (re-clamping ScrollRow, since toggling can shrink or
 // grow the visible row count out from under it); a click anywhere else on
+// NodeAt returns the TreeTableNode at widget-local (x, y) in the current
+// visible-flattened, scrolled body, or nil for the header band or empty space
+// below the last row. It does not mutate ScrollRow (unlike OnEvent). Exposed so
+// a host can hit-test a right-click and build a context menu for that node.
+func (t *TreeTable) NodeAt(x, y int) *TreeTableNode {
+	if y < TreeTableHeaderHeight {
+		return nil
+	}
+	t.flatten()
+	total := len(t.rows)
+	wr := t.bodyVisibleRows()
+	localIdx := (y - TreeTableHeaderHeight) / TreeTableRowHeight
+	if wr > 0 && total > wr && localIdx >= wr {
+		return nil
+	}
+	idx := localIdx + t.clampScrollRow(t.ScrollRow, total, wr)
+	if idx < 0 || idx >= total {
+		return nil
+	}
+	return t.rows[idx].node
+}
+
+// Remove detaches node n from the forest — from a top-level Root slot or from
+// its parent's Children. It returns true when n was found and removed; false
+// for a nil node or one not in the tree. Exposed so a host can implement a
+// "delete node" menu action (TreeTableNode has no parent pointer).
+func (t *TreeTable) Remove(n *TreeTableNode) bool {
+	if n == nil {
+		return false
+	}
+	for i, c := range t.Root {
+		if c == n {
+			t.Root = append(t.Root[:i], t.Root[i+1:]...)
+			return true
+		}
+		if removeTreeTableChild(c, n) {
+			return true
+		}
+	}
+	return false
+}
+
+// removeTreeTableChild removes target from parent's subtree (depth-first),
+// returning whether it was found.
+func removeTreeTableChild(parent, target *TreeTableNode) bool {
+	for i, c := range parent.Children {
+		if c == target {
+			parent.Children = append(parent.Children[:i], parent.Children[i+1:]...)
+			return true
+		}
+		if removeTreeTableChild(c, target) {
+			return true
+		}
+	}
+	return false
+}
+
 // a row selects the node. Y is mapped through ScrollRow back to the
 // flattened index it targets, exactly like TreeView.OnEvent.
 func (t *TreeTable) OnEvent(ev Event) {
