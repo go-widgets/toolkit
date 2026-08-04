@@ -32,6 +32,11 @@ type Border struct {
 	OnResize                                     func(side DockSide, size int)
 
 	handles []splitHandle
+
+	// resizing/resizeSide track an in-flight splitter drag: set when a press
+	// lands on a handle, consulted on EventMouseDrag to resize that edge.
+	resizing   bool
+	resizeSide DockSide
 }
 
 // BorderSplitW is the pixel thickness of a Border splitter handle (matches
@@ -151,10 +156,47 @@ func (b *Border) Draw(p painter.Painter, theme *Theme) {
 func (b *Border) OnEvent(ev Event) {
 	pr := b.Bounds()
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
+	switch ev.Kind {
+	case EventClick:
+		// A press on a splitter handle grabs it for a resize.
+		if side, ok := b.SplitHandleAt(sx, sy); ok {
+			b.resizing, b.resizeSide = true, side
+			return
+		}
+	case EventMouseDrag:
+		if b.resizing {
+			b.ResizeSplit(b.resizeSide, b.sizeFromPointer(b.resizeSide, ev.X, ev.Y))
+			return
+		}
+	case EventMouseUp:
+		if b.resizing {
+			b.resizing = false
+			return
+		}
+	}
+	// Otherwise route to the region under the pointer (a nested Paned/Border
+	// then handles its own splitter drag through the same event).
 	for _, w := range b.regions() {
 		if w.Bounds().Contains(sx, sy) {
 			w.OnEvent(translateEvent(ev, pr, w.Bounds()))
 			return
 		}
+	}
+}
+
+// sizeFromPointer converts a Border-local pointer to the new edge-region size
+// for a drag on the given side: the distance from the region's outer edge to
+// the pointer.
+func (b *Border) sizeFromPointer(side DockSide, lx, ly int) int {
+	r := b.Bounds()
+	switch side {
+	case DockTop:
+		return ly
+	case DockBottom:
+		return r.H - ly
+	case DockLeft:
+		return lx
+	default: // DockRight
+		return r.W - lx
 	}
 }

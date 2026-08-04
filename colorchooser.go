@@ -64,9 +64,15 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	previewY := r.Y + 8
 	fillRect(p, previewX, previewY, 40, ColorChooserPreviewH, c.Color)
 	strokeRect(p, previewX, previewY, 40, ColorChooserPreviewH, theme.Border)
-	// Hex string under the swatch.
+	// Hex string under the swatch, right-aligned to the widget's edge so a
+	// 7-char "#RRGGBB" — wider than the 40px swatch — never spills past the
+	// right border (clamped so it also never runs off the left).
 	hex := c.Hex()
-	c.drawText(p, previewX, previewY+ColorChooserPreviewH+2, hex, theme.OnSurface)
+	hexX := r.X + r.W - c.textWidth(hex) - 4
+	if hexX < r.X+2 {
+		hexX = r.X + 2
+	}
+	c.drawText(p, hexX, previewY+ColorChooserPreviewH+2, hex, theme.OnSurface)
 }
 
 // OnEvent handles clicks on the 3 tracks to move the channel knob.

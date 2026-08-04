@@ -63,8 +63,17 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, btnX, r.Y+half, spinButtonW, r.H-half, theme.SurfaceAlt)
 	strokeRect(p, btnX, r.Y, spinButtonW, half, theme.Border)
 	strokeRect(p, btnX, r.Y+half, spinButtonW, r.H-half, theme.Border)
-	s.drawText(p, btnX+5, r.Y+(half-s.glyphHeight())/2, "+", theme.OnSurface)
-	s.drawText(p, btnX+5, r.Y+half+(r.H-half-s.glyphHeight())/2, "-", theme.OnSurface)
+	// Uniform stepper glyphs drawn as vector bars, centred in each button, so
+	// the "+" and "−" align exactly — unlike font glyphs, whose hyphen-minus
+	// sits at x-height while the plus is centred, making the pair look ragged.
+	cx := btnX + spinButtonW/2
+	const bar = 7 // arm length of the +/− (odd, so it centres on cx)
+	ink := theme.OnSurface
+	cyUp := r.Y + half/2
+	fillRect(p, cx-bar/2, cyUp, bar, 1, ink) // + horizontal
+	fillRect(p, cx, cyUp-bar/2, 1, bar, ink) // + vertical
+	cyDn := r.Y + half + (r.H-half)/2
+	fillRect(p, cx-bar/2, cyDn, bar, 1, ink) // − horizontal
 }
 
 // OnEvent: click on the upper-right button increments; click on the
