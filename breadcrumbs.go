@@ -12,13 +12,18 @@ import "github.com/go-widgets/painter"
 // chevron uses Theme.Border so it reads as a subtle divider rather
 // than another clickable label.
 //
-// The widget is passive display only: it computes per-segment X
-// positions from TextWidth so a caller wanting hit-testing (e.g.
-// clicking "Docs" to navigate up two levels) can walk the same offset
-// table externally. HitTest / OnEvent stay as Base defaults.
+// A click on a crumb fires OnSelect with that segment's index, so
+// "Home > Docs > Reference" navigates up when the user clicks an
+// ancestor crumb. OnSelect nil leaves the widget an inert display: the
+// same per-segment X layout Draw builds is walked by OnEvent to hit-test
+// the clicked crumb, so the click target and the drawn glyph can never
+// drift apart.
 type Breadcrumbs struct {
 	Base
 	Segments []string
+	// OnSelect, when non-nil, fires with the 0-based index of the crumb the
+	// user clicked. Nil (the zero value) keeps the widget passive.
+	OnSelect func(i int)
 }
 
 // BreadcrumbSep is the character(s) drawn between two segments. Kept as
@@ -55,6 +60,30 @@ func (b *Breadcrumbs) Draw(p painter.Painter, theme *Theme) {
 			x += BreadcrumbGap
 			b.drawText(p, x, ty, BreadcrumbSep, theme.Border)
 			x += b.textWidth(BreadcrumbSep) + BreadcrumbGap
+		}
+	}
+}
+
+// OnEvent fires OnSelect(i) when a click lands on the i-th crumb. It walks the
+// exact per-segment X layout Draw builds (textWidth(seg) then, between crumbs,
+// gap + separator + gap), so the hit region matches the painted glyphs. Clicks
+// in the inter-crumb separator gap, or when OnSelect is nil, are ignored. Event
+// coordinates are widget-local, so the first crumb starts at local x == 0.
+func (b *Breadcrumbs) OnEvent(ev Event) {
+	if ev.Kind != EventClick || b.OnSelect == nil {
+		return
+	}
+	n := len(b.Segments)
+	x := 0
+	for i, seg := range b.Segments {
+		w := b.textWidth(seg)
+		if ev.X >= x && ev.X < x+w {
+			b.OnSelect(i)
+			return
+		}
+		x += w
+		if i < n-1 {
+			x += BreadcrumbGap + b.textWidth(BreadcrumbSep) + BreadcrumbGap
 		}
 	}
 }

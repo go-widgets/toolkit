@@ -8,7 +8,9 @@ import "github.com/go-widgets/painter"
 
 // Scale is a horizontal slider over a continuous Min..Max range.
 // Click on the track jumps the thumb to that x-position + fires
-// OnChange. The 4-px track sits across the vertical midpoint in
+// OnChange; dragging the thumb (or anywhere along the track with the
+// button held) scrubs the value continuously through the same math.
+// The 4-px track sits across the vertical midpoint in
 // Theme.SurfaceAlt; the 10-px square thumb sits at the value's
 // position in Theme.Accent.
 type Scale struct {
@@ -125,8 +127,11 @@ func (s *Scale) setTo(v float64) {
 	}
 }
 
-// OnEvent: click jumps the thumb to the clicked x-position +
-// fires OnChange; arrow / Home / End / Page keys move Value while focused.
+// OnEvent: a click (or a drag while the button is held) moves the thumb to the
+// pointer's position along the track + fires OnChange; arrow / Home / End / Page
+// keys move Value while focused. A single thumb needs no drag-grab state -- the
+// position->SetValue->OnChange math handles any coordinate identically, so a
+// drag is just a click that keeps arriving.
 func (s *Scale) OnEvent(ev Event) {
 	if s.Disabled {
 		return
@@ -151,7 +156,7 @@ func (s *Scale) OnEvent(ev Event) {
 		}
 		return
 	}
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick && ev.Kind != EventMouseDrag {
 		return
 	}
 	r := s.Bounds()

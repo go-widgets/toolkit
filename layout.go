@@ -755,7 +755,11 @@ func (f *Frame) OnEvent(ev Event) {
 		return
 	}
 	hh := f.headerH()
-	if f.Collapsible && ev.Kind == EventClick && ev.Y >= 0 && ev.Y <= hh {
+	// The title-bar band drawn by drawTitleBar spans widget-local Y in
+	// [1, 1+hh) (the 1-px top border sits at Y == 0); match it exactly so a
+	// click on the border above the bar, or the first content row below it,
+	// does not toggle.
+	if f.Collapsible && ev.Kind == EventClick && ev.Y >= 1 && ev.Y < 1+hh {
 		f.Collapsed = !f.Collapsed
 		if f.OnCollapse != nil {
 			f.OnCollapse(f.Collapsed)

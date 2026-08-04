@@ -24,13 +24,18 @@ import (
 // active yet" (Current < 0 -> every badge is pending) or "all done"
 // (Current >= len -> every badge is filled).
 //
-// Steps is a passive display container: hit-testing / event routing
-// are not implemented — a caller who needs a click-to-jump interaction
-// walks the same layout math externally.
+// A click on a badge jumps to that step: OnEvent hit-tests the same
+// badge layout Draw paints, sets Current to the clicked index and fires
+// OnSelect(i). When OnSelect is nil (the zero value) Steps stays a
+// passive progress display — no click has any effect — so a caller that
+// wants a plain indicator opts out simply by leaving the callback unset.
 type Steps struct {
 	Base
 	Labels  []string
 	Current int
+	// OnSelect, when non-nil, fires with the clicked badge's 0-based index
+	// (after Current has been updated to it). Nil keeps Steps display-only.
+	OnSelect func(i int)
 	// Orientation lays the badges out left-to-right (Horizontal, the zero
 	// value — a wizard strip) or top-to-bottom (Vertical — a side
 	// checklist). Vertical draws its connectors as vertical lines and
@@ -126,6 +131,39 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 			y += StepBoxH
 		} else {
 			x += StepBoxW
+		}
+	}
+}
+
+// OnEvent jumps to a clicked step: it hit-tests each badge against the same
+// layout Draw paints (badge i advances by StepBoxW/StepBoxH plus one
+// StepConnectorW per gap along the layout axis; the cross axis is the pinned
+// badge column, vertically centred in a tall bar for the horizontal case), and
+// on a hit sets Current to that index and fires OnSelect(i). Only the badge box
+// is sensitive -- a click on a caption or a connector is ignored -- and a nil
+// OnSelect keeps Steps a passive display. Coordinates are widget-local, so the
+// first badge's top-left is (0, cross-offset).
+func (s *Steps) OnEvent(ev Event) {
+	if ev.Kind != EventClick || s.OnSelect == nil {
+		return
+	}
+	vertical := s.Orientation == Vertical
+	r := s.Bounds()
+	yOff := 0
+	if !vertical && r.H > StepBoxH {
+		yOff = (r.H - StepBoxH) / 2
+	}
+	for i := range s.Labels {
+		bx, by := 0, yOff
+		if vertical {
+			by = i * (StepBoxH + StepConnectorW)
+		} else {
+			bx = i * (StepBoxW + StepConnectorW)
+		}
+		if ev.X >= bx && ev.X < bx+StepBoxW && ev.Y >= by && ev.Y < by+StepBoxH {
+			s.Current = i
+			s.OnSelect(i)
+			return
 		}
 	}
 }

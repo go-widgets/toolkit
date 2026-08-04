@@ -38,9 +38,12 @@ const HeaderBarSubtitleGap = 2
 // (and subtitle, when non-empty) are centred horizontally in
 // whatever space remains between the two child regions.
 //
-// HeaderBar does not intercept events itself; children receive
-// events via the parent container's usual dispatch after HeaderBar
-// has positioned them (Draw does the layout side-effect).
+// HeaderBar positions its Start/End children in SetBounds (so their
+// Bounds are correct before the first paint) and forwards pointer
+// events to them in OnEvent, hit-testing each child and translating the
+// event into its local frame -- the same dispatch HBox does. A child
+// whose Bounds contains the event handles it; a click elsewhere on the
+// bar is ignored.
 type HeaderBar struct {
 	Base
 	Title    string
@@ -56,21 +59,23 @@ func NewHeaderBar(title string) *HeaderBar {
 	return &HeaderBar{Title: title}
 }
 
-// Draw paints the bar body, positions + draws every Start / End
-// child, then paints Title (+ Subtitle when non-empty) centred in
-// whatever horizontal space is left between the two child regions.
-//
-// Positioning side effect: every Start / End widget's Bounds is
-// updated to reflect its position inside the bar. The widget's
-// original Bounds.W is preserved; Bounds.H is fitted to the bar's
-// inner height (bar.H - HeaderBarPad). This mirrors GTK's
-// HdyHeaderBar pattern — children carry their own preferred width
-// but let the bar decide vertical placement.
-func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
-	r := h.Bounds()
-	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+// SetBounds positions the bar + lays out its Start/End children so their
+// Bounds are correct before the first paint (and before any OnEvent dispatch).
+func (h *HeaderBar) SetBounds(r Rect) {
+	h.Base.SetBounds(r)
+	h.layout()
+}
 
+// layout positions every Start / End child inside the bar and returns the
+// central strip (X origin + width) left for the Title / Subtitle. Each child's
+// original Bounds.W is preserved; its Bounds.H is fitted to the bar's inner
+// height (bar.H - HeaderBarPad) and Y to the inner top -- GTK's HdyHeaderBar
+// pattern, where children carry their own width but the bar owns vertical
+// placement. Shared by SetBounds (positions ahead of paint/events), Draw and
+// OnEvent, so the drawn child, its event target and its stored Bounds can never
+// drift apart.
+func (h *HeaderBar) layout() (titleX0, titleW int) {
+	r := h.Bounds()
 	innerY := r.Y + HeaderBarPad/2
 	innerH := r.H - HeaderBarPad
 
@@ -79,7 +84,6 @@ func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
 	for _, w := range h.Start {
 		wb := w.Bounds()
 		w.SetBounds(Rect{X: startX, Y: innerY, W: wb.W, H: innerH})
-		w.Draw(p, theme)
 		startX += wb.W
 	}
 
@@ -89,12 +93,27 @@ func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
 		wb := w.Bounds()
 		endX -= wb.W
 		w.SetBounds(Rect{X: endX, Y: innerY, W: wb.W, H: innerH})
+	}
+	return startX, endX - startX
+}
+
+// Draw paints the bar body, (re)positions + draws every Start / End child, then
+// paints Title (+ Subtitle when non-empty) centred in whatever horizontal space
+// is left between the two child regions.
+func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
+	r := h.Bounds()
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+
+	// Re-run layout so children added after SetBounds still position, then
+	// paint each in its Bounds.
+	titleX0, titleW := h.layout()
+	for _, w := range h.Start {
 		w.Draw(p, theme)
 	}
-
-	// Title / Subtitle centred in the region between Start + End.
-	titleX0 := startX
-	titleW := endX - startX
+	for _, w := range h.End {
+		w.Draw(p, theme)
+	}
 
 	if h.Subtitle == "" {
 		if h.Title == "" {
@@ -121,4 +140,37 @@ func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
 	sx := titleX0 + (titleW-sw)/2
 	sy := ty + h.glyphHeight() + HeaderBarSubtitleGap
 	h.drawText(p, sx, sy, h.Subtitle, dimInk(theme))
+}
+
+// OnEvent forwards a pointer event to the first Start / End child whose Bounds
+// contains it, translated into that child's local frame -- mirroring HBox's
+// dispatch. EventMouseMove goes to every child (so each raises/clears its hover
+// face); every other kind lands only on the child under the pointer. Event
+// coordinates are widget-local. layout() runs first so a child added after the
+// last SetBounds still has current Bounds to hit-test against.
+func (h *HeaderBar) OnEvent(ev Event) {
+	h.layout()
+	pr := h.Bounds()
+	if ev.Kind == EventMouseMove {
+		for _, w := range h.Start {
+			w.OnEvent(translateEvent(ev, pr, w.Bounds()))
+		}
+		for _, w := range h.End {
+			w.OnEvent(translateEvent(ev, pr, w.Bounds()))
+		}
+		return
+	}
+	sx, sy := ev.X+pr.X, ev.Y+pr.Y
+	for _, w := range h.Start {
+		if w.Bounds().Contains(sx, sy) {
+			w.OnEvent(translateEvent(ev, pr, w.Bounds()))
+			return
+		}
+	}
+	for _, w := range h.End {
+		if w.Bounds().Contains(sx, sy) {
+			w.OnEvent(translateEvent(ev, pr, w.Bounds()))
+			return
+		}
+	}
 }

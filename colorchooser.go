@@ -18,6 +18,13 @@ type ColorChooser struct {
 	Base
 	Color    RGBA
 	OnChange func(c RGBA)
+
+	// active is the channel grabbed by the current press/drag as a 1-based
+	// index (0 = none, 1 = R, 2 = G, 3 = B). Set on the EventClick that lands
+	// on a track, consulted on each EventMouseDrag so the knob keeps scrubbing
+	// its channel even after the pointer leaves the row, and cleared on
+	// EventMouseUp -- mirroring ColorPicker.active.
+	active int
 }
 
 // Sizing.
@@ -75,42 +82,68 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	c.drawText(p, hexX, previewY+ColorChooserPreviewH+2, hex, theme.OnSurface)
 }
 
-// OnEvent handles clicks on the 3 tracks to move the channel knob.
+// OnEvent moves a channel knob by press + drag. An EventClick on a track grabs
+// that channel (remembered in active) and sets it from the pointer X; each
+// following EventMouseDrag re-runs the set for the grabbed channel from the new
+// X -- so a drag scrubs the value continuously, even once the pointer strays out
+// of the row -- and EventMouseUp releases the grab. A click that misses every
+// track (e.g. on the preview/hex area) grabs nothing. Coordinates are
+// widget-local.
 func (c *ColorChooser) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
-		return
-	}
 	r := c.Bounds()
-	// Translate ev to widget-local; callers may already have done this.
-	x := ev.X
-	y := ev.Y
-	// Reject events outside the vertical band (the channel rows live
-	// at predictable Y ranges); horizontal overshoot is clamped per
-	// channel so a click "far right" snaps to the track's right edge.
+	switch ev.Kind {
+	case EventClick:
+		ch := c.channelAt(ev.Y, r)
+		if ch < 0 {
+			c.active = 0
+			return
+		}
+		c.active = ch + 1
+		c.setChannelFromX(ch, ev.X, r)
+	case EventMouseDrag:
+		if c.active == 0 {
+			return
+		}
+		c.setChannelFromX(c.active-1, ev.X, r)
+	case EventMouseUp:
+		c.active = 0
+	}
+}
+
+// channelAt returns the channel index (0=R, 1=G, 2=B) whose row contains the
+// widget-local y, or -1 when y falls outside every channel row.
+func (c *ColorChooser) channelAt(y int, r Rect) int {
 	if y < 0 || y >= r.H {
-		return
+		return -1
 	}
 	for i := 0; i < 3; i++ {
 		yMin := ColorChooserChannelPadY + i*ColorChooserChannelH
 		yMax := yMin + ColorChooserChannelH
-		if y < yMin || y >= yMax {
-			continue
+		if y >= yMin && y < yMax {
+			return i
 		}
-		trackX := ColorChooserPadX + 12
-		channelW := r.W - 2*ColorChooserPadX
-		trackW := channelW - 12
-		if x < trackX {
-			c.setChannel(i, 0)
-		} else if x >= trackX+trackW {
-			c.setChannel(i, 255)
-		} else {
-			v := (x - trackX) * 255 / trackW
-			c.setChannel(i, uint8(v))
-		}
-		if c.OnChange != nil {
-			c.OnChange(c.Color)
-		}
-		return
+	}
+	return -1
+}
+
+// setChannelFromX maps a widget-local x to channel i's value (clamped to the
+// track's ends, mirroring Draw's knobX = trackX + v*trackW/255 placement) and
+// fires OnChange. Shared by the click and drag arms so a press and a scrub land
+// on identical values for the same x.
+func (c *ColorChooser) setChannelFromX(i, x int, r Rect) {
+	trackX := ColorChooserPadX + 12
+	channelW := r.W - 2*ColorChooserPadX
+	trackW := channelW - 12
+	switch {
+	case x < trackX:
+		c.setChannel(i, 0)
+	case x >= trackX+trackW:
+		c.setChannel(i, 255)
+	default:
+		c.setChannel(i, uint8((x-trackX)*255/trackW))
+	}
+	if c.OnChange != nil {
+		c.OnChange(c.Color)
 	}
 }
 

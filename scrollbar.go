@@ -10,32 +10,48 @@ import "github.com/go-widgets/painter"
 // when the content dwarfs the viewport.
 const scrollbarMinThumb = 24
 
-// Scrollbar is a slim position indicator for scrollable content: a rounded track
-// with a thumb sized to Viewport/Total and positioned by Offset, showing where
-// the view sits within the whole. Vertical by default; set Horizontal for a
-// bottom scrollbar. When everything fits (Total <= Viewport) the thumb fills the
-// track.
+// Scrollbar is a slim, grabbable scrollbar for scrollable content: a rounded
+// track with a thumb sized to Viewport/Total and positioned by Offset, showing
+// where the view sits within the whole. Vertical by default; set Horizontal for
+// a bottom scrollbar. When everything fits (Total <= Viewport) the thumb fills
+// the track.
+//
+// The thumb is a live affordance, not merely an indicator: dragging it, or
+// clicking the track above/below it, moves Offset and fires OnScroll. Both the
+// paint (ThumbRect) and the interaction (OnEvent) read one shared geometry
+// (geom), the same sbGeom the embedded ScrollView/Table scrollbars use, so the
+// drawn thumb and the drag target can never drift apart. A host that only wants
+// a read-only indicator simply leaves OnScroll nil and never routes events to
+// it.
 type Scrollbar struct {
 	Base
 	Total      int  // total content length along the scroll axis
 	Viewport   int  // visible length
 	Offset     int  // scroll offset; clamped to [0, Total-Viewport]
 	Horizontal bool // false = vertical (the default for a scrollbar)
+	// OnScroll, when non-nil, fires with the new (clamped) Offset whenever a
+	// drag or track-page changes it. Nil keeps the scrollbar silent -- it still
+	// updates its own Offset, but reports nothing.
+	OnScroll func(offset int)
+
+	// drag carries the in-progress thumb grab (see scrollDrag), shared with the
+	// same press/drag/release policy the embedded scrollbars use.
+	drag scrollDrag
 }
 
 // NewScrollbar builds an empty vertical scrollbar.
 func NewScrollbar() *Scrollbar { return &Scrollbar{} }
 
-// HitTest returns false: the scrollbar is a passive indicator (the app already
-// owns wheel/drag scrolling). Compose with a drag handler to make it grabbable.
-func (s *Scrollbar) HitTest(_, _ int) bool { return false }
-
-// ThumbRect returns the thumb's rectangle for the current Total/Viewport/Offset,
-// so callers can hit-test or animate it. It is empty when the widget has no area.
-func (s *Scrollbar) ThumbRect() Rect {
+// geom builds the widget-local track + thumb geometry for the current
+// Total/Viewport/Offset as an sbGeom -- the same structure the embedded
+// ScrollView/Table scrollbars use -- so ThumbRect (paint) and OnEvent
+// (hit-test + drag) share one source of truth. ok is false when the widget has
+// no area. The thumb is sized to view/total (floored at scrollbarMinThumb,
+// capped at the track), and its leading edge is (length-thumb)*off/maxOff.
+func (s *Scrollbar) geom() (sbGeom, bool) {
 	r := s.Bounds()
 	if r.W <= 0 || r.H <= 0 {
-		return Rect{}
+		return sbGeom{}, false
 	}
 	total, view := s.Total, s.Viewport
 	if total < 1 {
@@ -66,14 +82,35 @@ func (s *Scrollbar) ThumbRect() Rect {
 	if thumb > length {
 		thumb = length
 	}
-	pos := 0
+	// No travel when the whole track is one page (maxOff == 0): pin the thumb to
+	// the start and give scrollForGrabStart a safe (0-travel) denominator.
+	travelNum, travelDen, thumbStart := 0, 1, 0
 	if maxOff > 0 {
-		pos = (length - thumb) * off / maxOff
+		travelNum, travelDen = length-thumb, maxOff
+		thumbStart = travelNum * off / travelDen
 	}
+	return sbGeom{
+		horizontal: s.Horizontal,
+		cross0:     0,
+		trackStart: 0, trackLen: length,
+		thumbStart: thumbStart, thumbLen: thumb,
+		travelNum: travelNum, travelDen: travelDen,
+		maxScroll: maxOff,
+	}, true
+}
+
+// ThumbRect returns the thumb's rectangle for the current Total/Viewport/Offset,
+// so callers can hit-test or animate it. It is empty when the widget has no area.
+func (s *Scrollbar) ThumbRect() Rect {
+	g, ok := s.geom()
+	if !ok {
+		return Rect{}
+	}
+	r := s.Bounds()
 	if s.Horizontal {
-		return Rect{X: r.X + pos, Y: r.Y, W: thumb, H: r.H}
+		return Rect{X: r.X + g.thumbStart, Y: r.Y, W: g.thumbLen, H: r.H}
 	}
-	return Rect{X: r.X, Y: r.Y + pos, W: r.W, H: thumb}
+	return Rect{X: r.X, Y: r.Y + g.thumbStart, W: r.W, H: g.thumbLen}
 }
 
 // Draw paints the track and the thumb. The thumb is drawn in Theme.Border so it
@@ -93,6 +130,58 @@ func (s *Scrollbar) Draw(p painter.Painter, theme *Theme) {
 	// the faint Border, so it stays clearly visible even when the surrounding
 	// surface is itself SurfaceAlt (e.g. a sidebar) where a Border thumb vanishes.
 	fillRoundRect(p, t.X, t.Y, t.W, t.H, radius, blendRGBA(theme.OnSurface, theme.SurfaceAlt, scrollbarThumbMix))
+}
+
+// OnEvent makes the thumb grabbable: an EventClick on the thumb starts a drag
+// (recording the grab offset); an EventClick on the track above/below the thumb
+// pages one viewport toward the click; an EventMouseDrag maps the pointer to a
+// clamped Offset while the grab is active; EventMouseUp releases it. All of it
+// runs through the shared scrollDrag policy against geom(), so a standalone
+// Scrollbar drags exactly like an embedded one. A Disabled scrollbar ignores
+// input. Coordinates are widget-local.
+func (s *Scrollbar) OnEvent(ev Event) {
+	if s.Disabled {
+		return
+	}
+	g, ok := s.geom()
+	switch ev.Kind {
+	case EventClick:
+		s.drag.press(g, ok, ev, s.Viewport, s.scrollBy)
+	case EventMouseDrag:
+		s.drag.drag(g, ok, ev, s.scrollTo)
+	case EventMouseUp:
+		s.drag.release()
+	}
+}
+
+// scrollBy nudges Offset by delta (a page step from a track click).
+func (s *Scrollbar) scrollBy(delta int) { s.setOffset(s.Offset + delta) }
+
+// scrollTo sets Offset to off (a thumb-drag target; already clamped by
+// scrollForGrabStart, re-clamped here for safety).
+func (s *Scrollbar) scrollTo(off int) { s.setOffset(off) }
+
+// setOffset clamps off to [0, Total-Viewport], assigns it, and fires OnScroll
+// only when the value actually changed -- so a drag that stays pinned at an end
+// doesn't emit a stream of no-op callbacks.
+func (s *Scrollbar) setOffset(off int) {
+	maxOff := s.Total - s.Viewport
+	if maxOff < 0 {
+		maxOff = 0
+	}
+	if off < 0 {
+		off = 0
+	}
+	if off > maxOff {
+		off = maxOff
+	}
+	if off == s.Offset {
+		return
+	}
+	s.Offset = off
+	if s.OnScroll != nil {
+		s.OnScroll(off)
+	}
 }
 
 // scrollbarThumbMix is how far the thumb colour sits from the track toward the

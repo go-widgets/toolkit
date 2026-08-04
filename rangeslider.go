@@ -172,10 +172,22 @@ func (s *RangeSlider) OnEvent(ev Event) {
 		// thumb grabs the other when the slider is not at the origin.
 		lowC := s.thumbPos(s.Low) - start + scaleThumbSize/2
 		highC := s.thumbPos(s.High) - start + scaleThumbSize/2
-		if abs(coord-lowC) <= abs(coord-highC) {
+		dl, dh := abs(coord-lowC), abs(coord-highC)
+		switch {
+		case dl < dh:
 			s.active = 1
-		} else {
+		case dh < dl:
 			s.active = 2
+		default:
+			// Equidistant -- the Low == High case, where both thumbs stack at one
+			// point. Break the tie by which side of the stack the cursor is on so
+			// either handle can be dragged out: to the right grabs High (pull the
+			// band open rightward), otherwise Low.
+			if coord > lowC {
+				s.active = 2
+			} else {
+				s.active = 1
+			}
 		}
 		s.moveActive(coord)
 	case EventMouseDrag:

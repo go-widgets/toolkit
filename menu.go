@@ -55,6 +55,12 @@ type Menu struct {
 	Items   []MenuItem
 	Hover   int // index of hovered row, -1 if none
 	OnClose func()
+
+	// openSub is the index of the row whose Submenu is currently open, or -1
+	// when none is. A click or hover on a submenu-parent row (or ArrowRight on
+	// it) opens its child Menu beside the row; ArrowLeft/Escape closes it.
+	// While open, pointer + key events that fall on the child route into it.
+	openSub int
 }
 
 // MenuRowH is the pixel height of a menu row.
@@ -71,8 +77,8 @@ const MenuSeparatorH = 6
 // the plain 8px inset), so plain menus render unchanged.
 const MenuCheckGutterW = 14
 
-// NewMenu builds a Menu with the given items + Hover at -1.
-func NewMenu(items []MenuItem) *Menu { return &Menu{Items: items, Hover: -1} }
+// NewMenu builds a Menu with the given items + Hover and openSub at -1.
+func NewMenu(items []MenuItem) *Menu { return &Menu{Items: items, Hover: -1, openSub: -1} }
 
 // hasCheckGutter reports whether any item wants a check/bullet glyph,
 // i.e. whether Draw must reserve MenuCheckGutterW before the label.
@@ -103,13 +109,14 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 			y += MenuSeparatorH
 			continue
 		}
-		if i == m.Hover && it.Action != nil {
+		if i == m.Hover && (it.Action != nil || it.Submenu != nil) {
 			fillRect(p, r.X+1, y, r.W-2, MenuRowH, theme.Accent)
 		}
 		ink := theme.OnSurface
-		if it.Action == nil && !it.Separator {
-			ink = theme.SurfaceAlt // disabled = greyed out
-		} else if i == m.Hover {
+		switch {
+		case it.Action == nil && it.Submenu == nil:
+			ink = theme.SurfaceAlt // disabled = greyed out (no action, no submenu)
+		case i == m.Hover:
 			ink = theme.Background // hovered row: invert ink
 		}
 		textY := y + (MenuRowH-m.glyphHeight())/2
@@ -141,6 +148,13 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 		}
 		y += MenuRowH
 	}
+	// An open submenu is painted last so it overlays the body: its child Menu
+	// is positioned beside the parent row (see subBounds) and drawn recursively,
+	// so nested submenus chain naturally.
+	if sub, cb, ok := m.openSubmenu(); ok {
+		sub.SetBounds(cb)
+		sub.Draw(p, theme)
+	}
 }
 
 // drawCheckGlyph paints a Checked row's indicator in the check gutter:
@@ -163,20 +177,59 @@ func (m *Menu) drawCheckGlyph(p painter.Painter, gx, rowY int, radio bool, ink R
 	}
 }
 
-// OnEvent: a click on an enabled row fires its Action + closes the
-// menu via OnClose (if wired). Keyboard: ArrowUp/ArrowDown move the
-// Hover highlight to the previous/next enabled row (skipping separators
-// and disabled/nil-Action rows, wrapping at both ends); Enter/Space fire
-// the hovered row's Action; Escape calls OnClose. A disabled Menu ignores
-// keys. Submenu chevron rows (nil Action) are treated as disabled here --
-// submenu navigation is deferred to a later wave.
+// MenuMinW is the floor width a submenu popover sizes to (see preferredSize) so
+// a child of very short labels still reads as a panel.
+const MenuMinW = 96
+
+// OnEvent: a click on an enabled row fires its Action + closes the menu via
+// OnClose (if wired); a click (or hover, or ArrowRight) on a submenu-parent row
+// opens its child Menu beside the row. Keyboard: ArrowUp/ArrowDown move the
+// Hover highlight to the previous/next navigable row (skipping separators and
+// disabled rows, wrapping at both ends); ArrowRight opens the hovered submenu;
+// Enter/Space activate the hovered row (opening its submenu, or firing its
+// Action); Escape calls OnClose. While a submenu is open, pointer events over
+// the child route into it, keys drive the child, and ArrowLeft/Escape close it.
+// A disabled Menu ignores keys.
 func (m *Menu) OnEvent(ev Event) {
+	// An open submenu gets first crack: pointer events on the child route into
+	// it; the child owns keys except ArrowLeft/Escape, which close it. Keep the
+	// child's Bounds in sync with cb so its own hit-testing (localInBounds) sees
+	// the position it was drawn at, even if no Draw ran since it opened.
+	if sub, cb, ok := m.openSubmenu(); ok {
+		r := m.Bounds()
+		sub.SetBounds(cb)
+		switch ev.Kind {
+		case EventClick, EventMouseMove:
+			if cb.Contains(ev.X+r.X, ev.Y+r.Y) {
+				sub.OnEvent(translateEvent(ev, r, cb))
+				return
+			}
+		case EventKeyDown:
+			if m.Disabled {
+				return
+			}
+			switch ev.Code {
+			case "ArrowLeft", "Escape":
+				m.openSub = -1
+			default:
+				sub.OnEvent(ev)
+			}
+			return
+		}
+	}
 	switch ev.Kind {
 	case EventMouseMove:
-		// Follow the pointer: highlight the row under it, or clear the
+		// Follow the pointer: highlight the row under it, opening its submenu
+		// (or closing any open one) as the hovered parent changes, or clear the
 		// highlight when the pointer has moved off the menu body.
 		if m.localInBounds(ev.X, ev.Y) {
-			m.Hover = m.rowAt(ev.Y)
+			idx := m.rowAt(ev.Y)
+			m.Hover = idx
+			if m.isSubmenuParent(idx) {
+				m.openSubAt(idx)
+			} else {
+				m.openSub = -1
+			}
 		} else {
 			m.Hover = -1
 		}
@@ -190,6 +243,13 @@ func (m *Menu) OnEvent(ev Event) {
 			m.moveHover(1)
 		case "ArrowUp":
 			m.moveHover(-1)
+		case "ArrowRight":
+			// Open the hovered row's submenu (if any) and seed its first item so
+			// the very next arrow moves within the child.
+			if m.isSubmenuParent(m.Hover) {
+				m.openSubAt(m.Hover)
+				m.Items[m.Hover].Submenu.moveHover(1)
+			}
 		case "Enter", " ", "Space":
 			m.activate(m.Hover)
 		case "Escape":
@@ -203,15 +263,20 @@ func (m *Menu) OnEvent(ev Event) {
 	}
 }
 
-// activate fires row idx's Action + closes the menu via OnClose (if wired),
-// after applying the row's checkable/radio state change -- the single path
-// both a click and an Enter/Space keypress drive. An out-of-range index, a
-// separator, or a disabled (nil-Action) row is a no-op.
+// activate handles row idx's activation -- the single path a click and an
+// Enter/Space keypress share. A submenu-parent row opens its submenu; a plain
+// row applies its checkable/radio state change, fires Action, and closes the
+// menu via OnClose. An out-of-range index, a separator, or a disabled
+// (nil-Action, no-submenu) row is a no-op.
 func (m *Menu) activate(idx int) {
 	if !m.enabledItem(idx) {
 		return
 	}
 	it := &m.Items[idx]
+	if it.Submenu != nil {
+		m.openSubAt(idx)
+		return
+	}
 	switch {
 	case it.RadioGroup != 0:
 		m.selectRadio(idx)
@@ -224,16 +289,100 @@ func (m *Menu) activate(idx int) {
 	}
 }
 
-// enabledItem reports whether row i is a keyboard-focusable, activatable item:
-// in range, not a separator, and carrying an Action (a nil Action is the
-// disabled state, which also covers a submenu-only chevron row -- submenu
-// navigation is a later wave).
+// enabledItem reports whether row i is navigable: in range, not a separator, and
+// carrying either an Action or a Submenu. A submenu-parent row is navigable even
+// though its Action is nil (Wave 4) -- activate opens the submenu for it rather
+// than firing an Action. A row with neither Action nor Submenu is the disabled
+// (greyed) state.
 func (m *Menu) enabledItem(i int) bool {
 	if i < 0 || i >= len(m.Items) {
 		return false
 	}
 	it := &m.Items[i]
-	return !it.Separator && it.Action != nil
+	return !it.Separator && (it.Action != nil || it.Submenu != nil)
+}
+
+// isSubmenuParent reports whether row i is a navigable submenu-parent row (in
+// range, not a separator, carrying a non-nil Submenu).
+func (m *Menu) isSubmenuParent(i int) bool {
+	return i >= 0 && i < len(m.Items) && !m.Items[i].Separator && m.Items[i].Submenu != nil
+}
+
+// openSubAt marks row idx's submenu open and wires the child's OnClose to this
+// menu's OnClose, so activating an item inside the child closes the whole chain.
+func (m *Menu) openSubAt(idx int) {
+	m.openSub = idx
+	if sub := m.Items[idx].Submenu; sub != nil && m.OnClose != nil {
+		sub.OnClose = m.OnClose
+	}
+}
+
+// openSubmenu returns the currently-open child Menu, its bounds (beside the
+// parent row), and true -- or ok == false when no submenu is open.
+func (m *Menu) openSubmenu() (*Menu, Rect, bool) {
+	if m.openSub < 0 || m.openSub >= len(m.Items) {
+		return nil, Rect{}, false
+	}
+	sub := m.Items[m.openSub].Submenu
+	if sub == nil {
+		return nil, Rect{}, false
+	}
+	return sub, m.subBounds(m.openSub), true
+}
+
+// subBounds places row idx's submenu to the right of the menu, aligned with the
+// row's top, sized to the child's preferred footprint. (Edge-flipping / scroll
+// on overflow is Wave 6.)
+func (m *Menu) subBounds(idx int) Rect {
+	r := m.Bounds()
+	w, h := m.Items[idx].Submenu.preferredSize()
+	return Rect{X: r.X + r.W, Y: r.Y + m.rowTop(idx), W: w, H: h}
+}
+
+// rowTop is the widget-local top Y of row idx -- the inverse of rowAt, summing
+// the heights (MenuRowH, or MenuSeparatorH for separators) of the rows above it
+// past the 2px body inset.
+func (m *Menu) rowTop(idx int) int {
+	cy := 2
+	for k := 0; k < idx && k < len(m.Items); k++ {
+		if m.Items[k].Separator {
+			cy += MenuSeparatorH
+		} else {
+			cy += MenuRowH
+		}
+	}
+	return cy
+}
+
+// preferredSize measures the menu's popover footprint: width is the widest row
+// (label + check gutter + shortcut or submenu chevron) floored at MenuMinW;
+// height is the summed row heights plus the 4px body inset. Used to size a
+// submenu when it opens.
+func (m *Menu) preferredSize() (w, h int) {
+	w = MenuMinW
+	h = 4
+	gutter := 0
+	if m.hasCheckGutter() {
+		gutter = MenuCheckGutterW
+	}
+	for i := range m.Items {
+		it := &m.Items[i]
+		if it.Separator {
+			h += MenuSeparatorH
+			continue
+		}
+		rowW := 16 + gutter + m.textWidth(it.Label)
+		if it.Submenu != nil {
+			rowW += 12
+		} else if it.Shortcut != "" {
+			rowW += 12 + m.textWidth(it.Shortcut)
+		}
+		if rowW > w {
+			w = rowW
+		}
+		h += MenuRowH
+	}
+	return w, h
 }
 
 // moveHover advances the Hover highlight by dir (+1 down, -1 up) to the next

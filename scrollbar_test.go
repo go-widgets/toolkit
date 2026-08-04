@@ -135,11 +135,15 @@ func TestScrollbarDrawAndInert(t *testing.T) {
 	if !painted {
 		t.Fatal("scrollbar drew nothing")
 	}
-	// Passive: it never swallows clicks, and a zero-size widget draws nothing.
-	if sb.HitTest(4, 40) {
-		t.Fatal("scrollbar must be click-through")
+	// Grabbable: a point inside its bounds hit-tests true (so a container routes
+	// drags to it), while a zero-size widget draws nothing and hit-tests false.
+	if !sb.HitTest(4, 40) {
+		t.Fatal("scrollbar inside its bounds should hit-test true")
 	}
 	empty := NewScrollbar()
+	if empty.HitTest(0, 0) {
+		t.Fatal("zero-bounds scrollbar must not hit-test")
+	}
 	empty.Draw(newP(makeSurface(1, 1), 1), DefaultLight()) // no panic on zero bounds
 	if r := empty.ThumbRect(); r != (Rect{}) {
 		t.Fatalf("zero-bounds thumb should be empty: %+v", r)

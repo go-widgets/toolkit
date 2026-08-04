@@ -85,6 +85,13 @@ type TextView struct {
 	// coalescing of consecutive keystrokes -- simplest correct
 	// behaviour, matching the sibling's documented choice).
 	undo, redo []tvSnapshot
+
+	// selAnchorLine/selAnchorCol remember where a mouse selection began: an
+	// EventClick records the caret it placed as the anchor, and each
+	// EventMouseDrag extends Selection from that anchor to the dragged-to
+	// caret. Kept private -- callers drive programmatic selection through
+	// SetSelection/SelectAll instead.
+	selAnchorLine, selAnchorCol int
 }
 
 // maxUndo caps the undo history so a long editing session can't grow
@@ -241,6 +248,23 @@ func (t *TextView) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
 		t.Focused = true
+		if len(t.Lines) == 0 {
+			return
+		}
+		// Place the caret under the click (mapping ev.X/ev.Y back through
+		// Draw's line/col layout) and start a fresh, collapsed selection
+		// anchored there so a following drag can extend it.
+		t.CursorLine, t.CursorCol = t.caretAt(ev.X, ev.Y)
+		t.selAnchorLine, t.selAnchorCol = t.CursorLine, t.CursorCol
+		t.ClearSelection()
+	case EventMouseDrag:
+		if len(t.Lines) == 0 {
+			return
+		}
+		// Extend the selection from the click anchor to the caret under the
+		// dragged pointer, moving the cursor with it.
+		t.CursorLine, t.CursorCol = t.caretAt(ev.X, ev.Y)
+		t.Selection = SelectionRange(t.selAnchorLine, t.selAnchorCol, t.CursorLine, t.CursorCol)
 	case EventKeyDown:
 		t.handleKey(ev.Code)
 	case EventChar:
@@ -440,6 +464,31 @@ func (t *TextView) drawSpans(p painter.Painter, x, y int, line string, spans []T
 			runStart = i
 		}
 	}
+}
+
+// caretAt maps a widget-local (x, y) to a (line, col) caret position -- the
+// inverse of Draw's placement, where line i sits at local y == 4+i*lineH and
+// column c at local x == 4+gutterW+c*glyphAdvance. The line is clamped to the
+// buffer and the column to that line's rune length; the column rounds to the
+// nearest gap so a click on a glyph's right half lands after it. Callers
+// guarantee len(Lines) > 0 before calling.
+func (t *TextView) caretAt(x, y int) (line, col int) {
+	lineH := t.glyphHeight() + 4 // > 0: glyphHeight is always positive
+	if y >= 4 {
+		line = (y - 4) / lineH
+	}
+	if line > len(t.Lines)-1 {
+		line = len(t.Lines) - 1
+	}
+	adv := t.glyphAdvance() // > 0 for every real font (Draw assumes the same)
+	col = (x - 4 - t.gutterWidth() + adv/2) / adv
+	if col < 0 {
+		col = 0
+	}
+	if maxCol := len([]rune(t.Lines[line])); col > maxCol {
+		col = maxCol
+	}
+	return line, col
 }
 
 // clampCol clamps CursorCol to the current line's rune length, used

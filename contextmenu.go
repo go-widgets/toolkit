@@ -121,8 +121,17 @@ func (c *ContextMenu) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
 	}
-	if ev.X >= mb.X && ev.X < mb.X+mb.W && ev.Y >= mb.Y && ev.Y < mb.Y+mb.H {
-		c.Menu.SetBounds(mb)
+	c.Menu.SetBounds(mb)
+	// A click counts as "inside" when it lands on the menu body OR on an open
+	// submenu that spills beyond it -- otherwise a click on a submenu row would
+	// be mistaken for an outside-click and dismiss the whole popup.
+	inside := ev.X >= mb.X && ev.X < mb.X+mb.W && ev.Y >= mb.Y && ev.Y < mb.Y+mb.H
+	if !inside {
+		if _, cb, ok := c.Menu.openSubmenu(); ok && cb.Contains(ev.X, ev.Y) {
+			inside = true
+		}
+	}
+	if inside {
 		c.Menu.OnEvent(Event{Kind: EventClick, X: ev.X - mb.X, Y: ev.Y - mb.Y})
 		return
 	}
