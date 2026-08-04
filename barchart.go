@@ -97,24 +97,28 @@ func (c *BarChart) Draw(p painter.Painter, theme *Theme) {
 	if bw < 1 {
 		bw = 1
 	}
-	for i, v := range c.Values {
-		if v <= 0 {
-			continue
+	// Clip the bars to the plot so a series with more bars than the box is wide
+	// (slot floored at 1) never paints past the right edge.
+	withClip(p, Rect{X: pl.X, Y: r.Y, W: r.X + r.W - pl.X, H: r.H}, func() {
+		for i, v := range c.Values {
+			if v <= 0 {
+				continue
+			}
+			frac := v / top
+			if frac > 1 {
+				frac = 1
+			}
+			bh := int(frac * float64(pl.H-1))
+			if bh < 1 {
+				bh = 1
+			}
+			bx := pl.X + 1 + i*slot
+			fillRect(p, bx, baseY-bh, bw, bh, theme.Accent)
 		}
-		frac := v / top
-		if frac > 1 {
-			frac = 1
+		if c.Hover && c.HoverIndex >= 0 && c.HoverIndex < n {
+			hw := bw + 2
+			hx := clampInt(pl.X+c.HoverIndex*slot, r.X, r.X+r.W-hw)
+			strokeRect(p, hx, pl.Y, hw, baseY-pl.Y+1, theme.OnSurface)
 		}
-		bh := int(frac * float64(pl.H-1))
-		if bh < 1 {
-			bh = 1
-		}
-		bx := pl.X + 1 + i*slot
-		fillRect(p, bx, baseY-bh, bw, bh, theme.Accent)
-	}
-	if c.Hover && c.HoverIndex >= 0 && c.HoverIndex < n {
-		hw := bw + 2
-		hx := clampInt(pl.X+c.HoverIndex*slot, r.X, r.X+r.W-hw)
-		strokeRect(p, hx, pl.Y, hw, baseY-pl.Y+1, theme.OnSurface)
-	}
+	})
 }
