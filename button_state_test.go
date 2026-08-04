@@ -38,3 +38,44 @@ func TestButtonSelectedAndDanger(t *testing.T) {
 		t.Fatal("ButtonDanger should stroke a red border")
 	}
 }
+
+// TestButtonPressFeedback: a click presses the button (pressed face + fires
+// OnClick); the release clears it. This is the visual click feedback a host
+// gets just by routing EventClick/EventMouseUp.
+func TestButtonPressFeedback(t *testing.T) {
+	th := DefaultLight()
+	fired := 0
+	b := NewButton("Go", func() { fired++ })
+	b.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
+
+	b.OnEvent(Event{Kind: EventClick})
+	if !b.pressed {
+		t.Fatal("EventClick should press the button")
+	}
+	if fired != 1 {
+		t.Fatalf("EventClick should fire OnClick once, got %d", fired)
+	}
+	// The pressed face is Accent (distinct from the resting Surface face).
+	buf := makeSurface(60, 20)
+	b.Draw(newP(buf, 60), th)
+	if px := pixelAt(buf, 60, 4, 10); px != th.Accent {
+		t.Fatalf("pressed button face = %v, want Accent %v", px, th.Accent)
+	}
+
+	b.OnEvent(Event{Kind: EventMouseUp})
+	if b.pressed {
+		t.Fatal("EventMouseUp should release the button")
+	}
+	buf2 := makeSurface(60, 20)
+	b.Draw(newP(buf2, 60), th)
+	if px := pixelAt(buf2, 60, 4, 10); px == th.Accent {
+		t.Fatal("released button should not keep the Accent (pressed) face")
+	}
+
+	// A nil OnClick still presses without panicking.
+	nb := NewButton("Y", nil)
+	nb.OnEvent(Event{Kind: EventClick})
+	if !nb.pressed {
+		t.Fatal("nil-OnClick button should still press")
+	}
+}

@@ -121,11 +121,20 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
-// OnEvent dispatches click events to the OnClick callback. Other
-// event kinds are ignored at this level (the parent container may
-// have already pre-filtered).
+// OnEvent drives the button from pointer events: EventClick presses it (shows
+// the pressed face + fires OnClick) and EventMouseUp releases it. Self-managing
+// the pressed state means any host that routes the press/release pair gets the
+// click feedback for free, without also wiring SetPressed. Other event kinds
+// are ignored. (SetPressed remains for hosts that drive press state their own
+// way, e.g. enter/leave dispatch.)
 func (b *Button) OnEvent(ev Event) {
-	if ev.Kind == EventClick && b.OnClick != nil {
-		b.OnClick()
+	switch ev.Kind {
+	case EventClick:
+		b.pressed = true
+		if b.OnClick != nil {
+			b.OnClick()
+		}
+	case EventMouseUp:
+		b.pressed = false
 	}
 }
