@@ -21,6 +21,35 @@ type ScatterChart struct {
 	Base
 	Series [][]ScatterPoint
 	Colors []RGBA // optional per-series palette override; cycles by index
+
+	// Hover + HoverSeries/HoverPoint ring the hovered point. Opt-in; the zero
+	// value draws none.
+	Hover                   bool
+	HoverSeries, HoverPoint int
+}
+
+// NearestPoint returns the point closest (in pixels) to widget-local (x, y) —
+// its series index, point index, the point, and ok=false when the chart has no
+// data. Exposed so a host can show the value on hover.
+func (c *ScatterChart) NearestPoint(localX, localY int) (series, point int, pt ScatterPoint, ok bool) {
+	xr, yr, seen := c.ranges()
+	if !seen {
+		return 0, 0, ScatterPoint{}, false
+	}
+	r := c.Bounds()
+	tx, ty := localX+r.X, localY+r.Y
+	best := 1 << 62
+	for si, s := range c.Series {
+		for pi, q := range s {
+			x, y := c.project(q, xr, yr)
+			x = clampInt(x, r.X, r.X+r.W-ScatterDot)
+			y = clampInt(y, r.Y, r.Y+r.H-ScatterDot)
+			if d := (x-tx)*(x-tx) + (y-ty)*(y-ty); d < best {
+				best, series, point, pt, ok = d, si, pi, q, true
+			}
+		}
+	}
+	return
 }
 
 // ScatterDot is the side (painter units) of the square marker drawn per point.
@@ -114,5 +143,12 @@ func (c *ScatterChart) Draw(p painter.Painter, theme *Theme) {
 			y = clampInt(y, r.Y, r.Y+r.H-ScatterDot)
 			fillRect(p, x, y, ScatterDot, ScatterDot, col)
 		}
+	}
+	if c.Hover && c.HoverSeries >= 0 && c.HoverSeries < len(c.Series) &&
+		c.HoverPoint >= 0 && c.HoverPoint < len(c.Series[c.HoverSeries]) {
+		x, y := c.project(c.Series[c.HoverSeries][c.HoverPoint], xr, yr)
+		x = clampInt(x, r.X, r.X+r.W-ScatterDot)
+		y = clampInt(y, r.Y, r.Y+r.H-ScatterDot)
+		strokeRect(p, clampInt(x-2, r.X, r.X+r.W-6), clampInt(y-2, r.Y, r.Y+r.H-6), 6, 6, theme.OnSurface)
 	}
 }

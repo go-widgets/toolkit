@@ -17,6 +17,11 @@ type BarChart struct {
 	Base
 	Values []float64
 	Max    float64 // top of the Y axis; when <= 0, taken from the data
+
+	// Hover + HoverIndex outline the hovered bar's column. Opt-in; the zero
+	// value draws none.
+	Hover      bool
+	HoverIndex int
 }
 
 // BarGutter is the horizontal gap (painter units) between adjacent bars.
@@ -106,5 +111,10 @@ func (c *BarChart) Draw(p painter.Painter, theme *Theme) {
 		}
 		bx := pl.X + 1 + i*slot
 		fillRect(p, bx, baseY-bh, bw, bh, theme.Accent)
+	}
+	if c.Hover && c.HoverIndex >= 0 && c.HoverIndex < n {
+		hw := bw + 2
+		hx := clampInt(pl.X+c.HoverIndex*slot, r.X, r.X+r.W-hw)
+		strokeRect(p, hx, pl.Y, hw, baseY-pl.Y+1, theme.OnSurface)
 	}
 }

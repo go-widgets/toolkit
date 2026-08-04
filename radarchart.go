@@ -30,6 +30,59 @@ type RadarChart struct {
 	Series [][]float64
 	Max    float64 // normalisation max; when <= 0, taken from the data
 	Colors []RGBA  // optional per-series palette override; cycles by index
+
+	// Hover + HoverAxis highlight the hovered axis spoke. Opt-in; the zero
+	// value draws none.
+	Hover     bool
+	HoverAxis int
+}
+
+// AxisAt returns the axis whose spoke is nearest (in angle) to widget-local
+// (x, y), and ok=false when the chart has no axes. Exposed so a host can show
+// that axis's values on hover.
+func (c *RadarChart) AxisAt(localX, localY int) (axis int, ok bool) {
+	n := len(c.Axes)
+	if n == 0 {
+		return 0, false
+	}
+	dx := float64(localX) - float64(c.Bounds().W)/2
+	dy := float64(localY) - float64(c.Bounds().H)/2
+	if dx == 0 && dy == 0 {
+		return 0, true
+	}
+	pa := math.Atan2(dy, dx)
+	best, bestDiff := 0, 10.0
+	for k := 0; k < n; k++ {
+		if d := math.Abs(angleNorm(pa - axisAngle(k, n))); d < bestDiff {
+			bestDiff, best = d, k
+		}
+	}
+	return best, true
+}
+
+// angleNorm wraps a radian angle to (-π, π].
+func angleNorm(a float64) float64 {
+	for a > math.Pi {
+		a -= 2 * math.Pi
+	}
+	for a <= -math.Pi {
+		a += 2 * math.Pi
+	}
+	return a
+}
+
+// drawHover highlights the hovered axis's spoke + tip when Hover is set.
+func (c *RadarChart) drawHover(p painter.Painter, theme *Theme) {
+	n := len(c.Axes)
+	if !c.Hover || n == 0 || c.HoverAxis < 0 || c.HoverAxis >= n {
+		return
+	}
+	r := c.Bounds()
+	radius := min(r.W, r.H)/2 - ChartPad - 2*c.glyphHeight()
+	cx, cy := r.X+r.W/2, r.Y+r.H/2
+	x, y := vertex(cx, cy, radius, c.HoverAxis, n, 1)
+	drawLine(p, cx, cy, x, y, theme.Accent)
+	fillRect(p, clampInt(x-2, r.X, r.X+r.W-4), clampInt(y-2, r.Y, r.Y+r.H-4), 4, 4, theme.Accent)
 }
 
 // RadarRings is the number of concentric grid rings drawn between the centre
@@ -194,4 +247,5 @@ func (c *RadarChart) Draw(p painter.Painter, theme *Theme) {
 		fillPolygon(p, pts, tint(col))
 		drawPolygon(p, pts, col)
 	}
+	c.drawHover(p, theme)
 }
