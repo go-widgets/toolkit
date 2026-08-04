@@ -36,6 +36,13 @@ type Accordion struct {
 	Expanded int
 	Multiple bool
 
+	// OnToggle fires whenever a section's expanded state flips through a user
+	// interaction -- a header click, or Enter/Space on the focused header. i is
+	// the section index and expanded is its NEW state (true = just opened). In
+	// exclusive mode, opening section i also collapses whichever section was
+	// open, but OnToggle reports only the section the user acted on. Nil is safe.
+	OnToggle func(i int, expanded bool)
+
 	// multiExpanded tracks per-section expanded state in Multiple
 	// mode. Lazily allocated on first toggle; nil means "nothing
 	// expanded yet".
@@ -68,12 +75,22 @@ func (a *Accordion) toggle(i int) {
 			a.multiExpanded = make(map[int]bool)
 		}
 		a.multiExpanded[i] = !a.multiExpanded[i]
+		a.fireToggle(i)
 		return
 	}
 	if a.Expanded == i {
 		a.Expanded = -1
 	} else {
 		a.Expanded = i
+	}
+	a.fireToggle(i)
+}
+
+// fireToggle reports section i's new expanded state through OnToggle (nil-safe)
+// -- the shared notify tail both the Multiple and exclusive toggle paths run.
+func (a *Accordion) fireToggle(i int) {
+	if a.OnToggle != nil {
+		a.OnToggle(i, a.isExpanded(i))
 	}
 }
 

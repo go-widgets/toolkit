@@ -56,6 +56,14 @@ type Menu struct {
 	Hover   int // index of hovered row, -1 if none
 	OnClose func()
 
+	// OnItemToggle fires when activating a checkable or radio row changes its
+	// Checked state (before the row's Action and OnClose run). i is the row
+	// index and checked is its NEW state: for a Checkable row the flipped value,
+	// for a RadioGroup member always true (its just-selected state; the siblings
+	// it cleared are not separately reported). Plain (non-checkish) rows never
+	// fire it. Nil is safe.
+	OnItemToggle func(i int, checked bool)
+
 	// openSub is the index of the row whose Submenu is currently open, or -1
 	// when none is. A click or hover on a submenu-parent row (or ArrowRight on
 	// it) opens its child Menu beside the row; ArrowLeft/Escape closes it.
@@ -364,8 +372,14 @@ func (m *Menu) activate(idx int) {
 	switch {
 	case it.RadioGroup != 0:
 		m.selectRadio(idx)
+		if m.OnItemToggle != nil {
+			m.OnItemToggle(idx, it.Checked)
+		}
 	case it.Checkable:
 		it.Checked = !it.Checked
+		if m.OnItemToggle != nil {
+			m.OnItemToggle(idx, it.Checked)
+		}
 	}
 	it.Action()
 	if m.OnClose != nil {

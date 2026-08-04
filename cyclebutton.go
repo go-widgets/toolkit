@@ -16,6 +16,12 @@ type CycleButton struct {
 	Options  []string
 	Index    int // index of the shown option; advanced on click
 	OnChange func(index int, value string)
+
+	// OnChangeIndex fires with the new Index every time the shown option
+	// advances, alongside the multi-argument OnChange. It is the single-argument
+	// counterpart that a value binder can wire to (OnChange's (index, value)
+	// signature cannot drive an int field binding). Nil is safe.
+	OnChangeIndex func(index int)
 }
 
 // NewCycleButton builds a CycleButton over options (the first shown).
@@ -80,5 +86,8 @@ func (c *CycleButton) step(delta int) {
 	c.Index = ((c.Index+delta)%n + n) % n
 	if c.OnChange != nil {
 		c.OnChange(c.Index, c.Options[c.Index])
+	}
+	if c.OnChangeIndex != nil {
+		c.OnChangeIndex(c.Index)
 	}
 }

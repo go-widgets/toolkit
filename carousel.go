@@ -22,6 +22,12 @@ type Carousel struct {
 	Slides  []Widget
 	Current int
 	Wrap    bool
+
+	// OnChange fires whenever the shown slide (Current) changes through a user
+	// interaction: a gutter-arrow step (Prev/Next), a dot-indicator click, or an
+	// arrow key. i is the new Current index. It runs only when Current actually
+	// changes, so re-selecting the shown slide is silent. Nil is safe.
+	OnChange func(i int)
 }
 
 // Carousel layout constants. carouselGutterW is the pixel width of each
@@ -76,11 +82,25 @@ func (c *Carousel) Next() {
 	c.clampCurrent()
 	if c.Current == n-1 {
 		if c.Wrap {
-			c.Current = 0
+			c.setCurrent(0)
 		}
 		return
 	}
-	c.Current++
+	c.setCurrent(c.Current + 1)
+}
+
+// setCurrent moves the shown slide to i and fires OnChange (nil-safe) when the
+// value actually changes -- the shared mutate+notify path Prev/Next, a dot
+// click and the arrow keys all funnel through. Re-selecting the shown slide is
+// silent, keeping a two-way binding loop-free.
+func (c *Carousel) setCurrent(i int) {
+	if c.Current == i {
+		return
+	}
+	c.Current = i
+	if c.OnChange != nil {
+		c.OnChange(i)
+	}
 }
 
 // Prev retreats Current by one slide. At the first slide it wraps to the
@@ -94,11 +114,11 @@ func (c *Carousel) Prev() {
 	c.clampCurrent()
 	if c.Current == 0 {
 		if c.Wrap {
-			c.Current = n - 1
+			c.setCurrent(n - 1)
 		}
 		return
 	}
-	c.Current--
+	c.setCurrent(c.Current - 1)
 }
 
 // contentRect is the slide viewport: the bounds minus the two side gutters
@@ -260,7 +280,7 @@ func (c *Carousel) OnEvent(ev Event) {
 		c.Next()
 	default:
 		if idx := c.dotAt(sx, sy); idx >= 0 {
-			c.Current = idx
+			c.setCurrent(idx)
 			return
 		}
 		content := c.contentRect()

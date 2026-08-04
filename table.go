@@ -169,6 +169,17 @@ type Table struct {
 	// safe. Only cells in a column with Editable set can be edited.
 	OnCellEdit func(row, col int, value string)
 
+	// OnSelect fires whenever the highlighted row (Selected, which doubles
+	// as the keyboard cursor) changes through a user interaction: a
+	// MultiSelect body-row click that moves the anchor, or a keyboard cursor
+	// move (Arrow / Page / Home / End). row is the new Selected index. The
+	// Table has already updated Selected before firing, and the callback runs
+	// only when the value actually changes, so a re-select of the same row is
+	// silent. Nil is safe -- a host that does not track selection leaves it
+	// unset. This single-argument slot is what makes Selected observable (e.g.
+	// via mvvmtk.BindTableSelection).
+	OnSelect func(row int)
+
 	// editRow/editCol point at the cell whose inline editor is open (both
 	// -1 = none; NewTable seeds them). editor is the live text field while
 	// an edit is in progress. See beginEdit/commitEdit/cancelEdit.
@@ -1639,13 +1650,27 @@ func (t *Table) handleKey(ev Event) {
 		return
 	}
 	if idx, ok := rovingIndex(t.Selected, len(t.Rows), t.bodyVisibleRows(), ev.Code); ok {
-		t.Selected = idx
+		t.setSelected(idx)
 		// A plain move mirrors a plain click: in MultiSelect mode the cursor
 		// row becomes the sole selection (and the anchor).
 		if t.MultiSelect {
 			t.SetRowSelection(idx)
 		}
 		t.scrollToSelected()
+	}
+}
+
+// setSelected moves the highlighted-row cursor to row and fires OnSelect
+// (nil-safe) when the value actually changes -- the shared mutate+notify path
+// a keyboard cursor move and a MultiSelect anchor-moving click both take.
+// Re-selecting the current row is silent, keeping a two-way binding loop-free.
+func (t *Table) setSelected(row int) {
+	if t.Selected == row {
+		return
+	}
+	t.Selected = row
+	if t.OnSelect != nil {
+		t.OnSelect(row)
 	}
 }
 
@@ -1685,7 +1710,7 @@ func (t *Table) extendRowSelection(code string) {
 	}
 	t.selectedRows[prev] = true
 	t.selectedRows[next] = true
-	t.Selected = next
+	t.setSelected(next)
 	t.scrollToSelected()
 }
 
@@ -2125,7 +2150,7 @@ func (t *Table) OnEvent(ev Event) {
 			t.ToggleRowSelect(row)
 		default:
 			t.SetRowSelection(row)
-			t.Selected = row
+			t.setSelected(row)
 		}
 	case EventMouseDrag:
 		// A scrollbar-thumb drag takes precedence over a column resize.

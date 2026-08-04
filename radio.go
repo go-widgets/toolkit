@@ -104,6 +104,14 @@ func (r *RadioButton) toggleStandalone() {
 type RadioGroup struct {
 	Members []*RadioButton
 	Active  int
+
+	// OnChange fires whenever the checked member changes through a user
+	// interaction: a click on a member, or an arrow key moving the checked
+	// member through the group. active is the new Active index. It fires
+	// alongside the newly-checked member's own OnToggle, giving the group a
+	// single-argument slot the whole selection can be observed through (e.g.
+	// via mvvmtk.BindRadioGroup). Nil is safe.
+	OnChange func(active int)
 }
 
 // NewRadioGroup builds an empty group with Active = -1.
@@ -126,6 +134,9 @@ func (g *RadioGroup) activate(idx int) {
 	}
 	if cb := g.Members[idx].OnToggle; cb != nil {
 		cb(true)
+	}
+	if g.OnChange != nil {
+		g.OnChange(idx)
 	}
 }
 
