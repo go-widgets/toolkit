@@ -90,24 +90,29 @@ func NewDiff(lines []DiffLine) *Diff {
 func (d *Diff) Draw(p painter.Painter, theme *Theme) {
 	r := d.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	for i, line := range d.Lines {
-		y := r.Y + DiffPadY + i*DiffLineH()
-		fill := theme.Surface
-		ink := theme.OnSurface
-		prefix := " "
-		switch line.Kind {
-		case DiffAdded:
-			fill = diffAddedFill
-			ink = diffAddedInk
-			prefix = "+"
-		case DiffRemoved:
-			fill = diffRemovedFill
-			ink = diffRemovedInk
-			prefix = "-"
+	// Clip the rows to the widget: more lines than fit (or a line wider than
+	// the box) must be clipped, never painted past the frame — the same
+	// graceful degradation Table/Notebook rely on.
+	withClip(p, r, func() {
+		for i, line := range d.Lines {
+			y := r.Y + DiffPadY + i*DiffLineH()
+			fill := theme.Surface
+			ink := theme.OnSurface
+			prefix := " "
+			switch line.Kind {
+			case DiffAdded:
+				fill = diffAddedFill
+				ink = diffAddedInk
+				prefix = "+"
+			case DiffRemoved:
+				fill = diffRemovedFill
+				ink = diffRemovedInk
+				prefix = "-"
+			}
+			fillRect(p, r.X+1, y, r.W-2, DiffLineH(), fill)
+			d.drawText(p, r.X+DiffPadX, y, prefix, ink)
+			d.drawText(p, r.X+DiffPadX+d.glyphAdvance(), y, line.Text, ink)
 		}
-		fillRect(p, r.X+1, y, r.W-2, DiffLineH(), fill)
-		d.drawText(p, r.X+DiffPadX, y, prefix, ink)
-		d.drawText(p, r.X+DiffPadX+d.glyphAdvance(), y, line.Text, ink)
-	}
+	})
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 }

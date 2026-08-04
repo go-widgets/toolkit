@@ -58,6 +58,26 @@ func (c *LineChart) plot() Rect {
 	return Rect{X: r.X + ChartPad, Y: r.Y, W: r.W - ChartPad, H: r.H - ChartPad}
 }
 
+// ValueAt maps a widget-local x to the nearest plotted point, returning its
+// index and value (ok=false only for an empty series). Exposed so a host can
+// show the underlying value on hover.
+func (c *LineChart) ValueAt(localX int) (index int, value float64, ok bool) {
+	n := len(c.Series)
+	if n == 0 {
+		return 0, 0, false
+	}
+	if n == 1 {
+		return 0, c.Series[0], true
+	}
+	span := c.plot().W - 1
+	if span < 1 {
+		return 0, c.Series[0], true
+	}
+	rel := localX - ChartPad
+	idx := clampInt((2*rel*(n-1)+span)/(2*span), 0, n-1) // nearest index
+	return idx, c.Series[idx], true
+}
+
 // pointAt maps series index i to a pixel in the plot area.
 func (c *LineChart) pointAt(i int, mn, mx float64) (int, int) {
 	pl := c.plot()

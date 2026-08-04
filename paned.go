@@ -26,6 +26,10 @@ type Paned struct {
 	Orientation       int
 	Position          int
 	OnPositionChanged func(pos int)
+
+	// resizing is true between grabbing the handle (EventClick on it) and
+	// releasing it, so EventMouseDrag moves the split.
+	resizing bool
 }
 
 // PanedHandleW is the pixel thickness of the splitter handle.
@@ -147,9 +151,6 @@ func (pd *Paned) Draw(p painter.Painter, theme *Theme) {
 
 // OnEvent forwards to the appropriate child based on click position.
 func (p *Paned) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
-		return
-	}
 	// ev is Paned-local; p.Position is a local offset, so the split test is
 	// local-vs-local. The child, however, sits at a non-zero offset within the
 	// Paned (First at the origin, Second past Position+handle), so the forwarded
@@ -160,10 +161,25 @@ func (p *Paned) OnEvent(ev Event) {
 	if p.Orientation == PanedVertical {
 		pos = ev.Y
 	}
-	pr := p.Bounds()
-	if pos < p.Position && p.First != nil {
-		p.First.OnEvent(translateEvent(ev, pr, p.First.Bounds()))
-	} else if pos >= p.Position+PanedHandleW && p.Second != nil {
-		p.Second.OnEvent(translateEvent(ev, pr, p.Second.Bounds()))
+	switch ev.Kind {
+	case EventClick:
+		// A press on the handle grabs it for a resize; otherwise route to the
+		// pane under the pointer.
+		if pos >= p.Position && pos < p.Position+PanedHandleW {
+			p.resizing = true
+			return
+		}
+		pr := p.Bounds()
+		if pos < p.Position && p.First != nil {
+			p.First.OnEvent(translateEvent(ev, pr, p.First.Bounds()))
+		} else if pos >= p.Position+PanedHandleW && p.Second != nil {
+			p.Second.OnEvent(translateEvent(ev, pr, p.Second.Bounds()))
+		}
+	case EventMouseDrag:
+		if p.resizing {
+			p.MoveHandle(pos) // drag the grip → move the split
+		}
+	case EventMouseUp:
+		p.resizing = false
 	}
 }

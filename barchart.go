@@ -50,6 +50,28 @@ func (c *BarChart) plot() Rect {
 	return Rect{X: r.X + ChartPad, Y: r.Y, W: r.W - ChartPad, H: r.H - ChartPad}
 }
 
+// ValueAt maps a widget-local x to the bar under it, returning its index and
+// value; ok is false for an empty chart or an x outside every bar slot. Exposed
+// so a host can show the underlying value on hover.
+func (c *BarChart) ValueAt(localX int) (index int, value float64, ok bool) {
+	n := len(c.Values)
+	if n == 0 {
+		return 0, 0, false
+	}
+	slot := c.plot().W / n
+	if slot < 1 {
+		slot = 1
+	}
+	rel := localX - ChartPad
+	if rel < 0 {
+		return 0, 0, false
+	}
+	if idx := rel / slot; idx < n {
+		return idx, c.Values[idx], true
+	}
+	return 0, 0, false
+}
+
 // Draw paints the axis frame then one Accent bar per value.
 func (c *BarChart) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()

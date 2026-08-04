@@ -62,7 +62,12 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 			nb.AddTab("Docs", NewMarkdownView("# x\n- y"))
 			return nb
 		}},
-		{"frame", func() Widget { f := NewFrame(NewLabel("in a frame")); f.Title = "Panel"; f.Collapsible = true; return f }},
+		{"frame", func() Widget {
+			f := NewFrame(NewLabel("in a frame"))
+			f.Title = "Panel"
+			f.Collapsible = true
+			return f
+		}},
 		{"card", func() Widget { return NewCard("Title", "Body one.\nBody two.", "footer") }},
 		{"expander", func() Widget { e := NewExpander("Details", NewLabel("body")); e.Expanded = true; return e }},
 		{"paned", func() Widget { return NewHPaned(NewLabel("L"), NewLabel("R")) }},
@@ -106,6 +111,14 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"viewswitcher", func() Widget { return NewViewSwitcher([]string{"Day", "Week", "Month"}, 0) }},
 		{"markdownview", func() Widget { return NewMarkdownView("# Title\n\n- one\n- two\n\nparagraph") }},
 		{"loadmask", func() Widget { m := NewLoadMask("Loading…"); m.Active = true; return m }},
+		{"colorchooser", func() Widget { return NewColorChooser(RGB(0x0d, 0x94, 0x88)) }},
+		{"diff", func() Widget {
+			lines := make([]DiffLine, 0, 12)
+			for i := 0; i < 12; i++ { // more lines than the 150px box holds
+				lines = append(lines, DiffLine{Text: "a fairly long unified-diff line of source text", Kind: DiffKind(i % 3)})
+			}
+			return NewDiff(lines)
+		}},
 	}
 
 	for _, c := range cases {
