@@ -14,15 +14,36 @@ import "github.com/go-widgets/painter"
 // [StartMin, EndMin), so EndMin must be greater than StartMin. In the calendar
 // views (AgendaMonth/AgendaQuarter/AgendaYear) the event is placed by its
 // absolute date instead: Y is the year, M the month (1..12) and D the
-// day-of-month (1..31); Day/StartMin/EndMin are ignored there. Fill is the
-// block/chip/dot colour — its zero value falls back to the theme's Accent so an
-// event added without an explicit colour still paints in the app's palette.
+// day-of-month (1..31); Day/StartMin/EndMin are ignored there.
+//
+// Colour resolution (see Agenda.eventFill): an explicit non-zero Fill always
+// wins; otherwise, when Calendar indexes a calendar in Agenda.Calendars that
+// carries a non-zero Color, that calendar's colour is used (so every event on a
+// "Work" calendar shares one colour without repeating it per event); otherwise
+// it falls back to the theme's Accent. Calendar is an index into
+// Agenda.Calendars; its zero value points at the first calendar, and any value
+// outside [0, len(Calendars)) means "no calendar" (Fill/Accent only). An event
+// whose calendar is Hidden is not drawn or hit-tested (see eventVisible).
 type AgendaEvent struct {
 	Title            string
 	Day              int
 	StartMin, EndMin int
 	Y, M, D          int
 	Fill             RGBA
+	Calendar         int
+}
+
+// AgendaCalendar is one named, colour-coded source of events — a "calendar" in
+// the Google/Apple Calendar sense (typically a remote CalDAV/ICS feed the host
+// syncs into Agenda.Events). Color tints every event that belongs to it, and
+// Hidden hides all of its events at once (the toggle an AgendaSidebar row
+// drives) without removing them from Agenda.Events. The toolkit does not fetch
+// anything — the host feeds events in and assigns each event's Calendar index;
+// AgendaCalendar only carries the presentation (name + colour + visibility).
+type AgendaCalendar struct {
+	Name   string
+	Color  RGBA
+	Hidden bool
 }
 
 // AgendaView selects which of the four calendar layouts an Agenda draws. The
@@ -69,6 +90,15 @@ type Agenda struct {
 	// that is not an event chip, carrying that cell's (year, month, day). A
 	// host uses it to add an event on the clicked day. Nil is safe.
 	OnDayActivate func(year, month, day int)
+
+	// Calendars are the named, colour-coded event sources (see
+	// AgendaCalendar). An event's colour is resolved from its Calendar index
+	// into this slice, and an event whose calendar is Hidden is not drawn or
+	// hit. Empty (the default) keeps the original behaviour: every event uses
+	// its own Fill (or the theme Accent) and none are ever hidden. Share this
+	// exact slice with an AgendaSidebar so toggling a row's visibility is seen
+	// here without any extra wiring.
+	Calendars []AgendaCalendar
 
 	// View selects the layout (week/month/quarter/year); zero = AgendaWeek.
 	View AgendaView
@@ -151,6 +181,40 @@ func agendaHourLabel(h int) string {
 		hh = "0" + hh
 	}
 	return hh + ":00"
+}
+
+// eventCalendar returns the AgendaCalendar an event belongs to, and ok=true,
+// when ev.Calendar indexes a real entry in a.Calendars; ok=false for an
+// out-of-range index (including the zero value when a.Calendars is empty),
+// meaning "no calendar".
+func (a *Agenda) eventCalendar(ev AgendaEvent) (AgendaCalendar, bool) {
+	if ev.Calendar >= 0 && ev.Calendar < len(a.Calendars) {
+		return a.Calendars[ev.Calendar], true
+	}
+	return AgendaCalendar{}, false
+}
+
+// eventVisible reports whether an event should be drawn/hit: false only when it
+// belongs to a calendar that is currently Hidden. Events with no calendar are
+// always visible, so a zero-Calendars Agenda hides nothing (unchanged
+// behaviour).
+func (a *Agenda) eventVisible(ev AgendaEvent) bool {
+	cal, ok := a.eventCalendar(ev)
+	return !ok || !cal.Hidden
+}
+
+// eventFill resolves an event's paint colour: an explicit non-zero Fill wins;
+// otherwise the event's calendar Color (when it has one and it is non-zero);
+// otherwise the theme Accent. This is the single colour rule every view shares,
+// so assigning an event to a calendar recolours it everywhere at once.
+func (a *Agenda) eventFill(ev AgendaEvent, theme *Theme) RGBA {
+	if ev.Fill != (RGBA{}) {
+		return ev.Fill
+	}
+	if cal, ok := a.eventCalendar(ev); ok && cal.Color != (RGBA{}) {
+		return cal.Color
+	}
+	return theme.Accent
 }
 
 // agendaSelectInk is the tint blended over a Selected event's own Fill: the
@@ -282,14 +346,14 @@ func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 	// Event blocks, clipped to the grid so none bleed into header/gutter.
 	withClip(p, gridRect, func() {
 		for i, ev := range a.Events {
+			if !a.eventVisible(ev) {
+				continue
+			}
 			br, ok := a.blockRect(r.X, r.Y, ev)
 			if !ok {
 				continue
 			}
-			fill := ev.Fill
-			if fill == (RGBA{}) {
-				fill = theme.Accent
-			}
+			fill := a.eventFill(ev, theme)
 			if a.Selected == i {
 				fill = agendaSelectInk(fill, theme)
 			}
@@ -392,6 +456,9 @@ func (a *Agenda) monthDayAt(x, y int) (int, int, int, bool) {
 // widget-local coordinates, or -1 when the point hits no block.
 func (a *Agenda) hitWeek(x, y int) int {
 	for i := len(a.Events) - 1; i >= 0; i-- {
+		if !a.eventVisible(a.Events[i]) {
+			continue
+		}
 		br, ok := a.blockRect(0, 0, a.Events[i])
 		if ok && br.Contains(x, y) {
 			return i
@@ -446,25 +513,21 @@ func prevMonth(year, month int) (int, int) {
 	return year, month - 1
 }
 
-// dayEvent reports whether any event falls on (y, m, d) and returns the fill of
-// the first such event (its zero value left for the caller to resolve against
-// the theme accent).
-func (a *Agenda) dayEvent(y, m, d int) (RGBA, bool) {
+// dayEvent reports whether any visible event falls on (y, m, d) and returns the
+// first such event so the caller can resolve its colour with eventFill (which
+// applies the calendar colour + accent fallback). Hidden-calendar events are
+// skipped, so a day whose only events belong to a hidden calendar reads as
+// empty.
+func (a *Agenda) dayEvent(y, m, d int) (AgendaEvent, bool) {
 	for _, ev := range a.Events {
+		if !a.eventVisible(ev) {
+			continue
+		}
 		if ev.Y == y && ev.M == m && ev.D == d {
-			return ev.Fill, true
+			return ev, true
 		}
 	}
-	return RGBA{}, false
-}
-
-// resolveFill returns fill unless it is the zero value, in which case it falls
-// back to the theme accent — the same rule the week blocks use.
-func resolveFill(fill RGBA, theme *Theme) RGBA {
-	if fill == (RGBA{}) {
-		return theme.Accent
-	}
-	return fill
+	return AgendaEvent{}, false
 }
 
 // --- month view -----------------------------------------------------------
@@ -509,6 +572,9 @@ func (a *Agenda) monthChips(ox, oy int) (chips []agendaChip, overflows []agendaO
 
 	byDay := make([][]int, dim+1)
 	for i, ev := range a.Events {
+		if !a.eventVisible(ev) {
+			continue
+		}
 		if ev.Y == y && ev.M == m && ev.D >= 1 && ev.D <= dim {
 			byDay[ev.D] = append(byDay[ev.D], i)
 		}
@@ -609,7 +675,7 @@ func (a *Agenda) drawMonth(p painter.Painter, theme *Theme) {
 		chips, overflows := a.monthChips(r.X, r.Y)
 		for _, c := range chips {
 			ev := a.Events[c.idx]
-			fill := resolveFill(ev.Fill, theme)
+			fill := a.eventFill(ev, theme)
 			if a.Selected == c.idx {
 				fill = agendaSelectInk(fill, theme)
 			}
@@ -719,12 +785,12 @@ func (a *Agenda) drawMiniMonth(p painter.Painter, theme *Theme, box Rect, sp min
 		cx := box.X + col*cellW
 		cy := gridTop + row*cellH
 		a.drawText(p, cx+(cellW-a.textWidth(itoa(day)))/2, cy, itoa(day), theme.OnSurface)
-		if fill, has := a.dayEvent(sp.y, sp.m, day); has {
+		if ev, has := a.dayEvent(sp.y, sp.m, day); has {
 			// Sit the marker just under the day number so it reads as
 			// belonging to this cell rather than crowding the next row.
 			dx := cx + cellW/2 - agendaDotR
 			dy := cy + a.glyphHeight() + 1
-			fillRoundRect(p, dx, dy, 2*agendaDotR, 2*agendaDotR, agendaDotR, resolveFill(fill, theme))
+			fillRoundRect(p, dx, dy, 2*agendaDotR, 2*agendaDotR, agendaDotR, a.eventFill(ev, theme))
 		}
 	}
 }
@@ -761,6 +827,9 @@ func (a *Agenda) hitMini(x, y int) int {
 		}
 		for j := len(a.Events) - 1; j >= 0; j-- {
 			ev := a.Events[j]
+			if !a.eventVisible(ev) {
+				continue
+			}
 			if ev.Y == sp.y && ev.M == sp.m && ev.D == day {
 				return j
 			}
