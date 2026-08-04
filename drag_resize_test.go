@@ -135,3 +135,55 @@ func TestChartValueAt(t *testing.T) {
 		t.Fatal("narrow BarChart.ValueAt should still resolve a bar")
 	}
 }
+
+// TestChartHoverCrosshair covers AreaChart.ValueAt and the Line/Area hover
+// crosshair (drawn only when Hover is set, always inside Bounds).
+func TestChartHoverCrosshair(t *testing.T) {
+	const w, h = 220, 130
+	bounds := Rect{X: 10, Y: 10, W: 200, H: 110}
+	inBounds := func(name string, buf []byte, r Rect) {
+		minX, minY, maxX, maxY := nbPaintedBBox(buf, w, h)
+		if minX >= 0 && (minX < r.X || minY < r.Y || maxX >= r.X+r.W || maxY >= r.Y+r.H) {
+			t.Fatalf("%s crosshair out of bounds: X[%d..%d] Y[%d..%d]", name, minX, maxX, minY, maxY)
+		}
+	}
+
+	// LineChart crosshair.
+	lc := NewLineChart([]float64{3, 7, 2, 8, 5})
+	lc.SetBounds(bounds)
+	lc.Hover, lc.HoverIndex = true, 2
+	buf := makeSurface(w, h)
+	lc.Draw(newP(buf, w), DefaultLight())
+	inBounds("line", buf, bounds)
+
+	// AreaChart.ValueAt on the first series.
+	ac := NewAreaChart([][]float64{{3, 6, 4, 8, 5}, {1, 3, 2, 5, 3}})
+	ac.SetBounds(bounds)
+	for i := range ac.Series[0] {
+		x, _ := ac.pointAt(ac.Series[0], i, 0, 10)
+		gi, gv, ok := ac.ValueAt(x - ac.Bounds().X)
+		if !ok || gi != i || gv != ac.Series[0][i] {
+			t.Fatalf("Area.ValueAt %d = (%d,%v,%v)", i, gi, gv, ok)
+		}
+	}
+	if _, _, ok := NewAreaChart(nil).ValueAt(5); ok {
+		t.Fatal("empty AreaChart.ValueAt should be ok=false")
+	}
+	if _, _, ok := NewAreaChart([][]float64{{}}).ValueAt(5); ok {
+		t.Fatal("empty-first-series AreaChart.ValueAt should be ok=false")
+	}
+	if i, v, ok := NewAreaChart([][]float64{{9}}).ValueAt(999); !ok || i != 0 || v != 9 {
+		t.Fatalf("single-point AreaChart.ValueAt = (%d,%v,%v)", i, v, ok)
+	}
+	tinyA := NewAreaChart([][]float64{{1, 2, 3}})
+	tinyA.SetBounds(Rect{X: 0, Y: 0, W: ChartPad + 1, H: 10})
+	if _, _, ok := tinyA.ValueAt(0); !ok {
+		t.Fatal("narrow AreaChart.ValueAt should still resolve")
+	}
+
+	// AreaChart crosshair.
+	ac.Hover, ac.HoverIndex = true, 3
+	abuf := makeSurface(w, h)
+	ac.Draw(newP(abuf, w), DefaultLight())
+	inBounds("area", abuf, bounds)
+}

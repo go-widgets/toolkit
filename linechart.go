@@ -18,6 +18,13 @@ type LineChart struct {
 	Base
 	Series   []float64
 	Min, Max float64 // Y bounds; when equal, taken from the data
+
+	// Hover + HoverIndex drive a hover crosshair: when Hover is set, Draw paints
+	// a vertical rule at data point HoverIndex and a marker where it meets the
+	// curve. A host sets these from ValueAt on pointer motion; the zero value
+	// (Hover == false) draws no crosshair, so existing renders are unchanged.
+	Hover      bool
+	HoverIndex int
 }
 
 // ChartPad is the margin (painter units) reserved for the axes on the left and
@@ -105,12 +112,26 @@ func (c *LineChart) Draw(p painter.Painter, theme *Theme) {
 	if len(c.Series) == 1 {
 		x, y := c.pointAt(0, mn, mx)
 		fillRect(p, x, y, 2, 2, theme.Accent)
+	} else {
+		px, py := c.pointAt(0, mn, mx)
+		for i := 1; i < len(c.Series); i++ {
+			x, y := c.pointAt(i, mn, mx)
+			drawLine(p, px, py, x, y, theme.Accent)
+			px, py = x, y
+		}
+	}
+	c.drawHover(p, theme, mn, mx)
+}
+
+// drawHover paints the hover crosshair — a vertical rule at data point
+// HoverIndex plus a marker where it meets the curve — when Hover is set and
+// HoverIndex is in range. The marker is clamped inside Bounds.
+func (c *LineChart) drawHover(p painter.Painter, theme *Theme, mn, mx float64) {
+	if !c.Hover || c.HoverIndex < 0 || c.HoverIndex >= len(c.Series) {
 		return
 	}
-	px, py := c.pointAt(0, mn, mx)
-	for i := 1; i < len(c.Series); i++ {
-		x, y := c.pointAt(i, mn, mx)
-		drawLine(p, px, py, x, y, theme.Accent)
-		px, py = x, y
-	}
+	r, pl := c.Bounds(), c.plot()
+	hx, hy := c.pointAt(c.HoverIndex, mn, mx)
+	drawLine(p, hx, r.Y, hx, pl.Y+pl.H-1, dimInk(theme))
+	fillRect(p, clampInt(hx-2, r.X, r.X+r.W-4), clampInt(hy-2, r.Y, r.Y+r.H-4), 4, 4, theme.Accent)
 }

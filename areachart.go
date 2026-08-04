@@ -22,6 +22,11 @@ type AreaChart struct {
 	Series   [][]float64
 	Min, Max float64 // shared Y bounds; when equal, taken from the data
 	Colors   []RGBA  // optional per-series palette override; cycles by index
+
+	// Hover + HoverIndex drive a hover crosshair on the first series, like
+	// LineChart. Zero value (Hover == false) draws none.
+	Hover      bool
+	HoverIndex int
 }
 
 // AreaFillAlpha is the opacity (0..255) of the shaded band under each series,
@@ -82,6 +87,27 @@ func (c *AreaChart) pointAt(s []float64, i int, mn, mx float64) (int, int) {
 	return x, y
 }
 
+// ValueAt maps a widget-local x to the nearest point of the FIRST series,
+// returning its index and value (ok=false when there is no data). Exposed so a
+// host can show the underlying value on hover.
+func (c *AreaChart) ValueAt(localX int) (index int, value float64, ok bool) {
+	if len(c.Series) == 0 || len(c.Series[0]) == 0 {
+		return 0, 0, false
+	}
+	s := c.Series[0]
+	n := len(s)
+	if n == 1 {
+		return 0, s[0], true
+	}
+	span := c.plot().W - 1
+	if span < 1 {
+		return 0, s[0], true
+	}
+	rel := localX - ChartPad
+	idx := clampInt((2*rel*(n-1)+span)/(2*span), 0, n-1)
+	return idx, s[idx], true
+}
+
 // seriesColor returns series i's colour: the Colors override (cycled) when set,
 // else the shared categorical palette (cycled).
 func (c *AreaChart) seriesColor(i int) RGBA {
@@ -137,4 +163,18 @@ func (c *AreaChart) Draw(p painter.Painter, theme *Theme) {
 			px, py = x, y
 		}
 	}
+	c.drawHover(p, theme, mn, mx)
+}
+
+// drawHover paints a vertical crosshair at HoverIndex on the first series plus
+// a marker where it meets that band's polyline, when Hover is set and the index
+// is in range. The marker is clamped inside Bounds.
+func (c *AreaChart) drawHover(p painter.Painter, theme *Theme, mn, mx float64) {
+	if !c.Hover || len(c.Series) == 0 || c.HoverIndex < 0 || c.HoverIndex >= len(c.Series[0]) {
+		return
+	}
+	r, pl := c.Bounds(), c.plot()
+	hx, hy := c.pointAt(c.Series[0], c.HoverIndex, mn, mx)
+	drawLine(p, hx, r.Y, hx, pl.Y+pl.H-1, dimInk(theme))
+	fillRect(p, clampInt(hx-2, r.X, r.X+r.W-4), clampInt(hy-2, r.Y, r.Y+r.H-4), 4, 4, theme.OnSurface)
 }
