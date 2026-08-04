@@ -111,6 +111,22 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"viewswitcher", func() Widget { return NewViewSwitcher([]string{"Day", "Week", "Month"}, 0) }},
 		{"markdownview", func() Widget { return NewMarkdownView("# Title\n\n- one\n- two\n\nparagraph") }},
 		{"loadmask", func() Widget { m := NewLoadMask("Loading…"); m.Active = true; return m }},
+		{"barchart-dense", func() Widget { // more bars than pixels -> must clip
+			v := make([]float64, 300)
+			for i := range v {
+				v[i] = float64(i%10) + 1
+			}
+			return NewBarChart(v)
+		}},
+		{"sparkbar-dense", func() Widget {
+			v := make([]float64, 300)
+			for i := range v {
+				v[i] = float64(i%10) + 1
+			}
+			s := NewSparkline(v)
+			s.Kind = SparkBar
+			return s
+		}},
 		{"colorchooser", func() Widget { return NewColorChooser(RGB(0x0d, 0x94, 0x88)) }},
 		{"diff", func() Widget {
 			lines := make([]DiffLine, 0, 12)

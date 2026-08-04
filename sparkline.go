@@ -160,24 +160,28 @@ func (s *Sparkline) Draw(p painter.Painter, theme *Theme) {
 	}
 	col := s.ink(theme)
 	mn, mx := s.valueRange()
-	switch {
-	case s.Kind == SparkBar:
-		s.drawBars(p, pl, mn, mx, col)
-	case n == 1:
-		x, y := s.pointAt(0, mn, mx, pl)
-		fillRect(p, x, y, 2, 2, col)
-	default:
-		px, py := s.pointAt(0, mn, mx, pl)
-		for i := 1; i < n; i++ {
-			x, y := s.pointAt(i, mn, mx, pl)
-			drawLine(p, px, py, x, y, col)
-			px, py = x, y
+	// Clip to the widget so a bar spark with more values than pixels (slot
+	// floored at 1) never paints past the bounds.
+	withClip(p, s.Bounds(), func() {
+		switch {
+		case s.Kind == SparkBar:
+			s.drawBars(p, pl, mn, mx, col)
+		case n == 1:
+			x, y := s.pointAt(0, mn, mx, pl)
+			fillRect(p, x, y, 2, 2, col)
+		default:
+			px, py := s.pointAt(0, mn, mx, pl)
+			for i := 1; i < n; i++ {
+				x, y := s.pointAt(i, mn, mx, pl)
+				drawLine(p, px, py, x, y, col)
+				px, py = x, y
+			}
+			if s.ShowLast {
+				fillRect(p, px-1, py-1, 2, 2, col)
+			}
 		}
-		if s.ShowLast {
-			fillRect(p, px-1, py-1, 2, 2, col)
-		}
-	}
-	s.drawHover(p, theme, mn, mx, pl)
+		s.drawHover(p, theme, mn, mx, pl)
+	})
 }
 
 // drawBars renders the series as thin vertical bars filling the plot width, the
