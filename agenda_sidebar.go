@@ -90,14 +90,11 @@ func (s *AgendaSidebar) rowAt(x, y int) int {
 	return i
 }
 
-// swatchColor resolves a calendar's swatch colour: its own Color, or the theme
-// Accent when it left Color unset — the same "zero falls back to Accent" rule
-// the events use, so a calendar and its events read as one colour.
+// swatchColor resolves a calendar's swatch colour via the shared
+// calendarSwatchColor rule (own Color, else theme Accent), so the rail and the
+// editor's calendar picker paint a calendar identically.
 func (s *AgendaSidebar) swatchColor(cal AgendaCalendar, theme *Theme) RGBA {
-	if cal.Color != (RGBA{}) {
-		return cal.Color
-	}
-	return theme.Accent
+	return calendarSwatchColor(cal, theme)
 }
 
 // Draw paints the sidebar: a SurfaceAlt background with a right divider, the

@@ -91,6 +91,16 @@ type Agenda struct {
 	// host uses it to add an event on the clicked day. Nil is safe.
 	OnDayActivate func(year, month, day int)
 
+	// OnEventEdited fires after the inline editor (see EditEvent) commits a
+	// change to event i — a title edit or a calendar reassignment. Nil is safe.
+	OnEventEdited func(i int)
+
+	// Inline event-editor state (see agenda_editor.go). editorOpen gates
+	// everything, so a zero-value Agenda has no editor and renders unchanged.
+	editorOpen bool
+	editing    int
+	editEntry  *Entry
+
 	// Calendars are the named, colour-coded event sources (see
 	// AgendaCalendar). An event's colour is resolved from its Calendar index
 	// into this slice, and an event whose calendar is Hidden is not drawn or
