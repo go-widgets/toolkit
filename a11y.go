@@ -37,10 +37,26 @@ const (
 // A11yInfo is a widget's accessibility description. Name is the accessible name
 // (its label/caption); Value is the current value where meaningful (a textbox's
 // text, a checkbox's "checked"/"" state, a slider's number).
+//
+// Range-valued controls (sliders, spin buttons, ratings, progress/level bars,
+// gauges) additionally expose a machine-readable numeric reading via Min, Max
+// and Now — the WAI-ARIA aria-valuemin / aria-valuemax / aria-valuenow triple.
+// HasRange gates them: it is true only when the widget populated all three, so
+// a consumer can tell a genuine 0 (Now on an empty slider) from an unset field.
+// A single bool rather than three *float64 pointers keeps A11yInfo a comparable
+// value type — == / != still work, as the table-driven tests rely on — and no
+// existing caller is affected, since every widget that omits a range leaves
+// HasRange false and the three floats at their zero value.
 type A11yInfo struct {
 	Role  Role
 	Name  string
 	Value string
+
+	// HasRange reports whether Min, Max and Now carry a meaningful reading.
+	HasRange bool
+	// Min, Max and Now are the numeric range and current position of a
+	// range-valued control, valid only when HasRange is true.
+	Min, Max, Now float64
 }
 
 // Accessible is implemented by widgets that expose accessibility metadata.
@@ -71,8 +87,21 @@ func checkedValue(on bool) string {
 	return ""
 }
 
-// A11y reports the Button as a button role named by its label.
-func (b *Button) A11y() A11yInfo { return A11yInfo{Role: RoleButton, Name: b.Label} }
+// A11y reports the Button as a button role named by its label. Value surfaces
+// the button's state when it is not resting: "selected" for the sticky,
+// app-managed Selected flag (a pill in a selector, the current tab), else
+// "pressed" while the transient press-feedback face is showing — so a screen
+// reader no longer hears an active or held button identically to an idle one.
+func (b *Button) A11y() A11yInfo {
+	v := ""
+	switch {
+	case b.Selected:
+		v = "selected"
+	case b.pressed:
+		v = "pressed"
+	}
+	return A11yInfo{Role: RoleButton, Name: b.Label, Value: v}
+}
 
 // A11y reports the Label as static text.
 func (l *Label) A11y() A11yInfo { return A11yInfo{Role: RoleText, Name: l.Text} }
@@ -99,9 +128,17 @@ func (s *Switch) A11y() A11yInfo {
 	return A11yInfo{Role: RoleSwitch, Value: v}
 }
 
-// A11y reports the Scale as a slider carrying its current value.
+// A11y reports the Scale as a slider carrying its current value, both as a
+// human-readable Value string and as the numeric Min/Max/Now range triple.
 func (s *Scale) A11y() A11yInfo {
-	return A11yInfo{Role: RoleSlider, Value: strconv.FormatFloat(s.Value, 'g', -1, 64)}
+	return A11yInfo{
+		Role:     RoleSlider,
+		Value:    strconv.FormatFloat(s.Value, 'g', -1, 64),
+		HasRange: true,
+		Min:      s.Min,
+		Max:      s.Max,
+		Now:      s.Value,
+	}
 }
 
 // Compile-time checks that each widget satisfies Accessible.

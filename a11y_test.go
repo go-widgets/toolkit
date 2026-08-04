@@ -24,7 +24,7 @@ func TestA11yInfoPerWidget(t *testing.T) {
 		{"checkbox-on", check, A11yInfo{Role: RoleCheckbox, Name: "Enable", Value: "checked"}},
 		{"radio-off", radio, A11yInfo{Role: RoleRadio, Name: "Option", Value: ""}},
 		{"switch-on", sw, A11yInfo{Role: RoleSwitch, Value: "on"}},
-		{"slider", scale, A11yInfo{Role: RoleSlider, Value: "42"}},
+		{"slider", scale, A11yInfo{Role: RoleSlider, Value: "42", HasRange: true, Min: 0, Max: 100, Now: 42}},
 	}
 	for _, c := range cases {
 		if got := c.w.A11y(); got != c.want {

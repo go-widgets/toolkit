@@ -85,25 +85,51 @@ func (s *SearchEntry) A11y() A11yInfo { return A11yInfo{Role: RoleSearchbox, Val
 // A11y reports the TextView as a textbox carrying its full buffer text.
 func (t *TextView) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: t.Text()} }
 
-// A11y reports the SpinButton as a spinbutton carrying its numeric value.
+// A11y reports the SpinButton as a spinbutton carrying its numeric value, both
+// as a Value string and as the numeric Min/Max/Now range triple.
 func (s *SpinButton) A11y() A11yInfo {
-	return A11yInfo{Role: RoleSpinbutton, Value: strconv.Itoa(s.Value)}
+	return A11yInfo{
+		Role:     RoleSpinbutton,
+		Value:    strconv.Itoa(s.Value),
+		HasRange: true,
+		Min:      float64(s.Min),
+		Max:      float64(s.Max),
+		Now:      float64(s.Value),
+	}
 }
 
 // A11y reports the RangeSlider as a group carrying its "low..high" band --
 // two cooperating handles read more naturally as one control's range value
-// than as two independent sliders.
+// than as two independent sliders. The numeric triple exposes the track
+// bounds in Min/Max; Now carries the Low handle (the arrow keys' default
+// handle), since a single aria-valuenow cannot hold both -- the full band
+// stays in Value.
 func (s *RangeSlider) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: formatFloat(s.Low) + ".." + formatFloat(s.High)}
+	return A11yInfo{
+		Role:     RoleGroup,
+		Value:    formatFloat(s.Low) + ".." + formatFloat(s.High),
+		HasRange: true,
+		Min:      s.Min,
+		Max:      s.Max,
+		Now:      s.Low,
+	}
 }
 
 // A11y reports the DropDown as a combobox named by its currently-selected
 // option.
 func (d *DropDown) A11y() A11yInfo { return A11yInfo{Role: RoleCombobox, Name: d.Current()} }
 
-// A11y reports the Rating as a slider carrying its "value/max" score.
+// A11y reports the Rating as a slider carrying its "value/max" score, plus the
+// numeric Min/Max/Now range triple (Min is 0, the empty rating).
 func (r *Rating) A11y() A11yInfo {
-	return A11yInfo{Role: RoleSlider, Value: strconv.Itoa(r.Value) + "/" + strconv.Itoa(r.Max)}
+	return A11yInfo{
+		Role:     RoleSlider,
+		Value:    strconv.Itoa(r.Value) + "/" + strconv.Itoa(r.Max),
+		HasRange: true,
+		Min:      0,
+		Max:      float64(r.Max),
+		Now:      float64(r.Value),
+	}
 }
 
 // A11y reports the ColorChooser as a group carrying its current colour as
@@ -267,14 +293,30 @@ func (t *Toast) A11y() A11yInfo { return A11yInfo{Role: RoleStatus, Name: t.Text
 func (n *Notification) A11y() A11yInfo { return A11yInfo{Role: RoleStatus, Name: n.Text} }
 
 // A11y reports the ProgressBar as a progressbar carrying its fraction as a
-// whole-number percentage.
+// whole-number percentage, plus the numeric range triple over the fraction's
+// natural [0, 1] span (Now is the raw fraction).
 func (p *ProgressBar) A11y() A11yInfo {
-	return A11yInfo{Role: RoleProgressbar, Value: percent(p.Fraction)}
+	return A11yInfo{
+		Role:     RoleProgressbar,
+		Value:    percent(p.Fraction),
+		HasRange: true,
+		Min:      0,
+		Max:      1,
+		Now:      p.Fraction,
+	}
 }
 
-// A11y reports the LevelBar as a meter carrying its "value/max" reading.
+// A11y reports the LevelBar as a meter carrying its "value/max" reading, plus
+// the numeric Min/Max/Now range triple (Min is 0, the empty meter).
 func (l *LevelBar) A11y() A11yInfo {
-	return A11yInfo{Role: RoleMeter, Value: strconv.Itoa(l.Value) + "/" + strconv.Itoa(l.Max)}
+	return A11yInfo{
+		Role:     RoleMeter,
+		Value:    strconv.Itoa(l.Value) + "/" + strconv.Itoa(l.Max),
+		HasRange: true,
+		Min:      0,
+		Max:      float64(l.Max),
+		Now:      float64(l.Value),
+	}
 }
 
 // A11y reports the ProgressCircle as a progressbar carrying its fraction as
