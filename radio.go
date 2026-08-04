@@ -60,13 +60,38 @@ func (r *RadioButton) OnEvent(ev Event) {
 	if r.Disabled {
 		return
 	}
-	if ev.Kind != EventClick {
-		return
+	switch ev.Kind {
+	case EventClick:
+		if r.group != nil {
+			r.group.activate(r.index)
+			return
+		}
+		r.toggleStandalone()
+	case EventKeyDown:
+		if r.group != nil {
+			// Arrow keys move the checked member through the group, wrapping,
+			// firing the newly-checked member's callback (reusing group.activate)
+			// and following focus to it -- the ARIA radio-group convention.
+			switch ev.Code {
+			case "ArrowDown", "ArrowRight":
+				r.group.moveChecked(r, +1)
+			case "ArrowUp", "ArrowLeft":
+				r.group.moveChecked(r, -1)
+			}
+			return
+		}
+		// A standalone radio (no group) behaves like a CheckButton: Space/Enter
+		// toggles it, reusing the click path.
+		switch ev.Code {
+		case " ", "Space", "Enter":
+			r.toggleStandalone()
+		}
 	}
-	if r.group != nil {
-		r.group.activate(r.index)
-		return
-	}
+}
+
+// toggleStandalone flips a group-less radio's Checked and fires OnToggle
+// (nil-safe) -- the shared mutate path for a click and a Space/Enter key press.
+func (r *RadioButton) toggleStandalone() {
 	r.Checked = !r.Checked
 	if r.OnToggle != nil {
 		r.OnToggle(r.Checked)
@@ -102,4 +127,19 @@ func (g *RadioGroup) activate(idx int) {
 	if cb := g.Members[idx].OnToggle; cb != nil {
 		cb(true)
 	}
+}
+
+// moveChecked steps the checked member delta places (±1) from the currently
+// focused member from, wrapping at both ends, activates it (reusing activate so
+// the member callback fires exactly as a click would), and follows keyboard
+// focus to the newly-checked member -- the ARIA radio-group arrow convention.
+func (g *RadioGroup) moveChecked(from *RadioButton, delta int) {
+	n := len(g.Members)
+	if n == 0 {
+		return
+	}
+	next := ((from.index+delta)%n + n) % n
+	g.activate(next)
+	from.SetFocused(false)
+	g.Members[next].SetFocused(true)
 }

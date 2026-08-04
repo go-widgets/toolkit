@@ -133,6 +133,24 @@ func (pg *Pagination) drawSlot(p painter.Painter, theme *Theme, x, y int, slot p
 // Current to its page. Ellipsis slots and out-of-band clicks are
 // no-ops.
 func (pg *Pagination) OnEvent(ev Event) {
+	if ev.Kind == EventKeyDown {
+		if pg.Disabled || pg.Total <= 0 {
+			return
+		}
+		// Left/Right step one page (like the prev/next buttons); Home/End jump to
+		// the first/last page. Each reuses the same clamp+fireChange path.
+		switch ev.Code {
+		case "ArrowLeft", "ArrowUp":
+			pg.goTo(pg.Current - 1)
+		case "ArrowRight", "ArrowDown":
+			pg.goTo(pg.Current + 1)
+		case "Home":
+			pg.goTo(1)
+		case "End":
+			pg.goTo(pg.Total)
+		}
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
@@ -176,6 +194,22 @@ func (pg *Pagination) OnEvent(ev Event) {
 func (pg *Pagination) fireChange() {
 	if pg.OnChange != nil {
 		pg.OnChange(pg.Current)
+	}
+}
+
+// goTo clamps page to [1, Total] and, when it actually changes Current, assigns
+// it and fires OnChange -- the shared mutate+callback path the arrow / Home /
+// End keys reuse, matching a prev/next/number click.
+func (pg *Pagination) goTo(page int) {
+	if page < 1 {
+		page = 1
+	}
+	if page > pg.Total {
+		page = pg.Total
+	}
+	if page != pg.Current {
+		pg.Current = page
+		pg.fireChange()
 	}
 }
 

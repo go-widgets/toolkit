@@ -31,6 +31,7 @@ type AccordionSection struct {
 // full remaining space when there is only one section.
 type Accordion struct {
 	Base
+	focusState
 	Sections []AccordionSection
 	Expanded int
 	Multiple bool
@@ -39,6 +40,10 @@ type Accordion struct {
 	// mode. Lazily allocated on first toggle; nil means "nothing
 	// expanded yet".
 	multiExpanded map[int]bool
+
+	// focusedSection is the header the keyboard focus ring sits on: Up/Down move
+	// it between sections and Enter/Space toggles it. Clamped on use by focusIdx.
+	focusedSection int
 }
 
 // NewAccordion builds an Accordion with every section collapsed.
@@ -139,14 +144,51 @@ func (a *Accordion) Draw(p painter.Painter, theme *Theme) {
 			sec.Body.Draw(p, theme)
 		}
 	}
+	// Focus ring around the focused header (drawFocusRing paints nothing when
+	// the Accordion is unfocused, so an unfocused render is byte-identical).
+	if len(a.Sections) > 0 {
+		a.drawFocusRing(p, theme, headers[a.focusIdx()])
+	}
+}
+
+// focusIdx clamps focusedSection to a valid section index. Callers guard on a
+// non-empty Sections slice.
+func (a *Accordion) focusIdx() int {
+	i := a.focusedSection
+	if i < 0 {
+		return 0
+	}
+	if n := len(a.Sections); i >= n {
+		return n - 1
+	}
+	return i
 }
 
 // OnEvent: a click on header i toggles it (see toggle); a click
 // inside an expanded section's body forwards to that Body via
-// translated coordinates. Anything else (non-click events, or a
-// click that lands on neither a header nor an open body) is a
-// no-op.
+// translated coordinates. While focused, Enter/Space toggles the focused
+// header and Up/Down move the header focus between sections. Anything else
+// (other non-click events, or a click that lands on neither a header nor an
+// open body) is a no-op.
 func (a *Accordion) OnEvent(ev Event) {
+	if ev.Kind == EventKeyDown {
+		if a.Disabled || len(a.Sections) == 0 {
+			return
+		}
+		switch ev.Code {
+		case "Enter", " ", "Space":
+			a.toggle(a.focusIdx())
+		case "ArrowDown":
+			if i := a.focusIdx(); i < len(a.Sections)-1 {
+				a.focusedSection = i + 1
+			}
+		case "ArrowUp":
+			if i := a.focusIdx(); i > 0 {
+				a.focusedSection = i - 1
+			}
+		}
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}

@@ -189,14 +189,24 @@ func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
 // non-click event — routes to the active page, translated into its local frame.
 func (n *Notebook) OnEvent(ev Event) {
 	r := n.Bounds()
+	if ev.Kind == EventKeyDown && !n.Disabled {
+		// Arrow keys move the active tab along the strip, wrapping, firing
+		// OnTabChanged -- the tablist keyboard convention. Both axes are accepted
+		// so it works for a horizontal (Top/Bottom) or vertical (Left/Right) strip.
+		switch ev.Code {
+		case "ArrowLeft", "ArrowUp":
+			n.stepTab(-1)
+			return
+		case "ArrowRight", "ArrowDown":
+			n.stepTab(+1)
+			return
+		}
+	}
 	if ev.Kind == EventClick {
 		// ev is widget-local; hit-test the tabs in surface coordinates.
 		ax, ay := ev.X+r.X, ev.Y+r.Y
 		if idx := n.tabAt(ax, ay); idx >= 0 {
-			n.Active = idx
-			if n.OnTabChanged != nil {
-				n.OnTabChanged(idx)
-			}
+			n.setActive(idx)
 			return
 		}
 		// A click that lands neither on a tab nor in the body (e.g. empty strip
@@ -213,4 +223,27 @@ func (n *Notebook) OnEvent(ev Event) {
 			page.OnEvent(translateEvent(ev, r, body))
 		}
 	}
+}
+
+// setActive selects tab idx and fires OnTabChanged (nil-safe) -- the shared
+// mutate+callback path for a tab click and a keyboard tab move.
+func (n *Notebook) setActive(idx int) {
+	n.Active = idx
+	if n.OnTabChanged != nil {
+		n.OnTabChanged(idx)
+	}
+}
+
+// stepTab moves Active delta tabs along the strip, wrapping at both ends, and
+// fires OnTabChanged. A no-op when there are no tabs.
+func (n *Notebook) stepTab(delta int) {
+	count := len(n.Tabs)
+	if count == 0 {
+		return
+	}
+	cur := n.Active
+	if cur < 0 || cur >= count {
+		cur = 0
+	}
+	n.setActive(((cur+delta)%count + count) % count)
 }

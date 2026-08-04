@@ -57,11 +57,24 @@ func (t *ToggleButton) OnEvent(ev Event) {
 	}
 	switch ev.Kind {
 	case EventClick:
-		t.Pressed = !t.Pressed
-		if t.OnToggle != nil {
-			t.OnToggle(t.Pressed)
+		t.toggle()
+	case EventKeyDown:
+		// Space or Enter flips the sticky state while focused, reusing the click
+		// path (OnToggle).
+		switch ev.Code {
+		case " ", "Space", "Enter":
+			t.toggle()
 		}
 	case EventMouseMove:
 		t.hovered = t.localInBounds(ev.X, ev.Y)
+	}
+}
+
+// toggle flips Pressed and fires OnToggle (nil-safe) -- the shared mutate path
+// for a click and a Space/Enter key press.
+func (t *ToggleButton) toggle() {
+	t.Pressed = !t.Pressed
+	if t.OnToggle != nil {
+		t.OnToggle(t.Pressed)
 	}
 }

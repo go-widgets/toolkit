@@ -36,6 +36,12 @@ type ComboBox struct {
 	OnChange func(string)
 	// OnSelect fires when an option is chosen (click or Enter).
 	OnSelect func(string)
+
+	// highlight is the index (into the visible filtered rows) the keyboard
+	// highlight sits on. ArrowDown/ArrowUp move it and Enter selects it. It is
+	// reset to 0 whenever the filter changes, so it always starts on the first
+	// match. highlightRow clamps it against the current row count on use.
+	highlight int
 }
 
 // NewComboBox builds a ComboBox with the given options and an empty field.
@@ -118,11 +124,18 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 	if c.Open {
 		pb := c.PopoverBounds()
 		fillRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Surface)
-		strokeRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Border)
+		hi := c.highlightRow()
 		for i, opt := range c.visible() {
-			oy := pb.Y + i*comboRowH + (comboRowH-c.glyphHeight())/2
+			rowY := pb.Y + i*comboRowH
+			if i == hi {
+				// Highlighted row gets a SurfaceAlt band; the border is stroked
+				// afterwards so the popover outline stays crisp over it.
+				fillRect(p, pb.X, rowY, pb.W, comboRowH, theme.SurfaceAlt)
+			}
+			oy := rowY + (comboRowH-c.glyphHeight())/2
 			c.drawText(p, pb.X+4, oy, opt, theme.OnSurface)
 		}
+		strokeRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Border)
 	}
 	c.drawFocusRing(p, theme, r)
 }
@@ -158,14 +171,30 @@ func (c *ComboBox) OnEvent(ev Event) {
 			if len(runes) > 0 {
 				c.Text = string(runes[:len(runes)-1])
 				c.Open = true
+				c.highlight = 0
 				if c.OnChange != nil {
 					c.OnChange(c.Text)
 				}
 			}
-		case "Enter":
-			if f := c.Filtered(); len(f) > 0 {
-				c.selectOption(f[0])
+		case "ArrowDown":
+			// Move the highlight down through the filtered rows (opening the
+			// popover if it was closed), clamped to the last row.
+			c.Open = true
+			if n := len(c.visible()); c.highlight < n-1 {
+				c.highlight++
 			}
+		case "ArrowUp":
+			if c.highlight > 0 {
+				c.highlight--
+			}
+		case "Enter":
+			// Commit the highlighted row (which defaults to the first match, so a
+			// plain type-then-Enter still picks the top option).
+			if vis := c.visible(); len(vis) > 0 {
+				c.selectOption(vis[c.highlightRow()])
+			}
+		case "Escape":
+			c.Open = false
 		}
 	case EventChar:
 		if ev.Code == "" {
@@ -173,10 +202,27 @@ func (c *ComboBox) OnEvent(ev Event) {
 		}
 		c.Text += ev.Code
 		c.Open = true
+		c.highlight = 0
 		if c.OnChange != nil {
 			c.OnChange(c.Text)
 		}
 	}
+}
+
+// highlightRow returns the highlight index clamped to the current visible-row
+// count, so a filter that shrank the list can't leave it out of range.
+func (c *ComboBox) highlightRow() int {
+	n := len(c.visible())
+	if n == 0 {
+		return 0
+	}
+	if c.highlight >= n {
+		return n - 1
+	}
+	if c.highlight < 0 {
+		return 0
+	}
+	return c.highlight
 }
 
 // selectOption commits s as the field value, closes the popover, and fires

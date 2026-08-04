@@ -86,6 +86,24 @@ func (r *Rating) Draw(p painter.Painter, theme *Theme) {
 // (index >= Max) are ignored so a spurious hit doesn't push Value
 // past Max.
 func (r *Rating) OnEvent(ev Event) {
+	if ev.Kind == EventKeyDown {
+		if r.Disabled {
+			return
+		}
+		// Left/Right adjust the rating by one star; Home clears it (0), End fills
+		// it (Max). Each reuses the same clamp+OnChange path as a click.
+		switch ev.Code {
+		case "ArrowRight", "ArrowUp":
+			r.setValue(r.Value + 1)
+		case "ArrowLeft", "ArrowDown":
+			r.setValue(r.Value - 1)
+		case "Home":
+			r.setValue(0)
+		case "End":
+			r.setValue(r.Max)
+		}
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
@@ -93,7 +111,19 @@ func (r *Rating) OnEvent(ev Event) {
 	if idx < 0 || idx >= r.Max {
 		return
 	}
-	r.Value = idx + 1
+	r.setValue(idx + 1)
+}
+
+// setValue clamps v to [0, Max], assigns it, and fires OnChange (nil-safe) --
+// the shared mutate+callback path for a click and every key adjustment.
+func (r *Rating) setValue(v int) {
+	if v < 0 {
+		v = 0
+	}
+	if v > r.Max {
+		v = r.Max
+	}
+	r.Value = v
 	if r.OnChange != nil {
 		r.OnChange(r.Value)
 	}

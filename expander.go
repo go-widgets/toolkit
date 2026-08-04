@@ -14,6 +14,7 @@ import "github.com/go-widgets/painter"
 // header. When collapsed, only the header is drawn.
 type Expander struct {
 	Base
+	focusState
 	Label    string
 	Expanded bool
 	Content  Widget
@@ -61,19 +62,30 @@ func (e *Expander) Draw(p painter.Painter, theme *Theme) {
 		e.Content.SetBounds(body)
 		e.Content.Draw(p, theme)
 	}
+	// Focus ring around the clickable header row (paints nothing when unfocused,
+	// so an unfocused render is byte-identical).
+	e.drawFocusRing(p, theme, Rect{X: r.X, Y: r.Y, W: r.W, H: ExpanderHeaderH})
 }
 
 // OnEvent: click on the header toggles Expanded + fires OnExpand;
-// clicks below the header forward to Content (when expanded).
+// clicks below the header forward to Content (when expanded). While focused,
+// Enter/Space toggles the header (same path as a header click).
 func (e *Expander) OnEvent(ev Event) {
+	if ev.Kind == EventKeyDown {
+		if e.Disabled {
+			return
+		}
+		switch ev.Code {
+		case "Enter", " ", "Space":
+			e.toggle()
+		}
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
 	if ev.Y < ExpanderHeaderH {
-		e.Expanded = !e.Expanded
-		if e.OnExpand != nil {
-			e.OnExpand(e.Expanded)
-		}
+		e.toggle()
 		return
 	}
 	if e.Expanded && e.Content != nil {
@@ -85,5 +97,14 @@ func (e *Expander) OnEvent(ev Event) {
 		body := Rect{X: r.X, Y: r.Y + ExpanderHeaderH, W: r.W, H: r.H - ExpanderHeaderH}
 		e.Content.SetBounds(body)
 		e.Content.OnEvent(translateEvent(ev, r, body))
+	}
+}
+
+// toggle flips Expanded and fires OnExpand (nil-safe) -- the shared mutate path
+// for a header click and an Enter/Space key press.
+func (e *Expander) toggle() {
+	e.Expanded = !e.Expanded
+	if e.OnExpand != nil {
+		e.OnExpand(e.Expanded)
 	}
 }

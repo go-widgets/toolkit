@@ -26,6 +26,11 @@ type DropDown struct {
 	// set it when the control sits near the bottom edge so the list has room.
 	OpenUp   bool
 	OnSelect func(idx int)
+
+	// savedSelected remembers Selected at the moment the popover opened via the
+	// keyboard, so Escape can restore it after the arrow keys previewed other
+	// options without committing.
+	savedSelected int
 }
 
 // NewDropDown builds a DropDown with the given options + an initial
@@ -80,10 +85,44 @@ func (d *DropDown) OnEvent(ev Event) {
 	if d.Disabled {
 		return
 	}
-	if ev.Kind != EventClick {
+	switch ev.Kind {
+	case EventClick:
+		d.Open = !d.Open
+	case EventKeyDown:
+		d.onKey(ev.Code)
+	}
+}
+
+// onKey drives the dropdown from the keyboard while focused:
+//   - closed: Space or ArrowDown opens the popover, remembering Selected so
+//     Escape can restore it.
+//   - open: ArrowDown/ArrowUp move Selected through the options (clamped, no
+//     commit yet); Enter commits the highlighted option (reusing Select, which
+//     closes + fires OnSelect); Escape restores the pre-open Selected + closes.
+func (d *DropDown) onKey(code string) {
+	if !d.Open {
+		switch code {
+		case " ", "Space", "ArrowDown":
+			d.savedSelected = d.Selected
+			d.Open = true
+		}
 		return
 	}
-	d.Open = !d.Open
+	switch code {
+	case "ArrowDown":
+		if d.Selected < len(d.Options)-1 {
+			d.Selected++
+		}
+	case "ArrowUp":
+		if d.Selected > 0 {
+			d.Selected--
+		}
+	case "Enter":
+		d.Select(d.Selected)
+	case "Escape":
+		d.Selected = d.savedSelected
+		d.Open = false
+	}
 }
 
 // Select picks idx, closes the popover + fires OnSelect.

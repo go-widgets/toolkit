@@ -149,8 +149,14 @@ func (b *Button) OnEvent(ev Event) {
 		if b.PressFeedback {
 			b.pressed = true
 		}
-		if b.OnClick != nil {
-			b.OnClick()
+		b.activate()
+	case EventKeyDown:
+		// Enter or Space fires the primary action while focused, reusing the
+		// exact click path (OnClick) so keyboard + mouse stay consistent. No
+		// pressed-face flash: there is no routed key-up to clear it.
+		switch ev.Code {
+		case "Enter", " ", "Space":
+			b.activate()
 		}
 	case EventMouseUp:
 		b.pressed = false
@@ -158,5 +164,14 @@ func (b *Button) OnEvent(ev Event) {
 		// Raise the hover face when the pointer is over the button, clear it
 		// when a container forwards a move whose point has left it.
 		b.hovered = b.localInBounds(ev.X, ev.Y)
+	}
+}
+
+// activate fires OnClick (nil-safe) -- the single mutate+callback path shared
+// by an EventClick and an Enter/Space key press so both routes behave
+// identically.
+func (b *Button) activate() {
+	if b.OnClick != nil {
+		b.OnClick()
 	}
 }

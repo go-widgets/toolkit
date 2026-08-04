@@ -362,7 +362,8 @@ func TestCarouselClickDeadZoneNoOp(t *testing.T) {
 func TestCarouselOnEventIgnoresNonClick(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
 	c.SetBounds(Rect{X: 10, Y: 5, W: 200, H: 120})
-	c.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
+	// Left/Right step slides as of Wave 3; an unrelated key (Tab) must not.
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if c.Current != 0 {
 		t.Fatalf("Current = %d, want 0 (non-click ignored)", c.Current)
 	}

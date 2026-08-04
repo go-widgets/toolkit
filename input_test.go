@@ -399,7 +399,8 @@ func TestCheckButtonClickToggles(t *testing.T) {
 
 func TestCheckButtonIgnoresOtherEvents(t *testing.T) {
 	c := NewCheckButton("OK", false)
-	c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	// Space/Enter toggle as of Wave 3; an unrelated key (Tab) must not.
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if c.Checked {
 		t.Fatal("KeyDown should not toggle")
 	}
@@ -472,7 +473,9 @@ func TestRadioButtonStandaloneToggles(t *testing.T) {
 
 func TestRadioButtonIgnoresNonClick(t *testing.T) {
 	r := NewRadioButton("A")
-	r.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	// A standalone radio toggles on Space/Enter as of Wave 3; an unrelated key
+	// (Tab) must not.
+	r.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if r.Checked {
 		t.Fatal("KeyDown should not toggle a radio")
 	}
@@ -566,7 +569,8 @@ func TestToggleButtonNilCallbackNoPanic(t *testing.T) {
 
 func TestToggleButtonIgnoresNonClick(t *testing.T) {
 	tb := NewToggleButton("X", false)
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	// Space/Enter toggle as of Wave 3; an unrelated key (Tab) must not.
+	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if tb.Pressed {
 		t.Fatal("KeyDown should not toggle")
 	}

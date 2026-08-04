@@ -94,12 +94,24 @@ func (i *IconButton) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
 		i.pressed = true
-		if i.OnClick != nil {
-			i.OnClick()
+		i.activate()
+	case EventKeyDown:
+		// Enter or Space fires OnClick while focused, reusing the click path.
+		switch ev.Code {
+		case "Enter", " ", "Space":
+			i.activate()
 		}
 	case EventMouseUp:
 		i.pressed = false
 	case EventMouseMove:
 		i.hovered = i.localInBounds(ev.X, ev.Y)
+	}
+}
+
+// activate fires OnClick (nil-safe) -- the shared mutate+callback path for both
+// an EventClick and an Enter/Space key press.
+func (i *IconButton) activate() {
+	if i.OnClick != nil {
+		i.OnClick()
 	}
 }

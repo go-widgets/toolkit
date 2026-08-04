@@ -95,9 +95,21 @@ func (c *CheckButton) OnEvent(ev Event) {
 	if c.Disabled {
 		return
 	}
-	if ev.Kind != EventClick {
-		return
+	switch ev.Kind {
+	case EventClick:
+		c.toggle()
+	case EventKeyDown:
+		// Space or Enter toggles the box while focused, reusing the click path.
+		switch ev.Code {
+		case " ", "Space", "Enter":
+			c.toggle()
+		}
 	}
+}
+
+// toggle flips Checked and fires OnToggle (nil-safe) -- the shared mutate path
+// for a click and a Space/Enter key press.
+func (c *CheckButton) toggle() {
 	c.Checked = !c.Checked
 	if c.OnToggle != nil {
 		c.OnToggle(c.Checked)

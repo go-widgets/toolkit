@@ -275,7 +275,9 @@ func TestScaleClickClampsPosition(t *testing.T) {
 func TestScaleIgnoresNonClick(t *testing.T) {
 	s := NewScale(0, 100, 50)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
-	s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
+	// Arrow / Home / End / Page keys move the value as of Wave 3; an unrelated
+	// key (Tab) must not.
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if s.Value != 50 {
 		t.Fatal("KeyDown should not move the value")
 	}

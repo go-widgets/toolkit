@@ -54,10 +54,31 @@ func (c *CycleButton) OnEvent(ev Event) {
 	if c.Disabled {
 		return
 	}
-	if ev.Kind == EventClick && len(c.Options) > 0 {
-		c.Index = (c.Index + 1) % len(c.Options)
-		if c.OnChange != nil {
-			c.OnChange(c.Index, c.Options[c.Index])
+	switch ev.Kind {
+	case EventClick:
+		c.step(+1)
+	case EventKeyDown:
+		// Space / Enter / ArrowRight advance (matching a click); ArrowLeft steps
+		// back. Both directions wrap and fire OnChange.
+		switch ev.Code {
+		case " ", "Space", "Enter", "ArrowRight":
+			c.step(+1)
+		case "ArrowLeft":
+			c.step(-1)
 		}
+	}
+}
+
+// step advances Index by delta places (wrapping) and fires OnChange -- the
+// shared mutate+callback path for a click and a keyboard step. A no-op when
+// there are no options.
+func (c *CycleButton) step(delta int) {
+	n := len(c.Options)
+	if n == 0 {
+		return
+	}
+	c.Index = ((c.Index+delta)%n + n) % n
+	if c.OnChange != nil {
+		c.OnChange(c.Index, c.Options[c.Index])
 	}
 }

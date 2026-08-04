@@ -95,6 +95,20 @@ func (v *ViewSwitcher) Draw(p painter.Painter, theme *Theme) {
 // clicks with an empty Views slice, clicks on a zero-width strip and
 // clicks that fall outside every segment are all no-ops.
 func (v *ViewSwitcher) OnEvent(ev Event) {
+	if ev.Kind == EventKeyDown {
+		if v.Disabled {
+			return
+		}
+		// Left/Right (or Up/Down) move the active segment, wrapping, firing
+		// OnChange -- the segmented-tablist keyboard convention.
+		switch ev.Code {
+		case "ArrowLeft", "ArrowUp":
+			v.step(-1)
+		case "ArrowRight", "ArrowDown":
+			v.step(+1)
+		}
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
@@ -111,8 +125,28 @@ func (v *ViewSwitcher) OnEvent(ev Event) {
 	if idx < 0 || idx >= n {
 		return
 	}
+	v.setCurrent(idx)
+}
+
+// setCurrent selects segment idx and fires OnChange (nil-safe) -- the shared
+// mutate+callback path for a click and a keyboard move.
+func (v *ViewSwitcher) setCurrent(idx int) {
 	v.Current = idx
 	if v.OnChange != nil {
 		v.OnChange(idx)
 	}
+}
+
+// step moves Current delta segments, wrapping at both ends, and fires OnChange.
+// A no-op when there are no views.
+func (v *ViewSwitcher) step(delta int) {
+	n := len(v.Views)
+	if n == 0 {
+		return
+	}
+	cur := v.Current
+	if cur < 0 || cur >= n {
+		cur = 0
+	}
+	v.setCurrent(((cur+delta)%n + n) % n)
 }

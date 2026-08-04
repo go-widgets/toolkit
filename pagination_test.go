@@ -484,7 +484,8 @@ func TestPaginationIgnoresNonClick(t *testing.T) {
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
 	changes := 0
 	p.OnChange = func(page int) { changes++ }
-	p.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
+	// Left/Right/Home/End navigate as of Wave 3; an unrelated key (Tab) must not.
+	p.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if p.Current != 3 || changes != 0 {
 		t.Fatalf("non-click event: Current=%d changes=%d", p.Current, changes)
 	}

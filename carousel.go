@@ -18,6 +18,7 @@ import "github.com/go-widgets/painter"
 // obvious way to step through the rest.
 type Carousel struct {
 	Base
+	focusState
 	Slides  []Widget
 	Current int
 	Wrap    bool
@@ -220,6 +221,9 @@ func (c *Carousel) Draw(p painter.Painter, theme *Theme) {
 	c.drawArrow(p, theme, c.leftGutter(), true, c.Wrap || c.Current > 0)
 	c.drawArrow(p, theme, c.rightGutter(), false, c.Wrap || c.Current < n-1)
 	c.drawDots(p, theme)
+	// Focus ring around the whole carousel (paints nothing when unfocused, so an
+	// unfocused render is byte-identical).
+	c.drawFocusRing(p, theme, c.Bounds())
 }
 
 // OnEvent: a click in the left/right gutter steps Prev/Next; a click on dot i
@@ -227,6 +231,20 @@ func (c *Carousel) Draw(p painter.Painter, theme *Theme) {
 // Current slide, translated into its local frame. Non-click events + a
 // Carousel with no Slides are no-ops.
 func (c *Carousel) OnEvent(ev Event) {
+	if ev.Kind == EventKeyDown {
+		if c.Disabled || len(c.Slides) == 0 {
+			return
+		}
+		// Left/Right step to the previous/next slide, reusing Prev/Next (which
+		// wrap or clamp per Wrap).
+		switch ev.Code {
+		case "ArrowLeft", "ArrowUp":
+			c.Prev()
+		case "ArrowRight", "ArrowDown":
+			c.Next()
+		}
+		return
+	}
 	if ev.Kind != EventClick || len(c.Slides) == 0 {
 		return
 	}

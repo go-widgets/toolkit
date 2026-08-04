@@ -216,6 +216,10 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 // OnEvent dispatches a header-arrow click to Prev/NextMonth and a day-cell
 // click to OnSelect.
 func (c *Calendar) OnEvent(ev Event) {
+	if ev.Kind == EventKeyDown {
+		c.onKey(ev.Code)
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
@@ -249,8 +253,60 @@ func (c *Calendar) OnEvent(ev Event) {
 		return
 	}
 	c.Day = d
+	c.commitSelect()
+}
+
+// onKey drives the calendar from the keyboard while focused. Left/Right move the
+// day cursor by one, Up/Down by a week; Home/End jump to the first/last day of
+// the month; PageUp/PageDown step the viewed month (reusing Prev/NextMonth, so
+// OnMonthChange fires exactly as a header-arrow click would); Enter or Space
+// selects the day the cursor sits on (firing OnSelect like a day click). Cursor
+// moves stay within the month and do not fire OnSelect -- selection is the
+// explicit Enter/Space commit. A disabled calendar ignores every key.
+func (c *Calendar) onKey(code string) {
+	if c.Disabled {
+		return
+	}
+	switch code {
+	case "ArrowLeft":
+		c.moveDay(-1)
+	case "ArrowRight":
+		c.moveDay(+1)
+	case "ArrowUp":
+		c.moveDay(-7)
+	case "ArrowDown":
+		c.moveDay(+7)
+	case "Home":
+		c.moveDay(-c.Day + 1) // first of month
+	case "End":
+		c.moveDay(DaysInMonth(c.Year, c.Month) - c.Day) // last of month
+	case "PageUp":
+		c.PrevMonth()
+	case "PageDown":
+		c.NextMonth()
+	case "Enter", " ", "Space":
+		c.commitSelect()
+	}
+}
+
+// moveDay shifts the day cursor by delta, clamped to [1, days-in-month], without
+// firing OnSelect (arrow navigation previews; Enter/Space commits).
+func (c *Calendar) moveDay(delta int) {
+	d := c.Day + delta
+	if d < 1 {
+		d = 1
+	}
+	if dim := DaysInMonth(c.Year, c.Month); d > dim {
+		d = dim
+	}
+	c.Day = d
+}
+
+// commitSelect fires OnSelect (nil-safe) for the currently-highlighted day --
+// the shared callback path for a day click and an Enter/Space key press.
+func (c *Calendar) commitSelect() {
 	if c.OnSelect != nil {
-		c.OnSelect(c.Year, c.Month, d)
+		c.OnSelect(c.Year, c.Month, c.Day)
 	}
 }
 

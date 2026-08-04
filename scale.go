@@ -18,6 +18,11 @@ type Scale struct {
 	Value       float64
 	Orientation Orientation
 	OnChange    func(v float64)
+	// Step is the increment an arrow key applies to Value. When it is <= 0 the
+	// scale falls back to keyStep (1% of the range), so a caller that never sets
+	// Step still gets sensible keyboard nudges. PageUp/PageDown always move a
+	// whole page (keyPage, 10% of the range) regardless of Step.
+	Step float64
 }
 
 // scaleThumbSize is the pixel side length of the thumb.
@@ -89,10 +94,61 @@ func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 	s.drawFocusRing(p, theme, r)
 }
 
+// keyStep is the arrow-key increment: Step when the caller set a positive one,
+// else 1% of the range (so an unconfigured scale still nudges sensibly). Zero
+// when the range is empty.
+func (s *Scale) keyStep() float64 {
+	if s.Step > 0 {
+		return s.Step
+	}
+	return (s.Max - s.Min) / 100
+}
+
+// keyPage is the PageUp/PageDown increment: 10% of the range.
+func (s *Scale) keyPage() float64 { return (s.Max - s.Min) / 10 }
+
+// nudge adds delta to Value (clamped by SetValue) and fires OnChange -- the
+// shared mutate+callback path every arrow / Home / End / Page key reuses, so a
+// key move behaves exactly like a click that lands on the same value.
+func (s *Scale) nudge(delta float64) {
+	s.SetValue(s.Value + delta)
+	if s.OnChange != nil {
+		s.OnChange(s.Value)
+	}
+}
+
+// setTo assigns v (clamped) and fires OnChange -- used by Home/End.
+func (s *Scale) setTo(v float64) {
+	s.SetValue(v)
+	if s.OnChange != nil {
+		s.OnChange(s.Value)
+	}
+}
+
 // OnEvent: click jumps the thumb to the clicked x-position +
-// fires OnChange.
+// fires OnChange; arrow / Home / End / Page keys move Value while focused.
 func (s *Scale) OnEvent(ev Event) {
 	if s.Disabled {
+		return
+	}
+	if ev.Kind == EventKeyDown {
+		if s.Max <= s.Min {
+			return
+		}
+		switch ev.Code {
+		case "ArrowRight", "ArrowUp":
+			s.nudge(s.keyStep())
+		case "ArrowLeft", "ArrowDown":
+			s.nudge(-s.keyStep())
+		case "PageUp":
+			s.nudge(s.keyPage())
+		case "PageDown":
+			s.nudge(-s.keyPage())
+		case "Home":
+			s.setTo(s.Min)
+		case "End":
+			s.setTo(s.Max)
+		}
 		return
 	}
 	if ev.Kind != EventClick {

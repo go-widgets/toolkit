@@ -238,7 +238,9 @@ func TestButtonClickWithNilHandlerNoPanic(t *testing.T) {
 func TestButtonIgnoresNonClick(t *testing.T) {
 	clicks := 0
 	b := NewButton("OK", func() { clicks++ })
-	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	// Enter/Space are activation keys as of Wave 3 (see TestButtonKeyActivates);
+	// an unrelated key such as Tab must still not fire OnClick.
+	b.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if clicks != 0 {
 		t.Fatalf("KeyDown shouldn't fire OnClick (got clicks=%d)", clicks)
 	}

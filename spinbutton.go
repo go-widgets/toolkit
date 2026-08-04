@@ -91,6 +91,25 @@ func (s *SpinButton) OnEvent(ev Event) {
 	if s.Disabled {
 		return
 	}
+	if ev.Kind == EventKeyDown {
+		// Up/Down step by Step (like the +/- buttons); PageUp/PageDown by a large
+		// step (10x); Home/End jump to Min/Max. Each reuses SetValue+OnChange.
+		switch ev.Code {
+		case "ArrowUp":
+			s.apply(s.Value + s.Step)
+		case "ArrowDown":
+			s.apply(s.Value - s.Step)
+		case "PageUp":
+			s.apply(s.Value + 10*s.Step)
+		case "PageDown":
+			s.apply(s.Value - 10*s.Step)
+		case "Home":
+			s.apply(s.Min)
+		case "End":
+			s.apply(s.Max)
+		}
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
@@ -99,10 +118,16 @@ func (s *SpinButton) OnEvent(ev Event) {
 		return // body click: no action in v0.2 (would open keypad)
 	}
 	if ev.Y < r.H/2 {
-		s.SetValue(s.Value + s.Step)
+		s.apply(s.Value + s.Step)
 	} else {
-		s.SetValue(s.Value - s.Step)
+		s.apply(s.Value - s.Step)
 	}
+}
+
+// apply clamps + assigns v (via SetValue) and fires OnChange (nil-safe) -- the
+// shared mutate+callback path for a +/- button click and every stepper key.
+func (s *SpinButton) apply(v int) {
+	s.SetValue(v)
 	if s.OnChange != nil {
 		s.OnChange(s.Value)
 	}

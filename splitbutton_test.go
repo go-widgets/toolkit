@@ -207,7 +207,9 @@ func TestSplitButtonIgnoresNonClickEvents(t *testing.T) {
 	s := NewSplitButton("X", func() { fired++ })
 	s.OnArrow = func() { fired++ }
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
-	s.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	// Enter/Space (primary) and ArrowDown (menu) activate as of Wave 3; an
+	// unrelated key (Tab) and a char must not fire either handler.
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	s.OnEvent(Event{Kind: EventChar, Code: "a"})
 	if fired != 0 {
 		t.Fatalf("non-click fired handlers: %d", fired)

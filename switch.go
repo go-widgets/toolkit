@@ -72,9 +72,21 @@ func (s *Switch) OnEvent(ev Event) {
 	if s.Disabled {
 		return
 	}
-	if ev.Kind != EventClick {
-		return
+	switch ev.Kind {
+	case EventClick:
+		s.toggle()
+	case EventKeyDown:
+		// Space or Enter flips the switch while focused, reusing the click path.
+		switch ev.Code {
+		case " ", "Space", "Enter":
+			s.toggle()
+		}
 	}
+}
+
+// toggle flips On and fires OnToggle (nil-safe) -- the shared mutate path for a
+// click and a Space/Enter key press.
+func (s *Switch) toggle() {
 	s.On = !s.On
 	if s.OnToggle != nil {
 		s.OnToggle(s.On)

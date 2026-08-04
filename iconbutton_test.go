@@ -144,7 +144,9 @@ func TestIconButtonIgnoresNonClickEvents(t *testing.T) {
 	fired := 0
 	ib := NewIconButton("+", func() { fired++ })
 	ib.SetBounds(Rect{X: 0, Y: 0, W: 30, H: 30})
-	ib.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	// Enter/Space activate as of Wave 3; an unrelated key (Tab), a char, and a
+	// composition event must still not fire OnClick.
+	ib.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	ib.OnEvent(Event{Kind: EventChar, Code: "a"})
 	ib.OnEvent(Event{Kind: EventCompositionStart})
 	if fired != 0 {

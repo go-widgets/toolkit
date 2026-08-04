@@ -540,7 +540,9 @@ func TestExpanderNilContentNoPanic(t *testing.T) {
 func TestExpanderIgnoresNonClick(t *testing.T) {
 	body := &recordingWidget{}
 	e := NewExpander("S", body)
-	e.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	// Enter/Space toggle the header as of Wave 3; an unrelated key (Tab) must
+	// neither toggle nor propagate to the body.
+	e.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if e.Expanded || len(body.events) != 0 {
 		t.Fatal("KeyDown must not toggle or propagate")
 	}

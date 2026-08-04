@@ -21,10 +21,18 @@ type RangeSlider struct {
 	Low, High   float64
 	Orientation Orientation
 	OnChange    func(low, high float64)
+	// Step is the increment an arrow key applies to the keyboard-focused handle.
+	// When it is <= 0 the slider falls back to 1% of the range, so a caller that
+	// never sets Step still gets sensible keyboard nudges.
+	Step float64
 
 	// active is the handle grabbed by the current click/drag: 0 = none,
 	// 1 = Low, 2 = High. It is set on EventClick and cleared on EventMouseUp.
 	active int
+	// keyHandle selects which handle the arrow keys move: 0 = Low (the default),
+	// 1 = High. Home selects Low, End selects High. Kept separate from active so
+	// a keyboard selection survives across key presses without a drag.
+	keyHandle int
 }
 
 // NewRangeSlider builds a RangeSlider spanning [min, max] with the given
@@ -176,6 +184,54 @@ func (s *RangeSlider) OnEvent(ev Event) {
 		}
 	case EventMouseUp:
 		s.active = 0
+	case EventKeyDown:
+		if s.Disabled {
+			return
+		}
+		// Home/End pick which handle the arrows move (Low / High); the arrows
+		// nudge the picked handle by Step, clamped so the handles never cross
+		// (reusing the same cross-clamp + OnChange as a drag).
+		switch ev.Code {
+		case "Home":
+			s.keyHandle = 0
+		case "End":
+			s.keyHandle = 1
+		case "ArrowRight", "ArrowUp":
+			s.nudgeHandle(s.keyStep())
+		case "ArrowLeft", "ArrowDown":
+			s.nudgeHandle(-s.keyStep())
+		}
+	}
+}
+
+// keyStep is the arrow-key increment: Step when the caller set a positive one,
+// else 1% of the range.
+func (s *RangeSlider) keyStep() float64 {
+	if s.Step > 0 {
+		return s.Step
+	}
+	return (s.Max - s.Min) / 100
+}
+
+// nudgeHandle moves the keyboard-focused handle (keyHandle) by delta, clamped to
+// range and so it never crosses the other handle, then fires OnChange -- the
+// same mutate+callback path a drag uses.
+func (s *RangeSlider) nudgeHandle(delta float64) {
+	if s.keyHandle == 1 {
+		v := s.clamp(s.High + delta)
+		if v < s.Low {
+			v = s.Low
+		}
+		s.High = v
+	} else {
+		v := s.clamp(s.Low + delta)
+		if v > s.High {
+			v = s.High
+		}
+		s.Low = v
+	}
+	if s.OnChange != nil {
+		s.OnChange(s.Low, s.High)
 	}
 }
 

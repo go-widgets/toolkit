@@ -28,7 +28,8 @@ func TestSwitchClickToggles(t *testing.T) {
 // non-click event (typed here as EventKeyDown) must leave On unchanged.
 func TestSwitchIgnoresNonClick(t *testing.T) {
 	s := NewSwitch(false)
-	s.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	// Space/Enter toggle as of Wave 3; an unrelated key (Tab) must not.
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if s.On {
 		t.Fatal("KeyDown should not toggle Switch")
 	}

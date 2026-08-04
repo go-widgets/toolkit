@@ -151,7 +151,9 @@ func TestAccordionBodyClickIgnoredWhenCollapsed(t *testing.T) {
 func TestAccordionIgnoresNonClick(t *testing.T) {
 	a := NewAccordion([]AccordionSection{{Title: "A"}})
 	a.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
-	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	// Enter/Space toggle the focused section as of Wave 3; an unrelated key
+	// (Tab) must not.
+	a.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
 	if a.Expanded != -1 {
 		t.Fatal("KeyDown must not toggle a section")
 	}

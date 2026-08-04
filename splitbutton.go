@@ -106,17 +106,42 @@ func (s *SplitButton) OnEvent(ev Event) {
 		s.hovered = s.localInBounds(ev.X, ev.Y)
 		return
 	}
+	if ev.Kind == EventKeyDown {
+		// Enter / Space fire the primary action (like clicking the main slot);
+		// ArrowDown opens the secondary/menu action (like clicking the arrow
+		// slot), only when the arrow slot is present. Each reuses the same
+		// nil-safe callback the corresponding click uses.
+		switch ev.Code {
+		case "Enter", " ", "Space":
+			s.fireClick()
+		case "ArrowDown":
+			if s.Arrow {
+				s.fireArrow()
+			}
+		}
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
 	r := s.Bounds()
 	if s.Arrow && ev.X >= r.W-SplitButtonArrowW {
-		if s.OnArrow != nil {
-			s.OnArrow()
-		}
+		s.fireArrow()
 		return
 	}
+	s.fireClick()
+}
+
+// fireClick / fireArrow are the nil-safe primary / secondary action paths
+// shared by pointer clicks and keyboard activation.
+func (s *SplitButton) fireClick() {
 	if s.OnClick != nil {
 		s.OnClick()
+	}
+}
+
+func (s *SplitButton) fireArrow() {
+	if s.OnArrow != nil {
+		s.OnArrow()
 	}
 }
