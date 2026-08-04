@@ -340,3 +340,255 @@ func TestAgendaSidebarStaysWithinBounds(t *testing.T) {
 		t.Errorf("painted bbox [%d,%d..%d,%d] escapes bounds %+v", minX, minY, maxX, maxY, b)
 	}
 }
+
+// --- AgendaSidebar inline rename -----------------------------------------
+
+// TestAgendaSidebarRenameLifecycle covers the double-click-to-open, typing,
+// Enter-commit (writes Name + fires OnRename with the right i/name), and the
+// invariant that a single click still only toggles Hidden.
+func TestAgendaSidebarRenameLifecycle(t *testing.T) {
+	cals := []AgendaCalendar{{Name: "Work"}, {Name: "Home"}}
+	s := NewAgendaSidebar(cals)
+	var gotI = -1
+	var gotName string
+	renameCalls := 0
+	s.OnRename = func(i int, name string) { gotI, gotName, renameCalls = i, name, renameCalls+1 }
+	toggled := -1
+	s.OnToggle = func(i int) { toggled = i }
+	s.SetBounds(Rect{X: 0, Y: 0, W: 160, H: 120})
+
+	if s.Editing() != -1 {
+		t.Fatalf("Editing() = %d before opening, want -1", s.Editing())
+	}
+
+	// Double-click row 1 opens the editor WITHOUT toggling Hidden.
+	r1 := s.rowRect(1)
+	s.OnEvent(Event{Kind: EventClick, Code: AgendaSidebarDoubleClick, X: 60, Y: r1.Y + r1.H/2})
+	if s.Editing() != 1 {
+		t.Fatalf("double-click Editing() = %d, want 1", s.Editing())
+	}
+	if s.Calendars[1].Hidden {
+		t.Error("opening the editor must not toggle Hidden")
+	}
+	if toggled != -1 {
+		t.Error("opening the editor must not fire OnToggle")
+	}
+	if s.editEntry.Text != "Home" || !s.editEntry.Focused {
+		t.Errorf("editor seeded %q focused=%v, want \"Home\" focused", s.editEntry.Text, s.editEntry.Focused)
+	}
+
+	// Type: a character and a Backspace both reach the Entry.
+	s.OnEvent(Event{Kind: EventChar, Code: "X"})
+	if s.editEntry.Text != "HomeX" {
+		t.Errorf("after EventChar text = %q, want HomeX", s.editEntry.Text)
+	}
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
+	if s.editEntry.Text != "Home" {
+		t.Errorf("after Backspace text = %q, want Home", s.editEntry.Text)
+	}
+	s.OnEvent(Event{Kind: EventChar, Code: "y"}) // -> "Homey"
+
+	// Enter commits: Name written, OnRename(1,"Homey"), editor closed.
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	if s.Editing() != -1 {
+		t.Errorf("after Enter Editing() = %d, want -1", s.Editing())
+	}
+	if s.Calendars[1].Name != "Homey" {
+		t.Errorf("committed Name = %q, want Homey", s.Calendars[1].Name)
+	}
+	if gotI != 1 || gotName != "Homey" || renameCalls != 1 {
+		t.Errorf("OnRename got (%d,%q) calls=%d, want (1,\"Homey\") calls=1", gotI, gotName, renameCalls)
+	}
+
+	// A plain single click still toggles Hidden and does NOT open an editor.
+	toggled = -1
+	s.OnEvent(Event{Kind: EventClick, X: 10, Y: r1.Y + r1.H/2})
+	if s.Editing() != -1 {
+		t.Error("single click must not open the editor")
+	}
+	if !s.Calendars[1].Hidden || toggled != 1 {
+		t.Errorf("single click toggle: Hidden=%v toggled=%d, want true,1", s.Calendars[1].Hidden, toggled)
+	}
+}
+
+// TestAgendaSidebarRenameCancel covers Escape cancelling (Name unchanged) and
+// CancelEdit being reachable.
+func TestAgendaSidebarRenameCancel(t *testing.T) {
+	s := NewAgendaSidebar([]AgendaCalendar{{Name: "Work"}})
+	renamed := false
+	s.OnRename = func(int, string) { renamed = true }
+	s.SetBounds(Rect{W: 160, H: 120})
+
+	s.EditName(0)
+	s.OnEvent(Event{Kind: EventChar, Code: "Z"}) // edit in flight
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
+	if s.Editing() != -1 {
+		t.Error("Escape should close the editor")
+	}
+	if s.Calendars[0].Name != "Work" {
+		t.Errorf("Escape changed Name to %q, want Work (unchanged)", s.Calendars[0].Name)
+	}
+	if renamed {
+		t.Error("Escape must not fire OnRename")
+	}
+}
+
+// TestAgendaSidebarRenameClickOutsideCommits covers the click-away-commits path
+// and the click-inside-keeps-editing path.
+func TestAgendaSidebarRenameClickInsideAndOutside(t *testing.T) {
+	s := NewAgendaSidebar([]AgendaCalendar{{Name: "Work"}, {Name: "Home"}})
+	commits := 0
+	s.OnRename = func(int, string) { commits++ }
+	s.SetBounds(Rect{W: 160, H: 120})
+
+	s.EditName(0)
+	er := s.editLocalRect(0)
+	// Click inside the editor: stays editing, no commit.
+	s.OnEvent(Event{Kind: EventClick, X: er.X + er.W/2, Y: er.Y + er.H/2})
+	if s.Editing() != 0 {
+		t.Error("click inside the editor should keep it open")
+	}
+	if commits != 0 {
+		t.Error("click inside must not commit")
+	}
+	// Click outside (a different row) commits and closes.
+	r1 := s.rowRect(1)
+	s.OnEvent(Event{Kind: EventClick, X: 10, Y: r1.Y + r1.H/2})
+	if s.Editing() != -1 {
+		t.Error("click outside should commit + close the editor")
+	}
+	if commits != 1 {
+		t.Errorf("click-away commits = %d, want 1", commits)
+	}
+	// The click that committed must NOT also toggle the row it landed on.
+	if s.Calendars[1].Hidden {
+		t.Error("the committing click must not toggle another row")
+	}
+}
+
+// TestAgendaSidebarEditNameGuards covers out-of-range EditName (both ends),
+// CommitEdit / Editing on a closed editor, a stale editing index at commit,
+// and nil OnRename safety.
+func TestAgendaSidebarEditNameGuards(t *testing.T) {
+	s := NewAgendaSidebar([]AgendaCalendar{{Name: "Work"}})
+	s.SetBounds(Rect{W: 160, H: 120})
+
+	// Out-of-range EditName is a no-op (both i<0 and i>=len).
+	s.EditName(-1)
+	if s.Editing() != -1 {
+		t.Error("EditName(-1) should not open an editor")
+	}
+	s.EditName(5)
+	if s.Editing() != -1 {
+		t.Error("EditName(out-of-range) should not open an editor")
+	}
+
+	// CommitEdit with no editor open is a safe no-op.
+	s.CommitEdit()
+	if s.Editing() != -1 {
+		t.Error("CommitEdit with no editor should stay closed")
+	}
+
+	// nil OnRename must not panic on commit.
+	s.OnRename = nil
+	s.EditName(0)
+	s.OnEvent(Event{Kind: EventChar, Code: "!"})
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	if s.Calendars[0].Name != "Work!" {
+		t.Errorf("commit with nil OnRename Name = %q, want Work!", s.Calendars[0].Name)
+	}
+
+	// Stale editing index: the calendar goes away while editing, so commit
+	// closes without writing (and without OnRename).
+	s.EditName(0)
+	s.Calendars = s.Calendars[:0]
+	fired := false
+	s.OnRename = func(int, string) { fired = true }
+	s.CommitEdit()
+	if s.Editing() != -1 {
+		t.Error("commit on a stale index should still close the editor")
+	}
+	if fired {
+		t.Error("commit on a stale index must not fire OnRename")
+	}
+}
+
+// TestAgendaSidebarRenameIgnoresStrayEvents covers the editor's default event
+// arms: a non-editing, non-click event while open is ignored, and a narrow
+// bounds still produces a valid (clamped) editor rect.
+func TestAgendaSidebarRenameStrayAndNarrow(t *testing.T) {
+	s := NewAgendaSidebar([]AgendaCalendar{{Name: "Work"}})
+	s.SetBounds(Rect{W: 160, H: 120})
+	s.EditName(0)
+	// A key-up (not handled by the editor switch) is ignored, editor stays open.
+	s.OnEvent(Event{Kind: EventKeyUp, Code: "A"})
+	if s.Editing() != 0 {
+		t.Error("an unhandled event kind should leave the editor open unchanged")
+	}
+	if s.Calendars[0].Name != "Work" {
+		t.Error("an unhandled event must not mutate the name")
+	}
+
+	// Narrow bounds clamp the editor width to at least 1.
+	s.SetBounds(Rect{W: 1, H: 120})
+	if w := s.editLocalRect(0).W; w != 1 {
+		t.Errorf("narrow editLocalRect W = %d, want 1 (clamped)", w)
+	}
+	if w := s.editRect(0).W; w != 1 {
+		t.Errorf("narrow editRect W = %d, want 1 (clamped)", w)
+	}
+}
+
+// TestAgendaSidebarRenameDrawsEntryOverRow proves the inline Entry is painted
+// over the editing row's name area (its focused Accent border appears there,
+// contained within the row) and that the static name is replaced.
+func TestAgendaSidebarRenameDrawsEntryOverRow(t *testing.T) {
+	th := DefaultLight()
+	const w, h = 180, 200
+	teal := RGB(0x0D, 0x94, 0x88)
+	cals := []AgendaCalendar{{Name: "Work", Color: teal}, {Name: "Home", Color: teal}}
+	s := NewAgendaSidebar(cals)
+	s.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+
+	// Baseline (not editing): no Accent pixels in row 1's name area (swatch is
+	// teal, name is OnSurface).
+	surf0 := makeSurface(w, h)
+	s.Draw(newP(surf0, w), th)
+	er := s.editRect(1)
+	if n := countColorInRect(surf0, w, er, th.Accent); n != 0 {
+		t.Fatalf("baseline: found %d Accent pixels in the name area, want 0", n)
+	}
+
+	// Open the editor on row 1 and redraw: the focused Entry's Accent border
+	// now paints in that area, and every Accent pixel stays inside row 1.
+	s.EditName(1)
+	surf := makeSurface(w, h)
+	s.Draw(newP(surf, w), th)
+	if n := countColorInRect(surf, w, er, th.Accent); n == 0 {
+		t.Error("editing: expected the Entry's Accent border in the name area, found none")
+	}
+	row := s.rowRect(1)
+	// Accent pixels must all fall within the editing row (nothing bled out).
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if pixelAt(surf, w, x, y) == th.Accent {
+				if x < row.X || x >= row.X+row.W || y < row.Y || y >= row.Y+row.H {
+					t.Fatalf("Accent pixel at (%d,%d) escapes editing row %+v", x, y, row)
+				}
+			}
+		}
+	}
+}
+
+// countColorInRect counts pixels equal to c within rect r (clamped to the buf).
+func countColorInRect(buf []byte, w int, r Rect, c RGBA) int {
+	n := 0
+	for y := r.Y; y < r.Y+r.H; y++ {
+		for x := r.X; x < r.X+r.W; x++ {
+			if pixelAt(buf, w, x, y) == c {
+				n++
+			}
+		}
+	}
+	return n
+}

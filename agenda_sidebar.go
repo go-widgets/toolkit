@@ -9,8 +9,9 @@ import "github.com/go-widgets/painter"
 // AgendaSidebar is the calendar list that sits beside an Agenda (Google/Apple
 // Calendar's left rail): an optional title row above one row per
 // AgendaCalendar, each showing a colour swatch, the calendar name, and its
-// visibility state. Clicking a row flips that calendar's Hidden flag and fires
-// OnToggle.
+// visibility state. A single click on a row flips that calendar's Hidden flag
+// and fires OnToggle; a double-click opens an inline editor over the row's name
+// to rename the calendar (the remote agenda), firing OnRename on commit.
 //
 // It shares the SAME AgendaCalendar slice as its Agenda — set both from one
 // slice value (agenda.Calendars = cals; sidebar := NewAgendaSidebar(cals)) —
@@ -30,10 +31,24 @@ type AgendaSidebar struct {
 	// Title is the header label above the rows; "" hides the header row
 	// entirely (the first calendar then sits at the very top).
 	Title string
-	// OnToggle fires after a click flips Calendars[i].Hidden, with that row's
-	// index. Nil is safe. The flip has already been applied when it runs, so a
-	// host can persist the new state or re-sync.
+	// OnToggle fires after a single click flips Calendars[i].Hidden, with that
+	// row's index. Nil is safe. The flip has already been applied when it runs,
+	// so a host can persist the new state or re-sync.
 	OnToggle func(i int)
+	// OnRename fires after CommitEdit writes a new Name onto Calendars[i] (open
+	// the inline editor by double-clicking a row, then Enter to commit). It
+	// carries the row index and the new name, already applied to Calendars[i]
+	// when it runs, so the host/VM persists it — the MVVM seam, analogous to
+	// OnToggle. Nil is safe.
+	OnRename func(i int, name string)
+
+	// editIndex is the calendar row whose name is being renamed inline. It is
+	// only meaningful while editEntry != nil (which is the "editor open" flag);
+	// a zero-value sidebar has editEntry == nil, so no editor is open.
+	editIndex int
+	// editEntry is the inline text field painted over the editing row's name; a
+	// nil editEntry means no rename editor is open.
+	editEntry *Entry
 }
 
 // AgendaSidebarRowH is the pixel height of one calendar row.
@@ -44,6 +59,18 @@ const agendaSidebarSwatch = 12
 
 // agendaSidebarPadX is the left inset before the swatch + the gap after it.
 const agendaSidebarPadX = 8
+
+// agendaSidebarEditInset is the vertical inset of the inline rename editor
+// inside a row, so the Entry's border sits a touch above/below the row edges.
+const agendaSidebarEditInset = 3
+
+// AgendaSidebarDoubleClick is the Event.Code a host tags a double-click
+// EventClick with, mirroring StatusIconSecondary for a right-click: a click
+// carrying this Code opens the inline rename editor on the row under it, while
+// an ordinary click (empty Code) toggles the row's visibility. A host that does
+// not distinguish double-clicks simply never sets it, and rows only ever
+// toggle — the rename editor stays fully opt-in.
+const AgendaSidebarDoubleClick = "double"
 
 // NewAgendaSidebar builds a sidebar over cals (the same slice the Agenda uses),
 // titled "Calendars". A nil slice is normalised to a non-nil empty slice so
@@ -97,12 +124,84 @@ func (s *AgendaSidebar) swatchColor(cal AgendaCalendar, theme *Theme) RGBA {
 	return calendarSwatchColor(cal, theme)
 }
 
+// editLocalRect is the inline rename editor's rectangle for row i in
+// widget-local coordinates (origin at the widget's top-left) — the space
+// OnEvent hit-tests in, exactly like rowAt. It spans the row's name area (right
+// of the swatch to the right inset), vertically inset by agendaSidebarEditInset.
+func (s *AgendaSidebar) editLocalRect(i int) Rect {
+	x := agendaSidebarPadX + agendaSidebarSwatch + agendaSidebarPadX
+	h := AgendaSidebarRowH - 2*agendaSidebarEditInset
+	y := s.headerH() + i*AgendaSidebarRowH + (AgendaSidebarRowH-h)/2
+	w := s.Bounds().W - agendaSidebarPadX - x
+	if w < 1 {
+		w = 1
+	}
+	return Rect{X: x, Y: y, W: w, H: h}
+}
+
+// editRect is editLocalRect shifted into absolute coordinates, the geometry
+// Draw hands the Entry (whose Draw paints in absolute space, like every row).
+func (s *AgendaSidebar) editRect(i int) Rect {
+	r := s.editLocalRect(i)
+	b := s.Bounds()
+	return Rect{X: b.X + r.X, Y: b.Y + r.Y, W: r.W, H: r.H}
+}
+
+// EditName opens the inline rename editor on calendar row i, seeding the Entry
+// with its current Name and focusing it. Out-of-range i is a safe no-op (no
+// editor opens). Opening a new editor replaces any editor already open, without
+// committing it. It never touches Hidden.
+func (s *AgendaSidebar) EditName(i int) {
+	if i < 0 || i >= len(s.Calendars) {
+		return
+	}
+	s.editIndex = i
+	s.editEntry = NewEntry(s.Calendars[i].Name)
+	s.editEntry.Focused = true
+}
+
+// Editing returns the index of the calendar whose rename editor is open, or -1
+// when none is open. A host checks this to route keystrokes into OnEvent while
+// editing (Enter/Esc commit/cancel) and to know the editor overlay is live.
+func (s *AgendaSidebar) Editing() int {
+	if s.editEntry == nil {
+		return -1
+	}
+	return s.editIndex
+}
+
+// CommitEdit writes the editor's text back onto Calendars[i].Name, fires
+// OnRename with (i, name), and closes the editor. A no-op when no editor is
+// open; guarded against an editing index gone stale (e.g. the calendar was
+// removed while editing).
+func (s *AgendaSidebar) CommitEdit() {
+	if s.editEntry == nil {
+		return
+	}
+	i := s.editIndex
+	if i >= 0 && i < len(s.Calendars) {
+		s.Calendars[i].Name = s.editEntry.Text
+		if s.OnRename != nil {
+			s.OnRename(i, s.Calendars[i].Name)
+		}
+	}
+	s.editEntry = nil
+}
+
+// CancelEdit closes the rename editor without changing any Name. Safe (a no-op)
+// when no editor is open.
+func (s *AgendaSidebar) CancelEdit() {
+	s.editEntry = nil
+}
+
 // Draw paints the sidebar: a SurfaceAlt background with a right divider, the
 // optional title row, then one row per calendar. A visible calendar shows a
 // filled swatch and full-strength name; a Hidden one shows a hollow (outline)
 // swatch and a dimmed name, so visibility reads at a glance. Every row is
 // clipped to its rectangle so a long name never bleeds into the next row or
-// past the rail.
+// past the rail. While a row is being renamed (see EditName) its inline Entry
+// is painted over the name area in place of the static name; the swatch is
+// unchanged.
 func (s *AgendaSidebar) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
@@ -129,6 +228,13 @@ func (s *AgendaSidebar) Draw(p painter.Painter, theme *Theme) {
 			} else {
 				fillRoundRect(p, sx, sy, sw, sw, 2, col)
 			}
+			if s.editEntry != nil && i == s.editIndex {
+				// Rename in progress: the Entry replaces the static name (the
+				// swatch above still paints, so visibility stays visible).
+				s.editEntry.SetBounds(s.editRect(i))
+				s.editEntry.Draw(p, theme)
+				return
+			}
 			ink := theme.OnSurface
 			if cal.Hidden {
 				ink = dimInk(theme)
@@ -138,10 +244,24 @@ func (s *AgendaSidebar) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
-// OnEvent toggles the visibility of the calendar row under an EventClick
-// (flipping Calendars[i].Hidden) and fires OnToggle with its index. Clicks on
-// the header or dead space, and any non-click event, are no-ops.
+// OnEvent drives the sidebar. When no rename editor is open: a double-click on
+// a row (an EventClick tagged with AgendaSidebarDoubleClick) opens the inline
+// rename editor over that row; an ordinary EventClick toggles the row's
+// Hidden flag and fires OnToggle; clicks on the header or dead space, and any
+// non-click event, are no-ops.
+//
+// While a rename editor is open (Editing() >= 0), events route to it instead:
+// EventChar and text-editing EventKeyDown feed the Entry (caret + text);
+// "Enter" commits (CommitEdit), "Escape" cancels (CancelEdit); a click inside
+// the editor keeps it focused, and a click anywhere else commits — the
+// Google/Apple Calendar convention that clicking away saves the rename (the
+// same rule the Agenda event editor uses). No visibility toggle happens while
+// editing.
 func (s *AgendaSidebar) OnEvent(ev Event) {
+	if s.editEntry != nil {
+		s.onEventEditing(ev)
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
@@ -149,8 +269,37 @@ func (s *AgendaSidebar) OnEvent(ev Event) {
 	if i < 0 {
 		return
 	}
+	if ev.Code == AgendaSidebarDoubleClick {
+		s.EditName(i)
+		return
+	}
 	s.Calendars[i].Hidden = !s.Calendars[i].Hidden
 	if s.OnToggle != nil {
 		s.OnToggle(i)
+	}
+}
+
+// onEventEditing routes an event while the rename editor is open: Enter commits,
+// Escape cancels, other keys + characters feed the Entry, a click inside the
+// editor keeps focus, and a click outside commits (click-away saves).
+func (s *AgendaSidebar) onEventEditing(ev Event) {
+	switch ev.Kind {
+	case EventKeyDown:
+		switch ev.Code {
+		case "Enter":
+			s.CommitEdit()
+		case "Escape":
+			s.CancelEdit()
+		default:
+			s.editEntry.OnEvent(ev)
+		}
+	case EventChar:
+		s.editEntry.OnEvent(ev)
+	case EventClick:
+		if s.editLocalRect(s.editIndex).Contains(ev.X, ev.Y) {
+			s.editEntry.OnEvent(ev)
+		} else {
+			s.CommitEdit()
+		}
 	}
 }
