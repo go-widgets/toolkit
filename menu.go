@@ -168,6 +168,16 @@ func (m *Menu) drawCheckGlyph(p painter.Painter, gx, rowY int, radio bool, ink R
 // toggles its own Checked; a radio-grouped row instead selects itself
 // exclusively within its RadioGroup (see selectRadio).
 func (m *Menu) OnEvent(ev Event) {
+	if ev.Kind == EventMouseMove {
+		// Follow the pointer: highlight the row under it, or clear the
+		// highlight when the pointer has moved off the menu body.
+		if m.localInBounds(ev.X, ev.Y) {
+			m.Hover = m.rowAt(ev.Y)
+		} else {
+			m.Hover = -1
+		}
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
@@ -242,6 +252,11 @@ type MenuBar struct {
 	Names  []string
 	Menus  []*Menu
 	Active int // -1 if none open
+
+	// hoverName tracks the top-level name under the pointer as a 1-based index
+	// (0 = none), set on EventMouseMove. The +1 offset keeps the zero value
+	// (no hover) safe for a literal MenuBar{}, so the resting draw is unchanged.
+	hoverName int
 }
 
 // MenuBarH is the pixel height of the bar strip.
@@ -303,9 +318,15 @@ func (b *MenuBar) Draw(p painter.Painter, theme *Theme) {
 		iw := b.NameWidth(i)
 		ix := r.X + b.NameOriginX(i)
 		ink := theme.OnSurface
-		if i == b.Active {
+		switch {
+		case i == b.Active:
 			fillRect(p, ix, r.Y, iw, MenuBarH, theme.Accent)
 			ink = theme.Background
+		case b.hoverName == i+1:
+			// A hovered (but not open) name raises to Surface — a subtle
+			// lighter cell against the SurfaceAlt bar. Skipped for the active
+			// name, whose Accent highlight already wins.
+			fillRect(p, ix, r.Y, iw, MenuBarH, theme.Surface)
 		}
 		tw := b.textWidth(name)
 		textX := ix + (iw-tw)/2
@@ -322,6 +343,23 @@ func (b *MenuBar) Draw(p painter.Painter, theme *Theme) {
 // formatting the key event's Code as "Alt+F" etc. before forwarding.
 func (b *MenuBar) OnEvent(ev Event) {
 	switch ev.Kind {
+	case EventMouseMove:
+		// Track the name under the pointer for the hover highlight; clear it
+		// when the pointer leaves the strip.
+		if ev.Y < 0 || ev.Y >= MenuBarH {
+			b.hoverName = 0
+			return
+		}
+		b.hoverName = 0
+		cx := 0
+		for i := range b.Names {
+			w := b.NameWidth(i)
+			if ev.X >= cx && ev.X < cx+w {
+				b.hoverName = i + 1
+				return
+			}
+			cx += w
+		}
 	case EventClick:
 		if ev.Y >= MenuBarH {
 			return

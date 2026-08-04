@@ -99,10 +99,20 @@ func (c *ContextMenu) Draw(p painter.Painter, theme *Theme) {
 // frame, so the hit row's Action fires and closes the overlay via OnClose); a
 // click anywhere outside dismisses the menu.
 func (c *ContextMenu) OnEvent(ev Event) {
-	if !c.Open || ev.Kind != EventClick {
+	if !c.Open {
 		return
 	}
 	mb := c.MenuBounds()
+	if ev.Kind == EventMouseMove {
+		// Forward the move to the Menu (translated into its frame) so its row
+		// highlight follows the pointer; a move outside the menu clears it.
+		c.Menu.SetBounds(mb)
+		c.Menu.OnEvent(Event{Kind: EventMouseMove, X: ev.X - mb.X, Y: ev.Y - mb.Y})
+		return
+	}
+	if ev.Kind != EventClick {
+		return
+	}
 	if ev.X >= mb.X && ev.X < mb.X+mb.W && ev.Y >= mb.Y && ev.Y < mb.Y+mb.H {
 		c.Menu.SetBounds(mb)
 		c.Menu.OnEvent(Event{Kind: EventClick, X: ev.X - mb.X, Y: ev.Y - mb.Y})

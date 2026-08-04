@@ -14,6 +14,8 @@ type ToggleButton struct {
 	Label    string
 	Pressed  bool
 	OnToggle func(pressed bool)
+
+	hovered bool
 }
 
 // NewToggleButton constructs a ToggleButton with the given label +
@@ -28,22 +30,36 @@ func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 	face := theme.Surface
 	if t.Pressed {
 		face = theme.Accent
+	} else if t.hovered {
+		// Hover raises the unpressed face to SurfaceAlt (matching Button); the
+		// pressed Accent face wins so the sticky state stays legible.
+		face = theme.SurfaceAlt
+	}
+	ink, border := theme.OnSurface, theme.Border
+	if t.Disabled {
+		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	strokeRect(p, r.X, r.Y, r.W, r.H, border)
 	tw := t.textWidth(t.Label)
 	tx := r.X + (r.W-tw)/2
 	ty := r.Y + (r.H-t.glyphHeight())/2
-	t.drawText(p, tx, ty, t.Label, theme.OnSurface)
+	t.drawText(p, tx, ty, t.Label, ink)
 }
 
-// OnEvent: click flips Pressed + fires OnToggle.
+// OnEvent: click flips Pressed + fires OnToggle; a move tracks the hover face.
+// A Disabled toggle ignores every kind.
 func (t *ToggleButton) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if t.Disabled {
 		return
 	}
-	t.Pressed = !t.Pressed
-	if t.OnToggle != nil {
-		t.OnToggle(t.Pressed)
+	switch ev.Kind {
+	case EventClick:
+		t.Pressed = !t.Pressed
+		if t.OnToggle != nil {
+			t.OnToggle(t.Pressed)
+		}
+	case EventMouseMove:
+		t.hovered = t.localInBounds(ev.X, ev.Y)
 	}
 }

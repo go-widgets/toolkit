@@ -90,23 +90,29 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 	if c.Open {
 		border = theme.Accent
 	}
-	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Surface)
+	// A disabled combobox mutes its face, border, text/placeholder, caret and
+	// chevron; only taken when Disabled so the enabled draw is byte-identical.
+	face, ink, placeholderInk := theme.Surface, theme.OnSurface, theme.SurfaceAlt
+	if c.Disabled {
+		face, border, ink, placeholderInk = mutedFace(theme), mutedInk(theme), mutedInk(theme), mutedInk(theme)
+	}
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
 	textY := r.Y + (r.H-c.glyphHeight())/2
 	if c.Text == "" && c.Placeholder != "" {
-		c.drawText(p, r.X+4, textY, c.Placeholder, theme.SurfaceAlt)
+		c.drawText(p, r.X+4, textY, c.Placeholder, placeholderInk)
 	} else {
-		c.drawText(p, r.X+4, textY, c.Text, theme.OnSurface)
+		c.drawText(p, r.X+4, textY, c.Text, ink)
 	}
 	// Caret at the end of the typed text, measured through the effective font so
 	// it lands correctly under a proportional / CJK face (mirrors Entry).
 	cx := r.X + 4 + c.textWidth(c.Text)
-	fillRect(p, cx, textY-1, 1, c.glyphHeight()+2, theme.OnSurface)
+	fillRect(p, cx, textY-1, 1, c.glyphHeight()+2, ink)
 	// ▼ chevron on the right edge, drawn exactly like DropDown's.
 	cvx := r.X + r.W - 10
 	cvy := r.Y + r.H/2
 	for t := 0; t < 4; t++ {
-		fillRect(p, cvx-t, cvy+2-t, 1+2*t, 1, theme.OnSurface)
+		fillRect(p, cvx-t, cvy+2-t, 1+2*t, 1, ink)
 	}
 	if c.Open {
 		pb := c.PopoverBounds()
@@ -124,6 +130,9 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 // field toggles Open; a click on a listed option selects it; Enter selects the
 // first filtered option.
 func (c *ComboBox) OnEvent(ev Event) {
+	if c.Disabled {
+		return
+	}
 	r := c.Bounds()
 	switch ev.Kind {
 	case EventClick:

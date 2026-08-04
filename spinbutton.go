@@ -50,25 +50,32 @@ func (s *SpinButton) SetValue(v int) {
 // buttons on the right.
 func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
-	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	// Body / border / text / button-face / glyph colours. A disabled spinbutton
+	// mutes them all; only taken when Disabled so the enabled draw is unchanged.
+	bodyC, borderC, textC, btnC := theme.Surface, theme.Border, theme.OnSurface, theme.SurfaceAlt
+	glyphC := theme.OnSurface
+	if s.Disabled {
+		bodyC, borderC, textC, btnC, glyphC = mutedFace(theme), mutedInk(theme), mutedInk(theme), mutedFace(theme), mutedInk(theme)
+	}
+	fillRect(p, r.X, r.Y, r.W, r.H, bodyC)
+	strokeRect(p, r.X, r.Y, r.W, r.H, borderC)
 	// Value text in the left portion.
 	text := strconv.Itoa(s.Value)
 	textY := r.Y + (r.H-s.glyphHeight())/2
-	s.drawText(p, r.X+4, textY, text, theme.OnSurface)
+	s.drawText(p, r.X+4, textY, text, textC)
 	// Two buttons on the right, vertically stacked.
 	btnX := r.X + r.W - spinButtonW
 	half := r.H / 2
-	fillRect(p, btnX, r.Y, spinButtonW, half, theme.SurfaceAlt)
-	fillRect(p, btnX, r.Y+half, spinButtonW, r.H-half, theme.SurfaceAlt)
-	strokeRect(p, btnX, r.Y, spinButtonW, half, theme.Border)
-	strokeRect(p, btnX, r.Y+half, spinButtonW, r.H-half, theme.Border)
+	fillRect(p, btnX, r.Y, spinButtonW, half, btnC)
+	fillRect(p, btnX, r.Y+half, spinButtonW, r.H-half, btnC)
+	strokeRect(p, btnX, r.Y, spinButtonW, half, borderC)
+	strokeRect(p, btnX, r.Y+half, spinButtonW, r.H-half, borderC)
 	// Uniform stepper glyphs drawn as vector bars, centred in each button, so
 	// the "+" and "−" align exactly — unlike font glyphs, whose hyphen-minus
 	// sits at x-height while the plus is centred, making the pair look ragged.
 	cx := btnX + spinButtonW/2
 	const bar = 7 // arm length of the +/− (odd, so it centres on cx)
-	ink := theme.OnSurface
+	ink := glyphC
 	cyUp := r.Y + half/2
 	fillRect(p, cx-bar/2, cyUp, bar, 1, ink) // + horizontal
 	fillRect(p, cx, cyUp-bar/2, 1, bar, ink) // + vertical
@@ -79,6 +86,9 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 // OnEvent: click on the upper-right button increments; click on the
 // lower-right button decrements.
 func (s *SpinButton) OnEvent(ev Event) {
+	if s.Disabled {
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}

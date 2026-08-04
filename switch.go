@@ -45,22 +45,31 @@ func (s *Switch) Draw(p painter.Painter, theme *Theme) {
 	if s.On {
 		track = theme.Accent
 	}
+	// A disabled switch mutes its track, knob and borders so it reads as inert.
+	// Only taken when Disabled — the enabled draw is byte-identical.
+	border, knob := theme.Border, theme.Surface
+	if s.Disabled {
+		track, border, knob = mutedFace(theme), mutedInk(theme), mutedFace(theme)
+	}
 	// Fully-rounded pill track + circular knob -- the iOS/macOS switch shape.
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, r.H/2, track)
-	strokeRoundRect(p, r.X, r.Y, r.W, r.H, r.H/2, theme.Border)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, r.H/2, border)
 	knobH := r.H - 2*switchPad
 	knobW := knobH
 	knobX := r.X + switchPad
 	if s.On {
 		knobX = r.X + r.W - knobW - switchPad
 	}
-	fillRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, theme.Surface)
-	strokeRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, theme.Border)
+	fillRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, knob)
+	strokeRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, border)
 }
 
 // OnEvent flips On + fires OnToggle on click. All other event kinds
 // pass through without effect (matches ToggleButton / CheckButton).
 func (s *Switch) OnEvent(ev Event) {
+	if s.Disabled {
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}

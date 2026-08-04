@@ -283,9 +283,17 @@ func (h *HBox) Draw(p painter.Painter, theme *Theme) {
 }
 
 // OnEvent forwards to the first child whose Bounds contains the event point,
-// translated into that child's local space.
+// translated into that child's local space. EventMouseMove is forwarded to
+// EVERY child (translated) instead, so the child under the pointer raises its
+// hover face while the ones it left clear theirs.
 func (h *HBox) OnEvent(ev Event) {
 	pr := h.Bounds()
+	if ev.Kind == EventMouseMove {
+		for _, c := range h.children {
+			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
+		}
+		return
+	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	for _, c := range h.children {
 		if c.w.Bounds().Contains(sx, sy) {
@@ -370,9 +378,17 @@ func (v *VBox) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
-// OnEvent forwards to the first child containing the event point.
+// OnEvent forwards to the first child containing the event point. EventMouseMove
+// is forwarded to every child instead, so hover-enter and hover-leave both
+// propagate (see HBox.OnEvent).
 func (v *VBox) OnEvent(ev Event) {
 	pr := v.Bounds()
+	if ev.Kind == EventMouseMove {
+		for _, c := range v.children {
+			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
+		}
+		return
+	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	for _, c := range v.children {
 		if c.w.Bounds().Contains(sx, sy) {
@@ -537,9 +553,16 @@ func (g *Grid) Draw(p painter.Painter, theme *Theme) {
 }
 
 // OnEvent hit-tests attached children + forwards with translated
-// coordinates.
+// coordinates. EventMouseMove is forwarded to every attached child instead, so
+// hover-enter and hover-leave both propagate (see HBox.OnEvent).
 func (g *Grid) OnEvent(ev Event) {
 	pr := g.Bounds()
+	if ev.Kind == EventMouseMove {
+		for _, c := range g.children {
+			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
+		}
+		return
+	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	for _, c := range g.children {
 		if c.w.Bounds().Contains(sx, sy) {
@@ -675,6 +698,13 @@ func (f *Frame) OnEvent(ev Event) {
 		return
 	}
 	pr := f.Bounds()
+	// A move is forwarded to the child unconditionally (translated) so it can
+	// clear its hover face once the pointer leaves it; every other kind lands
+	// only when the point is inside the child.
+	if ev.Kind == EventMouseMove {
+		f.child.OnEvent(translateEvent(ev, pr, f.child.Bounds()))
+		return
+	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	if f.child.Bounds().Contains(sx, sy) {
 		f.child.OnEvent(translateEvent(ev, pr, f.child.Bounds()))

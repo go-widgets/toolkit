@@ -50,10 +50,16 @@ func (d *DropDown) Current() string {
 // PopoverBounds).
 func (d *DropDown) Draw(p painter.Painter, theme *Theme) {
 	r := d.Bounds()
-	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	// A disabled dropdown mutes its face, border, text and chevron; only taken
+	// when Disabled so the enabled draw is byte-identical.
+	face, border, ink := theme.Surface, theme.Border, theme.OnSurface
+	if d.Disabled {
+		face, border, ink = mutedFace(theme), mutedInk(theme), mutedInk(theme)
+	}
+	fillRect(p, r.X, r.Y, r.W, r.H, face)
+	strokeRect(p, r.X, r.Y, r.W, r.H, border)
 	textY := r.Y + (r.H-d.glyphHeight())/2
-	d.drawText(p, r.X+6, textY, d.Current(), theme.OnSurface)
+	d.drawText(p, r.X+6, textY, d.Current(), ink)
 	// ▼ chevron on the right edge to signal a drop-down. The wide base
 	// sits on the top row and rows narrow moving down to the point,
 	// so at t=0 the 1-pixel-wide tip lands at cy+2 and at t=3 the 7-
@@ -61,13 +67,17 @@ func (d *DropDown) Draw(p painter.Painter, theme *Theme) {
 	cx := r.X + r.W - 10
 	cy := r.Y + r.H/2
 	for t := 0; t < 4; t++ {
-		fillRect(p, cx-t, cy+2-t, 1+2*t, 1, theme.OnSurface)
+		fillRect(p, cx-t, cy+2-t, 1+2*t, 1, ink)
 	}
 }
 
 // OnEvent toggles Open on click. Selection happens via Select() which
-// the host wires to its popover ListBox's OnActivate.
+// the host wires to its popover ListBox's OnActivate. A Disabled dropdown
+// ignores every kind (it cannot be opened).
 func (d *DropDown) OnEvent(ev Event) {
+	if d.Disabled {
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}

@@ -116,6 +116,12 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	case b.hovered:
 		face = theme.SurfaceAlt
 	}
+	// A disabled button ignores style + interaction and paints a muted face,
+	// so it reads as inert. Only taken when Disabled, so the enabled draw is
+	// byte-identical.
+	if b.Disabled {
+		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
+	}
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
 	if b.Label != "" {
@@ -133,6 +139,9 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 // are ignored. (SetPressed remains for hosts that drive press state their own
 // way, e.g. enter/leave dispatch.)
 func (b *Button) OnEvent(ev Event) {
+	if b.Disabled {
+		return
+	}
 	switch ev.Kind {
 	case EventClick:
 		if b.PressFeedback {
@@ -143,5 +152,9 @@ func (b *Button) OnEvent(ev Event) {
 		}
 	case EventMouseUp:
 		b.pressed = false
+	case EventMouseMove:
+		// Raise the hover face when the pointer is over the button, clear it
+		// when a container forwards a move whose point has left it.
+		b.hovered = b.localInBounds(ev.X, ev.Y)
 	}
 }

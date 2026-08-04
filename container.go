@@ -276,9 +276,20 @@ func (c *Container) Draw(p painter.Painter, theme *Theme) {
 }
 
 // OnEvent forwards to the first non-empty item whose Bounds contains the point,
-// translated into that item's local space.
+// translated into that item's local space. EventMouseMove is the exception: it
+// is forwarded to EVERY non-empty item (translated), so the item under the
+// pointer raises its hover face while the ones the pointer just left clear
+// theirs — hover-enter and hover-leave both propagate without host wiring.
 func (c *Container) OnEvent(ev Event) {
 	pr := c.Bounds()
+	if ev.Kind == EventMouseMove {
+		for _, it := range c.items {
+			if b := it.Widget.Bounds(); b.W > 0 && b.H > 0 {
+				it.Widget.OnEvent(translateEvent(ev, pr, b))
+			}
+		}
+		return
+	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	for _, it := range c.items {
 		b := it.Widget.Bounds()

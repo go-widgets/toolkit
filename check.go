@@ -45,24 +45,30 @@ func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 	if c.Checked {
 		fill = theme.Accent
 	}
+	// A disabled checkbox mutes the box, border, checkmark and label so it
+	// reads as inert. Only taken when Disabled — the enabled draw is unchanged.
+	border, tick, labelInk := theme.Border, theme.Background, theme.OnBackground
+	if c.Disabled {
+		fill, border, tick, labelInk = mutedFace(theme), mutedInk(theme), mutedInk(theme), mutedInk(theme)
+	}
 	fillRect(p, r.X, boxY, box, box, fill)
-	strokeRect(p, r.X, boxY, box, box, theme.Border)
+	strokeRect(p, r.X, boxY, box, box, border)
 	if c.Checked {
 		if c.Size > 0 {
-			drawCheckmark(p, r.X, boxY, box, theme.Background)
+			drawCheckmark(p, r.X, boxY, box, tick)
 		} else {
 			// The classic fixed 12px checkmark (byte-identical to prior releases).
 			for t := 0; t < 4; t++ {
-				fillRect(p, r.X+3+t, boxY+6+t, 1, 1, theme.Background)
+				fillRect(p, r.X+3+t, boxY+6+t, 1, 1, tick)
 			}
 			for t := 0; t < 6; t++ {
-				fillRect(p, r.X+6+t, boxY+9-t, 1, 1, theme.Background)
+				fillRect(p, r.X+6+t, boxY+9-t, 1, 1, tick)
 			}
 		}
 	}
 	// Label to the right of the box, vertically centred on glyph row.
 	textY := r.Y + (r.H-c.glyphHeight())/2
-	c.drawText(p, r.X+box+4, textY, c.Label, theme.OnBackground)
+	c.drawText(p, r.X+box+4, textY, c.Label, labelInk)
 }
 
 // drawCheckmark strokes a two-segment "✓" scaled to a box of side b at (x, y),
@@ -81,8 +87,12 @@ func drawCheckmark(p painter.Painter, x, y, b int, ink RGBA) {
 	}
 }
 
-// OnEvent flips Checked + fires OnToggle on click.
+// OnEvent flips Checked + fires OnToggle on click. A Disabled checkbox ignores
+// every kind.
 func (c *CheckButton) OnEvent(ev Event) {
+	if c.Disabled {
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}

@@ -50,38 +50,48 @@ func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 	if s.Max > s.Min {
 		pos = (s.Value - s.Min) / (s.Max - s.Min)
 	}
+	// Track / fill / thumb / border colours. A disabled scale mutes them all so
+	// it reads as inert; the enabled draw is byte-identical (branch only taken
+	// when Disabled).
+	trackC, fillC, thumbC, borderC := theme.SurfaceAlt, theme.Accent, theme.Surface, theme.Border
+	if s.Disabled {
+		trackC, fillC, thumbC, borderC = mutedFace(theme), mutedInk(theme), mutedFace(theme), mutedInk(theme)
+	}
 	if s.Orientation == Vertical {
 		const trackW = 4
 		trackX := r.X + (r.W-trackW)/2
 		trackR := trackW / 2
-		fillRoundRect(p, trackX, r.Y, trackW, r.H, trackR, theme.SurfaceAlt)
-		// pos=1 (Max) sits at the top; the Accent fill runs from the thumb centre
+		fillRoundRect(p, trackX, r.Y, trackW, r.H, trackR, trackC)
+		// pos=1 (Max) sits at the top; the fill runs from the thumb centre
 		// down to the bottom (a fader reads "filled" below the knob).
 		ty := r.Y + int((1-pos)*float64(r.H-scaleThumbSize))
 		centreY := ty + scaleThumbSize/2
-		fillRoundRect(p, trackX, centreY, trackW, r.Y+r.H-centreY, trackR, theme.Accent)
+		fillRoundRect(p, trackX, centreY, trackW, r.Y+r.H-centreY, trackR, fillC)
 		tx := r.X + (r.W-scaleThumbSize)/2
-		fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
-		strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
+		fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, thumbC)
+		strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, borderC)
 		return
 	}
 	const trackH = 4
 	trackY := r.Y + (r.H-trackH)/2
 	trackR := trackH / 2
-	// Full (unfilled) track first, then the Accent fill up to the thumb centre.
-	fillRoundRect(p, r.X, trackY, r.W, trackH, trackR, theme.SurfaceAlt)
+	// Full (unfilled) track first, then the fill up to the thumb centre.
+	fillRoundRect(p, r.X, trackY, r.W, trackH, trackR, trackC)
 	// Position the thumb (pos computed above). When Max == Min, sit at the left.
 	tx := r.X + int(pos*float64(r.W-scaleThumbSize))
-	fillRoundRect(p, r.X, trackY, tx+scaleThumbSize/2-r.X, trackH, trackR, theme.Accent)
+	fillRoundRect(p, r.X, trackY, tx+scaleThumbSize/2-r.X, trackH, trackR, fillC)
 	// Circular white thumb + border (same shape as the Switch knob).
 	ty := r.Y + (r.H-scaleThumbSize)/2
-	fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
-	strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
+	fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, thumbC)
+	strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, borderC)
 }
 
 // OnEvent: click jumps the thumb to the clicked x-position +
 // fires OnChange.
 func (s *Scale) OnEvent(ev Event) {
+	if s.Disabled {
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}

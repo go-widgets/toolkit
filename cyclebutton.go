@@ -33,17 +33,25 @@ func (c *CycleButton) Value() string {
 // widget's font.
 func (c *CycleButton) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()
-	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Surface)
-	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Border)
+	face, ink, border := theme.Surface, theme.OnSurface, theme.Border
+	if c.Disabled {
+		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
+	}
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
 	if v := c.Value(); v != "" {
 		tx := r.X + (r.W-c.textWidth(v))/2
 		ty := r.Y + (r.H-c.glyphHeight())/2
-		c.drawText(p, tx, ty, v, theme.OnSurface)
+		c.drawText(p, tx, ty, v, ink)
 	}
 }
 
-// OnEvent advances to the next option on a click (wrapping), firing OnChange.
+// OnEvent advances to the next option on a click (wrapping), firing OnChange. A
+// Disabled cycle button ignores every kind.
 func (c *CycleButton) OnEvent(ev Event) {
+	if c.Disabled {
+		return
+	}
 	if ev.Kind == EventClick && len(c.Options) > 0 {
 		c.Index = (c.Index + 1) % len(c.Options)
 		if c.OnChange != nil {

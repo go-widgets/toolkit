@@ -37,18 +37,27 @@ func NewRadioButton(label string) *RadioButton {
 func (r *RadioButton) Draw(p painter.Painter, theme *Theme) {
 	b := r.Bounds()
 	boxY := b.Y + (b.H-radioBoxSize)/2
-	fillRect(p, b.X, boxY, radioBoxSize, radioBoxSize, theme.Surface)
-	strokeRect(p, b.X, boxY, radioBoxSize, radioBoxSize, theme.Border)
+	// A disabled radio mutes its mark, dot and label; the enabled draw is
+	// unchanged (the branch is only taken when Disabled).
+	face, border, dot, labelInk := theme.Surface, theme.Border, theme.Accent, theme.OnBackground
+	if r.Disabled {
+		face, border, dot, labelInk = mutedFace(theme), mutedInk(theme), mutedInk(theme), mutedInk(theme)
+	}
+	fillRect(p, b.X, boxY, radioBoxSize, radioBoxSize, face)
+	strokeRect(p, b.X, boxY, radioBoxSize, radioBoxSize, border)
 	if r.Checked {
-		fillRect(p, b.X+3, boxY+3, radioBoxSize-6, radioBoxSize-6, theme.Accent)
+		fillRect(p, b.X+3, boxY+3, radioBoxSize-6, radioBoxSize-6, dot)
 	}
 	textY := b.Y + (b.H-r.glyphHeight())/2
-	r.drawText(p, b.X+radioBoxSize+4, textY, r.Label, theme.OnBackground)
+	r.drawText(p, b.X+radioBoxSize+4, textY, r.Label, labelInk)
 }
 
 // OnEvent: on click, route through the group (if any) so siblings
 // clear; otherwise toggle Checked locally.
 func (r *RadioButton) OnEvent(ev Event) {
+	if r.Disabled {
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}

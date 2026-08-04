@@ -123,6 +123,18 @@ const (
 	// kind so no app has to hand-roll wheel routing.
 	EventScroll
 
+	// EventMouseMove fires when the pointer moves over the widget with NO
+	// button pressed — the plain hover-tracking move (its pressed-button
+	// counterpart is EventMouseDrag). X/Y carry the widget-local pointer
+	// position. Containers forward it to their children (translating
+	// coordinates like every other kind) so a leaf sets its hover face when
+	// the pointer is over it and clears it when the pointer moves off; a
+	// widget that draws no hover state simply ignores it. Purely a
+	// visual-feedback signal — it never activates anything. Appended last
+	// (rather than beside EventMouseDrag) so the pre-existing kinds keep
+	// their integer values for any host that persists them.
+	EventMouseMove
+
 	// eventKindEnd is the exclusive upper bound of valid EventKind
 	// values — not itself a valid kind. Its sole purpose is letting
 	// TestEventKindValuesAreDistinct assert exhaustive coverage: any
@@ -209,6 +221,13 @@ type Base struct {
 	// Font, when non-nil, overrides the global active font for this widget
 	// only. nil means "inherit the active font" (the default).
 	Font Font
+	// Disabled, when true, makes an interactive widget inert: its OnEvent
+	// early-returns (no click / drag / scroll / hover / key effect) and its
+	// Draw paints a muted, greyed face. The zero value (false) is the normal
+	// interactive state, so every widget is enabled by default and existing
+	// renders are unchanged. Inherited by every widget that embeds Base, so a
+	// caller disables any control with `w.Disabled = true`.
+	Disabled bool
 }
 
 func (b *Base) Bounds() Rect            { return b.rect }
@@ -256,3 +275,24 @@ func (b *Base) glyphHeight() int { return b.EffectiveFont().Height() }
 // glyphAdvance is this widget's effective font's horizontal step per glyph —
 // the per-widget counterpart of the package-level GlyphAdvance.
 func (b *Base) glyphAdvance() int { return b.EffectiveFont().Advance() }
+
+// localInBounds reports whether a widget-local point (as delivered in an
+// OnEvent, whose X/Y are already offset into this widget's frame) falls within
+// this widget's own rectangle — [0,W) × [0,H). Hover-tracking widgets call it on
+// EventMouseMove to raise their hover face when the pointer is over them (true)
+// and clear it when a container forwards a move whose point has left them
+// (false), so hover-enter and hover-leave both work with no host wiring.
+func (b *Base) localInBounds(x, y int) bool {
+	return x >= 0 && y >= 0 && x < b.rect.W && y < b.rect.H
+}
+
+// mutedInk is the ink a Disabled widget paints its text / glyphs in: the theme's
+// OnSurface blended halfway to its Background, so a greyed control reads as
+// inactive under both light and dark themes. Shared so disabled widgets tint
+// consistently.
+func mutedInk(theme *Theme) RGBA { return blendRGBA(theme.OnSurface, theme.Background, 0.5) }
+
+// mutedFace is the fill a Disabled widget paints its body in: the theme's
+// SurfaceAlt blended halfway to its Background — a flat, greyed panel shared
+// across widgets so every disabled control has the same muted face.
+func mutedFace(theme *Theme) RGBA { return blendRGBA(theme.SurfaceAlt, theme.Background, 0.5) }

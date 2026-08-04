@@ -26,6 +26,8 @@ type SplitButton struct {
 	Arrow   bool
 	OnClick func()
 	OnArrow func()
+
+	hovered bool
 }
 
 // SplitButtonArrowW is the pixel width of the arrow slot on the right
@@ -60,13 +62,22 @@ func (s *SplitButton) Draw(p painter.Painter, theme *Theme) {
 		mainW = r.W - SplitButtonArrowW
 	}
 	ink := accentInk(theme)
+	// Both slots share one face: Accent at rest, brightened on hover, muted
+	// when Disabled. The zero-value hovered keeps the resting draw
+	// byte-identical to before the hover face existed.
+	face := theme.Accent
+	if s.hovered {
+		face = brighter(theme.Accent)
+	}
+	if s.Disabled {
+		face, ink = mutedFace(theme), mutedInk(theme)
+	}
 	// Main slot fill.
-	fillRect(p, r.X, r.Y, mainW, r.H, theme.Accent)
+	fillRect(p, r.X, r.Y, mainW, r.H, face)
 	if s.Arrow {
-		// Arrow slot fill (same Accent face) then a 1-px Border
-		// separator at the boundary + the "v" arrow glyph centred
-		// in the arrow slot.
-		fillRect(p, r.X+mainW, r.Y, SplitButtonArrowW, r.H, theme.Accent)
+		// Arrow slot fill (same face) then a 1-px Border separator at the
+		// boundary + the "v" arrow glyph centred in the arrow slot.
+		fillRect(p, r.X+mainW, r.Y, SplitButtonArrowW, r.H, face)
 		fillRect(p, r.X+mainW, r.Y, 1, r.H, theme.Border)
 		aw := s.textWidth("v")
 		ax := r.X + mainW + (SplitButtonArrowW-aw)/2
@@ -86,6 +97,13 @@ func (s *SplitButton) Draw(p painter.Painter, theme *Theme) {
 // the right SplitButtonArrowW pixels fires OnArrow, otherwise OnClick.
 // Both callbacks are nil-safe. Non-click event kinds are ignored.
 func (s *SplitButton) OnEvent(ev Event) {
+	if s.Disabled {
+		return
+	}
+	if ev.Kind == EventMouseMove {
+		s.hovered = s.localInBounds(ev.X, ev.Y)
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}

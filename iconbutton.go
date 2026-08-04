@@ -26,6 +26,9 @@ type IconButton struct {
 	Base
 	Icon    string
 	OnClick func()
+
+	hovered bool
+	pressed bool
 }
 
 // IconButtonSize is the default square dimension in pixels when
@@ -55,20 +58,46 @@ func (i *IconButton) Draw(p painter.Painter, theme *Theme) {
 		}
 		i.SetBounds(r)
 	}
-	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	// Resting face/ink, then the hover/press faces (to match Button), then the
+	// muted disabled face. The zero-value hovered/pressed keep the resting
+	// draw byte-identical to before these faces existed.
+	face, ink, border := theme.Surface, theme.OnSurface, theme.Border
+	switch {
+	case i.pressed:
+		face, ink = theme.Accent, theme.Background
+	case i.hovered:
+		face = theme.SurfaceAlt
+	}
+	if i.Disabled {
+		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
+	}
+	fillRect(p, r.X, r.Y, r.W, r.H, face)
+	strokeRect(p, r.X, r.Y, r.W, r.H, border)
 	if i.Icon != "" {
 		tw := i.textWidth(i.Icon)
 		tx := r.X + (r.W-tw)/2
 		ty := r.Y + (r.H-i.glyphHeight())/2
-		i.drawText(p, tx, ty, i.Icon, theme.OnSurface)
+		i.drawText(p, tx, ty, i.Icon, ink)
 	}
 }
 
-// OnEvent fires OnClick on EventClick; other event kinds are ignored.
-// OnClick is nil-safe.
+// OnEvent drives the button from pointer events: EventClick presses it (showing
+// the pressed face) and fires OnClick, EventMouseUp releases it, EventMouseMove
+// tracks the hover face. A Disabled button ignores every kind. OnClick is
+// nil-safe.
 func (i *IconButton) OnEvent(ev Event) {
-	if ev.Kind == EventClick && i.OnClick != nil {
-		i.OnClick()
+	if i.Disabled {
+		return
+	}
+	switch ev.Kind {
+	case EventClick:
+		i.pressed = true
+		if i.OnClick != nil {
+			i.OnClick()
+		}
+	case EventMouseUp:
+		i.pressed = false
+	case EventMouseMove:
+		i.hovered = i.localInBounds(ev.X, ev.Y)
 	}
 }
