@@ -64,21 +64,23 @@ func TestAgendaMonthArith(t *testing.T) {
 	}
 }
 
-func TestAgendaDayEventAndResolveFill(t *testing.T) {
+func TestAgendaDayEventAndEventFill(t *testing.T) {
 	teal := RGB(0x0D, 0x94, 0x88)
 	a := &Agenda{Events: []AgendaEvent{{Y: 2026, M: 2, D: 5, Fill: teal}}}
-	if f, has := a.dayEvent(2026, 2, 5); !has || f != teal {
-		t.Errorf("dayEvent hit = %v,%v want teal,true", f, has)
+	if ev, has := a.dayEvent(2026, 2, 5); !has || ev.Fill != teal {
+		t.Errorf("dayEvent hit = %v,%v want teal,true", ev, has)
 	}
 	if _, has := a.dayEvent(2026, 2, 6); has {
 		t.Error("dayEvent on an empty day should be false")
 	}
 	th := DefaultLight()
-	if got := resolveFill(RGBA{}, th); got != th.Accent {
-		t.Errorf("resolveFill(zero) = %v, want Accent", got)
+	// Explicit Fill wins.
+	if got := a.eventFill(AgendaEvent{Fill: teal}, th); got != teal {
+		t.Errorf("eventFill(explicit Fill) = %v, want teal", got)
 	}
-	if got := resolveFill(teal, th); got != teal {
-		t.Errorf("resolveFill(teal) = %v, want teal", got)
+	// No Fill, no calendar → theme Accent.
+	if got := a.eventFill(AgendaEvent{}, th); got != th.Accent {
+		t.Errorf("eventFill(bare) = %v, want Accent", got)
 	}
 }
 
