@@ -394,3 +394,47 @@ func TestWizardOnEventNilBodyNoPanic(t *testing.T) {
 	w.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 240})
 	w.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"}) // must not panic
 }
+
+// TestWizardButtonPressFeedback: clicking Back/Next arms the pressed feedback
+// on that button, which EventMouseUp clears; PressFeedback=false opts out.
+func TestWizardButtonPressFeedback(t *testing.T) {
+	w := NewWizard([]WizardStep{{Title: "A"}, {Title: "B"}, {Title: "C"}})
+	w.Current = 1 // on step B: Back enabled, Next enabled
+	w.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
+
+	// Click Next → armed + advanced.
+	nr := w.nextRect()
+	w.OnEvent(Event{Kind: EventClick, X: nr.X + nr.W/2, Y: nr.Y + nr.H/2})
+	if w.pressedBtn != wizBtnNext {
+		t.Fatalf("Next click: pressedBtn=%d, want wizBtnNext", w.pressedBtn)
+	}
+	if w.Current != 2 {
+		t.Fatalf("Next did not advance: Current=%d", w.Current)
+	}
+	// Draw renders the pressed Next button (covers the SetPressed branch).
+	w.Draw(newP(makeSurface(300, 200), 300), DefaultLight())
+	// Release clears it.
+	w.OnEvent(Event{Kind: EventMouseUp})
+	if w.pressedBtn != wizBtnNone {
+		t.Fatal("EventMouseUp should clear the pressed button")
+	}
+
+	// Click Back (now on step C) → armed + moved back; Draw pressed.
+	w.Current = 1
+	br := w.backRect()
+	w.OnEvent(Event{Kind: EventClick, X: br.X + br.W/2, Y: br.Y + br.H/2})
+	if w.pressedBtn != wizBtnBack || w.Current != 0 {
+		t.Fatalf("Back click: pressedBtn=%d Current=%d", w.pressedBtn, w.Current)
+	}
+	w.Draw(newP(makeSurface(300, 200), 300), DefaultLight())
+
+	// PressFeedback=false opts out.
+	w2 := NewWizard([]WizardStep{{Title: "A"}, {Title: "B"}})
+	w2.Current, w2.PressFeedback = 1, false
+	w2.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
+	br2 := w2.backRect()
+	w2.OnEvent(Event{Kind: EventClick, X: br2.X + br2.W/2, Y: br2.Y + br2.H/2})
+	if w2.pressedBtn != wizBtnNone {
+		t.Fatal("PressFeedback=false should not arm the pressed button")
+	}
+}

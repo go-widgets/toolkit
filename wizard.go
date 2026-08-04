@@ -47,12 +47,25 @@ type Wizard struct {
 	Steps    []WizardStep
 	Current  int
 	OnFinish func()
+
+	// PressFeedback shows the pressed face on the Back / Next button while it is
+	// held (EventClick → EventMouseUp). NewWizard enables it; set false to opt
+	// out.
+	PressFeedback bool
+
+	pressedBtn int // wizBtnNone / wizBtnBack / wizBtnNext
 }
+
+const (
+	wizBtnNone = iota
+	wizBtnBack
+	wizBtnNext
+)
 
 // NewWizard constructs a Wizard over the given steps, starting on the
 // first one (Current == 0).
 func NewWizard(steps []WizardStep) *Wizard {
-	return &Wizard{Steps: steps}
+	return &Wizard{Steps: steps, PressFeedback: true}
 }
 
 // onLastStep reports whether Current is at (or past) the final step
@@ -183,6 +196,9 @@ func (w *Wizard) Draw(p painter.Painter, theme *Theme) {
 	if w.Current == 0 {
 		back.Style = ButtonSecondary
 	}
+	if w.pressedBtn == wizBtnBack {
+		back.SetPressed(true)
+	}
 	back.Draw(p, theme)
 
 	next := NewButton(w.nextButtonLabel(), nil)
@@ -190,6 +206,9 @@ func (w *Wizard) Draw(p painter.Painter, theme *Theme) {
 	next.Style = ButtonProminent
 	if !w.currentCanAdvance() {
 		next.Style = ButtonSecondary
+	}
+	if w.pressedBtn == wizBtnNext {
+		next.SetPressed(true)
 	}
 	next.Draw(p, theme)
 }
@@ -207,17 +226,26 @@ func (w *Wizard) OnEvent(ev Event) {
 		return
 	}
 	r := w.Bounds()
+	if ev.Kind == EventMouseUp {
+		w.pressedBtn = wizBtnNone // release the pressed Back/Next feedback
+	}
 	if ev.Kind == EventClick {
 		// ev is widget-local; hit-test the buttons in surface coordinates.
 		ax, ay := ev.X+r.X, ev.Y+r.Y
 		if w.backRect().Contains(ax, ay) {
 			if w.Current > 0 {
+				if w.PressFeedback {
+					w.pressedBtn = wizBtnBack
+				}
 				w.Back()
 			}
 			return
 		}
 		if w.nextRect().Contains(ax, ay) {
 			if w.currentCanAdvance() {
+				if w.PressFeedback {
+					w.pressedBtn = wizBtnNext
+				}
 				w.Next()
 			}
 			return

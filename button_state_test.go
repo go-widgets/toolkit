@@ -79,3 +79,19 @@ func TestButtonPressFeedback(t *testing.T) {
 		t.Fatal("nil-OnClick button should still press")
 	}
 }
+
+// TestButtonPressFeedbackDisabled: a button with PressFeedback off does not
+// press on click (but still fires OnClick).
+func TestButtonPressFeedbackDisabled(t *testing.T) {
+	fired := false
+	b := NewButton("Q", func() { fired = true })
+	b.PressFeedback = false
+	b.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
+	b.OnEvent(Event{Kind: EventClick})
+	if b.pressed {
+		t.Fatal("PressFeedback=false should not press the button")
+	}
+	if !fired {
+		t.Fatal("OnClick should still fire with feedback disabled")
+	}
+}

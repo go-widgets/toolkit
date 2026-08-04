@@ -26,6 +26,11 @@ type Button struct {
 	// Style. The app sets it from its own model; the button never flips it itself.
 	Selected bool
 
+	// PressFeedback shows the pressed face on EventClick (until EventMouseUp).
+	// NewButton enables it; set it false to opt a button out (e.g. one whose
+	// action already navigates away so the flash would just flicker).
+	PressFeedback bool
+
 	hovered bool
 	pressed bool
 }
@@ -69,7 +74,7 @@ func accentFg(theme *Theme) RGBA {
 // NewButton constructs a Button with the given label + click handler.
 // Handler may be nil (a no-op button is still rendered).
 func NewButton(label string, onClick func()) *Button {
-	return &Button{Label: label, OnClick: onClick}
+	return &Button{Label: label, OnClick: onClick, PressFeedback: true}
 }
 
 // SetHovered/SetPressed are wired by the parent container's mouse
@@ -130,7 +135,9 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 func (b *Button) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
-		b.pressed = true
+		if b.PressFeedback {
+			b.pressed = true
+		}
 		if b.OnClick != nil {
 			b.OnClick()
 		}
