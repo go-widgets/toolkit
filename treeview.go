@@ -61,6 +61,9 @@ type TreeView struct {
 	// every Draw + OnEvent so hit-tests + paint share one definition
 	// of "visible".
 	rows []treeRow
+
+	// sbDrag tracks an in-progress drag of the vertical scrollbar thumb.
+	sbDrag scrollDrag
 }
 
 type treeRow struct {
@@ -334,23 +337,48 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 		clr.PopClip()
 	}
 	if windowed {
-		t.drawScrollbar(p, theme, r, wr, total)
+		t.drawScrollbar(p, theme, r)
 	}
 }
 
-// drawScrollbar paints the right-edge track + thumb, sized + positioned
-// by the same viewport/content proportion math ScrollView uses. Only
-// called when the flattened list overflows the window.
-func (t *TreeView) drawScrollbar(p painter.Painter, theme *Theme, r Rect, wr, total int) {
-	trackX := r.X + r.W - scrollbarWidth
-	fillRect(p, trackX, r.Y, scrollbarWidth, r.H, theme.SurfaceAlt)
+// scrollbarGeom returns the vertical scrollbar's widget-local geometry and
+// whether it is live (the flattened list overflows the window). It is the single
+// definition of the track + thumb shared by drawScrollbar and OnEvent, using the
+// same viewport/content proportion math ScrollView uses, driven by ScrollRow.
+func (t *TreeView) scrollbarGeom() (sbGeom, bool) {
+	r := t.Bounds()
+	t.flatten()
+	total := len(t.rows)
+	wr := t.windowRows()
+	if wr <= 0 || total <= wr {
+		return sbGeom{}, false
+	}
 	thumbH := r.H * wr / total
 	if thumbH < 8 {
 		thumbH = 8
 	}
-	maxScroll := total - wr // > 0: drawScrollbar is only called when windowed
-	thumbY := r.Y + t.ScrollRow*(r.H-thumbH)/maxScroll
-	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
+	maxScroll := total - wr // > 0 here (total > wr)
+	scroll := t.clampScrollRow(t.ScrollRow, total, wr)
+	return sbGeom{
+		cross0:     r.W - scrollbarWidth,
+		trackStart: 0,
+		trackLen:   r.H,
+		thumbStart: scroll * (r.H - thumbH) / maxScroll,
+		thumbLen:   thumbH,
+		travelNum:  r.H - thumbH,
+		travelDen:  maxScroll,
+		maxScroll:  maxScroll,
+	}, true
+}
+
+// drawScrollbar paints the right-edge track + thumb from scrollbarGeom. Only
+// called when the flattened list overflows the window.
+func (t *TreeView) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
+	// The caller only invokes this while windowed, which is exactly when
+	// scrollbarGeom reports live, so the ok flag is always true here.
+	g, _ := t.scrollbarGeom()
+	fillRect(p, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen, theme.SurfaceAlt)
+	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
 }
 
 // NodeAt returns the TreeNode at widget-local (x, y) in the current
@@ -419,7 +447,19 @@ func (t *TreeView) OnEvent(ev Event) {
 		handleScrollKey(t, ev.Code, t.windowRows())
 		return
 	case EventClick:
+		// A press on the scrollbar grabs its thumb (or pages the track); it
+		// must not also select a row, so consume it here.
+		if g, ok := t.scrollbarGeom(); t.sbDrag.press(g, ok, ev, t.windowRows(), t.ScrollBy) {
+			return
+		}
 		// fall through to the click handling below.
+	case EventMouseDrag:
+		g, ok := t.scrollbarGeom()
+		t.sbDrag.drag(g, ok, ev, t.ScrollTo)
+		return
+	case EventMouseUp:
+		t.sbDrag.release()
+		return
 	default:
 		return
 	}

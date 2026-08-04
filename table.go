@@ -245,6 +245,9 @@ type Table struct {
 	resizing    bool
 	resizingCol int
 
+	// sbDrag tracks an in-progress drag of the vertical scrollbar thumb.
+	sbDrag scrollDrag
+
 	// RowDetail, when non-nil, opts each body row into an expander: a leading
 	// disclosure ▶/▼ appears at the left of column 0, and clicking it toggles
 	// that row's expansion. An expanded row shows a detail line (one
@@ -591,7 +594,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// fitting (the byte-identical case) this is skipped entirely, same
 	// as the pre-feature Table never painting one.
 	if overflow {
-		t.drawScrollbar(p, theme, r, bodyY, scroll)
+		t.drawScrollbar(p, theme, r)
 	}
 
 	// --- Horizontal scrollbar (bottom edge) -------------------------
@@ -799,23 +802,46 @@ const tableScrollbarThumbMin = 8
 // by Draw while bodyOverflows() is true, which guarantees trackH > 0
 // and contentH > trackH (see bodyOverflows), so no defensive
 // zero/negative-denominator guard is needed here.
-func (t *Table) drawScrollbar(p painter.Painter, theme *Theme, r Rect, bodyY, scroll int) {
-	trackX := r.X + r.W - scrollbarWidth
-	trackH := r.Y + r.H - bodyY
-	fillRect(p, trackX, bodyY, scrollbarWidth, trackH, theme.SurfaceAlt)
+func (t *Table) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
+	// The caller only invokes this while the body overflows, which is exactly
+	// when scrollbarGeom reports live, so the ok flag is always true here.
+	g, _ := t.scrollbarGeom()
+	fillRect(p, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen, theme.SurfaceAlt)
+	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
+}
+
+// scrollbarGeom returns the vertical scrollbar's widget-local geometry and
+// whether it is live (the body overflows). The header never scrolls, so the
+// track spans only [TableHeaderHeight, r.H). It is the single definition of the
+// track + thumb shared by drawScrollbar and OnEvent. The thumb is sized + placed
+// in the visual-line pixel space (lineCount()*TableRowHeight) so groups + detail
+// rows count toward the extent, exactly as the previous inline math did; the
+// scroll value the thumb travel maps to is a body ScrollRow, clamped to
+// maxScrollRow(). bodyOverflows() guarantees contentH > trackH > 0, so the
+// travelDen below is positive.
+func (t *Table) scrollbarGeom() (sbGeom, bool) {
+	if !t.bodyOverflows() {
+		return sbGeom{}, false
+	}
+	r := t.Bounds()
+	trackTop := TableHeaderHeight
+	trackH := r.H - TableHeaderHeight
 	contentH := t.lineCount() * TableRowHeight
 	thumbH := trackH * trackH / contentH
 	if thumbH < tableScrollbarThumbMin {
 		thumbH = tableScrollbarThumbMin
 	}
-	// maxScrollRow() is guaranteed > 0 here (bodyOverflows() already
-	// established len(t.Rows) > bodyVisibleRows(), so the raw
-	// len(t.Rows)-bodyVisibleRows() difference maxScrollRow clamps is
-	// already positive) -- no divide-by-zero guard needed on that front,
-	// and contentH > trackH (established above) keeps the denominator
-	// below positive too.
-	thumbY := bodyY + scroll*TableRowHeight*(trackH-thumbH)/(contentH-trackH)
-	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
+	scroll := t.clampScrollRow()
+	return sbGeom{
+		cross0:     r.W - scrollbarWidth,
+		trackStart: trackTop,
+		trackLen:   trackH,
+		thumbStart: trackTop + scroll*TableRowHeight*(trackH-thumbH)/(contentH-trackH),
+		thumbLen:   thumbH,
+		travelNum:  TableRowHeight * (trackH - thumbH),
+		travelDen:  contentH - trackH,
+		maxScroll:  t.maxScrollRow(),
+	}, true
 }
 
 // drawHScrollbar paints the bottom-edge horizontal scrollbar over the
@@ -1962,6 +1988,11 @@ func (t *Table) OnEvent(ev Event) {
 		// consumed the keystroke while editing). Any other key is ignored.
 		handleScrollKey(t, ev.Code, t.bodyVisibleRows())
 	case EventClick:
+		// A press on the scrollbar grabs its thumb (or pages the track); it
+		// must not also select/edit a row, so consume it first.
+		if g, ok := t.scrollbarGeom(); t.sbDrag.press(g, ok, ev, t.bodyVisibleRows(), t.ScrollBy) {
+			return
+		}
 		if ev.Y < 0 {
 			return
 		}
@@ -2023,6 +2054,12 @@ func (t *Table) OnEvent(ev Event) {
 			t.Selected = row
 		}
 	case EventMouseDrag:
+		// A scrollbar-thumb drag takes precedence over a column resize.
+		if t.sbDrag.active {
+			g, ok := t.scrollbarGeom()
+			t.sbDrag.drag(g, ok, ev, t.ScrollTo)
+			return
+		}
 		if !t.resizing {
 			return
 		}
@@ -2034,6 +2071,7 @@ func (t *Table) OnEvent(ev Event) {
 		t.SetColumnWidth(t.resizingCol, ev.X-left)
 	case EventMouseUp:
 		t.resizing = false
+		t.sbDrag.release()
 	case EventDragMove:
 		if !t.reorderActive() {
 			return

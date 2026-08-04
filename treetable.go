@@ -66,6 +66,9 @@ type TreeTable struct {
 	// every Draw + OnEvent so hit-tests + paint share one definition of
 	// "visible", exactly like TreeView.rows.
 	rows []treeTableRow
+
+	// sbDrag tracks an in-progress drag of the vertical scrollbar thumb.
+	sbDrag scrollDrag
 }
 
 type treeTableRow struct {
@@ -327,27 +330,51 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 
 	// --- Vertical scrollbar (right edge, body only) ---------------------
 	if windowed {
-		t.drawScrollbar(p, theme, r, bodyY, wr, total)
+		t.drawScrollbar(p, theme, r)
 	}
 }
 
-// drawScrollbar paints the right-edge track + thumb over the body rows —
-// the header sits above it and never scrolls, so the track spans only
-// [bodyY, r.Y+r.H). Sized + positioned by the same row-count proportion
-// TreeView.drawScrollbar uses. Only called by Draw while windowed is
-// true, which guarantees total > wr > 0, so the maxScroll division below
-// never sees a zero denominator.
-func (t *TreeTable) drawScrollbar(p painter.Painter, theme *Theme, r Rect, bodyY, wr, total int) {
-	trackX := r.X + r.W - scrollbarWidth
-	trackH := r.Y + r.H - bodyY
-	fillRect(p, trackX, bodyY, scrollbarWidth, trackH, theme.SurfaceAlt)
+// scrollbarGeom returns the vertical scrollbar's widget-local geometry and
+// whether it is live (the flattened list overflows the window). The header sits
+// above the track and never scrolls, so the track spans only [TreeTableHeaderHeight,
+// r.H). It is the single definition of the track + thumb shared by drawScrollbar
+// and OnEvent, using the same row-count proportion TreeView uses.
+func (t *TreeTable) scrollbarGeom() (sbGeom, bool) {
+	r := t.Bounds()
+	t.flatten()
+	total := len(t.rows)
+	wr := t.bodyVisibleRows()
+	if wr <= 0 || total <= wr {
+		return sbGeom{}, false
+	}
+	trackTop := TreeTableHeaderHeight
+	trackH := r.H - TreeTableHeaderHeight
 	thumbH := trackH * wr / total
 	if thumbH < 8 {
 		thumbH = 8
 	}
-	maxScroll := total - wr // > 0: drawScrollbar is only called when windowed
-	thumbY := bodyY + t.ScrollRow*(trackH-thumbH)/maxScroll
-	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
+	maxScroll := total - wr // > 0 here (total > wr)
+	scroll := t.clampScrollRow(t.ScrollRow, total, wr)
+	return sbGeom{
+		cross0:     r.W - scrollbarWidth,
+		trackStart: trackTop,
+		trackLen:   trackH,
+		thumbStart: trackTop + scroll*(trackH-thumbH)/maxScroll,
+		thumbLen:   thumbH,
+		travelNum:  trackH - thumbH,
+		travelDen:  maxScroll,
+		maxScroll:  maxScroll,
+	}, true
+}
+
+// drawScrollbar paints the right-edge track + thumb over the body rows from
+// scrollbarGeom. Only called by Draw while windowed is true.
+func (t *TreeTable) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
+	// The caller only invokes this while windowed, which is exactly when
+	// scrollbarGeom reports live, so the ok flag is always true here.
+	g, _ := t.scrollbarGeom()
+	fillRect(p, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen, theme.SurfaceAlt)
+	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
 }
 
 // OnEvent: a click on the first column's disclosure glyph toggles that
@@ -425,7 +452,19 @@ func (t *TreeTable) OnEvent(ev Event) {
 		handleScrollKey(t, ev.Code, t.bodyVisibleRows())
 		return
 	case EventClick:
+		// A press on the scrollbar grabs its thumb (or pages the track); it
+		// must not also select a row, so consume it here.
+		if g, ok := t.scrollbarGeom(); t.sbDrag.press(g, ok, ev, t.bodyVisibleRows(), t.ScrollBy) {
+			return
+		}
 		// fall through to the click handling below.
+	case EventMouseDrag:
+		g, ok := t.scrollbarGeom()
+		t.sbDrag.drag(g, ok, ev, t.ScrollTo)
+		return
+	case EventMouseUp:
+		t.sbDrag.release()
+		return
 	default:
 		return
 	}

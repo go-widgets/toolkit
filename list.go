@@ -109,6 +109,9 @@ type ListBox struct {
 	// hovers over this ListBox, or -1 when there is none to show. Driven
 	// by EventDragMove/EventDragLeave/EventDrop.
 	dropIndicator int
+
+	// sbDrag tracks an in-progress drag of the vertical scrollbar thumb.
+	sbDrag scrollDrag
 }
 
 // NewListBox builds a ListBox containing items. Selected starts at
@@ -350,19 +353,43 @@ func (l *ListBox) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	trackX := r.X + r.W - scrollbarWidth
 	fillRect(p, trackX, r.Y, scrollbarWidth, r.H, theme.SurfaceAlt)
 
+	g, ok := l.scrollbarGeom()
+	if !ok {
+		return
+	}
+	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
+}
+
+// scrollbarGeom returns the vertical scrollbar's widget-local geometry and
+// whether the thumb is live (the content overflows the bounds). It is the single
+// definition of the thumb shared by drawScrollbar and OnEvent; the track column
+// itself is always painted by drawScrollbar while the list overflows. Modelled on
+// ScrollView's proportion math but driven by ScrollRow (whole rows).
+func (l *ListBox) scrollbarGeom() (sbGeom, bool) {
+	r := l.Bounds()
 	contentH := len(l.Items) * l.RowHeight
 	if r.H <= 0 || contentH <= r.H {
-		return
+		return sbGeom{}, false
 	}
 	thumbH := r.H * r.H / contentH
 	if thumbH < 8 {
 		thumbH = 8
 	}
-	thumbY := r.Y
-	if max := l.maxScrollRow(); max > 0 {
-		thumbY += l.clampedScrollRow() * (r.H - thumbH) / max
+	max := l.maxScrollRow()
+	thumbY := 0
+	if max > 0 {
+		thumbY = l.clampedScrollRow() * (r.H - thumbH) / max
 	}
-	fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
+	return sbGeom{
+		cross0:     r.W - scrollbarWidth,
+		trackStart: 0,
+		trackLen:   r.H,
+		thumbStart: thumbY,
+		thumbLen:   thumbH,
+		travelNum:  r.H - thumbH,
+		travelDen:  max,
+		maxScroll:  max,
+	}, true
 }
 
 // OnEvent dispatches: EventClick to onClick (selection, unchanged from
@@ -383,7 +410,17 @@ func (l *ListBox) OnEvent(ev Event) {
 		// rows or pages; any other key is ignored.
 		handleScrollKey(l, ev.Code, l.visibleRows())
 	case EventClick:
+		// A press on the scrollbar grabs its thumb (or pages the track); it
+		// must not also select a row, so consume it before onClick.
+		if g, ok := l.scrollbarGeom(); l.sbDrag.press(g, ok, ev, l.visibleRows(), l.ScrollBy) {
+			return
+		}
 		l.onClick(ev)
+	case EventMouseDrag:
+		g, ok := l.scrollbarGeom()
+		l.sbDrag.drag(g, ok, ev, l.ScrollTo)
+	case EventMouseUp:
+		l.sbDrag.release()
 	case EventDragMove:
 		l.onDragMove(ev)
 	case EventDragLeave:

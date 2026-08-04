@@ -21,6 +21,10 @@ type ScrollView struct {
 	OffsetX, OffsetY int
 	contentW         int
 	contentH         int
+
+	// sbV and sbH track an in-progress drag of the vertical / horizontal
+	// scrollbar thumb respectively.
+	sbV, sbH scrollDrag
 }
 
 // scrollbarWidth is the pixel thickness of a scrollbar track.
@@ -84,6 +88,60 @@ func (s *ScrollView) Scroll(dx, dy int) {
 	}
 }
 
+// vscrollGeom returns the vertical scrollbar's widget-local geometry and whether
+// it is live (the content is taller than the viewport). It is the single
+// definition of the vertical thumb shared by Draw and OnEvent; the scroll value
+// the thumb travel maps to is the pixel OffsetY, clamped to contentH-viewport.
+func (s *ScrollView) vscrollGeom() (sbGeom, bool) {
+	r := s.Bounds()
+	vp := s.viewport()
+	if !(s.contentH > vp.H && vp.H > 0) {
+		return sbGeom{}, false
+	}
+	thumbH := vp.H * vp.H / s.contentH
+	if thumbH < 8 {
+		thumbH = 8
+	}
+	maxOff := s.contentH - vp.H // > 0 here
+	return sbGeom{
+		cross0:     r.W - scrollbarWidth,
+		trackStart: 0,
+		trackLen:   vp.H,
+		thumbStart: s.OffsetY * (vp.H - thumbH) / maxOff,
+		thumbLen:   thumbH,
+		travelNum:  vp.H - thumbH,
+		travelDen:  maxOff,
+		maxScroll:  maxOff,
+	}, true
+}
+
+// hscrollGeom returns the horizontal scrollbar's widget-local geometry and
+// whether it is live (the content is wider than the viewport). The scroll value
+// the thumb travel maps to is the pixel OffsetX, clamped to contentW-viewport.
+func (s *ScrollView) hscrollGeom() (sbGeom, bool) {
+	r := s.Bounds()
+	vp := s.viewport()
+	if !(s.contentW > vp.W && vp.W > 0) {
+		return sbGeom{}, false
+	}
+	thumbW := vp.W * vp.W / s.contentW
+	if thumbW < 8 {
+		thumbW = 8
+	}
+	maxOff := s.contentW - vp.W // > 0 here
+	return sbGeom{
+		horizontal: true,
+		cross0:     r.H - scrollbarWidth,
+		trackStart: 0,
+		trackLen:   vp.W,
+		thumbStart: s.OffsetX * (vp.W - thumbW) / maxOff,
+		thumbLen:   thumbW,
+		travelNum:  vp.W - thumbW,
+		travelDen:  maxOff,
+		maxScroll:  maxOff,
+	}, true
+}
+
 // OnEvent gives ScrollView native wheel + keyboard scrolling. A ScrollView
 // measures its content in pixels rather than rows, so it converts the
 // EventScroll Delta (expressed in ROWS) into a pixel offset using its
@@ -98,6 +156,23 @@ func (s *ScrollView) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventScroll:
 		s.Scroll(0, ev.Delta*line)
+	case EventClick:
+		// A press on either scrollbar grabs its thumb, or pages the track
+		// toward the click; the content area stays passive for clicks.
+		if g, ok := s.vscrollGeom(); s.sbV.press(g, ok, ev, s.viewport().H, func(d int) { s.Scroll(0, d) }) {
+			return
+		}
+		if g, ok := s.hscrollGeom(); s.sbH.press(g, ok, ev, s.viewport().W, func(d int) { s.Scroll(d, 0) }) {
+			return
+		}
+	case EventMouseDrag:
+		gv, okv := s.vscrollGeom()
+		s.sbV.drag(gv, okv, ev, func(target int) { s.Scroll(0, target-s.OffsetY) })
+		gh, okh := s.hscrollGeom()
+		s.sbH.drag(gh, okh, ev, func(target int) { s.Scroll(target-s.OffsetX, 0) })
+	case EventMouseUp:
+		s.sbV.release()
+		s.sbH.release()
 	case EventKeyDown:
 		switch ev.Code {
 		case "ArrowUp":
@@ -139,35 +214,20 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 		}
 	}
 	// Vertical scrollbar (right edge), sized to the viewport height so it leaves
-	// the corner for a horizontal bar.
+	// the corner for a horizontal bar. The track is always painted; the thumb
+	// comes from vscrollGeom so Draw + OnEvent share one definition of it.
 	trackX := r.X + r.W - scrollbarWidth
 	fillRect(p, trackX, r.Y, scrollbarWidth, vp.H, theme.SurfaceAlt)
-	if s.contentH > vp.H && vp.H > 0 {
-		thumbH := vp.H * vp.H / s.contentH
-		if thumbH < 8 {
-			thumbH = 8
-		}
-		thumbY := r.Y
-		if s.contentH-vp.H > 0 {
-			thumbY += s.OffsetY * (vp.H - thumbH) / (s.contentH - vp.H)
-		}
-		fillRect(p, trackX, thumbY, scrollbarWidth, thumbH, theme.Accent)
+	if g, ok := s.vscrollGeom(); ok {
+		fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
 	}
 	// Horizontal scrollbar (bottom edge), only when the content overflows
 	// horizontally (which is exactly when the viewport reserved the bottom row).
 	if s.contentW > vp.W {
 		trackY := r.Y + r.H - scrollbarWidth
 		fillRect(p, r.X, trackY, vp.W, scrollbarWidth, theme.SurfaceAlt)
-		if vp.W > 0 {
-			thumbW := vp.W * vp.W / s.contentW
-			if thumbW < 8 {
-				thumbW = 8
-			}
-			thumbX := r.X
-			if s.contentW-vp.W > 0 {
-				thumbX += s.OffsetX * (vp.W - thumbW) / (s.contentW - vp.W)
-			}
-			fillRect(p, thumbX, trackY, thumbW, scrollbarWidth, theme.Accent)
+		if g, ok := s.hscrollGeom(); ok {
+			fillRect(p, r.X+g.thumbStart, trackY, g.thumbLen, scrollbarWidth, theme.Accent)
 		}
 	}
 }
