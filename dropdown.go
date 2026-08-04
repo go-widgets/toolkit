@@ -31,6 +31,16 @@ type DropDown struct {
 	// keyboard, so Escape can restore it after the arrow keys previewed other
 	// options without committing.
 	savedSelected int
+
+	// popScroll is the index of the option painted at the top of the open
+	// popover — the persistent scroll offset that makes options beyond
+	// PopoverMaxRows reachable. The popover ListBox DrawPopover builds already
+	// scrolls natively; this offset feeds its ScrollRow, the wheel
+	// (EventScroll) shifts it, arrow-key selection scrolls it to keep the
+	// highlighted option visible, and PopoverClick maps a click's y through it.
+	// Reads clamp on the fly (see clampedPopScroll), so a stale value after
+	// Options shrank is harmless.
+	popScroll int
 }
 
 // NewDropDown builds a DropDown with the given options + an initial
@@ -88,6 +98,15 @@ func (d *DropDown) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
 		d.Open = !d.Open
+		if d.Open {
+			d.scrollSelectedIntoView()
+		}
+	case EventScroll:
+		// Wheel over the open popover shifts its scroll window so options
+		// beyond PopoverMaxRows are reachable; ignored while closed.
+		if d.Open {
+			d.scrollPopover(ev.Delta)
+		}
 	case EventKeyDown:
 		d.onKey(ev.Code)
 	}
@@ -105,6 +124,7 @@ func (d *DropDown) onKey(code string) {
 		case " ", "Space", "ArrowDown":
 			d.savedSelected = d.Selected
 			d.Open = true
+			d.scrollSelectedIntoView()
 		}
 		return
 	}
@@ -113,10 +133,12 @@ func (d *DropDown) onKey(code string) {
 		if d.Selected < len(d.Options)-1 {
 			d.Selected++
 		}
+		d.scrollSelectedIntoView()
 	case "ArrowUp":
 		if d.Selected > 0 {
 			d.Selected--
 		}
+		d.scrollSelectedIntoView()
 	case "Enter":
 		d.Select(d.Selected)
 	case "Escape":
@@ -157,8 +179,53 @@ func (d *DropDown) PopoverBounds() Rect {
 }
 
 // PopoverMaxRows caps the dropdown popover height; longer option
-// lists can wrap in a ScrollView the caller supplies.
+// lists are reachable by scrolling the popover (see popScroll).
 const PopoverMaxRows = 12
+
+// maxPopScroll is the highest popScroll that still fills the popover window:
+// len(Options) - PopoverMaxRows, floored at 0 so a list that already fits never
+// scrolls.
+func (d *DropDown) maxPopScroll() int {
+	m := len(d.Options) - PopoverMaxRows
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// clampedPopScroll returns popScroll clamped to [0, maxPopScroll] WITHOUT
+// mutating the field, so a value left stale after Options shrank never paints or
+// hit-tests outside the valid window.
+func (d *DropDown) clampedPopScroll() int {
+	s := d.popScroll
+	if s < 0 {
+		s = 0
+	}
+	if m := d.maxPopScroll(); s > m {
+		s = m
+	}
+	return s
+}
+
+// scrollPopover shifts popScroll by delta rows (negative scrolls up), clamped to
+// [0, maxPopScroll] and written back immediately.
+func (d *DropDown) scrollPopover(delta int) {
+	d.popScroll += delta
+	d.popScroll = d.clampedPopScroll()
+}
+
+// scrollSelectedIntoView nudges popScroll so the highlighted option (Selected)
+// stays within the PopoverMaxRows-tall window: up if it sits above the window,
+// down if at or past the last visible row. Keeps arrow-key selection following
+// the highlight past the fold.
+func (d *DropDown) scrollSelectedIntoView() {
+	if d.Selected < d.popScroll {
+		d.popScroll = d.Selected
+	} else if d.Selected >= d.popScroll+PopoverMaxRows {
+		d.popScroll = d.Selected - PopoverMaxRows + 1
+	}
+	d.popScroll = d.clampedPopScroll()
+}
 
 // PopoverRowH is the pixel height of one option row in the popover.
 const PopoverRowH = 18
@@ -174,6 +241,11 @@ func (d *DropDown) DrawPopover(p painter.Painter, theme *Theme) {
 	}
 	lb := NewListBox(d.Options)
 	lb.Selected = d.Selected
+	// Feed the persistent scroll offset into the ListBox's own native virtual
+	// scrolling so options beyond PopoverMaxRows are painted (and a scrollbar
+	// appears) when the popover is scrolled. At popScroll == 0 this is
+	// byte-identical to an unscrolled list.
+	lb.ScrollRow = d.clampedPopScroll()
 	lb.SetBounds(d.PopoverBounds())
 	lb.Draw(p, theme)
 }
@@ -189,7 +261,10 @@ func (d *DropDown) PopoverClick(x, y int) bool {
 		return false
 	}
 	if pb := d.PopoverBounds(); x >= pb.X && x < pb.X+pb.W && y >= pb.Y && y < pb.Y+pb.H {
-		d.Select((y - pb.Y) / PopoverRowH)
+		// Map the click's row within the visible window back to an absolute
+		// option index through the scroll offset, so a click after scrolling
+		// selects the right option. Select clamps an out-of-range index.
+		d.Select(d.clampedPopScroll() + (y-pb.Y)/PopoverRowH)
 	} else {
 		d.Open = false
 	}

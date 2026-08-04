@@ -37,11 +37,20 @@ type ComboBox struct {
 	// OnSelect fires when an option is chosen (click or Enter).
 	OnSelect func(string)
 
-	// highlight is the index (into the visible filtered rows) the keyboard
-	// highlight sits on. ArrowDown/ArrowUp move it and Enter selects it. It is
-	// reset to 0 whenever the filter changes, so it always starts on the first
-	// match. highlightRow clamps it against the current row count on use.
+	// highlight is the ABSOLUTE index (into the full Filtered() list) the
+	// keyboard highlight sits on. ArrowDown/ArrowUp move it and Enter selects
+	// it. It is reset to 0 whenever the filter changes, so it always starts on
+	// the first match. highlightRow clamps it against the current match count on
+	// use.
 	highlight int
+
+	// popScroll is the index (into Filtered()) of the option painted at the top
+	// of the open popover window — the persistent scroll offset that makes
+	// matches beyond PopoverMaxRows reachable. The wheel (EventScroll) shifts
+	// it, arrow-key navigation scrolls it to keep the highlight visible, and the
+	// click hit-test maps through it. Reads clamp on the fly (clampedPopScroll),
+	// so a value left stale after the filter shrank is harmless.
+	popScroll int
 }
 
 // NewComboBox builds a ComboBox with the given options and an empty field.
@@ -65,15 +74,63 @@ func (c *ComboBox) Filtered() []string {
 	return out
 }
 
-// visible is the filtered list clamped to PopoverMaxRows — the rows the popover
-// actually shows. Both PopoverBounds (for its height) and Draw (for the rows it
-// paints) go through here so the clamp lives in exactly one place.
+// visible is the window of filtered rows the popover actually shows:
+// [popScroll, popScroll+PopoverMaxRows) clamped to the filtered list. Both
+// PopoverBounds (for its height) and Draw (for the rows it paints) go through
+// here, and the click hit-test indexes it directly, so the window lives in
+// exactly one place. When the filter fits in PopoverMaxRows this is the whole
+// list starting at 0, byte-identical to before scrolling existed.
 func (c *ComboBox) visible() []string {
 	f := c.Filtered()
-	if len(f) > PopoverMaxRows {
-		f = f[:PopoverMaxRows]
+	start := c.clampedPopScroll()
+	end := start + PopoverMaxRows
+	if end > len(f) {
+		end = len(f)
 	}
-	return f
+	return f[start:end]
+}
+
+// maxPopScroll is the highest popScroll that still fills the popover window:
+// len(Filtered()) - PopoverMaxRows, floored at 0.
+func (c *ComboBox) maxPopScroll() int {
+	m := len(c.Filtered()) - PopoverMaxRows
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// clampedPopScroll returns popScroll clamped to [0, maxPopScroll] without
+// mutating the field, so a value left stale after the filter shrank never paints
+// or hit-tests outside the valid window.
+func (c *ComboBox) clampedPopScroll() int {
+	s := c.popScroll
+	if s < 0 {
+		s = 0
+	}
+	if m := c.maxPopScroll(); s > m {
+		s = m
+	}
+	return s
+}
+
+// scrollPopover shifts popScroll by delta rows, clamped and written back.
+func (c *ComboBox) scrollPopover(delta int) {
+	c.popScroll += delta
+	c.popScroll = c.clampedPopScroll()
+}
+
+// scrollHighlightIntoView nudges popScroll so the highlighted match stays within
+// the PopoverMaxRows-tall window, so arrow-key navigation follows the highlight
+// past the fold.
+func (c *ComboBox) scrollHighlightIntoView() {
+	hi := c.highlightRow()
+	if hi < c.popScroll {
+		c.popScroll = hi
+	} else if hi >= c.popScroll+PopoverMaxRows {
+		c.popScroll = hi - PopoverMaxRows + 1
+	}
+	c.popScroll = c.clampedPopScroll()
 }
 
 // comboRowH is the pixel height of one option row in the popover, matching the
@@ -125,9 +182,10 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 		pb := c.PopoverBounds()
 		fillRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Surface)
 		hi := c.highlightRow()
+		start := c.clampedPopScroll()
 		for i, opt := range c.visible() {
 			rowY := pb.Y + i*comboRowH
-			if i == hi {
+			if start+i == hi {
 				// Highlighted row gets a SurfaceAlt band; the border is stroked
 				// afterwards so the popover outline stays crisp over it.
 				fillRect(p, pb.X, rowY, pb.W, comboRowH, theme.SurfaceAlt)
@@ -172,29 +230,39 @@ func (c *ComboBox) OnEvent(ev Event) {
 				c.Text = string(runes[:len(runes)-1])
 				c.Open = true
 				c.highlight = 0
+				c.popScroll = 0
 				if c.OnChange != nil {
 					c.OnChange(c.Text)
 				}
 			}
 		case "ArrowDown":
-			// Move the highlight down through the filtered rows (opening the
-			// popover if it was closed), clamped to the last row.
+			// Move the highlight down through the FULL filtered list (opening the
+			// popover if it was closed), clamped to the last match, and scroll
+			// the window to keep it visible past the fold.
 			c.Open = true
-			if n := len(c.visible()); c.highlight < n-1 {
+			if n := len(c.Filtered()); c.highlight < n-1 {
 				c.highlight++
 			}
+			c.scrollHighlightIntoView()
 		case "ArrowUp":
 			if c.highlight > 0 {
 				c.highlight--
 			}
+			c.scrollHighlightIntoView()
 		case "Enter":
-			// Commit the highlighted row (which defaults to the first match, so a
+			// Commit the highlighted match (which defaults to the first, so a
 			// plain type-then-Enter still picks the top option).
-			if vis := c.visible(); len(vis) > 0 {
-				c.selectOption(vis[c.highlightRow()])
+			if f := c.Filtered(); len(f) > 0 {
+				c.selectOption(f[c.highlightRow()])
 			}
 		case "Escape":
 			c.Open = false
+		}
+	case EventScroll:
+		// Wheel over the open popover shifts its scroll window so matches beyond
+		// PopoverMaxRows are reachable; ignored while closed.
+		if c.Open {
+			c.scrollPopover(ev.Delta)
 		}
 	case EventChar:
 		if ev.Code == "" {
@@ -203,16 +271,18 @@ func (c *ComboBox) OnEvent(ev Event) {
 		c.Text += ev.Code
 		c.Open = true
 		c.highlight = 0
+		c.popScroll = 0
 		if c.OnChange != nil {
 			c.OnChange(c.Text)
 		}
 	}
 }
 
-// highlightRow returns the highlight index clamped to the current visible-row
-// count, so a filter that shrank the list can't leave it out of range.
+// highlightRow returns the (absolute) highlight index clamped to the current
+// filtered-match count, so a filter that shrank the list can't leave it out of
+// range.
 func (c *ComboBox) highlightRow() int {
-	n := len(c.visible())
+	n := len(c.Filtered())
 	if n == 0 {
 		return 0
 	}

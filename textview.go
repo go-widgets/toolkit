@@ -41,6 +41,15 @@ type TextView struct {
 	Focused    bool
 	OnChange   func()
 
+	// ScrollLine is the index of the buffer line painted at the top of the
+	// viewport — the vertical scroll offset that makes a buffer taller than the
+	// bounds reachable. Draw windows from here, the wheel (EventScroll) shifts
+	// it, and every cursor move scrolls it to keep the caret visible. Reads
+	// clamp on the fly (clampedScrollLine), so a stale value after the buffer
+	// shrank is harmless; at ScrollLine == 0 rendering is byte-identical to
+	// before scrolling existed.
+	ScrollLine int
+
 	// Selection is the (start, end) range the host paints highlighted
 	// + range-deletes via DeleteSelection / cut+paste via
 	// CopySelection / CutSelection / Paste. An empty selection (Start
@@ -213,23 +222,34 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	if gutterInk.A == 0 {
 		gutterInk = dimInk(theme)
 	}
-	for i, line := range t.Lines {
-		y := r.Y + 4 + i*lineH
-		if t.ShowLineNumbers {
-			num := strconv.Itoa(i + 1)
-			// Right-align the number against the text's left margin.
-			nx := textX - 4 - t.textWidth(num)
-			t.drawText(p, nx, y, num, gutterInk)
+	// Window from ScrollLine so a buffer taller than the bounds is reachable;
+	// clip to the bounds so a partially-visible trailing line never bleeds past
+	// the bottom edge into a neighbour. At ScrollLine == 0 with a buffer that
+	// fits, start is 0 and every line is drawn exactly where it was before.
+	start := t.clampedScrollLine()
+	withClip(p, r, func() {
+		for i := start; i < len(t.Lines); i++ {
+			y := r.Y + 4 + (i-start)*lineH
+			if y >= r.Y+r.H {
+				break // fully below the viewport
+			}
+			line := t.Lines[i]
+			if t.ShowLineNumbers {
+				num := strconv.Itoa(i + 1)
+				// Right-align the number against the text's left margin.
+				nx := textX - 4 - t.textWidth(num)
+				t.drawText(p, nx, y, num, gutterInk)
+			}
+			if t.Highlighter == nil {
+				t.drawText(p, textX, y, line, theme.OnSurface)
+				continue
+			}
+			t.drawSpans(p, textX, y, line, t.Highlighter(i, line), theme.OnSurface)
 		}
-		if t.Highlighter == nil {
-			t.drawText(p, textX, y, line, theme.OnSurface)
-			continue
-		}
-		t.drawSpans(p, textX, y, line, t.Highlighter(i, line), theme.OnSurface)
-	}
+	})
 	if t.Focused {
 		cx := textX + t.CursorCol*t.glyphAdvance()
-		cy := r.Y + 4 + t.CursorLine*lineH
+		cy := r.Y + 4 + (t.CursorLine-start)*lineH
 		fillRect(p, cx, cy-1, 1, t.glyphHeight()+2, theme.OnSurface)
 		// IME composition preview: render the pending string in the
 		// muted SurfaceAlt tone starting at the cursor, so the user
@@ -257,6 +277,12 @@ func (t *TextView) OnEvent(ev Event) {
 		t.CursorLine, t.CursorCol = t.caretAt(ev.X, ev.Y)
 		t.selAnchorLine, t.selAnchorCol = t.CursorLine, t.CursorCol
 		t.ClearSelection()
+		t.scrollCaretIntoView()
+	case EventScroll:
+		// Native wheel scroll: shift the viewport by Delta lines (clamped at
+		// both ends). Independent of the caret, exactly like every sibling
+		// content widget that gained native scroll in v0.98.0.
+		t.scrollBy(ev.Delta)
 	case EventMouseDrag:
 		if len(t.Lines) == 0 {
 			return
@@ -265,8 +291,10 @@ func (t *TextView) OnEvent(ev Event) {
 		// dragged pointer, moving the cursor with it.
 		t.CursorLine, t.CursorCol = t.caretAt(ev.X, ev.Y)
 		t.Selection = SelectionRange(t.selAnchorLine, t.selAnchorCol, t.CursorLine, t.CursorCol)
+		t.scrollCaretIntoView()
 	case EventKeyDown:
 		t.handleKey(ev.Code)
+		t.scrollCaretIntoView()
 	case EventChar:
 		// If an IME composition was in flight, the incoming char is
 		// the commit result — clear the preview BEFORE inserting so
@@ -276,6 +304,7 @@ func (t *TextView) OnEvent(ev Event) {
 			t.pushUndo()
 		}
 		t.insertText(ev.Code)
+		t.scrollCaretIntoView()
 	case EventCompositionStart, EventCompositionUpdate:
 		// Preview only — do NOT touch Lines. Repaint responsibility
 		// lies with the host, who typically calls the widget's Draw
@@ -415,6 +444,72 @@ func (t *TextView) cursorRight() {
 	}
 }
 
+// visibleLines is how many whole buffer lines fit vertically within the bounds
+// (minus the 4px top inset) at the current line height. Floored at 1 so a very
+// short widget still shows the caret's line and scrolling stays well-defined. A
+// non-positive height or line height both collapse to 0 — no lines fit.
+func (t *TextView) visibleLines() int {
+	lineH := t.glyphHeight() + 4 // > 0: glyphHeight is always positive
+	h := t.Bounds().H - 4
+	if h <= 0 {
+		return 0
+	}
+	n := h / lineH
+	if n < 1 {
+		n = 1
+	}
+	return n
+}
+
+// maxScrollLine is the highest ScrollLine that still leaves a full window of
+// lines on screen: len(Lines) - visibleLines(), floored at 0 so a buffer that
+// already fits never scrolls.
+func (t *TextView) maxScrollLine() int {
+	m := len(t.Lines) - t.visibleLines()
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// clampedScrollLine returns ScrollLine clamped to [0, maxScrollLine()] WITHOUT
+// mutating the field, so an out-of-range value (set directly, or left stale
+// after Lines shrank) never paints or hit-tests outside the valid window.
+func (t *TextView) clampedScrollLine() int {
+	s := t.ScrollLine
+	if s < 0 {
+		s = 0
+	}
+	if m := t.maxScrollLine(); s > m {
+		s = m
+	}
+	return s
+}
+
+// scrollBy shifts ScrollLine by delta lines (negative scrolls up), clamped to
+// [0, maxScrollLine()] and written back immediately.
+func (t *TextView) scrollBy(delta int) {
+	t.ScrollLine += delta
+	t.ScrollLine = t.clampedScrollLine()
+}
+
+// scrollCaretIntoView nudges ScrollLine so the caret's line (CursorLine) stays
+// within the visible window: up if it sits above the top line, down if at or
+// past the last visible line. Called after every cursor move so typing or
+// arrowing off the visible region follows the caret (Wave 4 keep-caret-visible).
+func (t *TextView) scrollCaretIntoView() {
+	vis := t.visibleLines()
+	if vis <= 0 {
+		return
+	}
+	if t.CursorLine < t.ScrollLine {
+		t.ScrollLine = t.CursorLine
+	} else if t.CursorLine >= t.ScrollLine+vis {
+		t.ScrollLine = t.CursorLine - vis + 1
+	}
+	t.ScrollLine = t.clampedScrollLine()
+}
+
 // gutterWidth is the pixel width reserved for the line-number gutter,
 // or 0 when ShowLineNumbers is false. It sizes to the widest number
 // (the last line's) plus 8 px of padding, so the number column never
@@ -477,6 +572,9 @@ func (t *TextView) caretAt(x, y int) (line, col int) {
 	if y >= 4 {
 		line = (y - 4) / lineH
 	}
+	// Map the viewport row back to an absolute buffer line through the scroll
+	// offset, so a click after scrolling lands on the line the user sees.
+	line += t.clampedScrollLine()
 	if line > len(t.Lines)-1 {
 		line = len(t.Lines) - 1
 	}

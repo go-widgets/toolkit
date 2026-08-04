@@ -70,6 +70,13 @@ func (c *ContextMenu) menuSize() (w, h int) {
 func (c *ContextMenu) MenuBounds() Rect {
 	w, h := c.menuSize()
 	surf := c.Bounds()
+	// A menu taller than the surface is clamped to the surface height so it
+	// stays on screen; the wrapped Menu then scrolls its rows (Menu.scroll)
+	// rather than spilling off the bottom. A menu that fits keeps its exact
+	// measured height, so short menus are unchanged.
+	if h > surf.H {
+		h = surf.H
+	}
 	x, y := c.AnchorX, c.AnchorY
 	if x+w > surf.X+surf.W {
 		x = surf.X + surf.W - w
@@ -108,6 +115,13 @@ func (c *ContextMenu) OnEvent(ev Event) {
 		// highlight follows the pointer; a move outside the menu clears it.
 		c.Menu.SetBounds(mb)
 		c.Menu.OnEvent(Event{Kind: EventMouseMove, X: ev.X - mb.X, Y: ev.Y - mb.Y})
+		return
+	}
+	if ev.Kind == EventScroll {
+		// Forward the wheel to the wrapped Menu so a context menu taller than
+		// the surface scrolls its rows.
+		c.Menu.SetBounds(mb)
+		c.Menu.OnEvent(ev)
 		return
 	}
 	if ev.Kind == EventKeyDown {

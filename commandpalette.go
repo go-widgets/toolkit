@@ -44,6 +44,7 @@ type CommandPalette struct {
 	Commands  []PaletteCommand
 	query     string
 	selected  int
+	scroll    int
 	Visible   bool
 	OnDismiss func()
 }
@@ -98,6 +99,11 @@ const PaletteMinW = 240
 // row).
 const PaletteRowH = 18
 
+// PaletteMaxRows caps how many result rows the panel shows at once; a broader
+// query's remaining matches are reachable by scrolling (see scroll), so the
+// panel never grows taller than one query row plus PaletteMaxRows results.
+const PaletteMaxRows = 12
+
 // PalettePadX is the horizontal padding between the panel border and its text
 // content.
 const PalettePadX = 8
@@ -123,6 +129,49 @@ func (c *CommandPalette) Open() {
 	c.Visible = true
 	c.query = ""
 	c.selected = 0
+	c.scroll = 0
+}
+
+// visibleRows is how many result rows the panel shows: the filtered count capped
+// at PaletteMaxRows.
+func (c *CommandPalette) visibleRows() int {
+	n := len(c.filtered())
+	if n > PaletteMaxRows {
+		n = PaletteMaxRows
+	}
+	return n
+}
+
+// maxScroll is the highest scroll that still fills the result window:
+// len(filtered) - PaletteMaxRows, floored at 0.
+func (c *CommandPalette) maxScroll() int {
+	m := len(c.filtered()) - PaletteMaxRows
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// clampScroll pins scroll into [0, maxScroll] without mutating anything else.
+func (c *CommandPalette) clampScroll() {
+	if c.scroll < 0 {
+		c.scroll = 0
+	}
+	if m := c.maxScroll(); c.scroll > m {
+		c.scroll = m
+	}
+}
+
+// scrollSelectedIntoView nudges scroll so the selected result stays within the
+// PaletteMaxRows-tall window, keeping ArrowUp/ArrowDown navigation visible past
+// the fold.
+func (c *CommandPalette) scrollSelectedIntoView() {
+	if c.selected < c.scroll {
+		c.scroll = c.selected
+	} else if c.selected >= c.scroll+PaletteMaxRows {
+		c.scroll = c.selected - PaletteMaxRows + 1
+	}
+	c.clampScroll()
 }
 
 // Dismiss hides the palette and resets its query + selection. It does NOT call
@@ -133,6 +182,7 @@ func (c *CommandPalette) Dismiss() {
 	c.Visible = false
 	c.query = ""
 	c.selected = 0
+	c.scroll = 0
 }
 
 // filtered returns indices of Commands whose Label contains Query,
@@ -164,6 +214,7 @@ func (c *CommandPalette) clampSelected() {
 	if c.selected >= n {
 		c.selected = n - 1
 	}
+	c.scrollSelectedIntoView()
 }
 
 // panelBounds measures the panel and centers it inside the surface (Bounds()).
@@ -181,7 +232,7 @@ func (c *CommandPalette) panelBounds() Rect {
 			w = lw
 		}
 	}
-	h := (1+len(rows))*PaletteRowH + 2*palettePadY
+	h := (1+c.visibleRows())*PaletteRowH + 2*palettePadY
 	surf := c.Bounds()
 	x := surf.X + (surf.W-w)/2
 	y := surf.Y + (surf.H-h)/2
@@ -206,11 +257,22 @@ func (c *CommandPalette) Draw(p painter.Painter, theme *Theme) {
 	textOff := (PaletteRowH - c.glyphHeight()) / 2
 	c.drawText(p, pb.X+PalettePadX, qy+textOff, c.query+paletteCaret, theme.OnSurface)
 
-	// Result rows.
-	for row, i := range c.filtered() {
-		ry := pb.Y + palettePadY + (row+1)*PaletteRowH
+	// Result rows: only the PaletteMaxRows-tall window starting at scroll is
+	// painted, so a broad query's matches past the fold are reachable by
+	// scrolling instead of growing the panel off-screen. At scroll == 0 with a
+	// list that fits, the window is the whole list and this is byte-identical to
+	// the unwindowed render.
+	c.clampScroll()
+	all := c.filtered()
+	end := c.scroll + PaletteMaxRows
+	if end > len(all) {
+		end = len(all)
+	}
+	for win, i := range all[c.scroll:end] {
+		abs := c.scroll + win
+		ry := pb.Y + palettePadY + (win+1)*PaletteRowH
 		ink := theme.OnSurface
-		if row == c.selected {
+		if abs == c.selected {
 			fillRect(p, pb.X+1, ry, pb.W-2, PaletteRowH, theme.Accent)
 			ink = theme.Background
 		}
@@ -230,6 +292,11 @@ func (c *CommandPalette) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventChar, EventKeyDown:
 		c.HandleKey(ev)
+	case EventScroll:
+		// Wheel over the panel shifts the result window so matches beyond
+		// PaletteMaxRows are reachable.
+		c.scroll += ev.Delta
+		c.clampScroll()
 	case EventClick:
 		c.onClick(ev)
 	}
@@ -268,10 +335,12 @@ func (c *CommandPalette) onKey(code string) {
 		if n := len(c.filtered()); c.selected < n-1 {
 			c.selected++
 		}
+		c.scrollSelectedIntoView()
 	case "ArrowUp":
 		if c.selected > 0 {
 			c.selected--
 		}
+		c.scrollSelectedIntoView()
 	case "Enter":
 		c.activate()
 	case "Escape":
@@ -300,12 +369,14 @@ func (c *CommandPalette) onClick(ev Event) {
 	if rel < PaletteRowH {
 		return // query row / above the first result
 	}
-	// rel >= PaletteRowH here (the query row was handled above), so row >= 0.
-	row := rel/PaletteRowH - 1
-	if row >= len(c.filtered()) {
+	// rel >= PaletteRowH here (the query row was handled above), so the window
+	// row is >= 0; map it back to an absolute filtered index through the scroll
+	// offset so a click after scrolling runs the right command.
+	abs := c.scroll + rel/PaletteRowH - 1
+	if abs >= len(c.filtered()) {
 		return
 	}
-	c.selected = row
+	c.selected = abs
 	c.activate()
 }
 

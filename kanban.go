@@ -36,10 +36,12 @@ import (
 // anything. The selected card (SelectedCol/SelectedCard) paints on an
 // accent-tinted fill with an accent border.
 //
-// A column whose cards overflow its height simply clips (via
-// painter.Clipper, the same graceful degradation Table relies on); there
-// is no per-column scroll in v1. Clicking a card selects it and fires
-// OnCardClick; clicks on headers, gaps or dead space are no-ops.
+// A column whose cards overflow its height clips to its body (via
+// painter.Clipper, the same graceful degradation Table relies on) AND
+// scrolls independently: the wheel over a column shifts that column's card
+// stack (colScroll) so cards past the fold are reachable, each column clipped
+// to its own window. Clicking a card selects it and fires OnCardClick; clicks
+// on headers, gaps or dead space are no-ops.
 type Kanban struct {
 	Base
 	// Columns are the board's lists, left to right.
@@ -69,6 +71,15 @@ type Kanban struct {
 	dragCol      int
 	dragCard     int
 	dragX, dragY int
+
+	// colScroll is the per-column vertical scroll offset in pixels: the amount
+	// column i's card stack is shifted up so cards past the fold are reachable.
+	// The wheel over a column shifts its entry (see scrollColumn), Draw and the
+	// card hit-test read it through colScrollAt (which clamps on the fly, so a
+	// value left stale after a column shrank is harmless), and each column clips
+	// to its own body. Grown lazily to len(Columns); a nil/short slice means
+	// "every column at offset 0" — byte-identical to before scrolling existed.
+	colScroll []int
 }
 
 // KanbanCard is one card in a column: a bold Title over a muted
@@ -143,16 +154,91 @@ func (k *Kanban) colLocalX(i, colW int) int {
 
 // cardLocalRect is card ci of column i in widget-local coordinates: a
 // card is inset from its column by KanbanCardGap on each horizontal
-// edge and stacked below the header with a KanbanCardGap lead and gap.
-// Draw offsets the result by the widget's Bounds origin; cardAt tests
-// against it directly.
+// edge and stacked below the header with a KanbanCardGap lead and gap,
+// shifted up by the column's scroll offset so a scrolled stack reveals
+// its lower cards. Draw offsets the result by the widget's Bounds origin;
+// cardAt tests against it directly, so hit-testing follows the scroll.
 func (k *Kanban) cardLocalRect(i, ci, colW int) Rect {
 	return Rect{
 		X: k.colLocalX(i, colW) + KanbanCardGap,
-		Y: KanbanHeaderH + KanbanCardGap + ci*(KanbanCardH+KanbanCardGap),
+		Y: KanbanHeaderH + KanbanCardGap + ci*(KanbanCardH+KanbanCardGap) - k.colScrollAt(i),
 		W: colW - 2*KanbanCardGap,
 		H: KanbanCardH,
 	}
+}
+
+// cardSlot is the vertical stride of one card in a column's stack: the card
+// height plus the gap below it. One wheel notch scrolls by this much.
+const cardSlot = KanbanCardH + KanbanCardGap
+
+// colBodyH is the visible pixel height of a column's card area — the bounds
+// height below the header band and its 1px divider. Floored at 0.
+func (k *Kanban) colBodyH() int {
+	h := k.Bounds().H - KanbanHeaderH - 1
+	if h < 0 {
+		h = 0
+	}
+	return h
+}
+
+// colContentH is the total pixel height column i's card stack occupies (a lead
+// gap plus one slot per card), or 0 for an empty column.
+func (k *Kanban) colContentH(i int) int {
+	n := len(k.Columns[i].Cards)
+	if n == 0 {
+		return 0
+	}
+	return KanbanCardGap + n*cardSlot
+}
+
+// colMaxScroll is the highest scroll offset that still leaves the last card
+// against the column's bottom edge: content minus body, floored at 0 so a
+// column that already fits never scrolls.
+func (k *Kanban) colMaxScroll(i int) int {
+	m := k.colContentH(i) - k.colBodyH()
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// colScrollAt returns column i's scroll offset clamped to [0, colMaxScroll(i)]
+// without mutating anything, so a nil/short slice or a value left stale after a
+// column shrank never paints or hit-tests outside the valid window.
+func (k *Kanban) colScrollAt(i int) int {
+	if i < 0 || i >= len(k.colScroll) {
+		return 0
+	}
+	s := k.colScroll[i]
+	if s < 0 {
+		s = 0
+	}
+	if m := k.colMaxScroll(i); s > m {
+		s = m
+	}
+	return s
+}
+
+// scrollColumn shifts column i's scroll offset by delta pixels, clamped to
+// [0, colMaxScroll(i)] and written back (growing colScroll to len(Columns) the
+// first time a column is scrolled). Out-of-range columns are ignored.
+func (k *Kanban) scrollColumn(i, delta int) {
+	if i < 0 || i >= len(k.Columns) {
+		return
+	}
+	if len(k.colScroll) < len(k.Columns) {
+		grown := make([]int, len(k.Columns))
+		copy(grown, k.colScroll)
+		k.colScroll = grown
+	}
+	s := k.colScroll[i] + delta
+	if s < 0 {
+		s = 0
+	}
+	if m := k.colMaxScroll(i); s > m {
+		s = m
+	}
+	k.colScroll[i] = s
 }
 
 // Draw paints every column: a SurfaceAlt panel + header band with the
@@ -217,8 +303,8 @@ func (k *Kanban) drawDragOverlay(p painter.Painter, theme *Theme, r Rect, colW i
 	toCol := k.columnAt(k.dragX)
 	toIdx := k.dropIndexAt(toCol, k.dragY)
 	colX := r.X + k.colLocalX(toCol, colW)
-	slot := KanbanCardH + KanbanCardGap
-	indY := r.Y + KanbanHeaderH + KanbanCardGap + toIdx*slot - KanbanCardGap/2
+	slot := cardSlot
+	indY := r.Y + KanbanHeaderH + KanbanCardGap + toIdx*slot - KanbanCardGap/2 - k.colScrollAt(toCol)
 	bodyY := r.Y + KanbanHeaderH + 1
 	withClip(p, Rect{X: colX, Y: bodyY, W: colW, H: r.Y + r.H - bodyY}, func() {
 		fillRect(p, colX+KanbanCardGap, indY, colW-2*KanbanCardGap, 2, theme.Accent)
@@ -333,11 +419,13 @@ func (k *Kanban) columnAt(localX int) int {
 // slot boundary so dropping over the top half of a card inserts above it.
 func (k *Kanban) dropIndexAt(col, localY int) int {
 	cards := len(k.Columns[col].Cards)
-	rel := localY - (KanbanHeaderH + KanbanCardGap)
+	// Add the column's scroll offset so a drop over a scrolled stack targets the
+	// slot the pointer visually sits on, not the unscrolled one.
+	rel := localY - (KanbanHeaderH + KanbanCardGap) + k.colScrollAt(col)
 	if rel < 0 {
 		return 0
 	}
-	slot := KanbanCardH + KanbanCardGap
+	slot := cardSlot
 	idx := (rel + slot/2) / slot
 	if idx > cards {
 		idx = cards
@@ -396,6 +484,14 @@ func (k *Kanban) MoveCard(fromCol, fromCard, toCol, toIdx int) {
 // leaves the board a plain click. Both callbacks are nil-safe.
 func (k *Kanban) OnEvent(ev Event) {
 	switch ev.Kind {
+	case EventScroll:
+		// Native wheel scroll: shift the card stack of the column under the
+		// pointer by Delta card slots (clamped at both ends). A no-op when the
+		// column already fits or the board is empty.
+		if len(k.Columns) == 0 {
+			return
+		}
+		k.scrollColumn(k.columnAt(ev.X), ev.Delta*cardSlot)
 	case EventClick:
 		col, card := k.cardAt(ev.X, ev.Y)
 		if col < 0 {

@@ -42,6 +42,15 @@ type AgendaSidebar struct {
 	// OnToggle. Nil is safe.
 	OnRename func(i int, name string)
 
+	// scroll is the index of the calendar row painted at the top of the list
+	// (below the header) — the vertical scroll offset that makes a calendar list
+	// taller than the rail reachable. Draw windows from here, the wheel
+	// (EventScroll) shifts it, and the row hit-test / inline editor map through
+	// it. Reads clamp on the fly (clampedScroll), so a value left stale after
+	// the list shrank is harmless; at scroll == 0 rendering is byte-identical to
+	// before scrolling existed.
+	scroll int
+
 	// editIndex is the calendar row whose name is being renamed inline. It is
 	// only meaningful while editEntry != nil (which is the "editor open" flag);
 	// a zero-value sidebar has editEntry == nil, so no editor is open.
@@ -93,9 +102,54 @@ func (s *AgendaSidebar) headerH() int {
 
 // rowRect returns calendar row i's absolute pixel rectangle (below the header),
 // the geometry Draw paints; rowAt is its widget-local inverse for hit-testing.
+// The row is shifted up by the scroll offset so the list can be scrolled; at
+// scroll == 0 this is byte-identical to the unscrolled geometry.
 func (s *AgendaSidebar) rowRect(i int) Rect {
 	r := s.Bounds()
-	return Rect{X: r.X, Y: r.Y + s.headerH() + i*AgendaSidebarRowH, W: r.W, H: AgendaSidebarRowH}
+	y := r.Y + s.headerH() + (i-s.clampedScroll())*AgendaSidebarRowH
+	return Rect{X: r.X, Y: y, W: r.W, H: AgendaSidebarRowH}
+}
+
+// visibleRows is how many calendar rows fit below the header at
+// AgendaSidebarRowH. A non-positive body height collapses to 0.
+func (s *AgendaSidebar) visibleRows() int {
+	h := s.Bounds().H - s.headerH()
+	if h <= 0 {
+		return 0
+	}
+	return h / AgendaSidebarRowH
+}
+
+// maxScroll is the highest scroll that still fills the body window:
+// len(Calendars) - visibleRows(), floored at 0 so a list that already fits
+// never scrolls.
+func (s *AgendaSidebar) maxScroll() int {
+	m := len(s.Calendars) - s.visibleRows()
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// clampedScroll returns scroll clamped to [0, maxScroll()] without mutating the
+// field, so a value left stale after the list shrank never paints or hit-tests
+// outside the valid window.
+func (s *AgendaSidebar) clampedScroll() int {
+	v := s.scroll
+	if v < 0 {
+		v = 0
+	}
+	if m := s.maxScroll(); v > m {
+		v = m
+	}
+	return v
+}
+
+// ScrollBy shifts scroll by delta rows (negative scrolls up), clamped to
+// [0, maxScroll()] and written back immediately.
+func (s *AgendaSidebar) ScrollBy(delta int) {
+	s.scroll += delta
+	s.scroll = s.clampedScroll()
 }
 
 // rowAt maps a widget-local (x, y) to the calendar row under it, or -1 for the
@@ -110,7 +164,9 @@ func (s *AgendaSidebar) rowAt(x, y int) int {
 	if yy < 0 {
 		return -1
 	}
-	i := yy / AgendaSidebarRowH
+	// Map the viewport row back to an absolute calendar index through the
+	// scroll offset, so a click after scrolling toggles the right calendar.
+	i := yy/AgendaSidebarRowH + s.clampedScroll()
 	if i < 0 || i >= len(s.Calendars) {
 		return -1
 	}
@@ -131,7 +187,7 @@ func (s *AgendaSidebar) swatchColor(cal AgendaCalendar, theme *Theme) RGBA {
 func (s *AgendaSidebar) editLocalRect(i int) Rect {
 	x := agendaSidebarPadX + agendaSidebarSwatch + agendaSidebarPadX
 	h := AgendaSidebarRowH - 2*agendaSidebarEditInset
-	y := s.headerH() + i*AgendaSidebarRowH + (AgendaSidebarRowH-h)/2
+	y := s.headerH() + (i-s.clampedScroll())*AgendaSidebarRowH + (AgendaSidebarRowH-h)/2
 	w := s.Bounds().W - agendaSidebarPadX - x
 	if w < 1 {
 		w = 1
@@ -216,7 +272,20 @@ func (s *AgendaSidebar) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, r.X, r.Y+hh-1, r.W, 1, theme.Border)
 	}
 
+	// Clip the calendar rows to the body (below the header) so a scrolled-out
+	// row never paints over the header or past the rail's bottom edge; each
+	// row's own withClip intersects with this. At scroll == 0 with a list that
+	// fits, every row already lies inside the body, so the render is unchanged.
+	body := Rect{X: r.X, Y: r.Y + s.headerH(), W: r.W, H: r.H - s.headerH()}
 	sw := agendaSidebarSwatch
+	withClip(p, body, func() {
+		s.drawRows(p, theme, sw)
+	})
+}
+
+// drawRows paints the windowed calendar rows; split out of Draw so the body
+// clip wraps exactly the row loop.
+func (s *AgendaSidebar) drawRows(p painter.Painter, theme *Theme, sw int) {
 	for i, cal := range s.Calendars {
 		row := s.rowRect(i)
 		withClip(p, row, func() {
@@ -260,6 +329,12 @@ func (s *AgendaSidebar) Draw(p painter.Painter, theme *Theme) {
 func (s *AgendaSidebar) OnEvent(ev Event) {
 	if s.editEntry != nil {
 		s.onEventEditing(ev)
+		return
+	}
+	if ev.Kind == EventScroll {
+		// Native wheel scroll: shift the row window by Delta rows (clamped at
+		// both ends) so a long calendar list is reachable.
+		s.ScrollBy(ev.Delta)
 		return
 	}
 	if ev.Kind != EventClick {

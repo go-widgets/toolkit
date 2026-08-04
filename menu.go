@@ -61,6 +61,16 @@ type Menu struct {
 	// it) opens its child Menu beside the row; ArrowLeft/Escape closes it.
 	// While open, pointer + key events that fall on the child route into it.
 	openSub int
+
+	// scroll is the pixel offset the menu body is shifted up by when its rows
+	// are taller than its Bounds().H (a menu the host clamped to the surface).
+	// Draw clips to the bounds and paints from -scroll, the wheel (EventScroll)
+	// shifts it, and keyboard hover-navigation scrolls it to keep the hovered
+	// row visible. Reads clamp on the fly (see scrollBy / maxScroll), so a value
+	// left stale after Items or the bounds changed is harmless; when every row
+	// already fits (maxScroll == 0) scroll pins to 0 and the render + hit-test
+	// are byte-identical to before scrolling existed.
+	scroll int
 }
 
 // MenuRowH is the pixel height of a menu row.
@@ -79,6 +89,68 @@ const MenuCheckGutterW = 14
 
 // NewMenu builds a Menu with the given items + Hover and openSub at -1.
 func NewMenu(items []MenuItem) *Menu { return &Menu{Items: items, Hover: -1, openSub: -1} }
+
+// rowsHeight is the total pixel height of every row (MenuRowH, or MenuSeparatorH
+// for separators) — the body content height without the inset.
+func (m *Menu) rowsHeight() int {
+	h := 0
+	for i := range m.Items {
+		if m.Items[i].Separator {
+			h += MenuSeparatorH
+		} else {
+			h += MenuRowH
+		}
+	}
+	return h
+}
+
+// maxScroll is the highest scroll offset that still leaves the last row against
+// the bottom edge: the rows' full height plus the 4px body inset minus the
+// viewport (Bounds().H), floored at 0. Zero when the whole menu fits, so a
+// normally-sized menu never scrolls.
+func (m *Menu) maxScroll() int {
+	over := m.rowsHeight() + 4 - m.Bounds().H
+	if over < 0 {
+		over = 0
+	}
+	return over
+}
+
+// clampedScroll returns scroll clamped to [0, maxScroll()] without mutating the
+// field, so a stale value never paints or hit-tests outside the valid window.
+func (m *Menu) clampedScroll() int {
+	s := m.scroll
+	if s < 0 {
+		s = 0
+	}
+	if mx := m.maxScroll(); s > mx {
+		s = mx
+	}
+	return s
+}
+
+// scrollBy shifts scroll by delta pixels, clamped and written back.
+func (m *Menu) scrollBy(delta int) {
+	m.scroll += delta
+	m.scroll = m.clampedScroll()
+}
+
+// scrollHoverIntoView nudges scroll so the hovered row (Hover) stays fully
+// within the viewport: reveal it from above if it sits past the top, or from
+// below if it sits past the bottom. Keeps keyboard hover-navigation visible past
+// the fold. A no-op when nothing is hovered.
+func (m *Menu) scrollHoverIntoView() {
+	if m.Hover < 0 {
+		return
+	}
+	top := m.rowTop(m.Hover) // content-space top (>= 2)
+	if m.scroll > top {
+		m.scroll = top
+	} else if bot := top + MenuRowH; m.scroll < bot-m.Bounds().H {
+		m.scroll = bot - m.Bounds().H
+	}
+	m.scroll = m.clampedScroll()
+}
 
 // hasCheckGutter reports whether any item wants a check/bullet glyph,
 // i.e. whether Draw must reserve MenuCheckGutterW before the label.
@@ -101,53 +173,59 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 	if m.hasCheckGutter() {
 		gutter = MenuCheckGutterW
 	}
-	y := r.Y + 2
-	for i, it := range m.Items {
-		if it.Separator {
-			sep := y + MenuSeparatorH/2
-			fillRect(p, r.X+4, sep, r.W-8, 1, theme.SurfaceAlt)
-			y += MenuSeparatorH
-			continue
-		}
-		if i == m.Hover && (it.Action != nil || it.Submenu != nil) {
-			fillRect(p, r.X+1, y, r.W-2, MenuRowH, theme.Accent)
-		}
-		ink := theme.OnSurface
-		switch {
-		case it.Action == nil && it.Submenu == nil:
-			ink = theme.SurfaceAlt // disabled = greyed out (no action, no submenu)
-		case i == m.Hover:
-			ink = theme.Background // hovered row: invert ink
-		}
-		textY := y + (MenuRowH-m.glyphHeight())/2
-		if it.isCheckish() && it.Checked {
-			m.drawCheckGlyph(p, r.X+8, y, it.RadioGroup != 0, ink)
-		}
-		m.drawText(p, r.X+8+gutter, textY, it.Label, ink)
-		if it.Submenu != nil {
-			// ▶ chevron on the right edge to signal a nested menu.
-			// Flat left (tallest column, x = cx-1), point on right
-			// (1-pixel tip, x = cx+2).
-			cx := r.X + r.W - 8
-			cy := y + MenuRowH/2
-			for t := 0; t < 4; t++ {
-				fillRect(p, cx+2-t, cy-t, 1, 1+2*t, ink)
+	// Clip the rows to the bounds and paint from -scroll, so a menu whose rows
+	// overflow its (host-clamped) height scrolls instead of spilling past the
+	// surface. When every row fits, maxScroll == 0 pins scroll to 0 and the clip
+	// covers the whole body — byte-identical to the unscrolled render.
+	withClip(p, r, func() {
+		y := r.Y + 2 - m.clampedScroll()
+		for i, it := range m.Items {
+			if it.Separator {
+				sep := y + MenuSeparatorH/2
+				fillRect(p, r.X+4, sep, r.W-8, 1, theme.SurfaceAlt)
+				y += MenuSeparatorH
+				continue
 			}
-		} else if it.Shortcut != "" {
-			// Right-align the shortcut hint in a muted tone. Skipped when
-			// the row has a Submenu (the chevron already occupies the
-			// right edge). Muted ink follows the row's active/inactive
-			// state so a hovered row's shortcut inverts too.
-			sw := m.textWidth(it.Shortcut)
-			sx := r.X + r.W - 8 - sw
-			shortcutInk := theme.SurfaceAlt
-			if i == m.Hover && it.Action != nil {
-				shortcutInk = theme.Background
+			if i == m.Hover && (it.Action != nil || it.Submenu != nil) {
+				fillRect(p, r.X+1, y, r.W-2, MenuRowH, theme.Accent)
 			}
-			m.drawText(p, sx, textY, it.Shortcut, shortcutInk)
+			ink := theme.OnSurface
+			switch {
+			case it.Action == nil && it.Submenu == nil:
+				ink = theme.SurfaceAlt // disabled = greyed out (no action, no submenu)
+			case i == m.Hover:
+				ink = theme.Background // hovered row: invert ink
+			}
+			textY := y + (MenuRowH-m.glyphHeight())/2
+			if it.isCheckish() && it.Checked {
+				m.drawCheckGlyph(p, r.X+8, y, it.RadioGroup != 0, ink)
+			}
+			m.drawText(p, r.X+8+gutter, textY, it.Label, ink)
+			if it.Submenu != nil {
+				// ▶ chevron on the right edge to signal a nested menu.
+				// Flat left (tallest column, x = cx-1), point on right
+				// (1-pixel tip, x = cx+2).
+				cx := r.X + r.W - 8
+				cy := y + MenuRowH/2
+				for t := 0; t < 4; t++ {
+					fillRect(p, cx+2-t, cy-t, 1, 1+2*t, ink)
+				}
+			} else if it.Shortcut != "" {
+				// Right-align the shortcut hint in a muted tone. Skipped when
+				// the row has a Submenu (the chevron already occupies the
+				// right edge). Muted ink follows the row's active/inactive
+				// state so a hovered row's shortcut inverts too.
+				sw := m.textWidth(it.Shortcut)
+				sx := r.X + r.W - 8 - sw
+				shortcutInk := theme.SurfaceAlt
+				if i == m.Hover && it.Action != nil {
+					shortcutInk = theme.Background
+				}
+				m.drawText(p, sx, textY, it.Shortcut, shortcutInk)
+			}
+			y += MenuRowH
 		}
-		y += MenuRowH
-	}
+	})
 	// An open submenu is painted last so it overlays the body: its child Menu
 	// is positioned beside the parent row (see subBounds) and drawn recursively,
 	// so nested submenus chain naturally.
@@ -241,8 +319,10 @@ func (m *Menu) OnEvent(ev Event) {
 		switch ev.Code {
 		case "ArrowDown":
 			m.moveHover(1)
+			m.scrollHoverIntoView()
 		case "ArrowUp":
 			m.moveHover(-1)
+			m.scrollHoverIntoView()
 		case "ArrowRight":
 			// Open the hovered row's submenu (if any) and seed its first item so
 			// the very next arrow moves within the child.
@@ -258,6 +338,10 @@ func (m *Menu) OnEvent(ev Event) {
 			}
 		}
 		return
+	case EventScroll:
+		// Native wheel scroll: one notch moves one row. A no-op when the whole
+		// menu already fits (maxScroll == 0).
+		m.scrollBy(ev.Delta * MenuRowH)
 	case EventClick:
 		m.activate(m.rowAt(ev.Y))
 	}
@@ -336,7 +420,7 @@ func (m *Menu) openSubmenu() (*Menu, Rect, bool) {
 func (m *Menu) subBounds(idx int) Rect {
 	r := m.Bounds()
 	w, h := m.Items[idx].Submenu.preferredSize()
-	return Rect{X: r.X + r.W, Y: r.Y + m.rowTop(idx), W: w, H: h}
+	return Rect{X: r.X + r.W, Y: r.Y + m.rowTop(idx) - m.clampedScroll(), W: w, H: h}
 }
 
 // rowTop is the widget-local top Y of row idx -- the inverse of rowAt, summing
@@ -434,7 +518,11 @@ func (m *Menu) SetHover(y int) { m.Hover = m.rowAt(y) }
 
 // rowAt returns the item index at widget-local y, or -1 if none.
 func (m *Menu) rowAt(y int) int {
-	if y < 2 {
+	// Map the widget-local y back into content space through the scroll offset,
+	// so a click / hover after scrolling resolves to the row actually under the
+	// pointer. At scroll == 0 this is the original mapping.
+	ey := y + m.clampedScroll()
+	if ey < 2 {
 		return -1
 	}
 	cy := 2
@@ -443,7 +531,7 @@ func (m *Menu) rowAt(y int) int {
 		if it.Separator {
 			h = MenuSeparatorH
 		}
-		if y >= cy && y < cy+h {
+		if ey >= cy && ey < cy+h {
 			return i
 		}
 		cy += h
