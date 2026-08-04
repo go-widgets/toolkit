@@ -369,10 +369,19 @@ func (l *ListBox) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 // before this feature); EventDragMove/EventDragLeave/EventDrop to the
 // drag-to-reorder handlers below, which are all no-ops while Reorderable
 // is false, so behavior is byte-identical to a ListBox with no
-// drag-to-reorder support when the feature isn't opted into. Every other
-// event kind is ignored.
+// drag-to-reorder support when the feature isn't opted into. EventScroll
+// (wheel) and the Arrow/Page/Home/End keys scroll the visible window
+// natively (see handleScrollKey). Every other event kind is ignored.
 func (l *ListBox) OnEvent(ev Event) {
 	switch ev.Kind {
+	case EventScroll:
+		// Native wheel scroll: shift the visible window by Delta rows
+		// (ScrollBy clamps at top + bottom).
+		l.ScrollBy(ev.Delta)
+	case EventKeyDown:
+		// Arrow / Page / Home / End scroll the visible window by whole
+		// rows or pages; any other key is ignored.
+		handleScrollKey(l, ev.Code, l.visibleRows())
 	case EventClick:
 		l.onClick(ev)
 	case EventDragMove:

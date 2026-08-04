@@ -110,6 +110,19 @@ const (
 	// the end to its start even if other contacts are interleaved.
 	EventTouchEnd
 
+	// EventScroll fires when the user scrolls the wheel (or a trackpad
+	// two-finger swipe) over the widget — the toolkit's native scroll
+	// intent. Delta carries the scroll amount in ROWS: positive scrolls
+	// down / forward (toward the end of the content), negative scrolls
+	// up / back. X/Y carry the widget-local pointer position at the time
+	// of the scroll, so a container can hit-test which child the wheel is
+	// over. Scrollable widgets (ListBox, Table, TreeTable, TreeView,
+	// ScrollView) handle it by calling their own ScrollBy(Delta), which
+	// clamps at both ends; every other widget ignores it. Hosts translate
+	// the browser's wheel event (or a native scroll gesture) into this
+	// kind so no app has to hand-roll wheel routing.
+	EventScroll
+
 	// eventKindEnd is the exclusive upper bound of valid EventKind
 	// values — not itself a valid kind. Its sole purpose is letting
 	// TestEventKindValuesAreDistinct assert exhaustive coverage: any
@@ -133,6 +146,13 @@ type Event struct {
 	X, Y        int
 	Code        string
 	Ctrl, Shift bool
+	// Delta is the scroll amount, in ROWS, for an EventScroll: positive
+	// scrolls down / forward (toward the end of the content), negative
+	// scrolls up / back. It is zero and ignored on every other event kind.
+	// Scrollable widgets pass it straight to ScrollBy, which clamps at
+	// both ends, so an over-large Delta simply pins to the last (or first)
+	// row instead of running off.
+	Delta int
 }
 
 // Widget is the toolkit's single core abstraction. Every widget --

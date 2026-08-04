@@ -413,7 +413,20 @@ func removeTreeTableChild(parent, target *TreeTableNode) bool {
 // a row selects the node. Y is mapped through ScrollRow back to the
 // flattened index it targets, exactly like TreeView.OnEvent.
 func (t *TreeTable) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	switch ev.Kind {
+	case EventScroll:
+		// Native wheel scroll: shift the visible row window by Delta rows
+		// (ScrollBy clamps at top + bottom).
+		t.ScrollBy(ev.Delta)
+		return
+	case EventKeyDown:
+		// Arrow / Page / Home / End scroll the tree by whole rows or pages;
+		// any other key is ignored.
+		handleScrollKey(t, ev.Code, t.bodyVisibleRows())
+		return
+	case EventClick:
+		// fall through to the click handling below.
+	default:
 		return
 	}
 	t.flatten()

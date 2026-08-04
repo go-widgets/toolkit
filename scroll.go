@@ -84,6 +84,38 @@ func (s *ScrollView) Scroll(dx, dy int) {
 	}
 }
 
+// OnEvent gives ScrollView native wheel + keyboard scrolling. A ScrollView
+// measures its content in pixels rather than rows, so it converts the
+// EventScroll Delta (expressed in ROWS) into a pixel offset using its
+// effective font's line height — one wheel notch moves one text line. The
+// arrow keys scroll a line, Page{Up,Down} a viewport height, and Home / End
+// jump to the top / bottom; Scroll() clamps every result. All conversions go
+// through Scroll(0, dy) (vertical only — horizontal scrolling stays under the
+// host's control via Scroll directly). Any other event kind is ignored, so a
+// ScrollView remains a passive viewport for clicks exactly as before.
+func (s *ScrollView) OnEvent(ev Event) {
+	line := s.glyphHeight()
+	switch ev.Kind {
+	case EventScroll:
+		s.Scroll(0, ev.Delta*line)
+	case EventKeyDown:
+		switch ev.Code {
+		case "ArrowUp":
+			s.Scroll(0, -line)
+		case "ArrowDown":
+			s.Scroll(0, line)
+		case "PageUp":
+			s.Scroll(0, -s.viewport().H)
+		case "PageDown":
+			s.Scroll(0, s.viewport().H)
+		case "Home":
+			s.Scroll(0, -scrollExtreme)
+		case "End":
+			s.Scroll(0, scrollExtreme)
+		}
+	}
+}
+
 // Draw paints the child clipped to the viewport, then the scrollbar
 // track + thumb on the right edge.
 func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {

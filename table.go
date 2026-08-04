@@ -1952,6 +1952,15 @@ func (t *Table) OnEvent(ev Event) {
 		}
 	}
 	switch ev.Kind {
+	case EventScroll:
+		// Native wheel scroll: shift the visible row window by Delta rows
+		// (ScrollBy clamps at top + bottom).
+		t.ScrollBy(ev.Delta)
+	case EventKeyDown:
+		// Arrow / Page / Home / End scroll the body by whole rows or pages
+		// when no inline editor is open (the editor branch above already
+		// consumed the keystroke while editing). Any other key is ignored.
+		handleScrollKey(t, ev.Code, t.bodyVisibleRows())
 	case EventClick:
 		if ev.Y < 0 {
 			return
