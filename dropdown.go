@@ -97,7 +97,7 @@ func (d *DropDown) PopoverBounds() Rect {
 		rows = PopoverMaxRows
 	}
 	r := d.Bounds()
-	h := rows * 18
+	h := rows * PopoverRowH
 	y := r.Y + r.H
 	if d.OpenUp {
 		y = r.Y - h
@@ -108,3 +108,39 @@ func (d *DropDown) PopoverBounds() Rect {
 // PopoverMaxRows caps the dropdown popover height; longer option
 // lists can wrap in a ScrollView the caller supplies.
 const PopoverMaxRows = 12
+
+// PopoverRowH is the pixel height of one option row in the popover.
+const PopoverRowH = 18
+
+// DrawPopover paints the open options list at PopoverBounds, with the current
+// selection highlighted. A no-op when the DropDown is closed. The host calls it
+// in its overlay pass (after the rest of the scene) so the popover — which
+// extends past the control's Bounds — sits on top; that z-ordering is the one
+// thing the widget can't decide for itself.
+func (d *DropDown) DrawPopover(p painter.Painter, theme *Theme) {
+	if !d.Open {
+		return
+	}
+	lb := NewListBox(d.Options)
+	lb.Selected = d.Selected
+	lb.SetBounds(d.PopoverBounds())
+	lb.Draw(p, theme)
+}
+
+// PopoverClick routes a click at (x, y) — in the DropDown's own coordinate
+// frame, the same one Bounds/PopoverBounds use — while the popover is open: a
+// click inside it selects that option (firing OnSelect and closing), a click
+// anywhere else just closes it. Returns true when the open popover consumed the
+// click, false when the DropDown is closed (so the host falls through to its
+// normal hit-testing, where a click on the control reopens it).
+func (d *DropDown) PopoverClick(x, y int) bool {
+	if !d.Open {
+		return false
+	}
+	if pb := d.PopoverBounds(); x >= pb.X && x < pb.X+pb.W && y >= pb.Y && y < pb.Y+pb.H {
+		d.Select((y - pb.Y) / PopoverRowH)
+	} else {
+		d.Open = false
+	}
+	return true
+}
