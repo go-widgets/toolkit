@@ -22,6 +22,57 @@ type PieChart struct {
 	Base
 	Values []float64
 	Colors []RGBA // optional per-slice palette override; cycles by index
+
+	// Hover + HoverIndex outline the hovered slice (its two boundary radii).
+	// Opt-in; the zero value draws none.
+	Hover      bool
+	HoverIndex int
+}
+
+// SliceAt returns the slice under widget-local (x, y): its index, value and
+// ok=true; ok=false for a point outside the pie or an empty chart. Exposed so a
+// host can show the value on hover.
+func (c *PieChart) SliceAt(localX, localY int) (index int, value float64, ok bool) {
+	total := c.total()
+	if total <= 0 {
+		return 0, 0, false
+	}
+	r := c.Bounds()
+	radius := min(r.W, r.H) / 2
+	if radius < 1 {
+		return 0, 0, false
+	}
+	dx := float64(localX) - float64(r.W)/2
+	dy := float64(localY) - float64(r.H)/2
+	if math.Hypot(dx, dy) > float64(radius) {
+		return 0, 0, false
+	}
+	theta := math.Atan2(dx, -dy)
+	if theta < 0 {
+		theta += 2 * math.Pi
+	}
+	idx := sliceOf(c.cumFractions(total), theta/(2*math.Pi)) // always in [0, len)
+	return idx, c.Values[idx], true
+}
+
+// drawHover strokes the hovered slice's two boundary radii when Hover is set.
+func (c *PieChart) drawHover(p painter.Painter, theme *Theme) {
+	total := c.total()
+	if !c.Hover || total <= 0 || c.HoverIndex < 0 || c.HoverIndex >= len(c.Values) {
+		return
+	}
+	r := c.Bounds()
+	radius := min(r.W, r.H) / 2
+	cx, cy := r.X+r.W/2, r.Y+r.H/2
+	cum := c.cumFractions(total)
+	a0 := 0.0
+	if c.HoverIndex > 0 {
+		a0 = cum[c.HoverIndex-1]
+	}
+	for _, frac := range []float64{a0, cum[c.HoverIndex]} {
+		theta := frac * 2 * math.Pi
+		drawLine(p, cx, cy, cx+int(float64(radius)*math.Sin(theta)), cy-int(float64(radius)*math.Cos(theta)), theme.OnSurface)
+	}
 }
 
 // piePalette is a categorical colour set (Tableau-10-derived) chosen to stay
@@ -87,7 +138,6 @@ func sliceOf(cum []float64, f float64) int {
 
 // Draw fills the disc, colouring each pixel by the wedge its angle falls in.
 func (c *PieChart) Draw(p painter.Painter, theme *Theme) {
-	_ = theme
 	total := c.total()
 	if total <= 0 {
 		return
@@ -116,4 +166,5 @@ func (c *PieChart) Draw(p painter.Painter, theme *Theme) {
 			putPixel(p, x, y, c.sliceColor(sliceOf(cum, theta/(2*math.Pi))))
 		}
 	}
+	c.drawHover(p, theme)
 }

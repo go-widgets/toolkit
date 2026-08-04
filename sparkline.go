@@ -37,6 +37,51 @@ type Sparkline struct {
 	// ShowLast emphasises the final data point: a small dot on a SparkLine, a
 	// brighter final bar on a SparkBar.
 	ShowLast bool
+
+	// Hover + HoverIndex draw a hover crosshair (SparkLine) or highlight the
+	// hovered bar (SparkBar). Opt-in; the zero value draws none.
+	Hover      bool
+	HoverIndex int
+}
+
+// ValueAt maps a widget-local x to the nearest data point, returning its index
+// and value (ok=false only for an empty series). Exposed for hover.
+func (s *Sparkline) ValueAt(localX int) (index int, value float64, ok bool) {
+	n := len(s.Values)
+	if n == 0 {
+		return 0, 0, false
+	}
+	if n == 1 {
+		return 0, s.Values[0], true
+	}
+	span := s.plot().W - 1
+	if span < 1 {
+		return 0, s.Values[0], true
+	}
+	rel := localX - SparkPad
+	idx := clampInt((2*rel*(n-1)+span)/(2*span), 0, n-1)
+	return idx, s.Values[idx], true
+}
+
+// drawHover paints the crosshair (SparkLine) or a highlight outline on the
+// hovered bar (SparkBar) when Hover is set and HoverIndex is in range.
+func (s *Sparkline) drawHover(p painter.Painter, theme *Theme, mn, mx float64, pl Rect) {
+	if !s.Hover || s.HoverIndex < 0 || s.HoverIndex >= len(s.Values) {
+		return
+	}
+	r := s.Bounds()
+	if s.Kind == SparkBar {
+		n := len(s.Values)
+		slot := pl.W / n
+		if slot < 1 {
+			slot = 1
+		}
+		strokeRect(p, pl.X+s.HoverIndex*slot, r.Y, slot, r.H-1, theme.Accent)
+		return
+	}
+	hx, hy := s.pointAt(s.HoverIndex, mn, mx, pl)
+	drawLine(p, hx, r.Y, hx, r.Y+r.H-1, dimInk(theme))
+	fillRect(p, clampInt(hx-1, r.X, r.X+r.W-2), clampInt(hy-1, r.Y, r.Y+r.H-2), 2, 2, theme.Accent)
 }
 
 // SparkPad is the inset (painter units) reserved on every edge so the line's
@@ -115,24 +160,24 @@ func (s *Sparkline) Draw(p painter.Painter, theme *Theme) {
 	}
 	col := s.ink(theme)
 	mn, mx := s.valueRange()
-	if s.Kind == SparkBar {
+	switch {
+	case s.Kind == SparkBar:
 		s.drawBars(p, pl, mn, mx, col)
-		return
-	}
-	if n == 1 {
+	case n == 1:
 		x, y := s.pointAt(0, mn, mx, pl)
 		fillRect(p, x, y, 2, 2, col)
-		return
+	default:
+		px, py := s.pointAt(0, mn, mx, pl)
+		for i := 1; i < n; i++ {
+			x, y := s.pointAt(i, mn, mx, pl)
+			drawLine(p, px, py, x, y, col)
+			px, py = x, y
+		}
+		if s.ShowLast {
+			fillRect(p, px-1, py-1, 2, 2, col)
+		}
 	}
-	px, py := s.pointAt(0, mn, mx, pl)
-	for i := 1; i < n; i++ {
-		x, y := s.pointAt(i, mn, mx, pl)
-		drawLine(p, px, py, x, y, col)
-		px, py = x, y
-	}
-	if s.ShowLast {
-		fillRect(p, px-1, py-1, 2, 2, col)
-	}
+	s.drawHover(p, theme, mn, mx, pl)
 }
 
 // drawBars renders the series as thin vertical bars filling the plot width, the
