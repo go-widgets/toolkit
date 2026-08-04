@@ -21,6 +21,7 @@ import "github.com/go-widgets/painter"
 // the same navigation programmatically.
 type Calendar struct {
 	Base
+	focusState
 	Year     int
 	Month    int // 1..12
 	Day      int // selected day in [1, daysInMonth]
@@ -209,6 +210,7 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 	// previous order stroked the border first and the col-0 cells painted over
 	// the left border in the grid rows.
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	c.drawFocusRing(p, theme, r)
 }
 
 // OnEvent dispatches a header-arrow click to Prev/NextMonth and a day-cell

@@ -22,6 +22,7 @@ import (
 // PopoverBounds and draw the list there.
 type ComboBox struct {
 	Base
+	focusState
 	Options []string
 	// Text is the current field value — either free text the user typed or an
 	// option they selected. Filtered() narrows Options against it.
@@ -123,6 +124,7 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 			c.drawText(p, pb.X+4, oy, opt, theme.OnSurface)
 		}
 	}
+	c.drawFocusRing(p, theme, r)
 }
 
 // OnEvent drives the type-to-filter behaviour: printable characters and

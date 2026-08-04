@@ -204,7 +204,7 @@ func TestTagFieldClickRemovesTag(t *testing.T) {
 	if !reflect.DeepEqual(got, []string{"aa", "cc"}) {
 		t.Fatalf("OnChange got %v", got)
 	}
-	if !tf.Focused {
+	if !tf.Focused() {
 		t.Fatal("click should focus the field")
 	}
 }
@@ -220,7 +220,7 @@ func TestTagFieldClickBodyKeeps(t *testing.T) {
 	if len(tf.Tags) != 1 {
 		t.Fatalf("body click removed a tag: %v", tf.Tags)
 	}
-	if !tf.Focused {
+	if !tf.Focused() {
 		t.Fatal("click should focus the field")
 	}
 }
@@ -234,7 +234,7 @@ func TestTagFieldClickOutside(t *testing.T) {
 	if len(tf.Tags) != 1 {
 		t.Fatalf("outside click removed a tag: %v", tf.Tags)
 	}
-	if !tf.Focused {
+	if !tf.Focused() {
 		t.Fatal("click should focus the field")
 	}
 }

@@ -12,6 +12,7 @@ import "github.com/go-widgets/painter"
 // small and cycling is natural (e.g. a view mode: List → Grid → Compact).
 type CycleButton struct {
 	Base
+	focusState
 	Options  []string
 	Index    int // index of the shown option; advanced on click
 	OnChange func(index int, value string)
@@ -44,6 +45,7 @@ func (c *CycleButton) Draw(p painter.Painter, theme *Theme) {
 		ty := r.Y + (r.H-c.glyphHeight())/2
 		c.drawText(p, tx, ty, v, ink)
 	}
+	c.drawFocusRing(p, theme, r)
 }
 
 // OnEvent advances to the next option on a click (wrapping), firing OnChange. A

@@ -157,7 +157,7 @@ func (s *AgendaSidebar) EditName(i int) {
 	}
 	s.editIndex = i
 	s.editEntry = NewEntry(s.Calendars[i].Name)
-	s.editEntry.Focused = true
+	s.editEntry.SetFocused(true)
 }
 
 // Editing returns the index of the calendar whose rename editor is open, or -1

@@ -373,8 +373,8 @@ func TestAgendaSidebarRenameLifecycle(t *testing.T) {
 	if toggled != -1 {
 		t.Error("opening the editor must not fire OnToggle")
 	}
-	if s.editEntry.Text != "Home" || !s.editEntry.Focused {
-		t.Errorf("editor seeded %q focused=%v, want \"Home\" focused", s.editEntry.Text, s.editEntry.Focused)
+	if s.editEntry.Text != "Home" || !s.editEntry.Focused() {
+		t.Errorf("editor seeded %q focused=%v, want \"Home\" focused", s.editEntry.Text, s.editEntry.Focused())
 	}
 
 	// Type: a character and a Backspace both reach the Entry.

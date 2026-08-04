@@ -13,6 +13,7 @@ import "github.com/go-widgets/painter"
 // position in Theme.Accent.
 type Scale struct {
 	Base
+	focusState
 	Min, Max    float64
 	Value       float64
 	Orientation Orientation
@@ -70,6 +71,7 @@ func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 		tx := r.X + (r.W-scaleThumbSize)/2
 		fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, thumbC)
 		strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, borderC)
+		s.drawFocusRing(p, theme, r)
 		return
 	}
 	const trackH = 4
@@ -84,6 +86,7 @@ func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 	ty := r.Y + (r.H-scaleThumbSize)/2
 	fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, thumbC)
 	strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, borderC)
+	s.drawFocusRing(p, theme, r)
 }
 
 // OnEvent: click jumps the thumb to the clicked x-position +

@@ -39,9 +39,10 @@ type TagField struct {
 	Placeholder string
 	// OnChange fires whenever the tag set changes (commit / backspace / close).
 	OnChange func(tags []string)
-	// Focused is set true on click; it does not alter rendering but lets a
-	// host route subsequent keyboard input to the field.
-	Focused bool
+	// focusState carries the keyboard focus flag (set true on click) and draws
+	// the focus ring; it lets a host / container route subsequent keyboard input
+	// to the field.
+	focusState
 }
 
 // tagFieldHGap / tagFieldVGap are the pixel gaps between tokens on a row
@@ -107,13 +108,14 @@ func (t *TagField) Draw(p painter.Painter, theme *Theme) {
 		if t.Placeholder != "" {
 			t.drawText(p, x, ty, t.Placeholder, theme.SurfaceAlt)
 		}
-		return
+	} else {
+		if t.Text != "" {
+			t.drawText(p, x, ty, t.Text, theme.OnSurface)
+		}
+		cx := x + t.textWidth(t.Text)
+		fillRect(p, cx, ty-1, 1, t.glyphHeight()+2, theme.OnSurface)
 	}
-	if t.Text != "" {
-		t.drawText(p, x, ty, t.Text, theme.OnSurface)
-	}
-	cx := x + t.textWidth(t.Text)
-	fillRect(p, cx, ty-1, 1, t.glyphHeight()+2, theme.OnSurface)
+	t.drawFocusRing(p, theme, r)
 }
 
 // commit clears the in-progress Text and, when it held a non-blank value
@@ -167,7 +169,7 @@ func (t *TagField) OnEvent(ev Event) {
 			}
 		}
 	case EventClick:
-		t.Focused = true
+		t.focused = true
 		rects, _, _ := t.layout(0, 0)
 		for i, rc := range rects {
 			if !rc.Contains(ev.X, ev.Y) {

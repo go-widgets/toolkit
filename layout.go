@@ -282,11 +282,26 @@ func (h *HBox) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
+// focusableChildren yields the box's children left-to-right so the focus walker
+// can enumerate focusable descendants in visual order.
+func (h *HBox) focusableChildren() []Widget {
+	out := make([]Widget, len(h.children))
+	for i, c := range h.children {
+		out[i] = c.w
+	}
+	return out
+}
+
 // OnEvent forwards to the first child whose Bounds contains the event point,
 // translated into that child's local space. EventMouseMove is forwarded to
 // EVERY child (translated) instead, so the child under the pointer raises its
-// hover face while the ones it left clear theirs.
+// hover face while the ones it left clear theirs. Keyboard events go through the
+// focus system (routeFocusKey): Tab/Shift+Tab move focus, other keys route to
+// the focused descendant; a click also moves focus to the focusable it hits.
 func (h *HBox) OnEvent(ev Event) {
+	if routeFocusKey(h, ev) {
+		return
+	}
 	pr := h.Bounds()
 	if ev.Kind == EventMouseMove {
 		for _, c := range h.children {
@@ -295,6 +310,9 @@ func (h *HBox) OnEvent(ev Event) {
 		return
 	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
+	if ev.Kind == EventClick {
+		focusClick(h, sx, sy)
+	}
 	for _, c := range h.children {
 		if c.w.Bounds().Contains(sx, sy) {
 			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
@@ -378,10 +396,24 @@ func (v *VBox) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
+// focusableChildren yields the box's children top-to-bottom so the focus walker
+// can enumerate focusable descendants in visual order.
+func (v *VBox) focusableChildren() []Widget {
+	out := make([]Widget, len(v.children))
+	for i, c := range v.children {
+		out[i] = c.w
+	}
+	return out
+}
+
 // OnEvent forwards to the first child containing the event point. EventMouseMove
 // is forwarded to every child instead, so hover-enter and hover-leave both
-// propagate (see HBox.OnEvent).
+// propagate (see HBox.OnEvent). Keyboard events go through the focus system and
+// a click also moves focus to the focusable it hits (see HBox.OnEvent).
 func (v *VBox) OnEvent(ev Event) {
+	if routeFocusKey(v, ev) {
+		return
+	}
 	pr := v.Bounds()
 	if ev.Kind == EventMouseMove {
 		for _, c := range v.children {
@@ -390,6 +422,9 @@ func (v *VBox) OnEvent(ev Event) {
 		return
 	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
+	if ev.Kind == EventClick {
+		focusClick(v, sx, sy)
+	}
 	for _, c := range v.children {
 		if c.w.Bounds().Contains(sx, sy) {
 			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
@@ -552,10 +587,25 @@ func (g *Grid) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
+// focusableChildren yields the grid's attached children in attach order so the
+// focus walker can enumerate focusable descendants.
+func (g *Grid) focusableChildren() []Widget {
+	out := make([]Widget, len(g.children))
+	for i, c := range g.children {
+		out[i] = c.w
+	}
+	return out
+}
+
 // OnEvent hit-tests attached children + forwards with translated
 // coordinates. EventMouseMove is forwarded to every attached child instead, so
-// hover-enter and hover-leave both propagate (see HBox.OnEvent).
+// hover-enter and hover-leave both propagate (see HBox.OnEvent). Keyboard events
+// go through the focus system and a click also moves focus to the focusable it
+// hits (see HBox.OnEvent).
 func (g *Grid) OnEvent(ev Event) {
+	if routeFocusKey(g, ev) {
+		return
+	}
 	pr := g.Bounds()
 	if ev.Kind == EventMouseMove {
 		for _, c := range g.children {
@@ -564,6 +614,9 @@ func (g *Grid) OnEvent(ev Event) {
 		return
 	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
+	if ev.Kind == EventClick {
+		focusClick(g, sx, sy)
+	}
 	for _, c := range g.children {
 		if c.w.Bounds().Contains(sx, sy) {
 			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
@@ -683,9 +736,24 @@ func (f *Frame) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
+// focusableChildren yields the frame's single child (if any) so the focus
+// walker can descend into it.
+func (f *Frame) focusableChildren() []Widget {
+	if f.child == nil {
+		return nil
+	}
+	return []Widget{f.child}
+}
+
 // OnEvent toggles Collapsed on a title-bar click (when Collapsible), else
-// forwards to the child if the event lands inside its Bounds.
+// forwards to the child if the event lands inside its Bounds. Keyboard events go
+// through the focus system first (Tab/Shift+Tab traversal + routing to the
+// focused descendant); a click inside the child also moves focus to the
+// focusable it hits.
 func (f *Frame) OnEvent(ev Event) {
+	if routeFocusKey(f, ev) {
+		return
+	}
 	hh := f.headerH()
 	if f.Collapsible && ev.Kind == EventClick && ev.Y >= 0 && ev.Y <= hh {
 		f.Collapsed = !f.Collapsed
@@ -706,6 +774,9 @@ func (f *Frame) OnEvent(ev Event) {
 		return
 	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
+	if ev.Kind == EventClick {
+		focusClick(f, sx, sy)
+	}
 	if f.child.Bounds().Contains(sx, sy) {
 		f.child.OnEvent(translateEvent(ev, pr, f.child.Bounds()))
 	}

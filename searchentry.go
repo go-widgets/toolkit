@@ -23,10 +23,10 @@ import "github.com/go-widgets/painter"
 // existing callers are unaffected. This mirrors Banner.Icon.
 type SearchEntry struct {
 	Base
-	Text     string
-	Focused  bool // when true, a text caret is drawn at the end of Text
-	OnChange func(s string)
-	Icon     func(p painter.Painter, r Rect, ink RGBA)
+	focusState // when focused, a text caret is drawn at the end of Text
+	Text       string
+	OnChange   func(s string)
+	Icon       func(p painter.Painter, r Rect, ink RGBA)
 }
 
 // SearchEntryPadX is the horizontal padding between the widget's outer
@@ -80,7 +80,7 @@ func (s *SearchEntry) Draw(p painter.Painter, theme *Theme) {
 	// Caret at the end of the text when focused. Measured with the widget's own
 	// font so it always aligns with the text the widget just drew — a host must not
 	// overlay its own caret with a different font engine.
-	if s.Focused {
+	if s.focused {
 		caretW := s.glyphHeight() / 12
 		if caretW < 1 {
 			caretW = 1
@@ -92,6 +92,7 @@ func (s *SearchEntry) Draw(p painter.Painter, theme *Theme) {
 		clearX := r.X + r.W - SearchEntryPadX - SearchEntryIconW + (SearchEntryIconW-s.glyphAdvance())/2
 		s.drawText(p, clearX, textY, searchEntryClear, theme.Border)
 	}
+	s.drawFocusRing(p, theme, r)
 }
 
 // OnEvent handles character insertion (EventChar), Backspace deletion

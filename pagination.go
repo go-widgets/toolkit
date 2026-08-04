@@ -23,6 +23,7 @@ import (
 // but not clickable — the hit-test skips them.
 type Pagination struct {
 	Base
+	focusState
 	Current  int
 	Total    int
 	OnChange func(page int)
@@ -90,6 +91,7 @@ func (pg *Pagination) Draw(p painter.Painter, theme *Theme) {
 		// Next button.
 		pg.drawStep(p, theme, x, r.Y, ">", pg.Current < pg.Total)
 	})
+	pg.drawFocusRing(p, theme, r)
 }
 
 // drawStep paints one of the "<" / ">" step buttons. enabled=false

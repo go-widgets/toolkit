@@ -24,6 +24,7 @@ import "github.com/go-widgets/painter"
 // toolbar column doesn't shift when the widget is dropped in.
 type IconButton struct {
 	Base
+	focusState
 	Icon    string
 	OnClick func()
 
@@ -79,6 +80,7 @@ func (i *IconButton) Draw(p painter.Painter, theme *Theme) {
 		ty := r.Y + (r.H-i.glyphHeight())/2
 		i.drawText(p, tx, ty, i.Icon, ink)
 	}
+	i.drawFocusRing(p, theme, r)
 }
 
 // OnEvent drives the button from pointer events: EventClick presses it (showing

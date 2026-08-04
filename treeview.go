@@ -31,6 +31,7 @@ type TreeNode struct {
 // outline views.
 type TreeView struct {
 	Base
+	focusState
 	Root       *TreeNode
 	Selected   *TreeNode
 	OnActivate func(node *TreeNode)
@@ -339,6 +340,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 	if windowed {
 		t.drawScrollbar(p, theme, r)
 	}
+	t.drawFocusRing(p, theme, r)
 }
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and

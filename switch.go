@@ -21,6 +21,7 @@ import "github.com/go-widgets/painter"
 // Click flips On + fires OnToggle. Non-click events are ignored.
 type Switch struct {
 	Base
+	focusState
 	On       bool
 	OnToggle func(on bool)
 }
@@ -62,6 +63,7 @@ func (s *Switch) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, knob)
 	strokeRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, border)
+	s.drawFocusRing(p, theme, r)
 }
 
 // OnEvent flips On + fires OnToggle on click. All other event kinds

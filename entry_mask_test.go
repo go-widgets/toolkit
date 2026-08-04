@@ -16,14 +16,14 @@ func TestEntryPlaceholderAndMask(t *testing.T) {
 	// Placeholder shows when empty + focused (placeholder branch + caret path).
 	e := NewEntry("")
 	e.Placeholder = "client id"
-	e.Focused = true
+	e.SetFocused(true)
 	e.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 24})
 	e.Draw(p, th)
 
 	// Mask: display() masks each rune; Text/Value keep the real contents.
 	m := NewEntry("secret")
 	m.Mask = '•'
-	m.Focused = true
+	m.SetFocused(true)
 	m.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 24})
 	m.Draw(p, th)
 	if m.Value() != "secret" {

@@ -22,6 +22,7 @@ import "github.com/go-widgets/painter"
 // would otherwise resolve to an out-of-range index.
 type Rating struct {
 	Base
+	focusState
 	Value    int
 	Max      int
 	OnChange func(v int)
@@ -76,6 +77,7 @@ func (r *Rating) Draw(p painter.Painter, theme *Theme) {
 		ty := b.Y + (RatingStarW-r.glyphHeight())/2
 		r.drawText(p, tx, ty, "*", glyphInk)
 	}
+	r.drawFocusRing(p, theme, b)
 }
 
 // OnEvent handles a click by resolving the star index from ev.X and

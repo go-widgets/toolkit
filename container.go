@@ -275,12 +275,30 @@ func (c *Container) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
+// focusableChildren yields the container's item widgets in insertion (visual)
+// order so the focus walker can enumerate focusable descendants.
+func (c *Container) focusableChildren() []Widget {
+	out := make([]Widget, len(c.items))
+	for i, it := range c.items {
+		out[i] = it.Widget
+	}
+	return out
+}
+
 // OnEvent forwards to the first non-empty item whose Bounds contains the point,
 // translated into that item's local space. EventMouseMove is the exception: it
 // is forwarded to EVERY non-empty item (translated), so the item under the
 // pointer raises its hover face while the ones the pointer just left clear
 // theirs — hover-enter and hover-leave both propagate without host wiring.
+//
+// Keyboard events are handled by the focus system first: Tab/Shift+Tab move
+// focus through the focusable descendants, and any other key/char is routed to
+// the currently-focused descendant (routeFocusKey), never positionally. A click
+// additionally moves focus to whichever focusable descendant it lands on.
 func (c *Container) OnEvent(ev Event) {
+	if routeFocusKey(c, ev) {
+		return
+	}
 	pr := c.Bounds()
 	if ev.Kind == EventMouseMove {
 		for _, it := range c.items {
@@ -291,6 +309,9 @@ func (c *Container) OnEvent(ev Event) {
 		return
 	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
+	if ev.Kind == EventClick {
+		focusClick(c, sx, sy)
+	}
 	for _, it := range c.items {
 		b := it.Widget.Bounds()
 		if b.W > 0 && b.H > 0 && b.Contains(sx, sy) {

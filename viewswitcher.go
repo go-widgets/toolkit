@@ -24,6 +24,7 @@ import "github.com/go-widgets/painter"
 // tripping a nil-Views guard downstream.
 type ViewSwitcher struct {
 	Base
+	focusState
 	Views    []string
 	Current  int
 	OnChange func(i int)
@@ -86,6 +87,7 @@ func (v *ViewSwitcher) Draw(p painter.Painter, theme *Theme) {
 	}
 	// Bottom border line.
 	fillRect(p, r.X, r.Y+r.H-1, r.W, 1, theme.Border)
+	v.drawFocusRing(p, theme, r)
 }
 
 // OnEvent handles a click by locating which segment the X coordinate

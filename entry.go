@@ -16,9 +16,9 @@ import "github.com/go-widgets/painter"
 // several bytes on the wire.
 type Entry struct {
 	Base
+	focusState
 	Text     string
 	Cursor   int // rune index in [0, len(runes)]
-	Focused  bool
 	OnChange func(text string)
 	OnSubmit func(text string)
 
@@ -70,7 +70,7 @@ func (e *Entry) display() string {
 func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	r := e.Bounds()
 	border := theme.Border
-	if e.Focused {
+	if e.focused {
 		border = theme.Accent
 	}
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, theme.Surface)
@@ -82,7 +82,7 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	} else {
 		e.drawText(p, r.X+4, textY, shown, theme.OnSurface)
 	}
-	if e.Focused {
+	if e.focused {
 		// Caret x measured from the shown text up to the cursor, so it lands
 		// correctly under a proportional / CJK font (not a fixed advance).
 		runes := []rune(shown)
@@ -106,6 +106,7 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 		}
 		fillRect(p, cx, textY-1, 1, e.glyphHeight()+2, theme.OnSurface)
 	}
+	e.drawFocusRing(p, theme, r)
 }
 
 // OnEvent handles focus, keyboard navigation, character insertion +
@@ -114,7 +115,7 @@ func (e *Entry) OnEvent(ev Event) {
 	runes := []rune(e.Text)
 	switch ev.Kind {
 	case EventClick:
-		e.Focused = true
+		e.focused = true
 	case EventKeyDown:
 		switch ev.Code {
 		case "Backspace":

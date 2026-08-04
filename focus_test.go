@@ -19,6 +19,8 @@ func (f *fakeFocusable) SetFocused(focused bool) {
 	f.setCalls = append(f.setCalls, focused)
 }
 
+func (f *fakeFocusable) Focused() bool { return f.focused }
+
 func newFakes(names ...string) []*fakeFocusable {
 	fakes := make([]*fakeFocusable, len(names))
 	for i, n := range names {

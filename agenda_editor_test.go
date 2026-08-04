@@ -122,11 +122,11 @@ func TestAgendaEditorClick(t *testing.T) {
 	}
 
 	// Click inside the title Entry → focuses it, stays open.
-	a.editEntry.Focused = false
+	a.editEntry.SetFocused(false)
 	if !a.EditorClick(lay.entry.X+4, lay.entry.Y+lay.entry.H/2) {
 		t.Fatal("entry click should be consumed")
 	}
-	if !a.editEntry.Focused {
+	if !a.editEntry.Focused() {
 		t.Fatal("entry click should focus the entry")
 	}
 

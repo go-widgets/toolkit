@@ -55,7 +55,7 @@ func (a *Agenda) EditEvent(i int) {
 	a.editing = i
 	a.editorOpen = true
 	a.editEntry = NewEntry(a.Events[i].Title)
-	a.editEntry.Focused = true
+	a.editEntry.SetFocused(true)
 }
 
 // Editing returns the index of the event whose editor is open, or -1 when no
@@ -191,7 +191,7 @@ func (a *Agenda) EditorClick(x, y int) bool {
 		}
 	}
 	if lay.entry.Contains(x, y) {
-		a.editEntry.Focused = true
+		a.editEntry.SetFocused(true)
 		return true
 	}
 	if !lay.panel.Contains(x, y) {

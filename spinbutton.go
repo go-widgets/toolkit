@@ -14,6 +14,7 @@ import "strconv"
 // portion of the body.
 type SpinButton struct {
 	Base
+	focusState
 	Min, Max int
 	Value    int
 	Step     int
@@ -81,6 +82,7 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, cx, cyUp-bar/2, 1, bar, ink) // + vertical
 	cyDn := r.Y + half + (r.H-half)/2
 	fillRect(p, cx-bar/2, cyDn, bar, 1, ink) // − horizontal
+	s.drawFocusRing(p, theme, r)
 }
 
 // OnEvent: click on the upper-right button increments; click on the

@@ -35,6 +35,7 @@ const (
 // Clicking a tab swaps Active + fires OnTabChanged.
 type Notebook struct {
 	Base
+	focusState
 	Tabs         []NotebookTab
 	Active       int
 	TabSide      TabSide
@@ -181,6 +182,7 @@ func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
 			}
 		}
 	})
+	n.drawFocusRing(p, theme, n.Bounds())
 }
 
 // OnEvent: a click on a tab (any side) selects it; a click in the body — or any

@@ -16,6 +16,7 @@ import "github.com/go-widgets/painter"
 // subsequent drag moves that same handle, clamped so Low never crosses High.
 type RangeSlider struct {
 	Base
+	focusState
 	Min, Max    float64
 	Low, High   float64
 	Orientation Orientation
@@ -123,6 +124,7 @@ func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 			fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
 			strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
 		}
+		s.drawFocusRing(p, theme, r)
 		return
 	}
 	trackY := r.Y + (r.H-trackThick)/2
@@ -138,6 +140,7 @@ func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 		fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
 		strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
 	}
+	s.drawFocusRing(p, theme, r)
 }
 
 // OnEvent: a click grabs the nearer handle and jumps it to the cursor; a drag

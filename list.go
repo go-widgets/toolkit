@@ -54,6 +54,7 @@ import (
 // ListBox with no drag-to-reorder support at all.
 type ListBox struct {
 	Base
+	focusState
 	Items       []string
 	Selected    int // -1 = no selection; anchor/cursor row
 	RowHeight   int // pixels per row; default 18 via NewListBox
@@ -230,6 +231,7 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 	if overflow {
 		l.drawScrollbar(p, theme, r)
 	}
+	l.drawFocusRing(p, theme, r)
 }
 
 // dropIndicatorHeight is the pixel thickness of the insertion line Draw

@@ -42,6 +42,7 @@ type TreeTableNode struct {
 // the rows nest".
 type TreeTable struct {
 	Base
+	focusState
 	// Columns are the header cells. A zero Width means "auto" — the
 	// column claims an equal share of whatever pixel budget is left
 	// after the fixed-Width columns, same rule as Table.Columns.
@@ -332,6 +333,7 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 	if windowed {
 		t.drawScrollbar(p, theme, r)
 	}
+	t.drawFocusRing(p, theme, r)
 }
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and

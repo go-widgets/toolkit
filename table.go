@@ -43,6 +43,7 @@ import (
 // a new column width, then hand the Table back its updated state.
 type Table struct {
 	Base
+	focusState
 	// Columns are the header cells (title + optional pixel width).
 	// A zero Width means "auto" -- the column claims an equal share of
 	// whatever pixel budget is left after the fixed-Width columns.
@@ -616,6 +617,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 			t.editor.Draw(p, theme)
 		}
 	}
+	t.drawFocusRing(p, theme, r)
 }
 
 // drawDataRow paints one body data row (background + zebra/selection tint +
@@ -1791,7 +1793,7 @@ func (t *Table) beginEdit(row, col int) {
 		val = t.Rows[row][col]
 	}
 	e := NewEntry(val)
-	e.Focused = true
+	e.SetFocused(true)
 	e.Font = t.Font // inherit the table's face so CJK/complex text edits legibly
 	e.OnSubmit = func(string) { t.commitEdit() }
 	t.editRow, t.editCol, t.editor = row, col, e

@@ -22,6 +22,7 @@ import "github.com/go-widgets/painter"
 // fall-through to theme.Background, matching Button + Table + Avatar.
 type SplitButton struct {
 	Base
+	focusState
 	Label   string
 	Arrow   bool
 	OnClick func()
@@ -90,6 +91,7 @@ func (s *SplitButton) Draw(p painter.Painter, theme *Theme) {
 		ty := r.Y + (r.H-s.glyphHeight())/2
 		s.drawText(p, tx, ty, s.Label, ink)
 	}
+	s.drawFocusRing(p, theme, r)
 }
 
 // OnEvent routes clicks to OnClick or OnArrow depending on where the

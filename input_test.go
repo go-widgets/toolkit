@@ -11,7 +11,7 @@ import "testing"
 func TestEntryClickFocuses(t *testing.T) {
 	e := NewEntry("hi")
 	e.OnEvent(Event{Kind: EventClick})
-	if !e.Focused {
+	if !e.Focused() {
 		t.Fatal("click should set Focused = true")
 	}
 }
@@ -146,7 +146,7 @@ func TestEntryDrawFocusedShowsCursor(t *testing.T) {
 	const w, h = 64, 24
 	theme := DefaultLight()
 	e := NewEntry("ab")
-	e.Focused = true
+	e.SetFocused(true)
 	e.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(w, h)
 	e.Draw(newP(buf, w), theme)
@@ -255,7 +255,7 @@ func TestEntryDrawCompositionPreviewDistinctFromCommittedText(t *testing.T) {
 	const w, h = 64, 24
 	theme := DefaultLight()
 	e := NewEntry("ab")
-	e.Focused = true
+	e.SetFocused(true)
 	e.Composition = "^"
 	e.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(w, h)
@@ -264,7 +264,7 @@ func TestEntryDrawCompositionPreviewDistinctFromCommittedText(t *testing.T) {
 	// the buffer must at least differ from the no-composition render.
 	buf2 := makeSurface(w, h)
 	e2 := NewEntry("ab")
-	e2.Focused = true
+	e2.SetFocused(true)
 	e2.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	e2.Draw(newP(buf2, w), theme)
 	if string(buf) == string(buf2) {
@@ -278,7 +278,7 @@ func TestEntryDrawNoCompositionUnchanged(t *testing.T) {
 	const w, h = 64, 24
 	theme := DefaultLight()
 	e := NewEntry("ab")
-	e.Focused = true
+	e.SetFocused(true)
 	e.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(w, h)
 	e.Draw(newP(buf, w), theme)

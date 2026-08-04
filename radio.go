@@ -12,6 +12,7 @@ import "github.com/go-widgets/painter"
 // group) behaves like a CheckButton (toggleable on click).
 type RadioButton struct {
 	Base
+	focusState
 	Label    string
 	Checked  bool
 	OnToggle func(checked bool)
@@ -50,6 +51,7 @@ func (r *RadioButton) Draw(p painter.Painter, theme *Theme) {
 	}
 	textY := b.Y + (b.H-r.glyphHeight())/2
 	r.drawText(p, b.X+radioBoxSize+4, textY, r.Label, labelInk)
+	r.drawFocusRing(p, theme, b)
 }
 
 // OnEvent: on click, route through the group (if any) so siblings

@@ -17,6 +17,7 @@ import "github.com/go-widgets/painter"
 // the wasmbox compositor's tick is the redraw trigger).
 type Button struct {
 	Base
+	focusState
 	Label   string
 	OnClick func()
 	Style   ButtonStyle // resting appearance; default is ButtonDefault
@@ -130,6 +131,7 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 		ty := r.Y + (r.H-b.glyphHeight())/2
 		b.drawText(p, tx, ty, b.Label, ink)
 	}
+	b.drawFocusRing(p, theme, r)
 }
 
 // OnEvent drives the button from pointer events: EventClick presses it (shows

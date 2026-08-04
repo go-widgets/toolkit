@@ -11,6 +11,7 @@ import "github.com/go-widgets/painter"
 // Theme.Surface; the label is rendered centered in the button.
 type ToggleButton struct {
 	Base
+	focusState
 	Label    string
 	Pressed  bool
 	OnToggle func(pressed bool)
@@ -45,6 +46,7 @@ func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 	tx := r.X + (r.W-tw)/2
 	ty := r.Y + (r.H-t.glyphHeight())/2
 	t.drawText(p, tx, ty, t.Label, ink)
+	t.drawFocusRing(p, theme, r)
 }
 
 // OnEvent: click flips Pressed + fires OnToggle; a move tracks the hover face.

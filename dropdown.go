@@ -18,6 +18,7 @@ import "github.com/go-widgets/painter"
 // popover directly into the same buffer).
 type DropDown struct {
 	Base
+	focusState
 	Options  []string
 	Selected int
 	Open     bool
@@ -69,6 +70,7 @@ func (d *DropDown) Draw(p painter.Painter, theme *Theme) {
 	for t := 0; t < 4; t++ {
 		fillRect(p, cx-t, cy+2-t, 1+2*t, 1, ink)
 	}
+	d.drawFocusRing(p, theme, r)
 }
 
 // OnEvent toggles Open on click. Selection happens via Select() which

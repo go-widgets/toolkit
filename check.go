@@ -13,6 +13,7 @@ import "github.com/go-widgets/painter"
 // rendered in Theme.OnBackground to the right of the box.
 type CheckButton struct {
 	Base
+	focusState
 	Label    string
 	Checked  bool
 	Size     int // box side length in px; 0 uses the 12px default
@@ -69,6 +70,7 @@ func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 	// Label to the right of the box, vertically centred on glyph row.
 	textY := r.Y + (r.H-c.glyphHeight())/2
 	c.drawText(p, r.X+box+4, textY, c.Label, labelInk)
+	c.drawFocusRing(p, theme, r)
 }
 
 // drawCheckmark strokes a two-segment "✓" scaled to a box of side b at (x, y),

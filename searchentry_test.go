@@ -19,7 +19,7 @@ func assertFocusedCaret(t *testing.T) {
 	theme := DefaultLight()
 	draw := func(focused bool) []byte {
 		s := NewSearchEntry("hello")
-		s.Focused = focused
+		s.SetFocused(focused)
 		s.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 		buf := makeSurface(w, h)
 		s.Draw(newP(buf, w), theme)
