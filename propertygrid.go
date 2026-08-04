@@ -63,6 +63,19 @@ func (pg *PropertyGrid) Clear() {
 	pg.table.Selected = -1
 }
 
+// RemoveAt removes the property at row index i, keeping the name index and the
+// backing Table in sync and clearing a now-stale selection. An out-of-range i
+// is a no-op. Exposed so a host can implement a "delete property" menu action
+// (hit-test the row with PropertyGrid.Table().RowAt).
+func (pg *PropertyGrid) RemoveAt(i int) {
+	if i < 0 || i >= len(pg.names) {
+		return
+	}
+	pg.names = append(pg.names[:i], pg.names[i+1:]...)
+	pg.table.Rows = append(pg.table.Rows[:i], pg.table.Rows[i+1:]...)
+	pg.table.Selected = -1
+}
+
 // Value returns the current value of the named property, or "" if there is no
 // such property.
 func (pg *PropertyGrid) Value(name string) string {
