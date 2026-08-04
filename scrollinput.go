@@ -4,48 +4,54 @@
 
 package toolkit
 
-// rowScroller is implemented by every widget that scrolls its content by
-// whole rows through a clamped ScrollBy (ListBox, Table, TreeTable,
-// TreeView). The native wheel + keyboard scroll handlers drive them through
-// this single interface so the scroll-input policy lives in one place
-// instead of being re-derived in each widget's OnEvent.
-type rowScroller interface {
-	// ScrollBy shifts the top visible row by delta (positive scrolls down /
-	// forward, negative up / back), clamped to the valid range at both ends.
-	ScrollBy(delta int)
-}
-
-// scrollExtreme overshoots far past either end of any list. Because ScrollBy
-// clamps, adding or subtracting it lands exactly on the last or first row —
-// the Home / End behaviour, without each widget having to report its length.
+// scrollExtreme overshoots far past either end of any list. Because a clamped
+// pixel/row scroll pins to its valid range, adding or subtracting it lands
+// exactly on the last or first position — the Home / End behaviour, without
+// the caller having to report its length. Used by ScrollView's key handling.
 const scrollExtreme = 1 << 30
 
-// handleScrollKey applies the standard scroll-navigation keybindings to a
-// row-scrolling widget and reports whether code was one of them:
+// rovingIndex computes where a data widget's keyboard cursor moves for a
+// roving-cursor navigation key, over a visible list of n rows with the given
+// page step, starting from cur (-1 = no cursor yet). It reports the new index
+// and whether code was one of the navigation keys it handles:
 //
-//	ArrowUp / ArrowDown   one row up / down
+//	ArrowUp / ArrowDown   one row up / down (clamped, no wrap)
 //	PageUp  / PageDown    one page up / down (page = visible rows)
 //	Home    / End         jump to the first / last row
 //
-// page is the widget's current visible-row count (the page step). A key that
-// isn't a scroll key returns false, leaving the caller free to fall through
-// to its own key handling.
-func handleScrollKey(s rowScroller, code string, page int) bool {
-	switch code {
-	case "ArrowUp":
-		s.ScrollBy(-1)
-	case "ArrowDown":
-		s.ScrollBy(1)
-	case "PageUp":
-		s.ScrollBy(-page)
-	case "PageDown":
-		s.ScrollBy(page)
-	case "Home":
-		s.ScrollBy(-scrollExtreme)
-	case "End":
-		s.ScrollBy(scrollExtreme)
-	default:
-		return false
+// A first ArrowUp/ArrowDown with no cursor lands on the first row; the Page
+// keys treat a missing cursor as the first row too. A key that isn't a
+// navigation key returns (cur, false), leaving the caller free to handle it
+// (Enter/Space activation, tree Left/Right, …). n <= 0 always returns
+// (cur, false): an empty list has nowhere for the cursor to go.
+func rovingIndex(cur, n, page int, code string) (int, bool) {
+	if n <= 0 {
+		return cur, false
 	}
-	return true
+	base := cur
+	if base < 0 {
+		base = 0
+	}
+	switch code {
+	case "ArrowDown":
+		if cur < 0 {
+			return 0, true
+		}
+		return min(cur+1, n-1), true
+	case "ArrowUp":
+		if cur < 0 {
+			return 0, true
+		}
+		return max(cur-1, 0), true
+	case "PageDown":
+		return min(base+page, n-1), true
+	case "PageUp":
+		return max(base-page, 0), true
+	case "Home":
+		return 0, true
+	case "End":
+		return n - 1, true
+	default:
+		return cur, false
+	}
 }

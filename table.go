@@ -1619,6 +1619,76 @@ func (t *Table) scrollToSelected() {
 	}
 }
 
+// handleKey drives the keyboard roving cursor: Arrow/Page/Home/End move
+// Selected over the body rows (auto-scrolling to keep it visible),
+// Shift+ArrowUp/Down extends a MultiSelect range from the cursor, and Enter /
+// Space activate the cursor row like a click. A disabled Table, or one with
+// no rows, ignores every key. Selected doubles as the cursor, so the Accent
+// highlight tracks keyboard navigation exactly as it does a mouse selection.
+func (t *Table) handleKey(ev Event) {
+	if t.Disabled || len(t.Rows) == 0 {
+		return
+	}
+	switch ev.Code {
+	case "Enter", " ", "Space":
+		t.activateCursor()
+		return
+	}
+	if t.MultiSelect && ev.Shift && (ev.Code == "ArrowUp" || ev.Code == "ArrowDown") {
+		t.extendRowSelection(ev.Code)
+		return
+	}
+	if idx, ok := rovingIndex(t.Selected, len(t.Rows), t.bodyVisibleRows(), ev.Code); ok {
+		t.Selected = idx
+		// A plain move mirrors a plain click: in MultiSelect mode the cursor
+		// row becomes the sole selection (and the anchor).
+		if t.MultiSelect {
+			t.SetRowSelection(idx)
+		}
+		t.scrollToSelected()
+	}
+}
+
+// activateCursor applies to the cursor row exactly what a plain click on it
+// would: in MultiSelect mode it collapses the selection to that single row.
+// A single-select Table has no click-side callback, so activation there just
+// keeps the cursor row as Selected (it already is). An out-of-range cursor is
+// a no-op.
+func (t *Table) activateCursor() {
+	if t.Selected < 0 || t.Selected >= len(t.Rows) {
+		return
+	}
+	if t.MultiSelect {
+		t.SetRowSelection(t.Selected)
+	}
+}
+
+// extendRowSelection grows the multi-row selection by one row in the arrow's
+// direction and moves the lead cursor (Selected) onto the newly entered row,
+// keeping it visible -- the keyboard analogue of Shift+click's range extend.
+// The previous cursor row is folded into the set first so the anchor is never
+// lost; a move already at the top/bottom edge simply re-selects the same row.
+// Only reached while MultiSelect is on and Rows is non-empty.
+func (t *Table) extendRowSelection(code string) {
+	prev := t.Selected
+	if prev < 0 {
+		prev = 0
+	}
+	next := prev
+	if code == "ArrowDown" {
+		next = min(prev+1, len(t.Rows)-1)
+	} else {
+		next = max(prev-1, 0)
+	}
+	if t.selectedRows == nil {
+		t.selectedRows = make(map[int]bool)
+	}
+	t.selectedRows[prev] = true
+	t.selectedRows[next] = true
+	t.Selected = next
+	t.scrollToSelected()
+}
+
 // IsRowSelected reports whether row i is a member of the multi-row
 // selection set. A negative i is always false -- mirrors how every
 // other row/column index in this file collapses an invalid value
@@ -1985,10 +2055,12 @@ func (t *Table) OnEvent(ev Event) {
 		// (ScrollBy clamps at top + bottom).
 		t.ScrollBy(ev.Delta)
 	case EventKeyDown:
-		// Arrow / Page / Home / End scroll the body by whole rows or pages
-		// when no inline editor is open (the editor branch above already
-		// consumed the keystroke while editing). Any other key is ignored.
-		handleScrollKey(t, ev.Code, t.bodyVisibleRows())
+		// Arrow / Page / Home / End move the selection cursor (Selected) over
+		// the body rows, auto-scrolling to keep it visible; Shift+Arrow
+		// extends a MultiSelect range; Enter / Space activate the cursor row.
+		// Reached only when no inline editor is open (the editor branch above
+		// already consumed the keystroke while editing).
+		t.handleKey(ev)
 	case EventClick:
 		// A press on the scrollbar grabs its thumb (or pages the track); it
 		// must not also select/edit a row, so consume it first.

@@ -173,6 +173,115 @@ func (t *TreeTable) scrollToSelected() {
 	t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), wr)
 }
 
+// handleKey drives the keyboard roving cursor over the visible flattened
+// rows: Arrow Up/Down + Page + Home/End move Selected (auto-scrolling to keep
+// it visible); ArrowRight expands a collapsed node or descends into an
+// already-expanded one; ArrowLeft collapses an expanded node or moves to the
+// parent; Enter / Space select the cursor node like a click. A disabled
+// TreeTable, or an empty forest, ignores every key.
+func (t *TreeTable) handleKey(ev Event) {
+	if t.Disabled {
+		return
+	}
+	t.flatten()
+	if len(t.rows) == 0 {
+		return
+	}
+	cur := t.cursorRow()
+	switch ev.Code {
+	case "Enter", " ", "Space":
+		t.activateCursor()
+		return
+	case "ArrowRight":
+		t.expandOrDescend(cur)
+		return
+	case "ArrowLeft":
+		t.collapseOrParent(cur)
+		return
+	}
+	if idx, ok := rovingIndex(cur, len(t.rows), t.bodyVisibleRows(), ev.Code); ok {
+		t.setCursorRow(idx)
+	}
+}
+
+// cursorRow returns the flattened-row index of Selected, or -1 when nothing is
+// selected or Selected is not currently visible. Callers flatten() first.
+func (t *TreeTable) cursorRow() int {
+	if t.Selected == nil {
+		return -1
+	}
+	for i, row := range t.rows {
+		if row.node == t.Selected {
+			return i
+		}
+	}
+	return -1
+}
+
+// setCursorRow moves the cursor to flattened row idx (Selected + scroll to
+// keep it visible), the keyboard analogue of clicking that row. Callers pass
+// an in-range idx.
+func (t *TreeTable) setCursorRow(idx int) {
+	t.Selected = t.rows[idx].node
+	t.scrollToSelected()
+}
+
+// activateCursor applies to the cursor node what a click on it would: it sets
+// it as Selected. A TreeTable click has no callback, so activation just keeps
+// the cursor node selected (it already is). A nil cursor is a no-op.
+func (t *TreeTable) activateCursor() {
+	if cur := t.cursorRow(); cur >= 0 {
+		t.Selected = t.rows[cur].node
+	}
+}
+
+// expandOrDescend implements ArrowRight: expand a collapsed parent (the same
+// Expanded toggle a chevron click drives), descend to the first child of an
+// already-expanded parent, or do nothing on a leaf. With no cursor yet it
+// selects the first row so the tree becomes navigable.
+func (t *TreeTable) expandOrDescend(cur int) {
+	if cur < 0 {
+		t.setCursorRow(0)
+		return
+	}
+	node := t.rows[cur].node
+	if len(node.Children) == 0 {
+		return
+	}
+	if !node.Expanded {
+		node.Expanded = true
+		t.flatten()
+		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.bodyVisibleRows())
+		return
+	}
+	// The node is expanded and has children, so its first child is the very
+	// next flattened row -- descend onto it.
+	t.setCursorRow(cur + 1)
+}
+
+// collapseOrParent implements ArrowLeft: collapse an expanded parent, else
+// move to the parent -- the nearest preceding row at a shallower depth. A
+// top-level leaf simply stays put; with no cursor yet it does nothing.
+func (t *TreeTable) collapseOrParent(cur int) {
+	if cur < 0 {
+		return
+	}
+	node := t.rows[cur].node
+	if len(node.Children) > 0 && node.Expanded {
+		node.Expanded = false
+		t.flatten()
+		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.bodyVisibleRows())
+		return
+	}
+	depth := t.rows[cur].depth
+	for i := cur - 1; i >= 0; i-- {
+		if t.rows[i].depth < depth {
+			t.setCursorRow(i)
+			return
+		}
+	}
+}
+
 // columnWidths distributes the total pixel budget across every column —
 // the TreeTableColumn analogue of Table.columnWidths, same fixed/auto
 // split + same "remainder onto the last auto column" rule.
@@ -449,9 +558,11 @@ func (t *TreeTable) OnEvent(ev Event) {
 		t.ScrollBy(ev.Delta)
 		return
 	case EventKeyDown:
-		// Arrow / Page / Home / End scroll the tree by whole rows or pages;
-		// any other key is ignored.
-		handleScrollKey(t, ev.Code, t.bodyVisibleRows())
+		// Arrow / Page / Home / End move the selection cursor (Selected) over
+		// the visible flattened rows, auto-scrolling to keep it visible;
+		// Right expands / descends, Left collapses / moves to the parent;
+		// Enter / Space activate (select) the cursor node like a click.
+		t.handleKey(ev)
 		return
 	case EventClick:
 		// A press on the scrollbar grabs its thumb (or pages the track); it

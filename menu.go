@@ -164,11 +164,15 @@ func (m *Menu) drawCheckGlyph(p painter.Painter, gx, rowY int, radio bool, ink R
 }
 
 // OnEvent: a click on an enabled row fires its Action + closes the
-// menu via OnClose (if wired). Before Action runs, a checkable row
-// toggles its own Checked; a radio-grouped row instead selects itself
-// exclusively within its RadioGroup (see selectRadio).
+// menu via OnClose (if wired). Keyboard: ArrowUp/ArrowDown move the
+// Hover highlight to the previous/next enabled row (skipping separators
+// and disabled/nil-Action rows, wrapping at both ends); Enter/Space fire
+// the hovered row's Action; Escape calls OnClose. A disabled Menu ignores
+// keys. Submenu chevron rows (nil Action) are treated as disabled here --
+// submenu navigation is deferred to a later wave.
 func (m *Menu) OnEvent(ev Event) {
-	if ev.Kind == EventMouseMove {
+	switch ev.Kind {
+	case EventMouseMove:
 		// Follow the pointer: highlight the row under it, or clear the
 		// highlight when the pointer has moved off the menu body.
 		if m.localInBounds(ev.X, ev.Y) {
@@ -177,18 +181,37 @@ func (m *Menu) OnEvent(ev Event) {
 			m.Hover = -1
 		}
 		return
-	}
-	if ev.Kind != EventClick {
+	case EventKeyDown:
+		if m.Disabled {
+			return
+		}
+		switch ev.Code {
+		case "ArrowDown":
+			m.moveHover(1)
+		case "ArrowUp":
+			m.moveHover(-1)
+		case "Enter", " ", "Space":
+			m.activate(m.Hover)
+		case "Escape":
+			if m.OnClose != nil {
+				m.OnClose()
+			}
+		}
 		return
+	case EventClick:
+		m.activate(m.rowAt(ev.Y))
 	}
-	idx := m.rowAt(ev.Y)
-	if idx < 0 || idx >= len(m.Items) {
+}
+
+// activate fires row idx's Action + closes the menu via OnClose (if wired),
+// after applying the row's checkable/radio state change -- the single path
+// both a click and an Enter/Space keypress drive. An out-of-range index, a
+// separator, or a disabled (nil-Action) row is a no-op.
+func (m *Menu) activate(idx int) {
+	if !m.enabledItem(idx) {
 		return
 	}
 	it := &m.Items[idx]
-	if it.Separator || it.Action == nil {
-		return
-	}
 	switch {
 	case it.RadioGroup != 0:
 		m.selectRadio(idx)
@@ -198,6 +221,46 @@ func (m *Menu) OnEvent(ev Event) {
 	it.Action()
 	if m.OnClose != nil {
 		m.OnClose()
+	}
+}
+
+// enabledItem reports whether row i is a keyboard-focusable, activatable item:
+// in range, not a separator, and carrying an Action (a nil Action is the
+// disabled state, which also covers a submenu-only chevron row -- submenu
+// navigation is a later wave).
+func (m *Menu) enabledItem(i int) bool {
+	if i < 0 || i >= len(m.Items) {
+		return false
+	}
+	it := &m.Items[i]
+	return !it.Separator && it.Action != nil
+}
+
+// moveHover advances the Hover highlight by dir (+1 down, -1 up) to the next
+// enabled row, skipping separators and disabled/nil-Action rows and wrapping
+// at both ends. From no hover (-1) a downward step lands on the first enabled
+// row and an upward step on the last. A menu with no enabled row leaves Hover
+// untouched.
+func (m *Menu) moveHover(dir int) {
+	n := len(m.Items)
+	if n == 0 {
+		return
+	}
+	cur := m.Hover
+	if cur < 0 {
+		// Seed so the first step lands on the first (down) or last (up) row.
+		if dir < 0 {
+			cur = 0
+		} else {
+			cur = -1
+		}
+	}
+	for k := 0; k < n; k++ {
+		cur = (cur + dir + n) % n
+		if m.enabledItem(cur) {
+			m.Hover = cur
+			return
+		}
 	}
 }
 
@@ -387,10 +450,36 @@ func (b *MenuBar) OnEvent(ev Event) {
 		}
 	case EventKeyDown:
 		// Mnemonic: "Alt+X" opens the FIRST menu whose Name starts with
-		// X (case-insensitive). Escape closes the open menu. Any other
-		// Code is ignored.
+		// X (case-insensitive). Escape closes the open menu. While a menu
+		// is open, ArrowLeft/ArrowRight move Active between top-level menus
+		// (wrapping) and ArrowDown enters the open menu's first item. A
+		// disabled MenuBar ignores keys. Any other Code is ignored.
+		if b.Disabled {
+			return
+		}
 		if ev.Code == "Escape" {
 			b.Active = -1
+			return
+		}
+		switch ev.Code {
+		case "ArrowLeft", "ArrowRight":
+			if b.Active < 0 || len(b.Names) == 0 {
+				return
+			}
+			dir := 1
+			if ev.Code == "ArrowLeft" {
+				dir = -1
+			}
+			b.Active = (b.Active + dir + len(b.Names)) % len(b.Names)
+			return
+		case "ArrowDown":
+			// Enter the open menu: highlight its first enabled item.
+			if b.Active < 0 || b.Active >= len(b.Menus) {
+				return
+			}
+			if m := b.Menus[b.Active]; m != nil {
+				m.moveHover(1)
+			}
 			return
 		}
 		const prefix = "Alt+"

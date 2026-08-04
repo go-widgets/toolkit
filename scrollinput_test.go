@@ -50,43 +50,10 @@ func TestListBoxWheelScroll(t *testing.T) {
 	}
 }
 
-func TestListBoxKeyboardScroll(t *testing.T) {
-	lb := newScrollListBox()
-	max := lb.maxScrollRow()
-	page := lb.visibleRows()
-
-	key := func(code string) { lb.OnEvent(Event{Kind: EventKeyDown, Code: code}) }
-
-	key("ArrowDown")
-	if lb.ScrollRow != 1 {
-		t.Fatalf("ArrowDown: %d, want 1", lb.ScrollRow)
-	}
-	key("ArrowUp")
-	if lb.ScrollRow != 0 {
-		t.Fatalf("ArrowUp: %d, want 0", lb.ScrollRow)
-	}
-	key("PageDown")
-	if lb.ScrollRow != page {
-		t.Fatalf("PageDown: %d, want %d", lb.ScrollRow, page)
-	}
-	key("PageUp")
-	if lb.ScrollRow != 0 {
-		t.Fatalf("PageUp: %d, want 0", lb.ScrollRow)
-	}
-	key("End")
-	if lb.ScrollRow != max {
-		t.Fatalf("End: %d, want %d", lb.ScrollRow, max)
-	}
-	key("Home")
-	if lb.ScrollRow != 0 {
-		t.Fatalf("Home: %d, want 0", lb.ScrollRow)
-	}
-	// A non-scroll key is ignored (covers handleScrollKey's default).
-	key("Enter")
-	if lb.ScrollRow != 0 {
-		t.Fatalf("Enter should not scroll: %d", lb.ScrollRow)
-	}
-}
+// Arrow/Page/Home/End keys now drive a roving SELECTION cursor (not the scroll
+// offset) — that behaviour and its auto-scroll-to-keep-visible are covered in
+// wave3b_data_keyboard_test.go. The tests below keep only the wheel
+// (EventScroll) path, which still just scrolls.
 
 // --- Table -----------------------------------------------------------------
 
@@ -103,7 +70,6 @@ func newScrollTable() *Table {
 func TestTableWheelAndKeyScroll(t *testing.T) {
 	tb := newScrollTable()
 	max := tb.maxScrollRow()
-	page := tb.bodyVisibleRows()
 	if max < 3 {
 		t.Fatalf("test needs a scrollable table, max=%d", max)
 	}
@@ -119,37 +85,6 @@ func TestTableWheelAndKeyScroll(t *testing.T) {
 	tb.OnEvent(Event{Kind: EventScroll, Delta: -1000})
 	if tb.ScrollRow != 0 {
 		t.Fatalf("wheel clamp top: %d, want 0", tb.ScrollRow)
-	}
-
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "PageDown"})
-	if tb.ScrollRow != page {
-		t.Fatalf("PageDown: %d, want %d", tb.ScrollRow, page)
-	}
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
-	if tb.ScrollRow != 0 {
-		t.Fatalf("Home: %d, want 0", tb.ScrollRow)
-	}
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
-	if tb.ScrollRow != max {
-		t.Fatalf("End: %d, want %d", tb.ScrollRow, max)
-	}
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
-	if tb.ScrollRow != max-1 {
-		t.Fatalf("ArrowUp: %d, want %d", tb.ScrollRow, max-1)
-	}
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if tb.ScrollRow != max {
-		t.Fatalf("ArrowDown: %d, want %d", tb.ScrollRow, max)
-	}
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "PageUp"})
-	if tb.ScrollRow != max-page {
-		t.Fatalf("PageUp: %d, want %d", tb.ScrollRow, max-page)
-	}
-	// Non-scroll key ignored.
-	before := tb.ScrollRow
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if tb.ScrollRow != before {
-		t.Fatalf("Tab should not scroll: %d", tb.ScrollRow)
 	}
 }
 
@@ -182,37 +117,10 @@ func TestTreeTableWheelAndKeyScroll(t *testing.T) {
 	if tt.ScrollRow != 0 {
 		t.Fatalf("wheel clamp top: %d, want 0", tt.ScrollRow)
 	}
-
-	tt.OnEvent(Event{Kind: EventKeyDown, Code: "PageDown"})
-	if tt.ScrollRow != page {
-		t.Fatalf("PageDown: %d, want %d", tt.ScrollRow, page)
-	}
-	tt.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
-	if tt.ScrollRow != max {
-		t.Fatalf("End: %d, want %d", tt.ScrollRow, max)
-	}
-	tt.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
-	if tt.ScrollRow != max-1 {
-		t.Fatalf("ArrowUp: %d, want %d", tt.ScrollRow, max-1)
-	}
-	tt.OnEvent(Event{Kind: EventKeyDown, Code: "PageUp"})
-	if tt.ScrollRow != max-1-page {
-		t.Fatalf("PageUp: %d, want %d", tt.ScrollRow, max-1-page)
-	}
-	tt.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
-	if tt.ScrollRow != 0 {
-		t.Fatalf("Home: %d, want 0", tt.ScrollRow)
-	}
-	tt.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if tt.ScrollRow != 1 {
-		t.Fatalf("ArrowDown: %d, want 1", tt.ScrollRow)
-	}
-	// Non-scroll key + a non-handled event kind are both no-ops (the latter
-	// covers the default branch of the switch).
-	tt.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
+	// A non-handled event kind is a no-op (covers the switch default branch).
 	tt.OnEvent(Event{Kind: EventMouseUp})
-	if tt.ScrollRow != 1 {
-		t.Fatalf("ignored events changed ScrollRow: %d, want 1", tt.ScrollRow)
+	if tt.ScrollRow != 0 {
+		t.Fatalf("ignored event changed ScrollRow: %d, want 0", tt.ScrollRow)
 	}
 }
 
@@ -246,36 +154,10 @@ func TestTreeViewWheelAndKeyScroll(t *testing.T) {
 	if tv.ScrollRow != 0 {
 		t.Fatalf("wheel clamp top: %d, want 0", tv.ScrollRow)
 	}
-
-	tv.OnEvent(Event{Kind: EventKeyDown, Code: "PageDown"})
-	if tv.ScrollRow != page {
-		t.Fatalf("PageDown: %d, want %d", tv.ScrollRow, page)
-	}
-	tv.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
-	if tv.ScrollRow != max {
-		t.Fatalf("End: %d, want %d", tv.ScrollRow, max)
-	}
-	tv.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
-	if tv.ScrollRow != max-1 {
-		t.Fatalf("ArrowUp: %d, want %d", tv.ScrollRow, max-1)
-	}
-	tv.OnEvent(Event{Kind: EventKeyDown, Code: "PageUp"})
-	if tv.ScrollRow != max-1-page {
-		t.Fatalf("PageUp: %d, want %d", tv.ScrollRow, max-1-page)
-	}
-	tv.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
-	if tv.ScrollRow != 0 {
-		t.Fatalf("Home: %d, want 0", tv.ScrollRow)
-	}
-	tv.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if tv.ScrollRow != 1 {
-		t.Fatalf("ArrowDown: %d, want 1", tv.ScrollRow)
-	}
-	// Non-scroll key + non-handled kind: both no-ops (default branch).
-	tv.OnEvent(Event{Kind: EventKeyDown, Code: "Space"})
+	// A non-handled event kind is a no-op (covers the switch default branch).
 	tv.OnEvent(Event{Kind: EventMouseUp})
-	if tv.ScrollRow != 1 {
-		t.Fatalf("ignored events changed ScrollRow: %d, want 1", tv.ScrollRow)
+	if tv.ScrollRow != 0 {
+		t.Fatalf("ignored event changed ScrollRow: %d, want 0", tv.ScrollRow)
 	}
 }
 

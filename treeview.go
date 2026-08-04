@@ -176,6 +176,127 @@ func (t *TreeView) scrollToSelected() {
 	t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), wr)
 }
 
+// handleKey drives the keyboard roving cursor over the visible flattened
+// rows: Arrow Up/Down + Page + Home/End move Selected (auto-scrolling to keep
+// it visible); ArrowRight expands a collapsed node or descends into an
+// already-expanded one; ArrowLeft collapses an expanded node or moves to the
+// parent; Enter / Space activate the cursor node like a click. A disabled
+// TreeView, or an empty tree, ignores every key.
+func (t *TreeView) handleKey(ev Event) {
+	if t.Disabled {
+		return
+	}
+	t.flatten()
+	if len(t.rows) == 0 {
+		return
+	}
+	cur := t.cursorRow()
+	switch ev.Code {
+	case "Enter", " ", "Space":
+		t.activateCursor()
+		return
+	case "ArrowRight":
+		t.expandOrDescend(cur)
+		return
+	case "ArrowLeft":
+		t.collapseOrParent(cur)
+		return
+	}
+	if idx, ok := rovingIndex(cur, len(t.rows), t.windowRows(), ev.Code); ok {
+		t.setCursorRow(idx)
+	}
+}
+
+// cursorRow returns the flattened-row index of Selected, or -1 when nothing is
+// selected or Selected is not currently visible. Callers flatten() first.
+func (t *TreeView) cursorRow() int {
+	if t.Selected == nil {
+		return -1
+	}
+	for i, row := range t.rows {
+		if row.node == t.Selected {
+			return i
+		}
+	}
+	return -1
+}
+
+// setCursorRow moves the cursor to flattened row idx, mirroring a plain click:
+// in MultiSelect mode the node becomes the sole selection, then the view
+// scrolls to keep it visible. Callers pass an in-range idx.
+func (t *TreeView) setCursorRow(idx int) {
+	node := t.rows[idx].node
+	t.Selected = node
+	if t.MultiSelect {
+		t.SetSelection(node)
+	}
+	t.scrollToSelected()
+}
+
+// activateCursor fires the same selection + OnActivate a click on the cursor
+// node would. A nil Selected (nothing under the cursor) is a no-op, and a nil
+// OnActivate is safe.
+func (t *TreeView) activateCursor() {
+	if t.Selected == nil {
+		return
+	}
+	if t.MultiSelect {
+		t.SetSelection(t.Selected)
+	}
+	if t.OnActivate != nil {
+		t.OnActivate(t.Selected)
+	}
+}
+
+// expandOrDescend implements ArrowRight: on a collapsed parent it expands the
+// node (reusing the same Expanded toggle a chevron click drives); on an
+// already-expanded parent it descends to the first child (the next flattened
+// row); on a leaf it does nothing. With no cursor yet it selects the first
+// row so the tree becomes navigable.
+func (t *TreeView) expandOrDescend(cur int) {
+	if cur < 0 {
+		t.setCursorRow(0)
+		return
+	}
+	node := t.rows[cur].node
+	if len(node.Children) == 0 {
+		return
+	}
+	if !node.Expanded {
+		node.Expanded = true
+		t.flatten()
+		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.windowRows())
+		return
+	}
+	// The node is expanded and has children, so its first child is the very
+	// next flattened row -- descend onto it.
+	t.setCursorRow(cur + 1)
+}
+
+// collapseOrParent implements ArrowLeft: on an expanded parent it collapses the
+// node; otherwise it moves the cursor to the parent -- the nearest preceding
+// row at a shallower depth. A cursor at the top level with nothing to collapse
+// simply stays put. With no cursor yet it does nothing.
+func (t *TreeView) collapseOrParent(cur int) {
+	if cur < 0 {
+		return
+	}
+	node := t.rows[cur].node
+	if len(node.Children) > 0 && node.Expanded {
+		node.Expanded = false
+		t.flatten()
+		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.windowRows())
+		return
+	}
+	depth := t.rows[cur].depth
+	for i := cur - 1; i >= 0; i-- {
+		if t.rows[i].depth < depth {
+			t.setCursorRow(i)
+			return
+		}
+	}
+}
+
 // IsSelected reports whether n is part of the multi-select set. It
 // only reflects MultiSelect state; when MultiSelect is false it
 // always returns false (single-select uses Selected directly).
@@ -444,9 +565,11 @@ func (t *TreeView) OnEvent(ev Event) {
 		t.ScrollBy(ev.Delta)
 		return
 	case EventKeyDown:
-		// Arrow / Page / Home / End scroll the tree by whole rows or pages;
-		// any other key is ignored.
-		handleScrollKey(t, ev.Code, t.windowRows())
+		// Arrow / Page / Home / End move the selection cursor (Selected) over
+		// the visible flattened rows, auto-scrolling to keep it visible;
+		// Right expands / descends, Left collapses / moves to the parent;
+		// Enter / Space activate the cursor node like a click.
+		t.handleKey(ev)
 		return
 	case EventClick:
 		// A press on the scrollbar grabs its thumb (or pages the track); it

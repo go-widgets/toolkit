@@ -127,9 +127,10 @@ func TestContextMenuIgnoresWhenClosedOrNonClick(t *testing.T) {
 	if cm.Open {
 		t.Error("event on a closed menu should not open it")
 	}
-	// Open but non-click: ignored (menu stays open).
+	// Open but an event kind the context menu neither forwards nor treats as
+	// an outside-click (EventMouseUp): ignored, menu stays open.
 	cm.Popup(10, 10)
-	cm.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
+	cm.OnEvent(Event{Kind: EventMouseUp})
 	if !cm.Open {
 		t.Error("non-click event should not dismiss")
 	}

@@ -324,8 +324,8 @@ func (l *ListBox) ScrollBy(delta int) {
 // when nothing is selected (Selected < 0) so a fresh or
 // selection-cleared list is never pulled to a bogus ScrollRow.
 //
-// ListBox has no built-in keyboard navigation today; this is exposed
-// for a host (or a future arrow-key handler) that drives Selected
+// The keyboard roving cursor (handleKey) uses this to keep the moving
+// selection on screen; it is also exposed for a host that drives Selected
 // externally and wants the list to keep it in view.
 func (l *ListBox) scrollToSelected() {
 	if l.Selected < 0 {
@@ -399,8 +399,9 @@ func (l *ListBox) scrollbarGeom() (sbGeom, bool) {
 // drag-to-reorder handlers below, which are all no-ops while Reorderable
 // is false, so behavior is byte-identical to a ListBox with no
 // drag-to-reorder support when the feature isn't opted into. EventScroll
-// (wheel) and the Arrow/Page/Home/End keys scroll the visible window
-// natively (see handleScrollKey). Every other event kind is ignored.
+// (wheel) scrolls the visible window; the Arrow/Page/Home/End keys move the
+// selection cursor and Enter/Space activate it (see handleKey). Every other
+// event kind is ignored.
 func (l *ListBox) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventScroll:
@@ -408,9 +409,10 @@ func (l *ListBox) OnEvent(ev Event) {
 		// (ScrollBy clamps at top + bottom).
 		l.ScrollBy(ev.Delta)
 	case EventKeyDown:
-		// Arrow / Page / Home / End scroll the visible window by whole
-		// rows or pages; any other key is ignored.
-		handleScrollKey(l, ev.Code, l.visibleRows())
+		// Arrow / Page / Home / End move the selection cursor (Selected) by
+		// rows or pages, auto-scrolling to keep it visible; Enter / Space
+		// activate the cursor row like a click. A disabled list ignores keys.
+		l.handleKey(ev)
 	case EventClick:
 		// A press on the scrollbar grabs its thumb (or pages the track); it
 		// must not also select a row, so consume it before onClick.
@@ -429,6 +431,47 @@ func (l *ListBox) OnEvent(ev Event) {
 		l.onDragLeave()
 	case EventDrop:
 		l.onDrop(ev)
+	}
+}
+
+// handleKey drives the keyboard roving cursor: Arrow/Page/Home/End move
+// Selected over the items (auto-scrolling to keep it visible), and Enter /
+// Space activate the cursor row exactly like a click. A disabled ListBox
+// ignores every key. Selected doubles as the cursor, so the same Accent
+// highlight a mouse selection shows also tracks keyboard navigation.
+func (l *ListBox) handleKey(ev Event) {
+	if l.Disabled {
+		return
+	}
+	switch ev.Code {
+	case "Enter", " ", "Space":
+		l.activateCursor()
+		return
+	}
+	if idx, ok := rovingIndex(l.Selected, len(l.Items), l.visibleRows(), ev.Code); ok {
+		l.Selected = idx
+		// A plain move mirrors a plain click: in MultiSelect mode the cursor
+		// row becomes the sole selection (and the anchor).
+		if l.MultiSelect {
+			l.SetSelection(idx)
+		}
+		l.scrollToSelected()
+	}
+}
+
+// activateCursor fires the same selection + OnActivate a plain click on the
+// cursor row would: in MultiSelect mode it collapses the selection to the
+// cursor row, then OnActivate(Selected) runs. A cursor that is out of range
+// (nothing selected yet) is a no-op, and a nil OnActivate is safe.
+func (l *ListBox) activateCursor() {
+	if l.Selected < 0 || l.Selected >= len(l.Items) {
+		return
+	}
+	if l.MultiSelect {
+		l.SetSelection(l.Selected)
+	}
+	if l.OnActivate != nil {
+		l.OnActivate(l.Selected)
 	}
 }
 

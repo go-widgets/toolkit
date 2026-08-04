@@ -110,6 +110,14 @@ func (c *ContextMenu) OnEvent(ev Event) {
 		c.Menu.OnEvent(Event{Kind: EventMouseMove, X: ev.X - mb.X, Y: ev.Y - mb.Y})
 		return
 	}
+	if ev.Kind == EventKeyDown {
+		// Keyboard drives the wrapped Menu directly: Up/Down move the hover,
+		// Enter/Space fire the hovered item, Escape closes (via the Menu's
+		// OnClose that Popup wired to clear c.Open).
+		c.Menu.SetBounds(mb)
+		c.Menu.OnEvent(ev)
+		return
+	}
 	if ev.Kind != EventClick {
 		return
 	}
