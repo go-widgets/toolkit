@@ -518,6 +518,11 @@ func (p *PieChart) A11y() A11yInfo {
 // screen reader should not announce a loading placeholder as content.
 func (s *Skeleton) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
 
+// A11y reports the SkeletonGroup as a decorative presentation element,
+// for the same reason as the primitive Skeleton: a composed loading
+// placeholder is not content.
+func (g *SkeletonGroup) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
+
 // A11y reports the ActionRow as a group named by its title.
 func (a *ActionRow) A11y() A11yInfo { return A11yInfo{Role: RoleGroup, Name: a.Title} }
 
@@ -596,6 +601,7 @@ var (
 	_ Accessible = (*BarChart)(nil)
 	_ Accessible = (*PieChart)(nil)
 	_ Accessible = (*Skeleton)(nil)
+	_ Accessible = (*SkeletonGroup)(nil)
 	_ Accessible = (*ActionRow)(nil)
 	_ Accessible = (*Toolbar)(nil)
 )

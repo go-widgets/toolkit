@@ -120,6 +120,15 @@ prefix; new signature is `DrawIconX(p painter.Painter, r Rect, ink RGBA)`.
   indicator), Timeline (vertical event log), DropZone (dashed file
   drop target), Chip (removable tag), FormField (Label + Child +
   Help/Error), ProgressCircle (approximated circular progress).
+- **Skeleton (loading placeholders)** — shape kinds Text (rounded
+  bars, tunable LineH/LineGap/LastFrac/Radius), Rect (rounded media
+  block), Circle (avatar), plus the original Avatar/Block swap-parity
+  kinds. Optional diagonal shimmer band (a lighter tint over
+  Theme.SurfaceAlt, working in light + dark) driven by `SetPhase(t)`
+  advanced per frame. `SkeletonGroup` composes primitives; presets
+  `NewSkeletonCard(bounds)` (avatar + 2-line header + media block) and
+  `NewPageSkeleton(bounds)` (top bar + paragraph groups + image blocks,
+  the webengine browser client's loading screen).
 - **v0.8** — 12 widgets: Avatar, Skeleton (Text/Avatar/Block kinds),
   Rating, Toast (transient bottom-of-screen), Banner (persistent
   full-width), Popover (Visible container for a Child), ActionRow
