@@ -31,8 +31,12 @@ const (
 // Notebook is a tabbed container. A NotebookTabStripH-thick strip on the side
 // chosen by TabSide (Top by default) hosts the tabs; the rest is the active
 // page's body. For Top/Bottom the tabs run horizontally (each NotebookTabWidth
-// wide); for Left/Right they stack vertically (each NotebookTabStripH tall).
-// Clicking a tab swaps Active + fires OnTabChanged.
+// wide, shrunk to fit); for Left/Right they stack vertically (each
+// NotebookTabStripH tall) and the strip SCROLLS: the mouse wheel over a
+// vertical strip shifts the stacked tabs (clamped at both ends), and arrow-key
+// tab switching scrolls the strip to keep the active tab in view, so a strip
+// with more tabs than fit stays fully reachable. Clicking a tab swaps Active +
+// fires OnTabChanged.
 type Notebook struct {
 	Base
 	focusState
@@ -40,6 +44,14 @@ type Notebook struct {
 	Active       int
 	TabSide      TabSide
 	OnTabChanged func(idx int)
+
+	// tabScroll is the index of the first tab shown at the top of a vertical
+	// (Left/Right) strip -- the scroll offset that makes an over-long vertical
+	// tab strip reachable. Ignored for horizontal (Top/Bottom) strips, which
+	// shrink-to-fit instead. Reads clamp on the fly (clampedTabScroll), so a
+	// stale value is harmless; at tabScroll == 0 the strip renders + hit-tests
+	// byte-identically to before scrolling existed.
+	tabScroll int
 }
 
 // Geometry constants for the tab strip: the strip's thickness (its height for a
@@ -90,13 +102,93 @@ func (n *Notebook) tabRect(i int) Rect {
 		tw := n.tabW()
 		return Rect{X: r.X + i*tw, Y: r.Y + r.H - NotebookTabStripH, W: tw, H: NotebookTabStripH}
 	case TabLeft:
-		return Rect{X: r.X, Y: r.Y + i*NotebookTabStripH, W: NotebookTabWidth, H: NotebookTabStripH}
+		ty := r.Y + (i-n.clampedTabScroll())*NotebookTabStripH
+		return Rect{X: r.X, Y: ty, W: NotebookTabWidth, H: NotebookTabStripH}
 	case TabRight:
-		return Rect{X: r.X + r.W - NotebookTabWidth, Y: r.Y + i*NotebookTabStripH, W: NotebookTabWidth, H: NotebookTabStripH}
+		ty := r.Y + (i-n.clampedTabScroll())*NotebookTabStripH
+		return Rect{X: r.X + r.W - NotebookTabWidth, Y: ty, W: NotebookTabWidth, H: NotebookTabStripH}
 	default: // TabTop
 		tw := n.tabW()
 		return Rect{X: r.X + i*tw, Y: r.Y, W: tw, H: NotebookTabStripH}
 	}
+}
+
+// verticalStrip reports whether the tab strip stacks its tabs vertically
+// (Left/Right) rather than laying them out horizontally (Top/Bottom).
+func (n *Notebook) verticalStrip() bool {
+	return n.TabSide == TabLeft || n.TabSide == TabRight
+}
+
+// visibleTabs is how many vertically-stacked tabs the strip can show at once,
+// floored at 0. Meaningful only for a Left/Right strip.
+func (n *Notebook) visibleTabs() int {
+	h := n.Bounds().H
+	if h < 0 {
+		h = 0
+	}
+	return h / NotebookTabStripH
+}
+
+// maxTabScroll is the highest tabScroll that still fills a vertical strip:
+// len(Tabs) - visibleTabs(), floored at 0. Always 0 for a horizontal strip,
+// which does not scroll.
+func (n *Notebook) maxTabScroll() int {
+	if !n.verticalStrip() {
+		return 0
+	}
+	m := len(n.Tabs) - n.visibleTabs()
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// clampedTabScroll returns tabScroll clamped to [0, maxTabScroll()] without
+// mutating the field. Always 0 for a horizontal strip, so a Top/Bottom
+// notebook lays its tabs out exactly as before.
+func (n *Notebook) clampedTabScroll() int {
+	if !n.verticalStrip() {
+		return 0
+	}
+	v := n.tabScroll
+	if v < 0 {
+		v = 0
+	}
+	if m := n.maxTabScroll(); v > m {
+		v = m
+	}
+	return v
+}
+
+// ScrollTabsBy shifts a vertical strip's scroll offset by delta tabs (negative
+// scrolls up), clamped to [0, maxTabScroll()] and written back. A no-op for a
+// horizontal strip.
+func (n *Notebook) ScrollTabsBy(delta int) {
+	if !n.verticalStrip() {
+		return
+	}
+	n.tabScroll += delta
+	n.tabScroll = n.clampedTabScroll()
+}
+
+// scrollActiveIntoView nudges a vertical strip's scroll offset so the active
+// tab is within the visible window -- called after a keyboard tab switch so
+// arrowing onto an off-screen tab scrolls it into view. A no-op for a
+// horizontal strip or an empty window.
+func (n *Notebook) scrollActiveIntoView() {
+	if !n.verticalStrip() {
+		return
+	}
+	vis := n.visibleTabs()
+	if vis <= 0 {
+		return
+	}
+	if n.Active < n.tabScroll {
+		n.tabScroll = n.Active
+	} else if n.Active >= n.tabScroll+vis {
+		n.tabScroll = n.Active - vis + 1
+	}
+	n.tabScroll = n.clampedTabScroll()
 }
 
 // bodyRect is the page area — the bounds minus the strip band.
@@ -189,6 +281,15 @@ func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
 // non-click event — routes to the active page, translated into its local frame.
 func (n *Notebook) OnEvent(ev Event) {
 	r := n.Bounds()
+	if ev.Kind == EventScroll && n.verticalStrip() {
+		// Wheel over a vertical tab strip scrolls the stacked tabs (clamped at
+		// both ends). ev is widget-local; hit-test the strip in surface coords.
+		ax, ay := ev.X+r.X, ev.Y+r.Y
+		if n.stripRect().Contains(ax, ay) {
+			n.ScrollTabsBy(ev.Delta)
+			return
+		}
+	}
 	if ev.Kind == EventKeyDown && !n.Disabled {
 		// Arrow keys move the active tab along the strip, wrapping, firing
 		// OnTabChanged -- the tablist keyboard convention. Both axes are accepted
@@ -229,6 +330,10 @@ func (n *Notebook) OnEvent(ev Event) {
 // mutate+callback path for a tab click and a keyboard tab move.
 func (n *Notebook) setActive(idx int) {
 	n.Active = idx
+	// Keep the newly-active tab visible on a vertical strip (a no-op for a
+	// horizontal strip or an already-visible tab), so keyboard tab switching
+	// onto an off-screen tab scrolls it into view.
+	n.scrollActiveIntoView()
 	if n.OnTabChanged != nil {
 		n.OnTabChanged(idx)
 	}

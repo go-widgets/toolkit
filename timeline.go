@@ -41,9 +41,12 @@ type TimelineEvent struct {
 // that rail, and the event's Title (+ optional Detail) rendered to
 // the right of the marker.
 //
-// Timeline is a passive display container — hit-testing / event
-// routing are not implemented. A caller who wants click-to-focus
-// walks the same layout math externally.
+// A vertical Timeline scrolls: the mouse wheel (EventScroll) shifts the event
+// window up/down, clamped at both ends, and the events are clipped to Bounds
+// so a long log never bleeds past the widget's box. EventAt maps a point to
+// the event under it through the same offset, so a caller who wants
+// click-to-focus can hit-test the scrolled list without redoing the layout
+// math. A horizontal Timeline stays a fixed left-to-right ribbon (no scroll).
 type Timeline struct {
 	Base
 	Events []TimelineEvent
@@ -54,6 +57,14 @@ type Timeline struct {
 	// zero value is Horizontal — a plain flag keeps the non-breaking default
 	// unambiguous.
 	Horizontal bool
+
+	// scrollY is the vertical scroll offset in pixels for the vertical layout:
+	// the event list is drawn shifted up by this many pixels and hit-tested
+	// through it. The wheel (EventScroll) moves it and reads clamp on the fly
+	// (clampedScrollY), so a value left stale after the list shrank is
+	// harmless; at scrollY == 0 rendering + hit-testing are byte-identical to
+	// before scrolling existed.
+	scrollY int
 }
 
 // Timeline sizing constants. Marker column is 12 px wide, the
@@ -84,6 +95,93 @@ const (
 // when the event has NO Detail — one glyph row plus 4 px of inter-event
 // spacing. A function, as it derives from the active font's GlyphHeight.
 func TimelineEventH() int { return GlyphHeight() + 4 }
+
+// eventBlockH is the full vertical extent one event occupies in the vertical
+// layout: the base stride plus, when the event carries a Detail line, the gap
+// and the Detail glyph row beneath it.
+func (tl *Timeline) eventBlockH(ev TimelineEvent) int {
+	h := TimelineEventH()
+	if ev.Detail != "" {
+		h += TimelineDetailGap + tl.glyphHeight()
+	}
+	return h
+}
+
+// contentH is the total pixel height the vertical event list occupies,
+// including the top + bottom padding bands, used to clamp the scroll offset.
+func (tl *Timeline) contentH() int {
+	h := 2 * TimelinePadY
+	for _, ev := range tl.Events {
+		h += tl.eventBlockH(ev)
+	}
+	return h
+}
+
+// maxScrollY is the highest scrollY that still leaves the list filling the
+// widget, floored at 0 so a list that already fits never scrolls.
+func (tl *Timeline) maxScrollY() int {
+	m := tl.contentH() - tl.Bounds().H
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// clampedScrollY returns scrollY clamped to [0, maxScrollY()] without mutating
+// the field, so a value left stale after the list shrank never paints or
+// hit-tests outside the valid window.
+func (tl *Timeline) clampedScrollY() int {
+	v := tl.scrollY
+	if v < 0 {
+		v = 0
+	}
+	if m := tl.maxScrollY(); v > m {
+		v = m
+	}
+	return v
+}
+
+// ScrollBy shifts the vertical scroll offset by delta rows (negative scrolls
+// up), converting rows to pixels through TimelineEventH and clamping to
+// [0, maxScrollY()]. A no-op for a horizontal timeline, which does not scroll.
+func (tl *Timeline) ScrollBy(delta int) {
+	if tl.Horizontal {
+		return
+	}
+	tl.scrollY += delta * TimelineEventH()
+	tl.scrollY = tl.clampedScrollY()
+}
+
+// EventAt maps a widget-local (x, y) to the index of the vertical-timeline
+// event under it, accounting for the scroll offset, or -1 for the padding
+// bands, a point outside the widget's width, or empty space below the last
+// event. A horizontal timeline always returns -1 (its ribbon layout is
+// hit-tested by the caller). It is the offset-aware inverse of Draw's row
+// walk, so a click after scrolling resolves to the event actually shown.
+func (tl *Timeline) EventAt(x, y int) int {
+	if tl.Horizontal || x < 0 || x >= tl.Bounds().W {
+		return -1
+	}
+	cy := TimelinePadY - tl.clampedScrollY()
+	for i, ev := range tl.Events {
+		h := tl.eventBlockH(ev)
+		if y >= cy && y < cy+h {
+			return i
+		}
+		cy += h
+	}
+	return -1
+}
+
+// OnEvent handles the mouse wheel: a vertical timeline scrolls its event list
+// by EventScroll.Delta rows (clamped at both ends by ScrollBy) so a long log
+// stays reachable. Every other event -- and any event on a horizontal timeline
+// -- is ignored, preserving Timeline's otherwise passive-display contract.
+func (tl *Timeline) OnEvent(ev Event) {
+	if ev.Kind == EventScroll {
+		tl.ScrollBy(ev.Delta)
+	}
+}
 
 // NewTimeline constructs a Timeline carrying the given events. A
 // nil events slice is normalised to a non-nil empty slice so
@@ -134,20 +232,25 @@ func (tl *Timeline) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, railX, railY, 1, railH, theme.Border)
 
 	textX := r.X + TimelinePadX + TimelineMarkerW
-	y := r.Y + TimelinePadY
-	for _, ev := range tl.Events {
-		markerX := railX - TimelineMarkerSize/2
-		markerY := y + (tl.glyphHeight()-TimelineMarkerSize)/2
-		fillRect(p, markerX, markerY, TimelineMarkerSize, TimelineMarkerSize,
-			timelineMarkerInk(ev.Kind, theme))
-		tl.drawText(p, textX, y, ev.Title, theme.OnSurface)
-		blockH := TimelineEventH()
-		if ev.Detail != "" {
-			tl.drawText(p, textX, y+tl.glyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
-			blockH += TimelineDetailGap + tl.glyphHeight()
+	// Shift the event window up by the scroll offset and clip it to Bounds so a
+	// long log never bleeds past the widget. At scrollY == 0 the clip contains
+	// the whole (fitting) list, leaving the render byte-identical.
+	y := r.Y + TimelinePadY - tl.clampedScrollY()
+	withClip(p, r, func() {
+		for _, ev := range tl.Events {
+			markerX := railX - TimelineMarkerSize/2
+			markerY := y + (tl.glyphHeight()-TimelineMarkerSize)/2
+			fillRect(p, markerX, markerY, TimelineMarkerSize, TimelineMarkerSize,
+				timelineMarkerInk(ev.Kind, theme))
+			tl.drawText(p, textX, y, ev.Title, theme.OnSurface)
+			blockH := TimelineEventH()
+			if ev.Detail != "" {
+				tl.drawText(p, textX, y+tl.glyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
+				blockH += TimelineDetailGap + tl.glyphHeight()
+			}
+			y += blockH
 		}
-		y += blockH
-	}
+	})
 }
 
 // drawHorizontal paints the timeline as a left-to-right ribbon: a single

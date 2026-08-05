@@ -57,6 +57,15 @@ type Gantt struct {
 	editIdx  int
 	editMode ganttDragMode
 	editGrab int
+
+	// scroll is the index of the task row painted just below the fixed header
+	// band -- the vertical scroll offset that makes a long task list reachable
+	// while the header and axis ticks stay pinned. The wheel (EventScroll)
+	// shifts it and the row hit-test (TaskAt) maps through it. Reads clamp on
+	// the fly (clampedScroll), so a value left stale after the task list shrank
+	// is harmless; at scroll == 0 rendering + hit-testing are byte-identical to
+	// before scrolling existed.
+	scroll int
 }
 
 // ganttDragMode is how an in-flight bar drag edits its task: shift the whole
@@ -166,39 +175,89 @@ func (g *Gantt) Draw(p painter.Painter, theme *Theme) {
 		}
 	})
 
-	for i, tk := range g.Tasks {
-		rowY := r.Y + GanttHeaderH + i*GanttRowH
-		if g.Selected == i {
-			fillRect(p, r.X, rowY, r.W, GanttRowH, ganttSelectInk(theme))
-		}
-		labelY := rowY + (GanttRowH-g.glyphHeight())/2
-		withClip(p, Rect{X: r.X, Y: rowY, W: GanttLabelW, H: GanttRowH}, func() {
-			g.drawText(p, r.X+TableCellPadX, labelY, tk.Label, theme.OnSurface)
-		})
-
-		fill := tk.Fill
-		if fill == (RGBA{}) {
-			fill = theme.Accent
-		}
-		barX := colX(tk.Start)
-		barW := colX(tk.End) - barX
-		if barW < 1 {
-			barW = 1
-		}
-		barY := rowY + ganttBarPadY
-		barH := GanttRowH - 2*ganttBarPadY
-		withClip(p, axisRect, func() {
-			fillRect(p, barX, barY, barW, barH, fill)
-			if tk.Progress > 0 {
-				frac := tk.Progress
-				if frac > 1 {
-					frac = 1
-				}
-				pw := int(float64(barW) * frac)
-				fillRect(p, barX, barY, pw, barH, ganttProgressInk(fill))
+	// The task rows scroll under the fixed header: shift each row up by the
+	// scroll offset and clip the row band to below the header so a scrolled-out
+	// row never paints over the header, ticks or gutter separator. At scroll ==
+	// 0 the band contains every (fitting) row, leaving the render identical.
+	bodyClip := Rect{X: r.X, Y: r.Y + GanttHeaderH, W: r.W, H: r.H - GanttHeaderH}
+	scroll := g.clampedScroll()
+	withClip(p, bodyClip, func() {
+		for i, tk := range g.Tasks {
+			rowY := r.Y + GanttHeaderH + (i-scroll)*GanttRowH
+			if g.Selected == i {
+				fillRect(p, r.X, rowY, r.W, GanttRowH, ganttSelectInk(theme))
 			}
-		})
+			labelY := rowY + (GanttRowH-g.glyphHeight())/2
+			withClip(p, Rect{X: r.X, Y: rowY, W: GanttLabelW, H: GanttRowH}, func() {
+				g.drawText(p, r.X+TableCellPadX, labelY, tk.Label, theme.OnSurface)
+			})
+
+			fill := tk.Fill
+			if fill == (RGBA{}) {
+				fill = theme.Accent
+			}
+			barX := colX(tk.Start)
+			barW := colX(tk.End) - barX
+			if barW < 1 {
+				barW = 1
+			}
+			barY := rowY + ganttBarPadY
+			barH := GanttRowH - 2*ganttBarPadY
+			withClip(p, axisRect, func() {
+				fillRect(p, barX, barY, barW, barH, fill)
+				if tk.Progress > 0 {
+					frac := tk.Progress
+					if frac > 1 {
+						frac = 1
+					}
+					pw := int(float64(barW) * frac)
+					fillRect(p, barX, barY, pw, barH, ganttProgressInk(fill))
+				}
+			})
+		}
+	})
+}
+
+// visibleRows is the number of task rows the body window (Bounds height minus
+// the fixed header band) can show at once, floored at 0.
+func (g *Gantt) visibleRows() int {
+	h := g.Bounds().H - GanttHeaderH
+	if h < 0 {
+		return 0
 	}
+	return h / GanttRowH
+}
+
+// maxScroll is the highest scroll that still fills the body window:
+// len(Tasks) - visibleRows(), floored at 0 so a list that already fits never
+// scrolls.
+func (g *Gantt) maxScroll() int {
+	m := len(g.Tasks) - g.visibleRows()
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// clampedScroll returns scroll clamped to [0, maxScroll()] without mutating the
+// field, so a value left stale after the task list shrank never paints or
+// hit-tests outside the valid window.
+func (g *Gantt) clampedScroll() int {
+	v := g.scroll
+	if v < 0 {
+		v = 0
+	}
+	if m := g.maxScroll(); v > m {
+		v = m
+	}
+	return v
+}
+
+// ScrollBy shifts scroll by delta rows (negative scrolls up), clamped to
+// [0, maxScroll()] and written back immediately.
+func (g *Gantt) ScrollBy(delta int) {
+	g.scroll += delta
+	g.scroll = g.clampedScroll()
 }
 
 // barXLocal is column c's pixel x in widget-local coordinates (0 at the
@@ -222,13 +281,15 @@ func (g *Gantt) unitAtLocal(localX int) int {
 }
 
 // TaskAt returns the index of the task row under widget-local (x, y), or -1 for
-// the header band or empty space past the last task. Exposed so a host can
-// hit-test a right-click and build a context menu for that task.
+// the header band or empty space past the last task. The scroll offset is
+// folded in so a hit-test after scrolling resolves to the task actually shown
+// in that viewport slot. Exposed so a host can hit-test a right-click and build
+// a context menu for that task.
 func (g *Gantt) TaskAt(x, y int) int {
 	if y < GanttHeaderH {
 		return -1
 	}
-	row := (y - GanttHeaderH) / GanttRowH
+	row := (y-GanttHeaderH)/GanttRowH + g.clampedScroll()
 	if row < 0 || row >= len(g.Tasks) {
 		return -1
 	}
@@ -243,6 +304,11 @@ func (g *Gantt) TaskAt(x, y int) int {
 // callbacks are nil-safe.
 func (g *Gantt) OnEvent(ev Event) {
 	switch ev.Kind {
+	case EventScroll:
+		// Native wheel scroll: shift the task-row window by Delta rows (clamped
+		// at both ends) so a long task list is reachable. The header and axis
+		// stay pinned.
+		g.ScrollBy(ev.Delta)
 	case EventClick:
 		row := g.TaskAt(ev.X, ev.Y)
 		if row < 0 {

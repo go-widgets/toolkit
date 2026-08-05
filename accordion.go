@@ -158,7 +158,11 @@ func (a *Accordion) Draw(p painter.Painter, theme *Theme) {
 		}
 		if br := bodies[i]; br.H > 0 {
 			sec.Body.SetBounds(br)
-			sec.Body.Draw(p, theme)
+			// Clip the body to its allotted rect so a body taller than its share
+			// of the remaining space is cleanly cut off at the section boundary
+			// rather than bleeding over the next header (or past Bounds). A body
+			// that fits is unaffected -- the clip contains it entirely.
+			withClip(p, br, func() { sec.Body.Draw(p, theme) })
 		}
 	}
 	// Focus ring around the focused header (drawFocusRing paints nothing when
@@ -187,7 +191,19 @@ func (a *Accordion) focusIdx() int {
 // header and Up/Down move the header focus between sections. Anything else
 // (other non-click events, or a click that lands on neither a header nor an
 // open body) is a no-op.
+//
+// Scroll model: a section body is a host-supplied Widget occupying its allotted
+// rect, so the Accordion does not itself scroll a body's contents. Instead a
+// tall body is clipped cleanly to its rect (see Draw) and the mouse wheel
+// (EventScroll) over an expanded body is forwarded to that body -- translated
+// into its local frame -- so a scrollable child (a ListBox, a ScrollView, ...)
+// scrolls itself. A wheel event over a header, a collapsed section, or dead
+// space is ignored.
 func (a *Accordion) OnEvent(ev Event) {
+	if ev.Kind == EventScroll {
+		a.forwardToBody(ev)
+		return
+	}
 	if ev.Kind == EventKeyDown {
 		if a.Disabled || len(a.Sections) == 0 {
 			return
@@ -218,6 +234,26 @@ func (a *Accordion) OnEvent(ev Event) {
 			a.toggle(i)
 			return
 		}
+		br := bodies[i]
+		if br.H > 0 && ay >= br.Y && ay < br.Y+br.H && ax >= br.X && ax < br.X+br.W {
+			if sec := a.Sections[i]; sec.Body != nil {
+				sec.Body.SetBounds(br)
+				sec.Body.OnEvent(translateEvent(ev, r, br))
+			}
+			return
+		}
+	}
+}
+
+// forwardToBody routes ev (a wheel event, in widget-local coordinates) to the
+// expanded section body under the pointer, translated into that body's local
+// frame, so a scrollable child scrolls itself. A pointer over a header, a
+// collapsed section, or dead space matches no open body and is ignored.
+func (a *Accordion) forwardToBody(ev Event) {
+	r := a.Bounds()
+	ax, ay := ev.X+r.X, ev.Y+r.Y
+	_, bodies := a.sectionRects()
+	for i := range a.Sections {
 		br := bodies[i]
 		if br.H > 0 && ay >= br.Y && ay < br.Y+br.H && ax >= br.X && ax < br.X+br.W {
 			if sec := a.Sections[i]; sec.Body != nil {
