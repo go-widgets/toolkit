@@ -36,41 +36,50 @@ in headless tests (screenshot-hash regressions).
   best embedded via an iframe overlay at the host level.
 - **Not GTK.** No CSS engine, no SVG renderer, no full BiDi/IME. A
   broad primitive set — buttons, inputs, containers, feedback,
-  overlays, structural rows, semantic banners, data displays — around
-  8 kLoC of widget code with double that in tests.
+  overlays, structural rows, semantic banners, data displays,
+  dashboard/data widgets, charts and desktop-shell pieces — around
+  30 kLoC of widget code with roughly 40 kLoC of tests.
 
 ## Status
 
-**v0.9 — GTK 4 / DaisyUI parity pass.** Three additive waves closed
-the coverage gap versus libadwaita and DaisyUI 4: v0.7 shipped 9
-core widgets (Switch, Badge, Kbd, Alert, Card, Breadcrumbs, Steps,
-HeaderBar, Table), v0.8 shipped 12 overlays and structural rows
-(Avatar, Skeleton, Rating, Toast, Banner, Popover, ActionRow,
-ViewSwitcher, ChatBubble, SearchEntry, Diff, Pagination), v0.9
-shipped 8 finishing widgets (SplitButton, IconButton, Stat, Timeline,
-DropZone, Chip, FormField, ProgressCircle).
+**v0.109.0 — broad GTK 4 / DaisyUI / desktop-shell coverage.** The
+widget set has grown well past the early parity passes into a full
+application toolkit: ~150 widget types across inputs, containers,
+overlays, structural rows, semantic banners, a dashboard/data suite,
+a chart family, desktop-shell pieces (status area, wallpaper,
+command palette), and a loading-screen **Skeleton** family. A
+declarative `Container` + swappable `Layout` model (`FitLayout`,
+`BoxLayout`, `BorderLayout`, `CardLayout`, `FlowLayout`) sits under
+the convenience containers (`HBox`/`VBox`/`Grid`/`Frame`/`Dock`/
+`Border`).
 
-62 widgets + 10 stock icons, ~8k LoC of widget code, 100% statement
-coverage.
+~150 widget types + 10 stock icons, ~30 kLoC of widget code, 100%
+statement coverage.
 Pure Go, no CGO, stdlib only. Builds for `GOOS=js GOARCH=wasm` and
 every native target Go ships.
 
 | Family       | Widgets                                                            |
 | ------------ | ------------------------------------------------------------------ |
-| Base         | `Widget`, `Base`, `Rect`, `Event` (+ IME composition), `Theme`, `RGBA` |
+| Base         | `Widget`, `Base`, `Rect`, `Event` (+ IME composition), `Theme`, `RGBA`, `Accessible`/`A11yInfo`, `Focusable`, `Measurer` |
 | Text         | bitmap 5x7 + anti-aliased `NewTrueTypeFont`, one-call AA default `UseOpenTypeText`, global `SetFont` + per-widget `Base.Font`, `DrawText`, `TextWidth`, `Label` |
-| Action       | `Button`, `ToggleButton`, `CheckButton`, `RadioButton` + `Group`   |
-| Input        | `Entry`, `TextView` + `Selection` + IME preview + optional `Highlighter` (syntax spans) + `ShowLineNumbers` gutter, `SpinButton`, `Scale`, `RangeSlider` |
+| Action       | `Button`, `ToggleButton`, `CheckButton`, `RadioButton` + `RadioGroup`, `Switch`, `SplitButton`, `IconButton`, `CycleButton`, `Chip`, `SegmentedBar` |
+| Input        | `Entry`, `TextView` + `Selection` + IME preview + optional `Highlighter` (syntax spans) + `ShowLineNumbers` gutter, `SpinButton`, `Scale`, `RangeSlider`, `SearchEntry`, `TagField`, `ComboBox`, `FormField`, `Validate`/`Rule` |
 | Terminal     | `TerminalView` (Cols×Rows `TermCell` grid, block cursor, wrap/scroll, per-cell FG/BG) |
 | Selection    | `ListBox`, `TreeView`, `DropDown`                                  |
-| Layout       | `HBox`, `VBox`, `Grid`, `Frame`, `Stack`, `Overlay`, `Paned`, `Expander` |
-| Tabs         | `Notebook`                                                         |
-| Scroll       | `ScrollView`                                                       |
-| Feedback     | `ProgressBar`, `LevelBar`, `Spinner`, `Image`, `Tooltip`, `Notification` |
-| Navigation   | `Menu` + `MenuItem.Shortcut`, `MenuBar` + `Alt+letter`, `ContextMenu`, `Dialog`, `MessageDialog` |
-| Bars         | `Toolbar`, `Statusbar`, 10 stock `DrawIcon*` helpers               |
-| Composite    | `FileChooser`, `ColorChooser`, `FontChooser`, `Calendar`, `DatePicker`, `MarkdownView`, `MarkdownEditor` |
-| Charts       | `LineChart`, `BarChart`, `PieChart`                               |
+| Containers   | `Container` + swappable `Layout` (`FitLayout`, `BoxLayout`, `BorderLayout`, `CardLayout`, `FlowLayout`); convenience wrappers `HBox`, `VBox`, `Grid`, `Frame`, `Dock`, `Border`, `Stack`, `Overlay`, `Paned`, `Expander`, `Accordion`; declarative `Node` builder + `ViewController` (`LookupAs`) |
+| Tabs         | `Notebook`, `ViewSwitcher`, `Carousel`                             |
+| Scroll       | `ScrollView`, `Scrollbar`                                          |
+| Feedback     | `ProgressBar`, `ProgressCircle`, `LevelBar`, `Spinner`, `Image`, `Tooltip`, `Notification`, `Toast`, `Banner`, `Alert`, `Badge`, `LoadMask`, `Backdrop`, `FocusRing` |
+| Loading      | `Skeleton` (Text/Rect/Circle/Avatar/Block kinds, shimmer via `SetPhase`), `SkeletonGroup`, `NewSkeletonCard`, `NewPageSkeleton` |
+| Structure    | `Card`, `HeaderBar`, `ActionRow`, `Breadcrumbs`, `Steps`, `Avatar`, `Rating`, `Stat`, `Kbd`, `ChatBubble`, `Diff`, `Pagination`, `DropZone` |
+| Navigation   | `Menu` + `MenuItem.Shortcut`, `MenuBar` + `Alt+letter`, `ContextMenu`, `Popover`, `CommandPalette`, `Dialog`, `MessageDialog`, `Wizard` |
+| Window       | `Window`, `WindowDecoration`, `DecoButton` (client-side decorations) |
+| Bars         | `Toolbar`, `PagingToolbar`, `Statusbar`, 10 stock `DrawIcon*` helpers |
+| Composite    | `FileChooser`, `ColorChooser`, `ColorPicker`, `FontChooser`, `Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker`, `MarkdownView`, `MarkdownEditor` |
+| Data suite   | `Table` (cell edit, frozen columns, group rows, aggregates, row-expanders), `TreeTable`, `PropertyGrid`, `Kanban` (drag cards), `Gantt` (drag/resize bars), `Agenda`/`AgendaCalendar` event calendar (week/month/quarter/year, colour-coded calendars, sidebar, inline editor) |
+| Charts       | `LineChart`, `BarChart`, `PieChart`, `AreaChart`, `ScatterChart`, `RadarChart`, `Gauge`, `Sparkline` |
+| Shell        | `StatusIcon`, `StatusArea`, `Wallpaper`, `Thumbnail`               |
+| Motion       | `Easing`/`Tween` (`Linear`, `EaseIn*/Out*/InOut*`), `GestureRecognizer` |
 | Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
 
 ### v0.6 breaking change
