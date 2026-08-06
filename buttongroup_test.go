@@ -21,7 +21,7 @@ func TestButtonGroupLayoutHorizontal(t *testing.T) {
 	g := NewButtonGroup(NewButton("1", nil), NewButton("2", nil), NewButton("3", nil))
 	g.SetBounds(Rect{X: 10, Y: 5, W: 90, H: 30})
 	// Equal thirds; members tile the group exactly (last absorbs the remainder).
-	want := []Rect{{10, 5, 30, 30}, {40, 5, 30, 30}, {70, 5, 30, 30}}
+	want := []Rect{{X: 10, Y: 5, W: 30, H: 30}, {X: 40, Y: 5, W: 30, H: 30}, {X: 70, Y: 5, W: 30, H: 30}}
 	for i, w := range want {
 		if got := g.Buttons[i].Bounds(); got != w {
 			t.Fatalf("member %d bounds = %+v, want %+v", i, got, w)
@@ -39,7 +39,7 @@ func TestButtonGroupLayoutVerticalAndEmpty(t *testing.T) {
 	g := NewButtonGroup(NewButton("1", nil), NewButton("2", nil))
 	g.Orientation = Vertical
 	g.SetBounds(Rect{X: 2, Y: 4, W: 24, H: 41}) // 41/2 = 20, last = 21
-	if a := g.Buttons[0].Bounds(); a != (Rect{2, 4, 24, 20}) {
+	if a := g.Buttons[0].Bounds(); a != (Rect{X: 2, Y: 4, W: 24, H: 20}) {
 		t.Fatalf("top member = %+v", a)
 	}
 	if b := g.Buttons[1].Bounds(); b.Y != 24 || b.Y+b.H != 45 {
@@ -48,7 +48,7 @@ func TestButtonGroupLayoutVerticalAndEmpty(t *testing.T) {
 	// Empty group: SetBounds is a safe no-op (no divide-by-zero).
 	empty := NewButtonGroup()
 	empty.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 10})
-	if empty.Bounds() != (Rect{0, 0, 40, 10}) {
+	if empty.Bounds() != (Rect{X: 0, Y: 0, W: 40, H: 10}) {
 		t.Fatal("empty group should still record its bounds")
 	}
 }
