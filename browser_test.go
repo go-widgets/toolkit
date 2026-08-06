@@ -414,7 +414,7 @@ func TestBrowserDrawToolbarFaces(t *testing.T) {
 	back, fwd, reload, _, _, _ := b.toolbarLayout()
 	// Enabled buttons paint their fill in Surface; a point at the left inset,
 	// mid-height, is fill (left of the centred label).
-	sample := func(r Rect) RGBA { return pixelAt(buf, browserBounds.W, r.X+3, r.Y+r.H/2) }
+	sample := func(r Rect) RGBA { return pixelAt(buf, browserBounds.W, r.X+3, r.Y+3) }
 	if sample(back) != theme.Surface {
 		t.Fatalf("enabled Back fill = %+v, want Surface", sample(back))
 	}
@@ -430,7 +430,7 @@ func TestBrowserDrawToolbarFaces(t *testing.T) {
 	buf2 := makeSurface(browserBounds.W, browserBounds.H)
 	b2.Draw(newP(buf2, browserBounds.W), theme)
 	back2, fwd2, reload2, _, _, _ := b2.toolbarLayout()
-	s2 := func(r Rect) RGBA { return pixelAt(buf2, browserBounds.W, r.X+3, r.Y+r.H/2) }
+	s2 := func(r Rect) RGBA { return pixelAt(buf2, browserBounds.W, r.X+3, r.Y+3) }
 	if s2(back2) != mutedFace(theme) {
 		t.Fatalf("disabled Back fill = %+v, want mutedFace", s2(back2))
 	}
@@ -941,14 +941,14 @@ func TestBrowserZoomLayoutRects(t *testing.T) {
 	if zoomOut.X != reload.X+reload.W+BrowserBtnGap {
 		t.Fatalf("zoomOut.X = %d, want %d (right after Reload)", zoomOut.X, reload.X+reload.W+BrowserBtnGap)
 	}
-	if zoomOut.W != b.textWidth(browserZoomOutLabel)+2*BrowserBtnPad {
-		t.Fatalf("zoomOut.W = %d, want label+2*pad %d", zoomOut.W, b.textWidth(browserZoomOutLabel)+2*BrowserBtnPad)
+	if zoomOut.W != btnH {
+		t.Fatalf("zoomOut.W = %d, want btnH %d (square)", zoomOut.W, btnH)
 	}
-	if zoomIn.X != zoomOut.X+zoomOut.W+BrowserBtnGap {
-		t.Fatalf("zoomIn.X = %d, want %d (right after zoomOut)", zoomIn.X, zoomOut.X+zoomOut.W+BrowserBtnGap)
+	if zoomIn.X != zoomOut.X+zoomOut.W {
+		t.Fatalf("zoomIn.X = %d, want %d (adjacent to zoomOut within the zoom group)", zoomIn.X, zoomOut.X+zoomOut.W)
 	}
-	if zoomIn.W != b.textWidth(browserZoomInLabel)+2*BrowserBtnPad {
-		t.Fatalf("zoomIn.W = %d, want label+2*pad %d", zoomIn.W, b.textWidth(browserZoomInLabel)+2*BrowserBtnPad)
+	if zoomIn.W != btnH {
+		t.Fatalf("zoomIn.W = %d, want btnH %d (square)", zoomIn.W, btnH)
 	}
 	if addr.X != zoomIn.X+zoomIn.W+BrowserBtnGap {
 		t.Fatalf("addr.X = %d, want %d (right after zoomIn)", addr.X, zoomIn.X+zoomIn.W+BrowserBtnGap)
@@ -976,12 +976,21 @@ func TestBrowserToolbarIconLayoutSquare(t *testing.T) {
 	tr := b.toolbarRect()
 	btnY := tr.Y + BrowserPadY
 	btnH := tr.H - 2*BrowserPadY
+	// Members are adjacent within a group; a BrowserBtnGap separates the nav group
+	// (after Reload) from the zoom group (after zoom-in / before the address).
 	x := tr.X + BrowserPadX
-	for i, r := range []Rect{back, fwd, reload, zoomOut, zoomIn} {
-		if r.X != x || r.Y != btnY || r.W != btnH || r.H != btnH {
-			t.Fatalf("icon button %d = %+v, want square {X:%d Y:%d W:%d H:%d}", i, r, x, btnY, btnH, btnH)
+	items := []struct {
+		r        Rect
+		gapAfter bool
+	}{{back, false}, {fwd, false}, {reload, true}, {zoomOut, false}, {zoomIn, true}}
+	for i, it := range items {
+		if it.r.X != x || it.r.Y != btnY || it.r.W != btnH || it.r.H != btnH {
+			t.Fatalf("icon button %d = %+v, want square {X:%d Y:%d W:%d H:%d}", i, it.r, x, btnY, btnH, btnH)
 		}
-		x += btnH + BrowserBtnGap
+		x += btnH
+		if it.gapAfter {
+			x += BrowserBtnGap
+		}
 	}
 	if addr.X != x || addr.Y != btnY || addr.H != btnH {
 		t.Fatalf("addr = %+v, want X=%d Y=%d H=%d after the icon row", addr, x, btnY, btnH)

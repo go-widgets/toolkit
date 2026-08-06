@@ -593,17 +593,18 @@ func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect
 	btnY := tr.Y + BrowserPadY
 	btnH := tr.H - 2*BrowserPadY
 	x := tr.X + BrowserPadX
-	place := func(k browserBtnKind) Rect {
-		w := b.btnWidth(k, btnH)
-		rc := Rect{X: x, Y: btnY, W: w, H: btnH}
-		x += w + BrowserBtnGap
+	// Every toolbar button is a btnH×btnH square so the two ButtonGroups (nav,
+	// zoom) divide their bounds into equal members. Members are adjacent within a
+	// group; a gap separates the nav group, the zoom group and the address field.
+	sq := func() Rect {
+		rc := Rect{X: x, Y: btnY, W: btnH, H: btnH}
+		x += btnH
 		return rc
 	}
-	back = place(browserBtnBack)
-	fwd = place(browserBtnFwd)
-	reload = place(browserBtnReload)
-	zoomOut = place(browserBtnZoomOut)
-	zoomIn = place(browserBtnZoomIn)
+	back, fwd, reload = sq(), sq(), sq()
+	x += BrowserBtnGap
+	zoomOut, zoomIn = sq(), sq()
+	x += BrowserBtnGap
 	addrW := tr.X + tr.W - BrowserPadX - x
 	if addrW < 0 {
 		addrW = 0
@@ -612,14 +613,52 @@ func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect
 	return
 }
 
-// btnWidth is a toolbar button's width: a square (side = the toolbar's inner
-// height btnH) when its icon hook is set, else the text label's width plus the
-// button's horizontal padding.
-func (b *Browser) btnWidth(k browserBtnKind, btnH int) int {
-	if b.btnIcon(k) != nil {
-		return btnH
+// toolbarGroups builds the two segmented ButtonGroups — nav (Back / Forward /
+// Reload) and zoom (out / in) — with each member wired to its action, icon,
+// label fallback, font and disabled state, and positioned over its cluster.
+// Draw and click-routing both go through it so the visual and the hit-testing
+// stay in lock-step. addr is the address-field rect.
+func (b *Browser) toolbarGroups() (nav, zoom *ButtonGroup, addr Rect) {
+	back, _, reload, zoomOut, zoomIn, ad := b.toolbarLayout()
+	addr = ad
+	mk := func(k browserBtnKind, onClick func()) *Button {
+		btn := &Button{Label: b.btnLabel(k), Icon: b.btnIcon(k), OnClick: onClick}
+		btn.SetFont(b.EffectiveFont())
+		btn.Disabled = !b.btnEnabled(k)
+		return btn
 	}
-	return b.textWidth(b.btnLabel(k)) + 2*BrowserBtnPad
+	nav = NewButtonGroup(
+		mk(browserBtnBack, func() {
+			if b.CanBack() {
+				b.Back()
+			}
+		}),
+		mk(browserBtnFwd, func() {
+			if b.CanForward() {
+				b.Forward()
+			}
+		}),
+		mk(browserBtnReload, func() {
+			if b.activeTab() != nil {
+				b.Reload()
+			}
+		}),
+	)
+	nav.SetBounds(unionRect(back, reload))
+	zoom = NewButtonGroup(
+		mk(browserBtnZoomOut, func() {
+			if b.CanZoomOut() {
+				b.ZoomOut()
+			}
+		}),
+		mk(browserBtnZoomIn, func() {
+			if b.CanZoomIn() {
+				b.ZoomIn()
+			}
+		}),
+	)
+	zoom.SetBounds(unionRect(zoomOut, zoomIn))
+	return
 }
 
 // tabRects returns the pill rect of every tab, dividing the strip evenly.
@@ -712,27 +751,15 @@ func (b *Browser) drawTabStrip(p painter.Painter, theme *Theme) {
 func (b *Browser) drawToolbar(p painter.Painter, theme *Theme) {
 	tr := b.toolbarRect()
 	fillRect(p, tr.X, tr.Y, tr.W, tr.H, theme.SurfaceAlt)
-	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
-	b.drawButton(p, theme, browserBtnBack, back)
-	b.drawButton(p, theme, browserBtnFwd, fwd)
-	b.drawButton(p, theme, browserBtnReload, reload)
-	b.drawButton(p, theme, browserBtnZoomOut, zoomOut)
-	b.drawButton(p, theme, browserBtnZoomIn, zoomIn)
+	nav, zoom, addr := b.toolbarGroups()
+	nav.Draw(p, theme)
+	zoom.Draw(p, theme)
 	b.drawAddress(p, theme, addr)
 }
 
-// drawButton paints one toolbar button as a real toolkit Button so it gets the
-// shared rounded-rect chrome — fill, border, and the muted disabled face — for
-// free rather than a hand-rolled rectangle. When the button's icon hook is set
-// the Button renders that vector glyph (dimmed with the face ink when disabled);
-// otherwise it falls back to the text label. The button inherits the Browser's
-// effective font so the fallback text matches the rest of the chrome.
-func (b *Browser) drawButton(p painter.Painter, theme *Theme, k browserBtnKind, r Rect) {
-	btn := &Button{Label: b.btnLabel(k), Icon: b.btnIcon(k)}
-	btn.SetBounds(r)
-	btn.SetFont(b.EffectiveFont())
-	btn.Disabled = !b.btnEnabled(k)
-	btn.Draw(p, theme)
+// unionRect is the smallest rect covering a and b, both on the same toolbar row.
+func unionRect(a, b Rect) Rect {
+	return Rect{X: a.X, Y: a.Y, W: b.X + b.W - a.X, H: a.H}
 }
 
 // drawAddress paints the editable address field: the edit buffer when focused
@@ -930,39 +957,15 @@ func (b *Browser) handleClick(ax, ay int) {
 		}
 		return
 	}
-	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
-	switch {
-	case back.Contains(ax, ay):
-		b.addrFocused = false
-		if b.CanBack() {
-			b.Back()
+	nav, zoom, addr := b.toolbarGroups()
+	for _, g := range []*ButtonGroup{nav, zoom} {
+		if gb := g.Bounds(); gb.Contains(ax, ay) {
+			b.addrFocused = false
+			g.OnEvent(Event{Kind: EventClick, X: ax - gb.X, Y: ay - gb.Y})
+			return
 		}
-		return
-	case fwd.Contains(ax, ay):
-		b.addrFocused = false
-		if b.CanForward() {
-			b.Forward()
-		}
-		return
-	case reload.Contains(ax, ay):
-		b.addrFocused = false
-		if b.activeTab() != nil {
-			b.Reload()
-		}
-		return
-	case zoomOut.Contains(ax, ay):
-		b.addrFocused = false
-		if b.CanZoomOut() {
-			b.ZoomOut()
-		}
-		return
-	case zoomIn.Contains(ax, ay):
-		b.addrFocused = false
-		if b.CanZoomIn() {
-			b.ZoomIn()
-		}
-		return
-	case addr.Contains(ax, ay):
+	}
+	if addr.Contains(ax, ay) {
 		b.addrFocused = true
 		b.addrBuf = b.CurrentURL()
 		b.changed()
