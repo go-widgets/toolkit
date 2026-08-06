@@ -22,6 +22,16 @@ type Button struct {
 	OnClick func()
 	Style   ButtonStyle // resting appearance; default is ButtonDefault
 
+	// Icon, when set, lets the host paint a real vector glyph in the button's
+	// face instead of the text Label — the seam other widgets use for
+	// host-supplied icons (mirrors Banner.Icon / SearchEntry.Icon). Draw invokes
+	// Icon with the button's full bounds and the current face ink (which already
+	// carries the pressed / disabled tint), so the glyph tracks every button
+	// state; the callback is responsible for centring + sizing itself within the
+	// rect. When nil the button falls back to drawing Label, so existing callers
+	// are unaffected and headless renders still show text.
+	Icon func(p painter.Painter, r Rect, ink RGBA)
+
 	// Selected is a sticky, app-managed "active" state (a pill in a selector, the
 	// current tab/provider): when true the button fills with Accent regardless of
 	// Style. The app sets it from its own model; the button never flips it itself.
@@ -125,7 +135,13 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
-	if b.Label != "" {
+	// A host-supplied Icon replaces the text Label (like SearchEntry.Icon): it is
+	// handed the full button rect and the current ink so the glyph tracks the
+	// button's pressed / disabled tint. The Label is the nil-Icon fallback.
+	switch {
+	case b.Icon != nil:
+		b.Icon(p, r, ink)
+	case b.Label != "":
 		tw := b.textWidth(b.Label)
 		tx := r.X + (r.W-tw)/2
 		ty := r.Y + (r.H-b.glyphHeight())/2

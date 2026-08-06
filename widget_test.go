@@ -313,6 +313,59 @@ func TestButtonDrawStates(t *testing.T) {
 	}
 }
 
+// TestButtonIconReplacesLabel covers the host-supplied Icon seam: when Icon is
+// set Draw invokes it with the button's full bounds + the current face ink
+// (which tracks enabled / disabled / pressed) and skips the text Label.
+func TestButtonIconReplacesLabel(t *testing.T) {
+	const w, h = 40, 24
+	theme := DefaultLight()
+	sentinel := RGB(0x01, 0x02, 0x03)
+	var gotRect Rect
+	var gotInk RGBA
+	calls := 0
+	b := NewButton("HIDDEN", nil)
+	b.Icon = func(p painter.Painter, r Rect, ink RGBA) {
+		calls++
+		gotRect, gotInk = r, ink
+		p.PutPixel(r.X+r.W/2, r.Y+r.H/2, sentinel)
+	}
+	bounds := Rect{X: 4, Y: 4, W: 30, H: 16}
+	b.SetBounds(bounds)
+
+	// Enabled: icon invoked once with the full bounds + OnSurface ink; the
+	// sentinel lands and no Label glyph (OnSurface ink) is drawn.
+	buf := makeSurface(w, h)
+	b.Draw(newP(buf, w), theme)
+	if calls != 1 {
+		t.Fatalf("icon calls = %d, want 1", calls)
+	}
+	if gotRect != bounds {
+		t.Fatalf("icon rect = %+v, want the full button bounds %+v", gotRect, bounds)
+	}
+	if gotInk != theme.OnSurface {
+		t.Fatalf("enabled icon ink = %+v, want OnSurface", gotInk)
+	}
+	if pixelAt(buf, w, bounds.X+bounds.W/2, bounds.Y+bounds.H/2) != sentinel {
+		t.Fatal("icon sentinel pixel not painted")
+	}
+	if scanFor(buf, w, bounds, theme.OnSurface) {
+		t.Fatal("Label glyphs drawn despite Icon being set")
+	}
+	// Disabled: the icon receives the muted ink.
+	b.Disabled = true
+	b.Draw(newP(makeSurface(w, h), w), theme)
+	if gotInk != mutedInk(theme) {
+		t.Fatalf("disabled icon ink = %+v, want mutedInk", gotInk)
+	}
+	// Pressed: the icon receives the Background ink (inverted on the Accent face).
+	b.Disabled = false
+	b.SetPressed(true)
+	b.Draw(newP(makeSurface(w, h), w), theme)
+	if gotInk != theme.Background {
+		t.Fatalf("pressed icon ink = %+v, want Background", gotInk)
+	}
+}
+
 // --- Label ---------------------------------------------------------------
 
 func TestLabelHitTestIsNever(t *testing.T) {

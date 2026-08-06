@@ -46,6 +46,21 @@ type Browser struct {
 	// is safe.
 	OnOpenExternal func(url string)
 
+	// BackIcon / ForwardIcon / ReloadIcon / ZoomOutIcon / ZoomInIcon are the
+	// host-supplied vector-icon painters for the toolbar buttons — the same seam
+	// as SearchEntry.Icon. Each is invoked with its button's rect and the button
+	// face ink (which already carries the enabled / disabled tint), so the host
+	// draws a real arrow / refresh / minus / plus glyph centred in the button.
+	// The toolkit ships no icon set of its own (keeping its zero-dependency
+	// contract); a host wires these to, e.g., an Iconoir binding. Each is
+	// nil-safe: a nil hook falls back to the plain text label, so headless
+	// renders and existing callers keep working unchanged.
+	BackIcon    func(p painter.Painter, r Rect, ink RGBA)
+	ForwardIcon func(p painter.Painter, r Rect, ink RGBA)
+	ReloadIcon  func(p painter.Painter, r Rect, ink RGBA)
+	ZoomOutIcon func(p painter.Painter, r Rect, ink RGBA)
+	ZoomInIcon  func(p painter.Painter, r Rect, ink RGBA)
+
 	// OnChange fires once whenever any observable-relevant state mutates
 	// (navigation, tab add/close/switch, loading/progress change, address edit,
 	// delivered page). A mvvm binder subscribes to push state into Observables.
@@ -111,13 +126,18 @@ const (
 	// BrowserTabStripH is the tab-strip row height (shown only in MultiTab with
 	// at least two tabs).
 	BrowserTabStripH = 24
-	// BrowserToolbarH is the Back/Forward/Reload/address toolbar row height.
-	BrowserToolbarH = 26
+	// BrowserToolbarH is the Back/Forward/Reload/address toolbar row height. It
+	// is deliberately tall enough that a button box (BrowserToolbarH - 2*PadY)
+	// is a comfortable ~30px square at scale 1 — a real, clickable icon button
+	// rather than a cramped text chip.
+	BrowserToolbarH = 40
 	// BrowserProgressH is the loading bar height across the content top.
 	BrowserProgressH = 3
-	// BrowserPadX / BrowserPadY are the toolbar's inner insets.
+	// BrowserPadX / BrowserPadY are the toolbar's inner insets. PadY is generous
+	// so the buttons sit centred in the taller row with breathing room above and
+	// below.
 	BrowserPadX = 4
-	BrowserPadY = 3
+	BrowserPadY = 5
 	// BrowserBtnGap is the gap between toolbar buttons.
 	BrowserBtnGap = 4
 	// BrowserBtnPad is the horizontal text inset inside a toolbar button / the
@@ -160,6 +180,71 @@ const (
 	browserZoomOutLabel = "-"
 	browserZoomInLabel  = "+"
 )
+
+// browserBtnKind identifies one toolbar button so layout, drawing and
+// hit-testing all share a single definition of each button's label, icon hook
+// and enabled state.
+type browserBtnKind int
+
+const (
+	browserBtnBack browserBtnKind = iota
+	browserBtnFwd
+	browserBtnReload
+	browserBtnZoomOut
+	browserBtnZoomIn
+)
+
+// btnLabel is a toolbar button's text-fallback label (drawn when its icon hook
+// is nil).
+func (b *Browser) btnLabel(k browserBtnKind) string {
+	switch k {
+	case browserBtnBack:
+		return browserBackLabel
+	case browserBtnFwd:
+		return browserFwdLabel
+	case browserBtnReload:
+		return browserReloadLabel
+	case browserBtnZoomOut:
+		return browserZoomOutLabel
+	default: // browserBtnZoomIn
+		return browserZoomInLabel
+	}
+}
+
+// btnIcon returns the host-supplied icon painter for a toolbar button, or nil
+// when the host did not wire one (the text label is then used).
+func (b *Browser) btnIcon(k browserBtnKind) func(p painter.Painter, r Rect, ink RGBA) {
+	switch k {
+	case browserBtnBack:
+		return b.BackIcon
+	case browserBtnFwd:
+		return b.ForwardIcon
+	case browserBtnReload:
+		return b.ReloadIcon
+	case browserBtnZoomOut:
+		return b.ZoomOutIcon
+	default: // browserBtnZoomIn
+		return b.ZoomInIcon
+	}
+}
+
+// btnEnabled reports whether a toolbar button is currently actionable: Back /
+// Forward follow the history ends, Reload needs an active tab, and the zoom
+// buttons follow the zoom clamps.
+func (b *Browser) btnEnabled(k browserBtnKind) bool {
+	switch k {
+	case browserBtnBack:
+		return b.CanBack()
+	case browserBtnFwd:
+		return b.CanForward()
+	case browserBtnReload:
+		return b.activeTab() != nil
+	case browserBtnZoomOut:
+		return b.CanZoomOut()
+	default: // browserBtnZoomIn
+		return b.CanZoomIn()
+	}
+}
 
 // NewBrowser builds an empty Browser in the default MultiTab mode at 1.0 zoom.
 func NewBrowser() *Browser { return &Browser{zoom: 1.0} }
@@ -498,30 +583,43 @@ func (b *Browser) contentRect() Rect {
 func (b *Browser) renderWidth() int { return b.contentRect().W }
 
 // toolbarLayout returns the Back, Forward, Reload, zoom-out and zoom-in button
-// rects and the address field rect for the current toolbar. Button widths follow
-// their label; the address field fills the remainder.
+// rects and the address field rect for the current toolbar. A button whose icon
+// hook is set is laid out as a square (side = the toolbar's inner height) so the
+// icons form an even row of real buttons; a button with no icon is sized to its
+// text label so the fallback stays legible. The address field fills the
+// remainder to the right pad.
 func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect) {
 	tr := b.toolbarRect()
 	btnY := tr.Y + BrowserPadY
 	btnH := tr.H - 2*BrowserPadY
 	x := tr.X + BrowserPadX
-	place := func(label string) Rect {
-		w := b.textWidth(label) + 2*BrowserBtnPad
+	place := func(k browserBtnKind) Rect {
+		w := b.btnWidth(k, btnH)
 		rc := Rect{X: x, Y: btnY, W: w, H: btnH}
 		x += w + BrowserBtnGap
 		return rc
 	}
-	back = place(browserBackLabel)
-	fwd = place(browserFwdLabel)
-	reload = place(browserReloadLabel)
-	zoomOut = place(browserZoomOutLabel)
-	zoomIn = place(browserZoomInLabel)
+	back = place(browserBtnBack)
+	fwd = place(browserBtnFwd)
+	reload = place(browserBtnReload)
+	zoomOut = place(browserBtnZoomOut)
+	zoomIn = place(browserBtnZoomIn)
 	addrW := tr.X + tr.W - BrowserPadX - x
 	if addrW < 0 {
 		addrW = 0
 	}
 	addr = Rect{X: x, Y: btnY, W: addrW, H: btnH}
 	return
+}
+
+// btnWidth is a toolbar button's width: a square (side = the toolbar's inner
+// height btnH) when its icon hook is set, else the text label's width plus the
+// button's horizontal padding.
+func (b *Browser) btnWidth(k browserBtnKind, btnH int) int {
+	if b.btnIcon(k) != nil {
+		return btnH
+	}
+	return b.textWidth(b.btnLabel(k)) + 2*BrowserBtnPad
 }
 
 // tabRects returns the pill rect of every tab, dividing the strip evenly.
@@ -609,31 +707,32 @@ func (b *Browser) drawTabStrip(p painter.Painter, theme *Theme) {
 	}
 }
 
-// drawToolbar paints the toolbar background, the three buttons and the address
-// field.
+// drawToolbar paints the toolbar background, the five icon buttons and the
+// address field.
 func (b *Browser) drawToolbar(p painter.Painter, theme *Theme) {
 	tr := b.toolbarRect()
 	fillRect(p, tr.X, tr.Y, tr.W, tr.H, theme.SurfaceAlt)
 	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
-	b.drawButton(p, theme, back, browserBackLabel, b.CanBack())
-	b.drawButton(p, theme, fwd, browserFwdLabel, b.CanForward())
-	b.drawButton(p, theme, reload, browserReloadLabel, b.activeTab() != nil)
-	b.drawButton(p, theme, zoomOut, browserZoomOutLabel, b.CanZoomOut())
-	b.drawButton(p, theme, zoomIn, browserZoomInLabel, b.CanZoomIn())
+	b.drawButton(p, theme, browserBtnBack, back)
+	b.drawButton(p, theme, browserBtnFwd, fwd)
+	b.drawButton(p, theme, browserBtnReload, reload)
+	b.drawButton(p, theme, browserBtnZoomOut, zoomOut)
+	b.drawButton(p, theme, browserBtnZoomIn, zoomIn)
 	b.drawAddress(p, theme, addr)
 }
 
-// drawButton paints one rounded toolbar button; a disabled button reads muted.
-func (b *Browser) drawButton(p painter.Painter, theme *Theme, r Rect, label string, enabled bool) {
-	fill, ink := theme.Surface, theme.OnSurface
-	if !enabled {
-		fill, ink = mutedFace(theme), mutedInk(theme)
-	}
-	fillRoundRect(p, r.X, r.Y, r.W, r.H, 4, fill)
-	strokeRoundRect(p, r.X, r.Y, r.W, r.H, 4, theme.Border)
-	tx := r.X + (r.W-b.textWidth(label))/2
-	ty := r.Y + (r.H-b.glyphHeight())/2
-	b.drawText(p, tx, ty, label, ink)
+// drawButton paints one toolbar button as a real toolkit Button so it gets the
+// shared rounded-rect chrome — fill, border, and the muted disabled face — for
+// free rather than a hand-rolled rectangle. When the button's icon hook is set
+// the Button renders that vector glyph (dimmed with the face ink when disabled);
+// otherwise it falls back to the text label. The button inherits the Browser's
+// effective font so the fallback text matches the rest of the chrome.
+func (b *Browser) drawButton(p painter.Painter, theme *Theme, k browserBtnKind, r Rect) {
+	btn := &Button{Label: b.btnLabel(k), Icon: b.btnIcon(k)}
+	btn.SetBounds(r)
+	btn.SetFont(b.EffectiveFont())
+	btn.Disabled = !b.btnEnabled(k)
+	btn.Draw(p, theme)
 }
 
 // drawAddress paints the editable address field: the edit buffer when focused

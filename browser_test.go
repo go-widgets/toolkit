@@ -8,6 +8,8 @@ import (
 	"image"
 	"strings"
 	"testing"
+
+	"github.com/go-widgets/painter"
 )
 
 // browserBounds is the standard placement used across the Browser tests: a
@@ -953,6 +955,90 @@ func TestBrowserZoomLayoutRects(t *testing.T) {
 	}
 	if addr.X+addr.W != tr.X+tr.W-BrowserPadX {
 		t.Fatalf("addr right edge = %d, want %d", addr.X+addr.W, tr.X+tr.W-BrowserPadX)
+	}
+}
+
+// TestBrowserToolbarIconLayoutSquare asserts the taller toolbar and that every
+// button whose icon hook is set is laid out as a btnH×btnH square, chained by
+// BrowserBtnGap, with the address field filling the remainder — the icon-button
+// (as opposed to text-label) branch of the layout.
+func TestBrowserToolbarIconLayoutSquare(t *testing.T) {
+	if BrowserToolbarH != 40 {
+		t.Fatalf("BrowserToolbarH = %d, want 40 (a comfortably tall toolbar)", BrowserToolbarH)
+	}
+	b := NewBrowser()
+	b.SetBounds(browserBounds)
+	noop := func(p painter.Painter, r Rect, ink RGBA) {}
+	b.BackIcon, b.ForwardIcon, b.ReloadIcon = noop, noop, noop
+	b.ZoomOutIcon, b.ZoomInIcon = noop, noop
+
+	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
+	tr := b.toolbarRect()
+	btnY := tr.Y + BrowserPadY
+	btnH := tr.H - 2*BrowserPadY
+	x := tr.X + BrowserPadX
+	for i, r := range []Rect{back, fwd, reload, zoomOut, zoomIn} {
+		if r.X != x || r.Y != btnY || r.W != btnH || r.H != btnH {
+			t.Fatalf("icon button %d = %+v, want square {X:%d Y:%d W:%d H:%d}", i, r, x, btnY, btnH, btnH)
+		}
+		x += btnH + BrowserBtnGap
+	}
+	if addr.X != x || addr.Y != btnY || addr.H != btnH {
+		t.Fatalf("addr = %+v, want X=%d Y=%d H=%d after the icon row", addr, x, btnY, btnH)
+	}
+	if addr.X+addr.W != tr.X+tr.W-BrowserPadX {
+		t.Fatalf("addr right edge = %d, want %d", addr.X+addr.W, tr.X+tr.W-BrowserPadX)
+	}
+}
+
+// TestBrowserDrawToolbarIcons checks each toolbar Button invokes its host icon
+// hook once with its exact rect and the state-tracking ink: an enabled button
+// gets OnSurface, a disabled one gets the muted ink.
+func TestBrowserDrawToolbarIcons(t *testing.T) {
+	theme := DefaultLight()
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "")
+	b.Navigate("http://b") // history [a,b] cursor 1: Back enabled, Forward disabled
+
+	type capture struct {
+		rect  Rect
+		ink   RGBA
+		calls int
+	}
+	caps := map[string]*capture{}
+	sentinel := RGB(0x01, 0x02, 0x03)
+	mk := func(name string) func(p painter.Painter, r Rect, ink RGBA) {
+		caps[name] = &capture{}
+		return func(p painter.Painter, r Rect, ink RGBA) {
+			c := caps[name]
+			c.rect, c.ink, c.calls = r, ink, c.calls+1
+			p.PutPixel(r.X+r.W/2, r.Y+r.H/2, sentinel)
+		}
+	}
+	b.BackIcon, b.ForwardIcon, b.ReloadIcon = mk("back"), mk("fwd"), mk("reload")
+	b.ZoomOutIcon, b.ZoomInIcon = mk("zo"), mk("zi")
+
+	back, fwd, reload, zoomOut, zoomIn, _ := b.toolbarLayout()
+	buf := makeSurface(browserBounds.W, browserBounds.H)
+	b.Draw(newP(buf, browserBounds.W), theme)
+
+	for name, r := range map[string]Rect{"back": back, "fwd": fwd, "reload": reload, "zo": zoomOut, "zi": zoomIn} {
+		c := caps[name]
+		if c.calls != 1 {
+			t.Fatalf("%s icon calls = %d, want 1", name, c.calls)
+		}
+		if c.rect != r {
+			t.Fatalf("%s icon rect = %+v, want %+v", name, c.rect, r)
+		}
+		if pixelAt(buf, browserBounds.W, r.X+r.W/2, r.Y+r.H/2) != sentinel {
+			t.Fatalf("%s icon region not painted", name)
+		}
+	}
+	if caps["back"].ink != theme.OnSurface {
+		t.Fatalf("enabled Back icon ink = %+v, want OnSurface", caps["back"].ink)
+	}
+	if caps["fwd"].ink != mutedInk(theme) {
+		t.Fatalf("disabled Forward icon ink = %+v, want mutedInk", caps["fwd"].ink)
 	}
 }
 
