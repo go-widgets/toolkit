@@ -701,3 +701,116 @@ func TestToastMultiActionClickOutsideNoOp(t *testing.T) {
 		t.Fatal("click outside the action zone must be a no-op")
 	}
 }
+
+// --- Action button: ButtonRects (host hit-testing) ------------------------
+
+// TestToastButtonRectsNilWhenNoActions pins the no-action contract: a plain
+// toast (no ActionLabel, no Actions) exposes no button rectangles.
+func TestToastButtonRectsNilWhenNoActions(t *testing.T) {
+	tt := NewToast("Copied", ToastInfo)
+	tt.AnchorIn(Rect{X: 0, Y: 0, W: 400, H: 300}, TopRight, 0)
+	if got := tt.ButtonRects(); got != nil {
+		t.Fatalf("ButtonRects with no actions = %v, want nil", got)
+	}
+}
+
+// TestToastButtonRectsLegacySingle asserts the legacy ActionLabel path yields
+// exactly one rect at the precise laid-out position, full pill height, matching
+// the divider column Draw paints.
+func TestToastButtonRectsLegacySingle(t *testing.T) {
+	tt := NewToast("Copied", ToastInfo)
+	tt.ActionLabel = "Undo"
+	tt.AnchorIn(Rect{X: 0, Y: 0, W: 400, H: 300}, TopRight, 0)
+	b := tt.Bounds()
+
+	rects := tt.ButtonRects()
+	if len(rects) != 1 {
+		t.Fatalf("legacy single-action ButtonRects len = %d, want 1", len(rects))
+	}
+	wantX := b.W - tt.actionsW() + ToastPadX
+	wantW := 1 + 2*ToastPadX + tt.textWidth("Undo")
+	want := Rect{X: wantX, Y: 0, W: wantW, H: b.H}
+	if rects[0] != want {
+		t.Fatalf("legacy button rect = %+v, want %+v", rects[0], want)
+	}
+}
+
+// TestToastButtonRectsMultiExactAndTilesActionZone asserts each button rect's
+// EXACT X/Y/W/H, that the buttons tile the action zone edge-to-edge (no gaps,
+// no overlap), and that the last rect ends flush with the pill's right edge.
+func TestToastButtonRectsMultiExactAndTilesActionZone(t *testing.T) {
+	tt := NewToast("Deleted", ToastInfo)
+	tt.Actions = []ToastAction{
+		{Label: "Undo", Callback: func() {}},
+		{Label: "Dismiss", Callback: func() {}},
+	}
+	tt.AnchorIn(Rect{X: 0, Y: 0, W: 400, H: 300}, TopRight, 0)
+	b := tt.Bounds()
+
+	rects := tt.ButtonRects()
+	if len(rects) != 2 {
+		t.Fatalf("multi-action ButtonRects len = %d, want 2", len(rects))
+	}
+
+	seg0 := 1 + 2*ToastPadX + tt.textWidth("Undo")
+	seg1 := 1 + 2*ToastPadX + tt.textWidth("Dismiss")
+	x0 := b.W - tt.actionsW() + ToastPadX
+	want := []Rect{
+		{X: x0, Y: 0, W: seg0, H: b.H},
+		{X: x0 + seg0, Y: 0, W: seg1, H: b.H},
+	}
+	for i := range want {
+		if rects[i] != want[i] {
+			t.Fatalf("button rect %d = %+v, want %+v", i, rects[i], want[i])
+		}
+	}
+	// Edge-to-edge tiling: rect 1 starts exactly where rect 0 ends.
+	if rects[1].X != rects[0].X+rects[0].W {
+		t.Fatalf("buttons not contiguous: rect0 ends at %d, rect1 starts at %d",
+			rects[0].X+rects[0].W, rects[1].X)
+	}
+	// The last button ends flush with the pill's right edge.
+	if end := rects[1].X + rects[1].W; end != b.W {
+		t.Fatalf("last button ends at %d, want pill right edge %d", end, b.W)
+	}
+}
+
+// TestToastButtonRectsAgreeWithOnEvent proves the host hit-test path and the
+// widget's own OnEvent routing are one and the same: clicking the CENTRE of each
+// ButtonRects rect fires exactly that action's callback (index-precise), and a
+// click one pixel left of the first rect fires nothing.
+func TestToastButtonRectsAgreeWithOnEvent(t *testing.T) {
+	var log []string
+	tt := NewToast("Deleted", ToastInfo)
+	tt.Actions = []ToastAction{
+		{Label: "Undo", Callback: func() { log = append(log, "undo") }},
+		{Label: "Dismiss", Callback: func() { log = append(log, "dismiss") }},
+	}
+	tt.AnchorIn(Rect{X: 0, Y: 0, W: 400, H: 300}, TopRight, 0)
+	tt.SetBounds(Rect{X: 0, Y: 0, W: tt.Bounds().W, H: tt.Bounds().H})
+	rects := tt.ButtonRects()
+	names := []string{"undo", "dismiss"}
+
+	for i, r := range rects {
+		log = nil
+		tt.Visible = true
+		cx := r.X + r.W/2
+		cy := r.Y + r.H/2
+		tt.OnEvent(Event{Kind: EventClick, X: cx, Y: cy})
+		if len(log) != 1 || log[0] != names[i] {
+			t.Fatalf("click centre of button %d fired %v, want [%s]", i, log, names[i])
+		}
+		if tt.Visible {
+			t.Fatalf("click on button %d should hide the toast", i)
+		}
+	}
+
+	// One pixel left of the first button: outside every rect -> no fire.
+	log = nil
+	tt.Visible = true
+	tt.OnEvent(Event{Kind: EventClick, X: rects[0].X - 1, Y: rects[0].H / 2})
+	if len(log) != 0 || !tt.Visible {
+		t.Fatalf("click just left of the first button fired %v (visible=%v), want none",
+			log, tt.Visible)
+	}
+}
