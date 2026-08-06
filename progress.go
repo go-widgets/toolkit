@@ -4,17 +4,26 @@
 
 package toolkit
 
+import "math"
+
 import "github.com/go-widgets/painter"
 
 // ProgressBar is a bar with a filled portion proportional to Fraction in [0,1].
 // Orientation picks the fill direction: Horizontal (default) fills left→right,
 // Vertical fills bottom→top. An optional Label is centred over the bar in
 // Theme.OnSurface ink (drawn for the horizontal orientation, where it fits).
+//
+// When Indeterminate is set the bar ignores Fraction and instead animates a
+// short chunk sliding along the track, driven by Phase (0..1, advance it from
+// the host frame loop like a Spinner) — for work whose completion is unknown
+// (a page fetch, an open-ended request).
 type ProgressBar struct {
 	Base
-	Fraction    float64
-	Label       string
-	Orientation Orientation
+	Fraction      float64
+	Label         string
+	Orientation   Orientation
+	Indeterminate bool
+	Phase         float64 // 0..1, only used when Indeterminate
 }
 
 // NewProgressBar builds an empty (Fraction=0) ProgressBar with no
@@ -32,9 +41,59 @@ func (p *ProgressBar) SetFraction(f float64) {
 	p.Fraction = f
 }
 
+// indetSpan returns the visible offset+length of the sliding chunk within a
+// track of trackLen units at phase ph (wrapped to [0,1)). The chunk is 30% of
+// the track and travels from fully off the near edge to fully off the far edge;
+// length 0 means the chunk is entirely off-track at this phase.
+func indetSpan(trackLen int, ph float64) (offset, length int) {
+	ph -= math.Floor(ph)
+	chunk := trackLen * 3 / 10
+	if chunk < 1 {
+		chunk = 1
+	}
+	pos := -chunk + int(ph*float64(trackLen+chunk)) // chunk start relative to origin
+	s := pos
+	if s < 0 {
+		s = 0
+	}
+	e := pos + chunk
+	if e > trackLen {
+		e = trackLen
+	}
+	if e <= s {
+		return 0, 0
+	}
+	return s, e - s
+}
+
+// drawIndeterminate paints the track, the sliding Accent chunk, the border and
+// an optional label (horizontal only).
+func (pb *ProgressBar) drawIndeterminate(p painter.Painter, theme *Theme, r Rect) {
+	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
+	if pb.Orientation == Vertical {
+		if off, ln := indetSpan(r.H, pb.Phase); ln > 0 {
+			fillRect(p, r.X, r.Y+off, r.W, ln, theme.Accent)
+		}
+		strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+		return
+	}
+	if off, ln := indetSpan(r.W, pb.Phase); ln > 0 {
+		fillRect(p, r.X+off, r.Y, ln, r.H, theme.Accent)
+	}
+	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	if pb.Label != "" {
+		tw := pb.textWidth(pb.Label)
+		pb.drawText(p, r.X+(r.W-tw)/2, r.Y+(r.H-pb.glyphHeight())/2, pb.Label, theme.OnSurface)
+	}
+}
+
 // Draw paints border + track + fill + optional centered label.
 func (pb *ProgressBar) Draw(p painter.Painter, theme *Theme) {
 	r := pb.Bounds()
+	if pb.Indeterminate {
+		pb.drawIndeterminate(p, theme, r)
+		return
+	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
 	f := pb.Fraction
 	if f < 0 {
