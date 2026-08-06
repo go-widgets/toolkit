@@ -42,6 +42,13 @@ type Button struct {
 	// action already navigates away so the flash would just flicker).
 	PressFeedback bool
 
+	// Flat suppresses the button's own rounded border + fill rounding, painting a
+	// square-cornered face only — so it can sit inside a container that owns the
+	// shared chrome (see ButtonGroup, which sets it on its members). The zero
+	// value (false) keeps the standalone rounded look, so existing callers are
+	// unaffected.
+	Flat bool
+
 	hovered bool
 	pressed bool
 }
@@ -133,8 +140,14 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	if b.Disabled {
 		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
-	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
-	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
+	if b.Flat {
+		// Square face only; the enclosing container (e.g. ButtonGroup) owns the
+		// shared border/rounding.
+		fillRect(p, r.X, r.Y, r.W, r.H, face)
+	} else {
+		fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
+		strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
+	}
 	// A host-supplied Icon replaces the text Label (like SearchEntry.Icon): it is
 	// handed the full button rect and the current ink so the glyph tracks the
 	// button's pressed / disabled tint. The Label is the nil-Icon fallback.
