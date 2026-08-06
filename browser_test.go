@@ -1301,3 +1301,64 @@ func TestBrowserDrawPageZoomHorizontalClip(t *testing.T) {
 		t.Fatal("last content column should be painted under zoom (clip stops exactly at cr.W)")
 	}
 }
+
+// TestBrowserAddressLeadingAndBookmark covers the address-field enrichment: a
+// host-supplied leading status icon (SSL padlock) + a trailing bookmark toggle.
+func TestBrowserAddressLeadingAndBookmark(t *testing.T) {
+	theme := DefaultLight()
+	b, _, _, _ := newTestBrowser()
+	leadCalls, starCalls := 0, 0
+	b.LeadingIcon = func(p painter.Painter, r Rect, ink RGBA) { leadCalls++ }
+	b.BookmarkIcon = func(p painter.Painter, r Rect, ink RGBA, on bool) { starCalls++ }
+	var toggled []bool
+	b.OnBookmarkToggle = func(on bool) { toggled = append(toggled, on) }
+	b.Open("https://a/", "A")
+
+	buf := makeSurface(browserBounds.W, browserBounds.H)
+	b.Draw(newP(buf, browserBounds.W), theme)
+	if leadCalls == 0 || starCalls == 0 {
+		t.Fatalf("leading/bookmark icons not drawn: lead=%d star=%d", leadCalls, starCalls)
+	}
+
+	_, _, _, _, _, addr := b.toolbarLayout()
+	lead, tz, star := b.addrZones(addr)
+	if lead.W != addr.H || star.X != addr.X+addr.W-addr.H {
+		t.Fatalf("zones: lead=%+v star=%+v", lead, star)
+	}
+	r := b.Bounds()
+	click := func(x, y int) { b.OnEvent(Event{Kind: EventClick, X: x - r.X, Y: y - r.Y}) }
+
+	// Clicking the star toggles the bookmark on (+ fires the callback), not focus.
+	click(star.X+star.W/2, star.Y+star.H/2)
+	if !b.Bookmarked || len(toggled) != 1 || !toggled[0] || b.addrFocused {
+		t.Fatalf("star click: bookmarked=%v toggled=%v focused=%v", b.Bookmarked, toggled, b.addrFocused)
+	}
+	// Clicking the text zone focuses the field (not the bookmark).
+	click(tz.X+3, tz.Y+tz.H/2)
+	if !b.addrFocused {
+		t.Fatal("text-zone click should focus the address field")
+	}
+	// A second star click toggles off.
+	click(star.X+star.W/2, star.Y+star.H/2)
+	if b.Bookmarked || len(toggled) != 2 || toggled[1] {
+		t.Fatalf("second star click: bookmarked=%v toggled=%v", b.Bookmarked, toggled)
+	}
+	// Draw again with Bookmarked=false already covered; flip on + redraw covers the on-state path.
+	b.Bookmarked = true
+	b.Draw(newP(makeSurface(browserBounds.W, browserBounds.H), browserBounds.W), theme)
+
+	// toggleBookmark with no OnBookmarkToggle set is a safe no-op-callback path.
+	b.OnBookmarkToggle = nil
+	b.toggleBookmark()
+
+	// addrZones clamps the text zone to non-negative when leading+star overlap a
+	// too-narrow field.
+	if _, txt, _ := b.addrZones(Rect{X: 0, Y: 0, W: 10, H: 30}); txt.W != 0 {
+		t.Fatalf("narrow field text zone W = %d, want clamped to 0", txt.W)
+	}
+	// With neither hook set, the whole field is the text zone (no slots).
+	b.LeadingIcon, b.BookmarkIcon = nil, nil
+	if l, txt, s := b.addrZones(addr); l != (Rect{}) || s != (Rect{}) || txt != addr {
+		t.Fatalf("no-hooks zones: lead=%+v star=%+v text=%+v (want empty/empty/full)", l, s, txt)
+	}
+}

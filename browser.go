@@ -61,6 +61,21 @@ type Browser struct {
 	ZoomOutIcon func(p painter.Painter, r Rect, ink RGBA)
 	ZoomInIcon  func(p painter.Painter, r Rect, ink RGBA)
 
+	// LeadingIcon, when set, paints a status glyph at the LEFT of the address
+	// field — e.g. an SSL padlock whose look the host varies by certificate state
+	// (secure / insecure / none). Same painter seam as the toolbar icons; the
+	// address text indents to its right. Nil → no leading slot (text starts at
+	// the normal inset).
+	LeadingIcon func(p painter.Painter, r Rect, ink RGBA)
+
+	// BookmarkIcon, when set, paints a toggle glyph at the RIGHT of the address
+	// field — e.g. a star, filled when on. It takes the current Bookmarked state
+	// so the host can draw the on/off variant. Clicking the slot flips Bookmarked
+	// and fires OnBookmarkToggle. Nil → no bookmark slot.
+	BookmarkIcon     func(p painter.Painter, r Rect, ink RGBA, on bool)
+	Bookmarked       bool
+	OnBookmarkToggle func(on bool)
+
 	// OnChange fires once whenever any observable-relevant state mutates
 	// (navigation, tab add/close/switch, loading/progress change, address edit,
 	// delivered page). A mvvm binder subscribes to push state into Observables.
@@ -765,6 +780,26 @@ func unionRect(a, b Rect) Rect {
 // drawAddress paints the editable address field: the edit buffer when focused
 // (with a caret + Accent focus ring) or the current URL otherwise, head-clipped
 // so a long URL keeps its tail (the path) visible.
+// addrZones splits the address-field rect into an optional leading status-icon
+// square (when LeadingIcon is set), an optional trailing bookmark square (when
+// BookmarkIcon is set), and the text zone between them.
+func (b *Browser) addrZones(r Rect) (lead, text, star Rect) {
+	textX, textR := r.X, r.X+r.W
+	if b.LeadingIcon != nil {
+		lead = Rect{X: r.X, Y: r.Y, W: r.H, H: r.H}
+		textX = r.X + r.H
+	}
+	if b.BookmarkIcon != nil {
+		star = Rect{X: r.X + r.W - r.H, Y: r.Y, W: r.H, H: r.H}
+		textR = r.X + r.W - r.H
+	}
+	if textR < textX {
+		textR = textX
+	}
+	text = Rect{X: textX, Y: r.Y, W: textR - textX, H: r.H}
+	return
+}
+
 func (b *Browser) drawAddress(p painter.Painter, theme *Theme, r Rect) {
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, 4, theme.Surface)
 	ring := theme.Border
@@ -772,12 +807,19 @@ func (b *Browser) drawAddress(p painter.Painter, theme *Theme, r Rect) {
 		ring = theme.Accent
 	}
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, 4, ring)
+	lead, tz, star := b.addrZones(r)
+	if b.LeadingIcon != nil {
+		b.LeadingIcon(p, lead, theme.OnSurface)
+	}
+	if b.BookmarkIcon != nil {
+		b.BookmarkIcon(p, star, theme.OnSurface, b.Bookmarked)
+	}
 	text := b.CurrentURL()
 	if b.addrFocused {
 		text = b.addrBuf
 	}
-	innerX := r.X + BrowserBtnPad
-	avail := r.W - 2*BrowserBtnPad
+	innerX := tz.X + BrowserBtnPad
+	avail := tz.W - 2*BrowserBtnPad
 	shown := text
 	if b.textWidth(shown) > avail {
 		shown = clipHeadToWidth(b.EffectiveFont(), shown, avail)
@@ -791,6 +833,16 @@ func (b *Browser) drawAddress(p painter.Painter, theme *Theme, r Rect) {
 		}
 		fillRect(p, innerX+b.textWidth(shown), ty, caretW, b.glyphHeight(), theme.OnSurface)
 	}
+}
+
+// toggleBookmark flips the bookmark state + fires OnBookmarkToggle. Called when
+// the bookmark slot in the address field is clicked.
+func (b *Browser) toggleBookmark() {
+	b.Bookmarked = !b.Bookmarked
+	if b.OnBookmarkToggle != nil {
+		b.OnBookmarkToggle(b.Bookmarked)
+	}
+	b.changed()
 }
 
 // drawContent paints the content background, the page render and the loading
@@ -966,6 +1018,12 @@ func (b *Browser) handleClick(ax, ay int) {
 		}
 	}
 	if addr.Contains(ax, ay) {
+		// A click on the trailing bookmark slot toggles it rather than focusing.
+		if _, _, star := b.addrZones(addr); b.BookmarkIcon != nil && star.Contains(ax, ay) {
+			b.addrFocused = false
+			b.toggleBookmark()
+			return
+		}
 		b.addrFocused = true
 		b.addrBuf = b.CurrentURL()
 		b.changed()
