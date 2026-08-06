@@ -369,7 +369,7 @@ func TestNormalizeURL(t *testing.T) {
 func TestBrowserToolbarLayoutClampsAddress(t *testing.T) {
 	b := NewBrowser()
 	b.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 60}) // too narrow for the buttons
-	_, _, _, addr := b.toolbarLayout()
+	_, _, _, _, _, addr := b.toolbarLayout()
 	if addr.W != 0 {
 		t.Fatalf("address width = %d, want clamped to 0", addr.W)
 	}
@@ -409,7 +409,7 @@ func TestBrowserDrawToolbarFaces(t *testing.T) {
 	buf := makeSurface(browserBounds.W, browserBounds.H)
 	b.Draw(newP(buf, browserBounds.W), theme)
 
-	back, fwd, reload, _ := b.toolbarLayout()
+	back, fwd, reload, _, _, _ := b.toolbarLayout()
 	// Enabled buttons paint their fill in Surface; a point at the left inset,
 	// mid-height, is fill (left of the centred label).
 	sample := func(r Rect) RGBA { return pixelAt(buf, browserBounds.W, r.X+3, r.Y+r.H/2) }
@@ -427,7 +427,7 @@ func TestBrowserDrawToolbarFaces(t *testing.T) {
 	b2.Open("http://only", "")
 	buf2 := makeSurface(browserBounds.W, browserBounds.H)
 	b2.Draw(newP(buf2, browserBounds.W), theme)
-	back2, fwd2, reload2, _ := b2.toolbarLayout()
+	back2, fwd2, reload2, _, _, _ := b2.toolbarLayout()
 	s2 := func(r Rect) RGBA { return pixelAt(buf2, browserBounds.W, r.X+3, r.Y+r.H/2) }
 	if s2(back2) != mutedFace(theme) {
 		t.Fatalf("disabled Back fill = %+v, want mutedFace", s2(back2))
@@ -496,7 +496,7 @@ func TestBrowserDrawAddressFocusAndCaret(t *testing.T) {
 	theme := DefaultLight()
 	b, _, _, _ := newTestBrowser()
 	b.Open("http://a", "")
-	_, _, _, addr := b.toolbarLayout()
+	_, _, _, _, _, addr := b.toolbarLayout()
 
 	// Unfocused: the address border is drawn in Border, not Accent.
 	buf := makeSurface(browserBounds.W, browserBounds.H)
@@ -639,7 +639,7 @@ func TestBrowserClickToolbarButtons(t *testing.T) {
 	b.Navigate("http://b")
 	b.Navigate("http://c") // cursor 2: Back enabled, Forward disabled
 
-	back, fwd, reload, addr := b.toolbarLayout()
+	back, fwd, reload, _, _, addr := b.toolbarLayout()
 
 	// Forward is disabled here: clicking it is a no-op (guard branch).
 	bx, by := center(fwd)
@@ -675,7 +675,7 @@ func TestBrowserClickToolbarButtons(t *testing.T) {
 
 func TestBrowserClickReloadWithNoTab(t *testing.T) {
 	b, navT, _, _ := newTestBrowser()
-	_, _, reload, _ := b.toolbarLayout()
+	_, _, reload, _, _, _ := b.toolbarLayout()
 	rx, ry := center(reload)
 	b.OnEvent(Event{Kind: EventClick, X: rx, Y: ry}) // no tab: Reload guard skipped
 	if len(*navT) != 0 {
@@ -687,7 +687,7 @@ func TestBrowserClickBackDisabledNoOp(t *testing.T) {
 	b, navT, _, _ := newTestBrowser()
 	b.Open("http://a", "") // single entry: Back disabled
 	n := len(*navT)
-	back, _, _, _ := b.toolbarLayout()
+	back, _, _, _, _, _ := b.toolbarLayout()
 	bx, by := center(back)
 	b.OnEvent(Event{Kind: EventClick, X: bx, Y: by})
 	if len(*navT) != n {
@@ -914,5 +914,295 @@ func TestBrowserMaxScrollShortImage(t *testing.T) {
 	b.Deliver("http://a", make([]byte, 400*1*4), 400, 1, cr.W, nil, "")
 	if m := b.maxScroll(b.tabs[b.active], cr); m != 0 {
 		t.Fatalf("maxScroll of a short page = %d, want 0", m)
+	}
+}
+
+// --- zoom ----------------------------------------------------------------
+
+// TestBrowserZoomLayoutRects asserts the two zoom buttons occupy exact rects on
+// the toolbar: immediately after Reload, before the address field, each sized to
+// its label, all sharing the toolbar's inner Y/H, with the address field filling
+// the remainder to the right pad.
+func TestBrowserZoomLayoutRects(t *testing.T) {
+	b := NewBrowser()
+	b.SetBounds(browserBounds)
+	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
+
+	tr := b.toolbarRect()
+	btnY := tr.Y + BrowserPadY
+	btnH := tr.H - 2*BrowserPadY
+	for _, r := range []Rect{back, fwd, reload, zoomOut, zoomIn, addr} {
+		if r.Y != btnY || r.H != btnH {
+			t.Fatalf("toolbar item Y/H = %d/%d, want %d/%d", r.Y, r.H, btnY, btnH)
+		}
+	}
+	if zoomOut.X != reload.X+reload.W+BrowserBtnGap {
+		t.Fatalf("zoomOut.X = %d, want %d (right after Reload)", zoomOut.X, reload.X+reload.W+BrowserBtnGap)
+	}
+	if zoomOut.W != b.textWidth(browserZoomOutLabel)+2*BrowserBtnPad {
+		t.Fatalf("zoomOut.W = %d, want label+2*pad %d", zoomOut.W, b.textWidth(browserZoomOutLabel)+2*BrowserBtnPad)
+	}
+	if zoomIn.X != zoomOut.X+zoomOut.W+BrowserBtnGap {
+		t.Fatalf("zoomIn.X = %d, want %d (right after zoomOut)", zoomIn.X, zoomOut.X+zoomOut.W+BrowserBtnGap)
+	}
+	if zoomIn.W != b.textWidth(browserZoomInLabel)+2*BrowserBtnPad {
+		t.Fatalf("zoomIn.W = %d, want label+2*pad %d", zoomIn.W, b.textWidth(browserZoomInLabel)+2*BrowserBtnPad)
+	}
+	if addr.X != zoomIn.X+zoomIn.W+BrowserBtnGap {
+		t.Fatalf("addr.X = %d, want %d (right after zoomIn)", addr.X, zoomIn.X+zoomIn.W+BrowserBtnGap)
+	}
+	if addr.X+addr.W != tr.X+tr.W-BrowserPadX {
+		t.Fatalf("addr right edge = %d, want %d", addr.X+addr.W, tr.X+tr.W-BrowserPadX)
+	}
+}
+
+// TestBrowserZoomInOutAndGuards drives the zoom to both clamps by steps, checking
+// the Can… guards, the step count / OnChange fires, and the silent no-op at each
+// clamp.
+func TestBrowserZoomInOutAndGuards(t *testing.T) {
+	b, _, _, changes := newTestBrowser()
+	if b.Zoom() != 1.0 {
+		t.Fatalf("initial zoom = %v, want 1.0", b.Zoom())
+	}
+	if !b.CanZoomIn() || !b.CanZoomOut() {
+		t.Fatal("mid-range zoom should allow both in and out")
+	}
+
+	before := *changes
+	steps := 0
+	for b.CanZoomIn() {
+		b.ZoomIn()
+		if steps++; steps > 100 {
+			t.Fatal("ZoomIn never reached the clamp")
+		}
+	}
+	if b.Zoom() != BrowserMaxZoom {
+		t.Fatalf("after zooming in fully = %v, want %v", b.Zoom(), BrowserMaxZoom)
+	}
+	if want := int((BrowserMaxZoom - 1.0) / browserZoomStep); steps != want {
+		t.Fatalf("zoom-in steps = %d, want %d", steps, want)
+	}
+	if *changes != before+steps {
+		t.Fatalf("zoom-in fired %d changes, want %d", *changes-before, steps)
+	}
+	if b.CanZoomIn() {
+		t.Fatal("CanZoomIn should be false at max")
+	}
+	before = *changes
+	b.ZoomIn() // no-op at the clamp: no mutation, no notification
+	if b.Zoom() != BrowserMaxZoom || *changes != before {
+		t.Fatalf("ZoomIn at clamp: zoom=%v changes=%d", b.Zoom(), *changes-before)
+	}
+
+	for b.CanZoomOut() {
+		b.ZoomOut()
+	}
+	if b.Zoom() != BrowserMinZoom {
+		t.Fatalf("after zooming out fully = %v, want %v", b.Zoom(), BrowserMinZoom)
+	}
+	if b.CanZoomOut() {
+		t.Fatal("CanZoomOut should be false at min")
+	}
+	before = *changes
+	b.ZoomOut() // no-op at the clamp
+	if b.Zoom() != BrowserMinZoom || *changes != before {
+		t.Fatalf("ZoomOut at clamp: zoom=%v changes=%d", b.Zoom(), *changes-before)
+	}
+}
+
+// TestBrowserSetZoomClampAndReset covers SetZoom's high/low clamps, the
+// set-to-current no-op, and ResetZoom (a fire when it moves, silence at 1.0).
+func TestBrowserSetZoomClampAndReset(t *testing.T) {
+	b, _, _, changes := newTestBrowser()
+
+	b.SetZoom(10) // clamp high
+	if b.Zoom() != BrowserMaxZoom {
+		t.Fatalf("SetZoom(10) = %v, want %v", b.Zoom(), BrowserMaxZoom)
+	}
+	b.SetZoom(-5) // clamp low
+	if b.Zoom() != BrowserMinZoom {
+		t.Fatalf("SetZoom(-5) = %v, want %v", b.Zoom(), BrowserMinZoom)
+	}
+	before := *changes
+	b.SetZoom(BrowserMinZoom) // setting the current value is a silent no-op
+	if *changes != before {
+		t.Fatalf("SetZoom(current) fired %d changes", *changes-before)
+	}
+
+	b.SetZoom(2.0)
+	before = *changes
+	b.ResetZoom()
+	if b.Zoom() != 1.0 || *changes != before+1 {
+		t.Fatalf("ResetZoom: zoom=%v changes=%d, want 1.0 + 1 change", b.Zoom(), *changes-before)
+	}
+	before = *changes
+	b.ResetZoom() // already 1.0: no-op
+	if *changes != before {
+		t.Fatalf("ResetZoom at 1.0 fired %d changes", *changes-before)
+	}
+}
+
+// TestBrowserZoomClampsScroll checks a zoom change re-clamps the active tab's
+// scroll to the new (smaller) extent, and leaves an in-range scroll untouched.
+func TestBrowserZoomClampsScroll(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "")
+	cr := b.contentRect()
+	b.Deliver("http://a", make([]byte, 2*2*4), 2, 2, cr.W, nil, "") // tall page
+
+	b.SetZoom(2.0)
+	maxAt2 := b.maxScroll(b.tabs[b.active], cr)
+	b.tabs[b.active].scroll = maxAt2 // pinned to the bottom at 2x
+
+	b.SetZoom(1.0) // extent shrinks → scroll must clamp down (scroll>m branch)
+	maxAt1 := b.maxScroll(b.tabs[b.active], cr)
+	if maxAt1 >= maxAt2 {
+		t.Fatalf("expected the extent to shrink: at1=%d at2=%d", maxAt1, maxAt2)
+	}
+	if got := b.tabs[b.active].scroll; got != maxAt1 {
+		t.Fatalf("scroll after zoom-out = %d, want clamped %d", got, maxAt1)
+	}
+
+	b.tabs[b.active].scroll = 0
+	b.SetZoom(2.0) // extent grows; scroll 0 stays valid (scroll<=m branch)
+	if got := b.tabs[b.active].scroll; got != 0 {
+		t.Fatalf("in-range scroll changed to %d", got)
+	}
+}
+
+// TestBrowserZoomScaledLinkHit checks a content click maps back to render-pixel
+// coords through BOTH the fit-to-width transform AND the zoom factor.
+func TestBrowserZoomScaledLinkHit(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "")
+	cr := b.contentRect()
+	// 100×100 render; a link over render x[40,60), y[0,20).
+	link := []BrowserLink{{Rect: image.Rect(40, 0, 60, 20), Href: "http://a/mid"}}
+	b.Deliver("http://a", make([]byte, 100*100*4), 100, 100, cr.W, link, "")
+
+	// Zoom out to 0.5: dispW = cr.W*0.5 = 200, so a display click at x=90 maps to
+	// render x = 90*100/200 = 45 — inside the link.
+	b.SetZoom(0.5)
+	b.OnEvent(Event{Kind: EventClick, X: cr.X + 90, Y: cr.Y + 2})
+	if b.CurrentURL() != "http://a/mid" {
+		t.Fatalf("zoomed link click navigated to %q, want http://a/mid", b.CurrentURL())
+	}
+	// A display click at x=10 → render x = 5, outside the link → no navigation.
+	b.Deliver("http://a/mid", make([]byte, 100*100*4), 100, 100, cr.W, link, "")
+	url := b.CurrentURL()
+	b.OnEvent(Event{Kind: EventClick, X: cr.X + 10, Y: cr.Y + 2})
+	if b.CurrentURL() != url {
+		t.Fatalf("zoomed miss click navigated to %q", b.CurrentURL())
+	}
+}
+
+// TestBrowserClickZoomButtons drives zoom through the toolbar buttons and checks
+// the disabled-at-clamp no-op plus the address-defocus side effect.
+func TestBrowserClickZoomButtons(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "")
+	_, _, _, zo, zi, _ := b.toolbarLayout()
+
+	zx, zy := center(zi)
+	b.OnEvent(Event{Kind: EventClick, X: zx, Y: zy})
+	if b.Zoom() != 1.0+browserZoomStep {
+		t.Fatalf("after zoom-in click = %v, want %v", b.Zoom(), 1.0+browserZoomStep)
+	}
+	zx, zy = center(zo)
+	b.OnEvent(Event{Kind: EventClick, X: zx, Y: zy})
+	if b.Zoom() != 1.0 {
+		t.Fatalf("after zoom-out click = %v, want 1.0", b.Zoom())
+	}
+
+	// At the max clamp a zoom-in click is a disabled no-op.
+	b.SetZoom(BrowserMaxZoom)
+	zx, zy = center(zi)
+	b.OnEvent(Event{Kind: EventClick, X: zx, Y: zy})
+	if b.Zoom() != BrowserMaxZoom {
+		t.Fatalf("disabled zoom-in click changed zoom to %v", b.Zoom())
+	}
+	// At the min clamp a zoom-out click is a disabled no-op.
+	b.SetZoom(BrowserMinZoom)
+	zx, zy = center(zo)
+	b.OnEvent(Event{Kind: EventClick, X: zx, Y: zy})
+	if b.Zoom() != BrowserMinZoom {
+		t.Fatalf("disabled zoom-out click changed zoom to %v", b.Zoom())
+	}
+
+	b.addrFocused = true
+	zx, zy = center(zi)
+	b.OnEvent(Event{Kind: EventClick, X: zx, Y: zy})
+	if b.addrFocused {
+		t.Fatal("a zoom-button click should defocus the address field")
+	}
+}
+
+// TestBrowserDrawZoomButtonsDimmedAtClamp asserts the zoom buttons read enabled
+// (Surface fill) mid-range and dimmed (mutedFace) at their respective clamps,
+// exactly like Back/Forward at the history ends.
+func TestBrowserDrawZoomButtonsDimmedAtClamp(t *testing.T) {
+	theme := DefaultLight()
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "")
+	_, _, _, zo, zi, _ := b.toolbarLayout()
+	fillAt := func(buf []byte, r Rect) RGBA { return pixelAt(buf, browserBounds.W, r.X+3, r.Y+r.H/2) }
+
+	// Mid zoom: both enabled.
+	buf := makeSurface(browserBounds.W, browserBounds.H)
+	b.Draw(newP(buf, browserBounds.W), theme)
+	if fillAt(buf, zo) != theme.Surface {
+		t.Fatalf("mid zoomOut fill = %+v, want Surface", fillAt(buf, zo))
+	}
+	if fillAt(buf, zi) != theme.Surface {
+		t.Fatalf("mid zoomIn fill = %+v, want Surface", fillAt(buf, zi))
+	}
+
+	// Max zoom: zoom-in dimmed, zoom-out still enabled.
+	b.SetZoom(BrowserMaxZoom)
+	buf2 := makeSurface(browserBounds.W, browserBounds.H)
+	b.Draw(newP(buf2, browserBounds.W), theme)
+	if fillAt(buf2, zi) != mutedFace(theme) {
+		t.Fatalf("zoomIn at max = %+v, want mutedFace", fillAt(buf2, zi))
+	}
+	if fillAt(buf2, zo) != theme.Surface {
+		t.Fatalf("zoomOut at max = %+v, want Surface", fillAt(buf2, zo))
+	}
+
+	// Min zoom: zoom-out dimmed, zoom-in enabled.
+	b.SetZoom(BrowserMinZoom)
+	buf3 := makeSurface(browserBounds.W, browserBounds.H)
+	b.Draw(newP(buf3, browserBounds.W), theme)
+	if fillAt(buf3, zo) != mutedFace(theme) {
+		t.Fatalf("zoomOut at min = %+v, want mutedFace", fillAt(buf3, zo))
+	}
+	if fillAt(buf3, zi) != theme.Surface {
+		t.Fatalf("zoomIn at min = %+v, want Surface", fillAt(buf3, zi))
+	}
+}
+
+// TestBrowserDrawPageZoomHorizontalClip exercises the drawPage horizontal clip:
+// at zoom > 1 the display width exceeds the content width, so columns past cr.W
+// are dropped while the blit still fills every content column.
+func TestBrowserDrawPageZoomHorizontalClip(t *testing.T) {
+	theme := DefaultLight()
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "")
+	cr := b.contentRect()
+	tl := RGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xFF}
+	px := []byte{
+		0x11, 0x22, 0x33, 0xFF, 0x44, 0x55, 0x66, 0xFF,
+		0x77, 0x88, 0x99, 0xFF, 0xAA, 0xBB, 0xCC, 0xFF,
+	}
+	b.Deliver("http://a", px, 2, 2, cr.W, nil, "")
+
+	b.SetZoom(2.0) // dispW (800) > cr.W (400): the clip break fires
+	buf := makeSurface(browserBounds.W, browserBounds.H)
+	b.Draw(newP(buf, browserBounds.W), theme)
+	if got := pixelAt(buf, browserBounds.W, cr.X, cr.Y); got != tl {
+		t.Fatalf("zoomed content top-left = %+v, want %+v", got, tl)
+	}
+	sentinel := RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}
+	if pixelAt(buf, browserBounds.W, cr.X+cr.W-1, cr.Y) == sentinel {
+		t.Fatal("last content column should be painted under zoom (clip stops exactly at cr.W)")
 	}
 }
