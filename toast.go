@@ -293,27 +293,55 @@ func (t *Toast) Draw(p painter.Painter, theme *Theme) {
 	}
 }
 
-// OnEvent runs the clicked button's Callback + hides the toast when a click
-// lands inside an action button; a click anywhere else in the pill (or when
-// there are no actions) is a no-op. ev.X is widget-local. The Callback is
-// nil-checked, so an action-less button still dismisses the toast on click.
-func (t *Toast) OnEvent(ev Event) {
+// ButtonRects returns the laid-out rectangle of each action button in the
+// toast's local (painted) coordinate space: X measured from the pill's LEFT
+// edge and Y from its TOP (independent of the toast's current Bounds() origin),
+// each rect spanning the full pill height. The i-th rect is the click target for
+// the i-th action -- the Actions slice in order, else the single button
+// synthesised from the legacy ActionLabel/Action pair. It returns nil when the
+// toast carries no actions.
+//
+// The rects use the toast's current Bounds() width + height, so call it AFTER
+// sizing the pill (AnchorIn, or a direct SetBounds). A host that hit-tests a
+// click itself -- rather than routing it through OnEvent -- maps the click into
+// the toast's local space (click minus the pill's top-left) and finds the button
+// whose rect contains it; OnEvent hit-tests against these very rects, so the two
+// paths can never disagree.
+func (t *Toast) ButtonRects() []Rect {
 	a := t.acts()
-	if ev.Kind != EventClick || len(a) == 0 {
-		return
+	if len(a) == 0 {
+		return nil
 	}
 	r := t.Bounds()
+	rects := make([]Rect, len(a))
 	bx := r.W - t.actionsW() + ToastPadX // local x of the first button
-	for _, act := range a {
+	for i, act := range a {
 		seg := 1 + 2*ToastPadX + t.textWidth(act.Label)
-		if ev.X >= bx && ev.X < bx+seg {
-			if act.Callback != nil {
-				act.Callback()
+		rects[i] = Rect{X: bx, Y: 0, W: seg, H: r.H}
+		bx += seg
+	}
+	return rects
+}
+
+// OnEvent runs the clicked button's Callback + hides the toast when a click
+// lands inside an action button; a click anywhere else in the pill (or when
+// there are no actions) is a no-op. ev.X/ev.Y are widget-local. The Callback is
+// nil-checked, so an action-less button still dismisses the toast on click. The
+// hit-test runs against [Toast.ButtonRects], the same geometry a host reads to
+// route a click itself.
+func (t *Toast) OnEvent(ev Event) {
+	if ev.Kind != EventClick {
+		return
+	}
+	a := t.acts()
+	for i, br := range t.ButtonRects() {
+		if ev.X >= br.X && ev.X < br.X+br.W && ev.Y >= br.Y && ev.Y < br.Y+br.H {
+			if a[i].Callback != nil {
+				a[i].Callback()
 			}
 			t.Visible = false
 			return
 		}
-		bx += seg
 	}
 }
 
