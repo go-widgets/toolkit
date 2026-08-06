@@ -62,6 +62,8 @@ type Browser struct {
 
 	addrFocused bool
 	addrBuf     string
+
+	zoom float64 // page display scale; clamped to [BrowserMinZoom, BrowserMaxZoom]
 }
 
 // TabMode selects how Open allocates tabs.
@@ -132,6 +134,20 @@ const (
 	BrowserTabCloseW = 14
 )
 
+// Page-zoom bounds. Zoom scales the already-delivered page bitmap for display
+// only (it never re-fetches or re-renders): the content is drawn magnified or
+// shrunk by the zoom factor, the scroll extent grows/shrinks with it, and link
+// hit-testing maps back through the zoom.
+const (
+	// BrowserMinZoom / BrowserMaxZoom clamp the page-zoom factor.
+	BrowserMinZoom = 0.5
+	BrowserMaxZoom = 3.0
+	// browserZoomStep is the increment ZoomIn / ZoomOut apply. Every zoom stop
+	// (0.5 … 3.0) is an exact multiple of the step, so the clamp comparisons are
+	// exact in binary floating point.
+	browserZoomStep = 0.25
+)
+
 // Toolbar button labels. Plain ASCII so they render legibly on both the pixel
 // back-end (5×7 bitmap font, which carries no guillemet or refresh glyph) and
 // the terminal back-end.
@@ -139,10 +155,14 @@ const (
 	browserBackLabel   = "< Back"
 	browserFwdLabel    = "Fwd >"
 	browserReloadLabel = "Reload"
+	// browserZoomOutLabel / browserZoomInLabel are the page-zoom buttons. Plain
+	// ASCII "-" / "+" render on both the pixel and terminal back-ends.
+	browserZoomOutLabel = "-"
+	browserZoomInLabel  = "+"
 )
 
-// NewBrowser builds an empty Browser in the default MultiTab mode.
-func NewBrowser() *Browser { return &Browser{} }
+// NewBrowser builds an empty Browser in the default MultiTab mode at 1.0 zoom.
+func NewBrowser() *Browser { return &Browser{zoom: 1.0} }
 
 // changed fires OnChange when set. Every mutating path routes through it so a
 // mvvm binder sees exactly one notification per state change.
@@ -380,6 +400,48 @@ func (b *Browser) OpenExternal() {
 	}
 }
 
+// --- zoom ----------------------------------------------------------------
+
+// Zoom reports the current page-display zoom factor (1.0 is 1:1 fit-to-width).
+func (b *Browser) Zoom() float64 { return b.zoom }
+
+// CanZoomIn reports whether the zoom can still increase (below BrowserMaxZoom).
+func (b *Browser) CanZoomIn() bool { return b.zoom < BrowserMaxZoom }
+
+// CanZoomOut reports whether the zoom can still decrease (above BrowserMinZoom).
+func (b *Browser) CanZoomOut() bool { return b.zoom > BrowserMinZoom }
+
+// ZoomIn increases the zoom by one step (no-op at BrowserMaxZoom).
+func (b *Browser) ZoomIn() { b.SetZoom(b.zoom + browserZoomStep) }
+
+// ZoomOut decreases the zoom by one step (no-op at BrowserMinZoom).
+func (b *Browser) ZoomOut() { b.SetZoom(b.zoom - browserZoomStep) }
+
+// ResetZoom returns the zoom to 1.0 (no-op when already there).
+func (b *Browser) ResetZoom() { b.SetZoom(1.0) }
+
+// SetZoom sets the page-display zoom, clamped to [BrowserMinZoom, BrowserMaxZoom].
+// A real change re-clamps the active tab's scroll to the new (smaller) extent and
+// fires OnChange; setting the current value is a no-op (no notification).
+func (b *Browser) SetZoom(f float64) {
+	if f < BrowserMinZoom {
+		f = BrowserMinZoom
+	}
+	if f > BrowserMaxZoom {
+		f = BrowserMaxZoom
+	}
+	if f == b.zoom {
+		return
+	}
+	b.zoom = f
+	if t := b.activeTab(); t != nil {
+		if m := b.maxScroll(t, b.contentRect()); t.scroll > m {
+			t.scroll = m
+		}
+	}
+	b.changed()
+}
+
 // startLoad marks t loading for target, resets its progress, records the pending
 // render width, notifies OnChange and triggers the host render via OnNavigate.
 func (b *Browser) startLoad(t *browserTab, target string) {
@@ -435,10 +497,10 @@ func (b *Browser) contentRect() Rect {
 // renderWidth is the pixel width a page is rendered for — the content width.
 func (b *Browser) renderWidth() int { return b.contentRect().W }
 
-// toolbarLayout returns the Back, Forward, Reload button rects and the address
-// field rect for the current toolbar. Button widths follow their label; the
-// address field fills the remainder.
-func (b *Browser) toolbarLayout() (back, fwd, reload, addr Rect) {
+// toolbarLayout returns the Back, Forward, Reload, zoom-out and zoom-in button
+// rects and the address field rect for the current toolbar. Button widths follow
+// their label; the address field fills the remainder.
+func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect) {
 	tr := b.toolbarRect()
 	btnY := tr.Y + BrowserPadY
 	btnH := tr.H - 2*BrowserPadY
@@ -452,6 +514,8 @@ func (b *Browser) toolbarLayout() (back, fwd, reload, addr Rect) {
 	back = place(browserBackLabel)
 	fwd = place(browserFwdLabel)
 	reload = place(browserReloadLabel)
+	zoomOut = place(browserZoomOutLabel)
+	zoomIn = place(browserZoomInLabel)
 	addrW := tr.X + tr.W - BrowserPadX - x
 	if addrW < 0 {
 		addrW = 0
@@ -484,13 +548,22 @@ func tabCloseRect(pill Rect) Rect {
 	return Rect{X: pill.X + pill.W - BrowserTabCloseW - BrowserPadX, Y: pill.Y, W: BrowserTabCloseW, H: pill.H}
 }
 
-// maxScroll is the largest vertical scroll offset for t within content cr (0
-// when the page fits or has no render).
-func (b *Browser) maxScroll(t *browserTab, cr Rect) int {
+// pageDisplaySize is t's on-screen render size in content cr: the fit-to-width
+// base (dispW = cr.W) scaled by the current zoom, with the height following the
+// render's aspect ratio. It returns 0, 0 when there is no render yet.
+func (b *Browser) pageDisplaySize(t *browserTab, cr Rect) (dispW, dispH int) {
 	if t.imgW <= 0 {
-		return 0
+		return 0, 0
 	}
-	dispH := t.imgH * cr.W / t.imgW
+	dispW = int(float64(cr.W) * b.zoom)
+	dispH = t.imgH * dispW / t.imgW
+	return dispW, dispH
+}
+
+// maxScroll is the largest vertical scroll offset for t within content cr (0
+// when the page fits or has no render). It follows the zoomed display height.
+func (b *Browser) maxScroll(t *browserTab, cr Rect) int {
+	_, dispH := b.pageDisplaySize(t, cr)
 	m := dispH - cr.H
 	if m < 0 {
 		m = 0
@@ -541,10 +614,12 @@ func (b *Browser) drawTabStrip(p painter.Painter, theme *Theme) {
 func (b *Browser) drawToolbar(p painter.Painter, theme *Theme) {
 	tr := b.toolbarRect()
 	fillRect(p, tr.X, tr.Y, tr.W, tr.H, theme.SurfaceAlt)
-	back, fwd, reload, addr := b.toolbarLayout()
+	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
 	b.drawButton(p, theme, back, browserBackLabel, b.CanBack())
 	b.drawButton(p, theme, fwd, browserFwdLabel, b.CanForward())
 	b.drawButton(p, theme, reload, browserReloadLabel, b.activeTab() != nil)
+	b.drawButton(p, theme, zoomOut, browserZoomOutLabel, b.CanZoomOut())
+	b.drawButton(p, theme, zoomIn, browserZoomInLabel, b.CanZoomIn())
 	b.drawAddress(p, theme, addr)
 }
 
@@ -610,15 +685,15 @@ func (b *Browser) drawContent(p painter.Painter, theme *Theme) {
 	}
 }
 
-// drawPage blits t's render scaled to the content width, top-aligned and offset
-// by the tab's scroll; rows outside the content rect are skipped so the blit
-// stays within cr.
+// drawPage blits t's render scaled to the zoomed display size, top-aligned and
+// offset by the tab's scroll; rows outside the content rect are skipped and
+// columns past the content width are clipped (zoom > 1 makes the page wider than
+// cr) so the blit stays within cr.
 func (b *Browser) drawPage(p painter.Painter, cr Rect, t *browserTab) {
 	if t.imgW <= 0 || t.imgH <= 0 || len(t.pixels) < t.imgW*t.imgH*4 {
 		return
 	}
-	dispW := cr.W
-	dispH := t.imgH * dispW / t.imgW
+	dispW, dispH := b.pageDisplaySize(t, cr)
 	if dispH < 1 {
 		return
 	}
@@ -629,6 +704,9 @@ func (b *Browser) drawPage(p painter.Painter, cr Rect, t *browserTab) {
 		}
 		base := (vy * t.imgH / dispH) * t.imgW
 		for vx := 0; vx < dispW; vx++ {
+			if vx >= cr.W {
+				break
+			}
 			off := (base + vx*t.imgW/dispW) * 4
 			p.PutPixel(cr.X+vx, sy, RGBA{R: t.pixels[off], G: t.pixels[off+1], B: t.pixels[off+2], A: t.pixels[off+3]})
 		}
@@ -753,7 +831,7 @@ func (b *Browser) handleClick(ax, ay int) {
 		}
 		return
 	}
-	back, fwd, reload, addr := b.toolbarLayout()
+	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
 	switch {
 	case back.Contains(ax, ay):
 		b.addrFocused = false
@@ -771,6 +849,18 @@ func (b *Browser) handleClick(ax, ay int) {
 		b.addrFocused = false
 		if b.activeTab() != nil {
 			b.Reload()
+		}
+		return
+	case zoomOut.Contains(ax, ay):
+		b.addrFocused = false
+		if b.CanZoomOut() {
+			b.ZoomOut()
+		}
+		return
+	case zoomIn.Contains(ax, ay):
+		b.addrFocused = false
+		if b.CanZoomIn() {
+			b.ZoomIn()
 		}
 		return
 	case addr.Contains(ax, ay):
@@ -798,8 +888,7 @@ func (b *Browser) linkAt(t *browserTab, cr Rect, ax, ay int) (string, bool) {
 	if t.imgW <= 0 || t.imgH <= 0 {
 		return "", false
 	}
-	dispW := cr.W
-	dispH := t.imgH * dispW / t.imgW
+	dispW, dispH := b.pageDisplaySize(t, cr)
 	if dispH <= 0 {
 		return "", false
 	}
