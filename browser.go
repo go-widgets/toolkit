@@ -117,6 +117,14 @@ type Browser struct {
 	addrFocused bool
 	addrBuf     string
 
+	// pressActive + pressKind give a toolbar button its click feedback: a click
+	// (EventClick) arms pressActive on the hit button's kind so the next Draw
+	// paints that button's pressed face, and the release (EventMouseUp) clears it.
+	// The button instances are rebuilt each frame, so the pressed state lives here
+	// on the persistent Browser rather than on the ephemeral Button.
+	pressActive bool
+	pressKind   browserBtnKind
+
 	zoom float64 // page display scale; clamped to [BrowserMinZoom, BrowserMaxZoom]
 }
 
@@ -691,6 +699,25 @@ func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect
 	return
 }
 
+// toolbarBtnAt maps an absolute-coordinate point to the toolbar button kind it
+// lands on (for press feedback). It returns false when the point is not over any
+// button (e.g. the inter-group gap or the address field).
+func (b *Browser) toolbarBtnAt(ax, ay int) (browserBtnKind, bool) {
+	back, fwd, reload, zoomOut, zoomIn, _ := b.toolbarLayout()
+	for _, m := range []struct {
+		r Rect
+		k browserBtnKind
+	}{
+		{back, browserBtnBack}, {fwd, browserBtnFwd}, {reload, browserBtnReload},
+		{zoomOut, browserBtnZoomOut}, {zoomIn, browserBtnZoomIn},
+	} {
+		if m.r.Contains(ax, ay) {
+			return m.k, true
+		}
+	}
+	return 0, false
+}
+
 // toolbarGroups builds the two segmented ButtonGroups — nav (Back / Forward /
 // Reload) and zoom (out / in) — with each member wired to its action, icon,
 // label fallback, font and disabled state, and positioned over its cluster.
@@ -700,9 +727,14 @@ func (b *Browser) toolbarGroups() (nav, zoom *ButtonGroup, addr Rect) {
 	back, _, reload, zoomOut, zoomIn, ad := b.toolbarLayout()
 	addr = ad
 	mk := func(k browserBtnKind, onClick func()) *Button {
-		btn := &Button{Label: b.btnLabel(k), Icon: b.btnIcon(k), OnClick: onClick}
+		btn := &Button{Label: b.btnLabel(k), Icon: b.btnIcon(k), OnClick: onClick, PressFeedback: true}
 		btn.SetFont(b.EffectiveFont())
 		btn.Disabled = !b.btnEnabled(k)
+		// Reflect the persistent press state so the pressed button keeps its
+		// pressed face across the per-frame rebuild until the release clears it.
+		if b.pressActive && b.pressKind == k {
+			btn.SetPressed(true)
+		}
 		return btn
 	}
 	nav = NewButtonGroup(
@@ -1011,6 +1043,12 @@ func (b *Browser) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
 		b.handleClick(ax, ay)
+	case EventMouseUp:
+		// Release clears the toolbar button's pressed face armed by EventClick.
+		if b.pressActive {
+			b.pressActive = false
+			b.changed()
+		}
 	case EventChar:
 		if !b.addrFocused || ev.Code == "" {
 			return
@@ -1085,6 +1123,11 @@ func (b *Browser) handleClick(ax, ay int) {
 		for _, g := range []*ButtonGroup{nav, zoom} {
 			if gb := g.Bounds(); gb.Contains(ax, ay) {
 				b.addrFocused = false
+				// Arm the pressed face on the hit button (when enabled) so the
+				// ensuing redraw shows the click; EventMouseUp clears it.
+				if k, ok := b.toolbarBtnAt(ax, ay); ok && b.btnEnabled(k) {
+					b.pressActive, b.pressKind = true, k
+				}
 				g.OnEvent(Event{Kind: EventClick, X: ax - gb.X, Y: ay - gb.Y})
 				return
 			}
