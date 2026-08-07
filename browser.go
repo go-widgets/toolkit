@@ -86,6 +86,30 @@ type Browser struct {
 	// from the host frame loop via Tick, exactly like Spinner.Phase.
 	Phase float64
 
+	// Scale multiplies every chrome metric — the tab-strip and toolbar heights,
+	// the pads, the button squares, the address slot, the loading-bar thickness
+	// and the tab-pill sizing — for HiDPI / device-pixel hosts. A host that lays
+	// the widget out in DEVICE pixels (e.g. a Retina surface at devicePixelRatio
+	// 2, optionally times a UI zoom) sets Scale = devicePixelRatio*zoom so the
+	// chrome stays physically the right size instead of shrinking to half. The
+	// zero value (and 1) mean "no scaling": layout is byte-identical to a build
+	// without the field, so existing callers are unaffected. Values <= 0 are
+	// treated as 1. Metrics are rounded (not truncated) at every use so the
+	// scaled buttons/tabs stay pixel-aligned and do not drift. The host-supplied
+	// icon hooks fill the now-larger button rects, so the glyphs grow with the
+	// buttons automatically.
+	Scale float64
+
+	// HideChrome, when true, hides BOTH the toolbar and the tab strip: neither is
+	// drawn and neither takes any vertical space, so the page content area fills
+	// the entire widget bounds. Toolbar clicks and address-field editing are then
+	// inert (there are no hit targets), but navigation still works
+	// programmatically (Open / Navigate / Back / Forward / Reload / SetZoom / …),
+	// so a host can drive a chromeless page view. The loading bar still shows over
+	// the content while a load is in flight. The zero value is false → the chrome
+	// is shown exactly as before, so existing callers are unaffected.
+	HideChrome bool
+
 	tabs   []*browserTab
 	active int
 	mode   TabMode
@@ -143,9 +167,9 @@ const (
 	BrowserTabStripH = 24
 	// BrowserToolbarH is the Back/Forward/Reload/address toolbar row height. It
 	// is deliberately tall enough that a button box (BrowserToolbarH - 2*PadY)
-	// is a comfortable ~30px square at scale 1 — a real, clickable icon button
-	// rather than a cramped text chip.
-	BrowserToolbarH = 40
+	// is a comfortable ~34px square at scale 1 — a real, clickable icon button
+	// rather than a cramped text chip. Multiply by Browser.Scale on HiDPI hosts.
+	BrowserToolbarH = 44
 	// BrowserProgressH is the loading bar height across the content top.
 	BrowserProgressH = 3
 	// BrowserPadX / BrowserPadY are the toolbar's inner insets. PadY is generous
@@ -263,6 +287,33 @@ func (b *Browser) btnEnabled(k browserBtnKind) bool {
 
 // NewBrowser builds an empty Browser in the default MultiTab mode at 1.0 zoom.
 func NewBrowser() *Browser { return &Browser{zoom: 1.0} }
+
+// scale is the effective chrome scale factor: Scale when positive, else 1 (the
+// zero value and any non-positive value mean "no scaling").
+func (b *Browser) scale() float64 {
+	if b.Scale <= 0 {
+		return 1
+	}
+	return b.Scale
+}
+
+// sc scales a base chrome metric by the effective scale, rounding to the nearest
+// pixel so the scaled buttons/tabs stay pixel-aligned and never drift. At scale 1
+// it returns v unchanged (math.Round(v*1) == v), keeping the default layout
+// byte-identical.
+func (b *Browser) sc(v int) int { return int(math.Round(float64(v) * b.scale())) }
+
+// Scaled chrome metrics: every layout/draw/hit-test site reads geometry through
+// these so a single scale factor moves them all together.
+func (b *Browser) tabStripH() int { return b.sc(BrowserTabStripH) }
+func (b *Browser) toolbarH() int  { return b.sc(BrowserToolbarH) }
+func (b *Browser) padX() int      { return b.sc(BrowserPadX) }
+func (b *Browser) padY() int      { return b.sc(BrowserPadY) }
+func (b *Browser) btnGap() int    { return b.sc(BrowserBtnGap) }
+func (b *Browser) btnPad() int    { return b.sc(BrowserBtnPad) }
+func (b *Browser) progressH() int { return b.sc(BrowserProgressH) }
+func (b *Browser) tabGap() int    { return b.sc(BrowserTabGap) }
+func (b *Browser) tabCloseW() int { return b.sc(BrowserTabCloseW) }
 
 // changed fires OnChange when set. Every mutating path routes through it so a
 // mvvm binder sees exactly one notification per state change.
@@ -557,18 +608,27 @@ func (b *Browser) startLoad(t *browserTab, target string) {
 
 // --- geometry ------------------------------------------------------------
 
-// showTabStrip reports whether the tab strip is drawn: MultiTab with at least
-// two tabs.
+// showTabStrip reports whether the tab strip is drawn: chrome visible, MultiTab
+// mode and at least two tabs.
 func (b *Browser) showTabStrip() bool {
-	return b.mode == MultiTab && len(b.tabs) >= 2
+	return !b.HideChrome && b.mode == MultiTab && len(b.tabs) >= 2
 }
 
 // stripH is the tab strip's height (0 when it is not shown).
 func (b *Browser) stripH() int {
 	if b.showTabStrip() {
-		return BrowserTabStripH
+		return b.tabStripH()
 	}
 	return 0
+}
+
+// toolbarSpace is the vertical space the toolbar occupies: the scaled toolbar
+// height when the chrome is shown, 0 when HideChrome hides it.
+func (b *Browser) toolbarSpace() int {
+	if b.HideChrome {
+		return 0
+	}
+	return b.toolbarH()
 }
 
 // tabStripRect is the tab-strip row (zero height when not shown).
@@ -577,16 +637,18 @@ func (b *Browser) tabStripRect() Rect {
 	return Rect{X: r.X, Y: r.Y, W: r.W, H: b.stripH()}
 }
 
-// toolbarRect is the Back/Forward/Reload/address row.
+// toolbarRect is the Back/Forward/Reload/address row (zero height when the chrome
+// is hidden).
 func (b *Browser) toolbarRect() Rect {
 	r := b.Bounds()
-	return Rect{X: r.X, Y: r.Y + b.stripH(), W: r.W, H: BrowserToolbarH}
+	return Rect{X: r.X, Y: r.Y + b.stripH(), W: r.W, H: b.toolbarSpace()}
 }
 
-// contentRect is the page area below the toolbar (height clamped at 0).
+// contentRect is the page area below the chrome (height clamped at 0). With the
+// chrome hidden it spans the whole widget bounds.
 func (b *Browser) contentRect() Rect {
 	r := b.Bounds()
-	top := b.stripH() + BrowserToolbarH
+	top := b.stripH() + b.toolbarSpace()
 	h := r.H - top
 	if h < 0 {
 		h = 0
@@ -605,9 +667,10 @@ func (b *Browser) renderWidth() int { return b.contentRect().W }
 // remainder to the right pad.
 func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect) {
 	tr := b.toolbarRect()
-	btnY := tr.Y + BrowserPadY
-	btnH := tr.H - 2*BrowserPadY
-	x := tr.X + BrowserPadX
+	padY, padX, gap := b.padY(), b.padX(), b.btnGap()
+	btnY := tr.Y + padY
+	btnH := tr.H - 2*padY
+	x := tr.X + padX
 	// Every toolbar button is a btnH×btnH square so the two ButtonGroups (nav,
 	// zoom) divide their bounds into equal members. Members are adjacent within a
 	// group; a gap separates the nav group, the zoom group and the address field.
@@ -617,10 +680,10 @@ func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect
 		return rc
 	}
 	back, fwd, reload = sq(), sq(), sq()
-	x += BrowserBtnGap
+	x += gap
 	zoomOut, zoomIn = sq(), sq()
-	x += BrowserBtnGap
-	addrW := tr.X + tr.W - BrowserPadX - x
+	x += gap
+	addrW := tr.X + tr.W - padX - x
 	if addrW < 0 {
 		addrW = 0
 	}
@@ -684,20 +747,22 @@ func (b *Browser) tabRects() []Rect {
 		return nil
 	}
 	pillW := sr.W / n
+	gap, inTop, inBot := b.tabGap(), b.sc(2), b.sc(4)
 	rects := make([]Rect, n)
 	for i := 0; i < n; i++ {
-		w := pillW - BrowserTabGap
+		w := pillW - gap
 		if w < 1 {
 			w = 1
 		}
-		rects[i] = Rect{X: sr.X + i*pillW, Y: sr.Y + 2, W: w, H: sr.H - 4}
+		rects[i] = Rect{X: sr.X + i*pillW, Y: sr.Y + inTop, W: w, H: sr.H - inBot}
 	}
 	return rects
 }
 
 // tabCloseRect is the × close box within a tab pill.
-func tabCloseRect(pill Rect) Rect {
-	return Rect{X: pill.X + pill.W - BrowserTabCloseW - BrowserPadX, Y: pill.Y, W: BrowserTabCloseW, H: pill.H}
+func (b *Browser) tabCloseRect(pill Rect) Rect {
+	cw := b.tabCloseW()
+	return Rect{X: pill.X + pill.W - cw - b.padX(), Y: pill.Y, W: cw, H: pill.H}
 }
 
 // pageDisplaySize is t's on-screen render size in content cr: the fit-to-width
@@ -730,10 +795,12 @@ func (b *Browser) maxScroll(t *browserTab, cr Rect) int {
 func (b *Browser) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Background)
-	if b.showTabStrip() {
-		b.drawTabStrip(p, theme)
+	if !b.HideChrome {
+		if b.showTabStrip() {
+			b.drawTabStrip(p, theme)
+		}
+		b.drawToolbar(p, theme)
 	}
-	b.drawToolbar(p, theme)
 	b.drawContent(p, theme)
 }
 
@@ -747,16 +814,17 @@ func (b *Browser) drawTabStrip(p painter.Painter, theme *Theme) {
 		if i == b.active {
 			fill, ring = theme.Surface, theme.Accent
 		}
-		fillRoundRect(p, pill.X, pill.Y, pill.W, pill.H, 6, fill)
-		strokeRoundRect(p, pill.X, pill.Y, pill.W, pill.H, 6, ring)
+		rad := b.sc(6)
+		fillRoundRect(p, pill.X, pill.Y, pill.W, pill.H, rad, fill)
+		strokeRoundRect(p, pill.X, pill.Y, pill.W, pill.H, rad, ring)
 		ty := pill.Y + (pill.H-b.glyphHeight())/2
 		title := tabDisplayTitle(t)
-		avail := pill.W - 2*BrowserBtnPad - BrowserTabCloseW
+		avail := pill.W - 2*b.btnPad() - b.tabCloseW()
 		if b.textWidth(title) > avail {
 			title = ellipsize(b.EffectiveFont(), title, avail)
 		}
-		b.drawText(p, pill.X+BrowserBtnPad, ty, title, theme.OnSurface)
-		cxr := tabCloseRect(pill)
+		b.drawText(p, pill.X+b.btnPad(), ty, title, theme.OnSurface)
+		cxr := b.tabCloseRect(pill)
 		b.drawText(p, cxr.X+(cxr.W-b.textWidth("x"))/2, ty, "x", theme.Border)
 	}
 }
@@ -801,12 +869,13 @@ func (b *Browser) addrZones(r Rect) (lead, text, star Rect) {
 }
 
 func (b *Browser) drawAddress(p painter.Painter, theme *Theme, r Rect) {
-	fillRoundRect(p, r.X, r.Y, r.W, r.H, 4, theme.Surface)
+	rad := b.sc(4)
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, rad, theme.Surface)
 	ring := theme.Border
 	if b.addrFocused {
 		ring = theme.Accent
 	}
-	strokeRoundRect(p, r.X, r.Y, r.W, r.H, 4, ring)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, rad, ring)
 	lead, tz, star := b.addrZones(r)
 	if b.LeadingIcon != nil {
 		b.LeadingIcon(p, lead, theme.OnSurface)
@@ -818,8 +887,8 @@ func (b *Browser) drawAddress(p painter.Painter, theme *Theme, r Rect) {
 	if b.addrFocused {
 		text = b.addrBuf
 	}
-	innerX := tz.X + BrowserBtnPad
-	avail := tz.W - 2*BrowserBtnPad
+	innerX := tz.X + b.btnPad()
+	avail := tz.W - 2*b.btnPad()
 	shown := text
 	if b.textWidth(shown) > avail {
 		shown = clipHeadToWidth(b.EffectiveFont(), shown, avail)
@@ -895,7 +964,7 @@ func (b *Browser) drawPage(p painter.Painter, cr Rect, t *browserTab) {
 // SetProgress was called this load, else indeterminate driven by Phase.
 func (b *Browser) drawProgress(p painter.Painter, theme *Theme, cr Rect, t *browserTab) {
 	pb := &ProgressBar{}
-	pb.SetBounds(Rect{X: cr.X, Y: cr.Y, W: cr.W, H: BrowserProgressH})
+	pb.SetBounds(Rect{X: cr.X, Y: cr.Y, W: cr.W, H: b.progressH()})
 	if t.hasProgress {
 		pb.Fraction = t.progress
 	} else {
@@ -994,40 +1063,44 @@ func (b *Browser) commitAddress() {
 // handleClick routes an absolute-coordinate click to the tab strip, a toolbar
 // button, the address field or a page link.
 func (b *Browser) handleClick(ax, ay int) {
-	if b.showTabStrip() && b.tabStripRect().Contains(ax, ay) {
-		for i, pill := range b.tabRects() {
-			if pill.Contains(ax, ay) {
-				if tabCloseRect(pill).Contains(ax, ay) {
-					b.CloseTab(i)
-				} else {
-					b.active = i
-					b.addrFocused = false
-					b.changed()
+	// With the chrome hidden there are no tab-strip / toolbar / address hit
+	// targets: a click falls straight through to the content area.
+	if !b.HideChrome {
+		if b.showTabStrip() && b.tabStripRect().Contains(ax, ay) {
+			for i, pill := range b.tabRects() {
+				if pill.Contains(ax, ay) {
+					if b.tabCloseRect(pill).Contains(ax, ay) {
+						b.CloseTab(i)
+					} else {
+						b.active = i
+						b.addrFocused = false
+						b.changed()
+					}
+					return
 				}
+			}
+			return
+		}
+		nav, zoom, addr := b.toolbarGroups()
+		for _, g := range []*ButtonGroup{nav, zoom} {
+			if gb := g.Bounds(); gb.Contains(ax, ay) {
+				b.addrFocused = false
+				g.OnEvent(Event{Kind: EventClick, X: ax - gb.X, Y: ay - gb.Y})
 				return
 			}
 		}
-		return
-	}
-	nav, zoom, addr := b.toolbarGroups()
-	for _, g := range []*ButtonGroup{nav, zoom} {
-		if gb := g.Bounds(); gb.Contains(ax, ay) {
-			b.addrFocused = false
-			g.OnEvent(Event{Kind: EventClick, X: ax - gb.X, Y: ay - gb.Y})
+		if addr.Contains(ax, ay) {
+			// A click on the trailing bookmark slot toggles it rather than focusing.
+			if _, _, star := b.addrZones(addr); b.BookmarkIcon != nil && star.Contains(ax, ay) {
+				b.addrFocused = false
+				b.toggleBookmark()
+				return
+			}
+			b.addrFocused = true
+			b.addrBuf = b.CurrentURL()
+			b.changed()
 			return
 		}
-	}
-	if addr.Contains(ax, ay) {
-		// A click on the trailing bookmark slot toggles it rather than focusing.
-		if _, _, star := b.addrZones(addr); b.BookmarkIcon != nil && star.Contains(ax, ay) {
-			b.addrFocused = false
-			b.toggleBookmark()
-			return
-		}
-		b.addrFocused = true
-		b.addrBuf = b.CurrentURL()
-		b.changed()
-		return
 	}
 	cr := b.contentRect()
 	if cr.Contains(ax, ay) {
