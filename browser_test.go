@@ -710,7 +710,7 @@ func TestBrowserClickTabStrip(t *testing.T) {
 		t.Fatalf("tab-body click set active=%d, want 0", b.ActiveIndex())
 	}
 	// Click pill 1's close box → close it.
-	cxr := tabCloseRect(rects[1])
+	cxr := b.tabCloseRect(rects[1])
 	cx, cy := center(cxr)
 	b.OnEvent(Event{Kind: EventClick, X: cx, Y: cy})
 	if b.TabCount() != 1 {
@@ -963,8 +963,8 @@ func TestBrowserZoomLayoutRects(t *testing.T) {
 // BrowserBtnGap, with the address field filling the remainder — the icon-button
 // (as opposed to text-label) branch of the layout.
 func TestBrowserToolbarIconLayoutSquare(t *testing.T) {
-	if BrowserToolbarH != 40 {
-		t.Fatalf("BrowserToolbarH = %d, want 40 (a comfortably tall toolbar)", BrowserToolbarH)
+	if BrowserToolbarH != 44 {
+		t.Fatalf("BrowserToolbarH = %d, want 44 (a comfortably tall toolbar)", BrowserToolbarH)
 	}
 	b := NewBrowser()
 	b.SetBounds(browserBounds)
@@ -1360,5 +1360,227 @@ func TestBrowserAddressLeadingAndBookmark(t *testing.T) {
 	b.LeadingIcon, b.BookmarkIcon = nil, nil
 	if l, txt, s := b.addrZones(addr); l != (Rect{}) || s != (Rect{}) || txt != addr {
 		t.Fatalf("no-hooks zones: lead=%+v star=%+v text=%+v (want empty/empty/full)", l, s, txt)
+	}
+}
+
+// --- Scale (HiDPI chrome) ------------------------------------------------
+
+// TestBrowserScaleLayout asserts every chrome metric multiplies by Scale, with
+// exact scaled rects at Scale=2 (and that they are strictly larger than Scale=1).
+func TestBrowserScaleLayout(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "")
+	b.Open("http://b", "") // two tabs → the strip is shown
+	b.Scale = 2
+
+	// Tab strip + toolbar heights double.
+	if sr := b.tabStripRect(); sr.H != 2*BrowserTabStripH { // 48
+		t.Fatalf("scaled tabStrip.H = %d, want %d", sr.H, 2*BrowserTabStripH)
+	}
+	tr := b.toolbarRect()
+	if tr.Y != 2*BrowserTabStripH || tr.H != 2*BrowserToolbarH { // Y=48 H=88
+		t.Fatalf("scaled toolbarRect = %+v, want Y=%d H=%d", tr, 2*BrowserTabStripH, 2*BrowserToolbarH)
+	}
+	// Content sits below the scaled strip + toolbar.
+	cr := b.contentRect()
+	wantTop := browserBounds.Y + 2*BrowserTabStripH + 2*BrowserToolbarH // 136
+	if cr.Y != wantTop || cr.H != browserBounds.H-2*BrowserTabStripH-2*BrowserToolbarH {
+		t.Fatalf("scaled contentRect = %+v, want Y=%d", cr, wantTop)
+	}
+	// Loading bar thickness scales.
+	if got := b.progressH(); got != 2*BrowserProgressH { // 6
+		t.Fatalf("scaled progressH = %d, want %d", got, 2*BrowserProgressH)
+	}
+
+	// Toolbar layout: pads/gap/button squares all doubled, exact coords.
+	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
+	btnY := tr.Y + 2*BrowserPadY // 58
+	btnH := tr.H - 2*(2*BrowserPadY)
+	if back != (Rect{X: tr.X + 2*BrowserPadX, Y: btnY, W: btnH, H: btnH}) { // {8,58,68,68}
+		t.Fatalf("scaled Back = %+v, want {%d,%d,%d,%d}", back, tr.X+2*BrowserPadX, btnY, btnH, btnH)
+	}
+	if fwd.X != back.X+btnH || reload.X != fwd.X+btnH {
+		t.Fatalf("scaled nav chain: fwd=%+v reload=%+v", fwd, reload)
+	}
+	if zoomOut.X != reload.X+btnH+2*BrowserBtnGap || zoomIn.X != zoomOut.X+btnH {
+		t.Fatalf("scaled zoom group: zoomOut=%+v zoomIn=%+v", zoomOut, zoomIn)
+	}
+	if addr.X != zoomIn.X+btnH+2*BrowserBtnGap || addr.X+addr.W != tr.X+tr.W-2*BrowserPadX {
+		t.Fatalf("scaled addr = %+v", addr)
+	}
+
+	// Tab pills + close boxes scale (inset 2→4 / 4→8, close width 14→28).
+	pills := b.tabRects()
+	if pills[0] != (Rect{X: 0, Y: 4, W: 200 - 2*BrowserTabGap, H: 48 - 8}) {
+		t.Fatalf("scaled pill[0] = %+v", pills[0])
+	}
+	cxr := b.tabCloseRect(pills[0])
+	if cxr.W != 2*BrowserTabCloseW || cxr.X != pills[0].X+pills[0].W-2*BrowserTabCloseW-2*BrowserPadX {
+		t.Fatalf("scaled close box = %+v", cxr)
+	}
+
+	// Strictly bigger than Scale=1.
+	b1, _, _, _ := newTestBrowser()
+	b1.Open("http://a", "")
+	b1.Open("http://b", "")
+	back1, _, _, _, _, _ := b1.toolbarLayout()
+	if back.H <= back1.H || b.tabStripRect().H <= b1.tabStripRect().H {
+		t.Fatalf("Scale=2 chrome not larger than Scale=1: btnH %d vs %d", back.H, back1.H)
+	}
+}
+
+// TestBrowserScaleDefaultIdentity asserts Scale 0 (the zero value) and Scale 1
+// produce byte-identical chrome geometry — existing callers are unaffected.
+func TestBrowserScaleDefaultIdentity(t *testing.T) {
+	build := func(s float64) *Browser {
+		b := NewBrowser()
+		b.SetBounds(browserBounds)
+		b.Scale = s
+		b.Open("http://a", "")
+		b.Open("http://b", "")
+		return b
+	}
+	b0, b1 := build(0), build(1)
+	if b0.tabStripRect() != b1.tabStripRect() || b0.toolbarRect() != b1.toolbarRect() || b0.contentRect() != b1.contentRect() {
+		t.Fatalf("Scale 0 vs 1 differ: strip %+v/%+v toolbar %+v/%+v content %+v/%+v",
+			b0.tabStripRect(), b1.tabStripRect(), b0.toolbarRect(), b1.toolbarRect(), b0.contentRect(), b1.contentRect())
+	}
+	if b0.progressH() != b1.progressH() {
+		t.Fatalf("progressH 0 vs 1: %d/%d", b0.progressH(), b1.progressH())
+	}
+	l0 := [6]Rect{}
+	l1 := [6]Rect{}
+	l0[0], l0[1], l0[2], l0[3], l0[4], l0[5] = b0.toolbarLayout()
+	l1[0], l1[1], l1[2], l1[3], l1[4], l1[5] = b1.toolbarLayout()
+	if l0 != l1 {
+		t.Fatalf("toolbarLayout Scale 0 vs 1 differ: %+v vs %+v", l0, l1)
+	}
+	p0, p1 := b0.tabRects(), b1.tabRects()
+	for i := range p0 {
+		if p0[i] != p1[i] || b0.tabCloseRect(p0[i]) != b1.tabCloseRect(p1[i]) {
+			t.Fatalf("tab pill %d Scale 0 vs 1 differ: %+v vs %+v", i, p0[i], p1[i])
+		}
+	}
+}
+
+// --- HideChrome (optional toolbar + tab strip) ---------------------------
+
+// TestBrowserHideChromeLayout asserts a hidden chrome takes no vertical space:
+// the tab strip and toolbar collapse to zero and the content fills the bounds.
+func TestBrowserHideChromeLayout(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "")
+	b.Open("http://b", "") // two tabs → the strip would show if the chrome were visible
+	b.HideChrome = true
+	if b.showTabStrip() {
+		t.Fatal("hidden chrome must not show the tab strip")
+	}
+	if b.stripH() != 0 || b.toolbarSpace() != 0 {
+		t.Fatalf("hidden chrome space: stripH=%d toolbarSpace=%d, want 0/0", b.stripH(), b.toolbarSpace())
+	}
+	if tr := b.toolbarRect(); tr.H != 0 {
+		t.Fatalf("hidden toolbarRect.H = %d, want 0", tr.H)
+	}
+	if cr := b.contentRect(); cr != b.Bounds() {
+		t.Fatalf("hidden contentRect = %+v, want full bounds %+v", cr, b.Bounds())
+	}
+}
+
+// TestBrowserHideChromeClicksInert asserts toolbar/address/tab clicks do nothing
+// when the chrome is hidden, while programmatic navigation still works.
+func TestBrowserHideChromeClicksInert(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "")
+	b.Navigate("http://b")
+	b.Navigate("http://c") // Back enabled, Forward disabled
+	// Capture where the toolbar button + address WOULD be (chrome shown), then hide.
+	back, _, _, _, _, addr := b.toolbarLayout()
+	b.HideChrome = true
+
+	before := b.CurrentURL()
+	bx, by := center(back)
+	b.OnEvent(Event{Kind: EventClick, X: bx, Y: by}) // over a would-be Back button
+	if b.CurrentURL() != before {
+		t.Fatalf("toolbar click navigated when chrome hidden: %q", b.CurrentURL())
+	}
+	axc, ayc := center(addr)
+	b.OnEvent(Event{Kind: EventClick, X: axc, Y: ayc}) // over a would-be address field
+	if b.addrFocused {
+		t.Fatal("address field must not focus when chrome hidden")
+	}
+	// Programmatic navigation still drives the chromeless page view.
+	b.Back()
+	if b.CurrentURL() != "http://b" {
+		t.Fatalf("programmatic Back failed when chrome hidden: %q", b.CurrentURL())
+	}
+}
+
+// TestBrowserHideChromeContentLink asserts a click routes straight to a page link
+// (which now spans the full bounds) when the chrome is hidden.
+func TestBrowserHideChromeContentLink(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+	b.HideChrome = true
+	b.Open("http://a", "")
+	cr := b.contentRect() // full bounds
+	if cr.Y != browserBounds.Y {
+		t.Fatalf("hidden content should start at the top, got Y=%d", cr.Y)
+	}
+	b.Deliver("http://a", make([]byte, 100*100*4), 100, 100, cr.W,
+		[]BrowserLink{{Rect: image.Rect(0, 0, 20, 20), Href: "http://a/link"}}, "")
+	b.OnEvent(Event{Kind: EventClick, X: cr.X + 1, Y: cr.Y + 1})
+	if b.CurrentURL() != "http://a/link" {
+		t.Fatalf("hidden-chrome content link click navigated to %q", b.CurrentURL())
+	}
+}
+
+// TestBrowserHideChromeDraw asserts no toolbar band is painted when the chrome is
+// hidden (the page fills the top), and that the loading bar still shows over the
+// content.
+func TestBrowserHideChromeDraw(t *testing.T) {
+	theme := DefaultLight()
+
+	// Page fills the top: with chrome the top band is SurfaceAlt; without it, it
+	// is the page blit.
+	tl := RGBA{R: 0x11, G: 0x22, B: 0x33, A: 0xFF}
+	px := []byte{
+		0x11, 0x22, 0x33, 0xFF, 0x11, 0x22, 0x33, 0xFF,
+		0x11, 0x22, 0x33, 0xFF, 0x11, 0x22, 0x33, 0xFF,
+	}
+	band := Rect{X: 0, Y: 0, W: browserBounds.W, H: BrowserToolbarH}
+
+	shown, _, _, _ := newTestBrowser()
+	shown.Open("http://a", "")
+	shown.Deliver("http://a", px, 2, 2, shown.contentRect().W, nil, "")
+	bufS := makeSurface(browserBounds.W, browserBounds.H)
+	shown.Draw(newP(bufS, browserBounds.W), theme)
+	if !scanFor(bufS, browserBounds.W, band, theme.SurfaceAlt) {
+		t.Fatal("chrome-shown browser should paint a SurfaceAlt toolbar band")
+	}
+
+	hidden, _, _, _ := newTestBrowser()
+	hidden.HideChrome = true
+	hidden.Open("http://a", "")
+	cr := hidden.contentRect()
+	hidden.Deliver("http://a", px, 2, 2, cr.W, nil, "")
+	bufH := makeSurface(browserBounds.W, browserBounds.H)
+	hidden.Draw(newP(bufH, browserBounds.W), theme)
+	if scanFor(bufH, browserBounds.W, band, theme.SurfaceAlt) {
+		t.Fatal("chrome-hidden browser must paint no toolbar band")
+	}
+	if pixelAt(bufH, browserBounds.W, cr.X, cr.Y) != tl {
+		t.Fatalf("hidden top-left = %+v, want page pixel %+v", pixelAt(bufH, browserBounds.W, cr.X, cr.Y), tl)
+	}
+
+	// Loading bar still shows over the content while a load is in flight.
+	load, _, _, _ := newTestBrowser()
+	load.HideChrome = true
+	load.Open("http://a", "") // loading, no deliver
+	load.Phase = 0.5
+	lcr := load.contentRect()
+	bufL := makeSurface(browserBounds.W, browserBounds.H)
+	load.Draw(newP(bufL, browserBounds.W), theme)
+	bar := Rect{X: lcr.X, Y: lcr.Y, W: lcr.W, H: load.progressH()}
+	if !scanFor(bufL, browserBounds.W, bar, theme.Accent) {
+		t.Fatal("loading bar should still show over the content when chrome hidden")
 	}
 }
