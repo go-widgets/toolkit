@@ -502,6 +502,78 @@ func TestBrowserToolbarClickDisabledNoPress(t *testing.T) {
 	}
 }
 
+// TestBrowserCopyAddress: the focused address field copies its text to the
+// clipboard and paints a select-all highlight, which an edit / click / commit
+// dismisses.
+func TestBrowserCopyAddress(t *testing.T) {
+	SetClipboard(nil)
+	theme := DefaultLight()
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://example.com/page", "")
+
+	// Unfocused: AddressText is the current URL and CopyAddress is a no-op.
+	if got := b.AddressText(); got != "http://example.com/page" {
+		t.Fatalf("unfocused AddressText = %q", got)
+	}
+	if txt, ok := b.CopyAddress(); ok || txt != "" {
+		t.Fatalf("unfocused CopyAddress = %q,%v, want no-op", txt, ok)
+	}
+
+	// Click focuses the field (addrBuf := CurrentURL); CopyAddress writes it.
+	_, _, _, _, _, addr := b.toolbarLayout()
+	cx, cy := center(addr)
+	b.OnEvent(Event{Kind: EventClick, X: cx, Y: cy})
+	if !b.AddressFocused() {
+		t.Fatal("click should focus the address field")
+	}
+	txt, ok := b.CopyAddress()
+	if !ok || txt != "http://example.com/page" || ClipboardText() != txt {
+		t.Fatalf("CopyAddress = %q,%v clip=%q", txt, ok, ClipboardText())
+	}
+	if !b.addrCopied {
+		t.Fatal("CopyAddress should arm the select-all highlight")
+	}
+	// Draw paints the highlight behind the URL.
+	buf := makeSurface(browserBounds.W, browserBounds.H)
+	b.Draw(newP(buf, browserBounds.W), theme)
+	hl := blendRGBA(theme.Accent, theme.Surface, 0.62)
+	if !scanFor(buf, browserBounds.W, addr, hl) {
+		t.Fatal("expected a select-all highlight in the address field after copy")
+	}
+	// Typing dismisses the highlight.
+	b.OnEvent(Event{Kind: EventChar, Code: "x"})
+	if b.addrCopied {
+		t.Fatal("an edit should dismiss the copied-highlight")
+	}
+	// A Backspace edit also dismisses it.
+	b.CopyAddress()
+	b.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
+	if b.addrCopied {
+		t.Fatal("a backspace should dismiss the copied-highlight")
+	}
+	// Re-copy then a click dismisses it.
+	b.CopyAddress()
+	b.OnEvent(Event{Kind: EventClick, X: cx, Y: cy})
+	if b.addrCopied {
+		t.Fatal("a click should dismiss the copied-highlight")
+	}
+	// Re-copy then Enter (commit) dismisses it.
+	b.CopyAddress()
+	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	if b.addrCopied {
+		t.Fatal("commit should dismiss the copied-highlight")
+	}
+
+	// A focused-but-empty address copies nothing.
+	b2, _, _, _ := newTestBrowser() // no Open → CurrentURL ""
+	_, _, _, _, _, addr2 := b2.toolbarLayout()
+	x2, y2 := center(addr2)
+	b2.OnEvent(Event{Kind: EventClick, X: x2, Y: y2})
+	if txt, ok := b2.CopyAddress(); ok || txt != "" {
+		t.Fatalf("empty CopyAddress = %q,%v, want no-op", txt, ok)
+	}
+}
+
 func TestBrowserDrawTabStrip(t *testing.T) {
 	theme := DefaultLight()
 	b, _, _, _ := newTestBrowser()
