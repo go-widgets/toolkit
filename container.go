@@ -285,6 +285,11 @@ func (c *Container) focusableChildren() []Widget {
 	return out
 }
 
+// Children yields the container's child widgets in insertion order. It lets
+// generic tree walkers (e.g. [CollectRuns]) descend without knowing the concrete
+// container type.
+func (c *Container) Children() []Widget { return c.focusableChildren() }
+
 // OnEvent forwards to the first non-empty item whose Bounds contains the point,
 // translated into that item's local space. EventMouseMove is the exception: it
 // is forwarded to EVERY non-empty item (translated), so the item under the

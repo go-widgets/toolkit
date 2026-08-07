@@ -330,9 +330,15 @@ func (s *TextSelection) CopySelection() string {
 	return txt
 }
 
+// childContainer is any container widget that exposes its children for generic
+// traversal (Container, HBox, VBox, …), so CollectRuns can descend without
+// knowing the concrete type.
+type childContainer interface{ Children() []Widget }
+
 // CollectRuns gathers the [TextRun]s of every widget in the tree rooted at w
-// that implements [SelectableText], walking [Container] children. It is the
-// bridge a host uses to feed a widget tree into a [TextSelection].
+// that implements [SelectableText], descending into any widget that exposes its
+// children via [childContainer] (Container / HBox / VBox / …). It is the bridge
+// a host uses to feed a widget tree into a [TextSelection].
 func CollectRuns(w Widget) []TextRun {
 	var out []TextRun
 	var walk func(Widget)
@@ -340,10 +346,10 @@ func CollectRuns(w Widget) []TextRun {
 		if st, ok := x.(SelectableText); ok {
 			out = append(out, st.TextRuns()...)
 		}
-		if c, ok := x.(*Container); ok {
-			for _, it := range c.Items() {
-				if it.Widget != nil {
-					walk(it.Widget)
+		if c, ok := x.(childContainer); ok {
+			for _, child := range c.Children() {
+				if child != nil {
+					walk(child)
 				}
 			}
 		}

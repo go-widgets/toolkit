@@ -292,6 +292,10 @@ func (h *HBox) focusableChildren() []Widget {
 	return out
 }
 
+// Children yields the box's child widgets in insertion order, so generic tree
+// walkers (e.g. [CollectRuns]) can descend without knowing the box type.
+func (h *HBox) Children() []Widget { return h.focusableChildren() }
+
 // OnEvent forwards to the first child whose Bounds contains the event point,
 // translated into that child's local space. EventMouseMove is forwarded to
 // EVERY child (translated) instead, so the child under the pointer raises its
@@ -405,6 +409,10 @@ func (v *VBox) focusableChildren() []Widget {
 	}
 	return out
 }
+
+// Children yields the box's child widgets in insertion order, so generic tree
+// walkers (e.g. [CollectRuns]) can descend without knowing the box type.
+func (v *VBox) Children() []Widget { return v.focusableChildren() }
 
 // OnEvent forwards to the first child containing the event point. EventMouseMove
 // is forwarded to every child instead, so hover-enter and hover-leave both
