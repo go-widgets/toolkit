@@ -447,6 +447,61 @@ func TestBrowserDrawToolbarFaces(t *testing.T) {
 	}
 }
 
+// TestBrowserToolbarClickPressFeedback: an EventClick on an enabled toolbar
+// button arms its pressed face (Accent fill) on the next Draw, and the matching
+// EventMouseUp clears it back to the resting Surface fill.
+func TestBrowserToolbarClickPressFeedback(t *testing.T) {
+	theme := DefaultLight()
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://a", "") // an active tab → zoom-in is enabled
+	_, _, _, _, zoomIn, _ := b.toolbarLayout()
+	zx, zy := center(zoomIn)
+
+	// Press: click the zoom-in button, then draw.
+	b.OnEvent(Event{Kind: EventClick, X: zx, Y: zy})
+	if !b.pressActive || b.pressKind != browserBtnZoomIn {
+		t.Fatalf("after click: pressActive=%v kind=%d, want true/zoomIn", b.pressActive, b.pressKind)
+	}
+	buf := makeSurface(browserBounds.W, browserBounds.H)
+	b.Draw(newP(buf, browserBounds.W), theme)
+	if got := pixelAt(buf, browserBounds.W, zoomIn.X+3, zoomIn.Y+3); got != theme.Accent {
+		t.Fatalf("pressed zoom-in fill = %+v, want Accent %+v", got, theme.Accent)
+	}
+
+	// Release: EventMouseUp clears the pressed face; redraw shows Surface again.
+	b.OnEvent(Event{Kind: EventMouseUp, X: zx, Y: zy})
+	if b.pressActive {
+		t.Fatal("EventMouseUp should clear pressActive")
+	}
+	buf2 := makeSurface(browserBounds.W, browserBounds.H)
+	b.Draw(newP(buf2, browserBounds.W), theme)
+	if got := pixelAt(buf2, browserBounds.W, zoomIn.X+3, zoomIn.Y+3); got != theme.Surface {
+		t.Fatalf("released zoom-in fill = %+v, want Surface %+v", got, theme.Surface)
+	}
+	// A second EventMouseUp with nothing pressed is a no-op (no panic, no change).
+	b.OnEvent(Event{Kind: EventMouseUp, X: zx, Y: zy})
+	if b.pressActive {
+		t.Fatal("idle EventMouseUp must leave pressActive false")
+	}
+}
+
+// TestBrowserToolbarClickDisabledNoPress: clicking a disabled toolbar button
+// (Back with no history behind the cursor) does not arm the pressed state.
+func TestBrowserToolbarClickDisabledNoPress(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+	b.Open("http://only", "") // single entry → Back disabled
+	back, _, _, _, _, addr := b.toolbarLayout()
+	bx, by := center(back)
+	b.OnEvent(Event{Kind: EventClick, X: bx, Y: by})
+	if b.pressActive {
+		t.Fatal("clicking a disabled button must not arm press feedback")
+	}
+	// toolbarBtnAt over the address field (not a button) reports no hit.
+	if k, ok := b.toolbarBtnAt(center(addr)); ok {
+		t.Fatalf("toolbarBtnAt over address = kind %d ok, want no hit", k)
+	}
+}
+
 func TestBrowserDrawTabStrip(t *testing.T) {
 	theme := DefaultLight()
 	b, _, _, _ := newTestBrowser()
