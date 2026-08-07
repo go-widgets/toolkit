@@ -12,3 +12,5 @@ require (
 )
 
 require github.com/go-opentype/fonts v0.4.1
+
+require github.com/go-widgets/mvvm v0.5.0 // indirect

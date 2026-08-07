@@ -116,6 +116,10 @@ type Browser struct {
 
 	addrFocused bool
 	addrBuf     string
+	// addrCopied marks that the address was just copied (CopyAddress), so the
+	// field paints a select-all highlight as visual feedback of what went to the
+	// clipboard. Cleared on any edit, navigation or focus change.
+	addrCopied bool
 
 	// pressActive + pressKind give a toolbar button its click feedback: a click
 	// (EventClick) arms pressActive on the hit button's kind so the next Draw
@@ -926,6 +930,12 @@ func (b *Browser) drawAddress(p painter.Painter, theme *Theme, r Rect) {
 		shown = clipHeadToWidth(b.EffectiveFont(), shown, avail)
 	}
 	ty := r.Y + (r.H-b.glyphHeight())/2
+	// After a copy, paint a select-all highlight behind the text so the user sees
+	// exactly what went to the clipboard.
+	if b.addrCopied && shown != "" {
+		hl := blendRGBA(theme.Accent, theme.Surface, 0.62)
+		fillRect(p, innerX, ty, b.textWidth(shown), b.glyphHeight(), hl)
+	}
 	b.drawText(p, innerX, ty, shown, theme.OnSurface)
 	if b.addrFocused {
 		caretW := b.glyphHeight() / 12
@@ -934,6 +944,40 @@ func (b *Browser) drawAddress(p painter.Painter, theme *Theme, r Rect) {
 		}
 		fillRect(p, innerX+b.textWidth(shown), ty, caretW, b.glyphHeight(), theme.OnSurface)
 	}
+}
+
+// AddressFocused reports whether the address field currently holds keyboard
+// focus (a prior click landed in it), so a host can route a copy chord to
+// [Browser.CopyAddress] instead of its own copy action.
+func (b *Browser) AddressFocused() bool { return b.addrFocused }
+
+// AddressText returns the text the address field shows: the editable buffer
+// while focused, else the current page URL.
+func (b *Browser) AddressText() string {
+	if b.addrFocused {
+		return b.addrBuf
+	}
+	return b.CurrentURL()
+}
+
+// CopyAddress copies the address field's text to the toolkit-wide clipboard and
+// flags a select-all highlight (visual feedback of what was copied), reporting
+// the text and whether anything was copied. It is a no-op returning ("", false)
+// when the field is not focused or is empty — so a host can try it first and
+// fall back to another copy action. Mirrors [Entry]'s "no selection → copy the
+// whole value" model.
+func (b *Browser) CopyAddress() (string, bool) {
+	if !b.addrFocused {
+		return "", false
+	}
+	txt := b.AddressText()
+	if txt == "" {
+		return "", false
+	}
+	SetClipboardText(txt)
+	b.addrCopied = true
+	b.changed()
+	return txt, true
 }
 
 // toggleBookmark flips the bookmark state + fires OnBookmarkToggle. Called when
@@ -1053,6 +1097,7 @@ func (b *Browser) OnEvent(ev Event) {
 		if !b.addrFocused || ev.Code == "" {
 			return
 		}
+		b.addrCopied = false // an edit dismisses the copied-highlight
 		b.addrBuf += ev.Code
 		b.changed()
 	case EventKeyDown:
@@ -1065,6 +1110,7 @@ func (b *Browser) OnEvent(ev Event) {
 			if len(runes) == 0 {
 				return
 			}
+			b.addrCopied = false // an edit dismisses the copied-highlight
 			b.addrBuf = string(runes[:len(runes)-1])
 			b.changed()
 		case "Enter":
@@ -1091,6 +1137,7 @@ func (b *Browser) OnEvent(ev Event) {
 func (b *Browser) commitAddress() {
 	raw := strings.TrimSpace(b.addrBuf)
 	b.addrFocused = false
+	b.addrCopied = false
 	if raw == "" {
 		b.changed()
 		return
@@ -1101,6 +1148,7 @@ func (b *Browser) commitAddress() {
 // handleClick routes an absolute-coordinate click to the tab strip, a toolbar
 // button, the address field or a page link.
 func (b *Browser) handleClick(ax, ay int) {
+	b.addrCopied = false // any click dismisses the copied-highlight
 	// With the chrome hidden there are no tab-strip / toolbar / address hit
 	// targets: a click falls straight through to the content area.
 	if !b.HideChrome {
