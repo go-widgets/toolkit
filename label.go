@@ -125,6 +125,18 @@ func (l *Label) faceFor() Font {
 // receive events.
 func (l *Label) HitTest(_, _ int) bool { return false }
 
+// TextRuns exposes the label's text to the selection subsystem as a single run
+// at its current bounds, measured with the face it paints with. It implements
+// [SelectableText], so a label is selectable/copyable when its container is fed
+// into a [TextSelection] (e.g. via [CollectRuns]). An empty label contributes
+// nothing.
+func (l *Label) TextRuns() []TextRun {
+	if l.Text == "" {
+		return nil
+	}
+	return []TextRun{{Text: l.Text, Bounds: l.Bounds(), Font: l.faceFor()}}
+}
+
 // Draw paints the Label's text with the toolkit's bitmap font. The text is
 // positioned vertically per VAlign (VAuto keeps the original centre-when-taller)
 // and horizontally per Align. When Ellipsis is set and the text is wider than
