@@ -307,6 +307,21 @@ func TestCollectRuns(t *testing.T) {
 	if r := CollectRuns(NewLabel("")); r != nil {
 		t.Fatalf("empty label should yield no runs, got %+v", r)
 	}
+
+	// The box containers (VBox/HBox) are walked too, via their Children()
+	// accessor — the reader's reading views are built from these.
+	vb := NewVBox()
+	vb.AddFixed(NewLabel("v1"), 10)
+	hb := NewHBox()
+	hb.AddFixed(NewLabel("h1"), 10)
+	vb.AddFixed(hb, 10)
+	vb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 40})
+	if r := CollectRuns(vb); len(r) != 2 {
+		t.Fatalf("VBox/HBox walk collected %d runs, want 2", len(r))
+	}
+	if len(vb.Children()) != 2 || len(hb.Children()) != 1 {
+		t.Fatalf("Children() accessors wrong: vb=%d hb=%d", len(vb.Children()), len(hb.Children()))
+	}
 }
 
 func TestTextSelectionCopy(t *testing.T) {
