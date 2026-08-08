@@ -7,6 +7,7 @@ package toolkit
 import (
 	"fmt"
 	"strings"
+	"unicode"
 
 	"github.com/go-widgets/painter"
 )
@@ -58,6 +59,15 @@ func (f *fallbackFont) pick(r rune) *truetypeFont {
 	return f.fonts[0]
 }
 
+// continuesGrapheme reports whether r continues the preceding grapheme rather
+// than starting a new one: a combining mark (Mn, Mc or Me — which includes the
+// variation selectors) or a format control (Cf, which includes the zero-width
+// joiner and non-joiner).
+func continuesGrapheme(r rune) bool {
+	return unicode.Is(unicode.Mn, r) || unicode.Is(unicode.Mc, r) ||
+		unicode.Is(unicode.Me, r) || unicode.Is(unicode.Cf, r)
+}
+
 // fbRun is a maximal slice of text rendered by a single face.
 type fbRun struct {
 	text string
@@ -65,6 +75,21 @@ type fbRun struct {
 }
 
 // runs splits text into maximal runs, each routed to the face that covers it.
+//
+// A rune that CONTINUES the preceding grapheme — a combining mark, a variation
+// selector, a zero-width joiner — never starts a new run while the run's own
+// face can render it, even when some earlier face in the chain also claims it.
+// Runs are what reach the shaper, so a split here silently defeats every
+// substitution that spans the boundary.
+//
+// That is not hypothetical. The zero-width joiner is carried by several script
+// faces (Thai, Arabic, Devanagari and Hebrew all ship it for their own
+// shaping), so plain first-face-wins routing sent it to whichever came first in
+// the chain. An emoji sequence then reached the shaper as three separate runs —
+// person, joiner, rocket — and the GSUB ligature that composes them into one
+// astronaut never fired, because it never saw them together. The same split
+// would break an Indic cluster written with a ZWNJ, or a base whose combining
+// mark another face happens to carry.
 func (f *fallbackFont) runs(text string) []fbRun {
 	var out []fbRun
 	var cur *truetypeFont
@@ -77,6 +102,9 @@ func (f *fallbackFont) runs(text string) []fbRun {
 	}
 	for _, r := range text {
 		ft := f.pick(r)
+		if cur != nil && ft != cur && continuesGrapheme(r) && cur.covers(r) {
+			ft = cur // keep the grapheme whole; the current face can draw it
+		}
 		if ft != cur {
 			flush()
 			cur = ft
