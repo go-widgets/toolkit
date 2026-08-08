@@ -204,3 +204,48 @@ func TestLeadingMarkPicksNormally(t *testing.T) {
 		t.Fatal("the leading mark must still be emitted")
 	}
 }
+
+// TestFallbackForwardsPrimaryMetrics checks a chain reports the metrics it
+// actually lays out with. Without these forwarders a chain looked like a Font
+// with no metrics at all, so anything wrapping one — NewSyntheticBoldFont, or a
+// caller probing for the optional interface — got zero or a guess.
+func TestFallbackForwardsPrimaryMetrics(t *testing.T) {
+	latin := newTTFace(t, testFontTTF, 20)
+	thai := newTTFace(t, notosansthai.TTF, 20)
+	f, err := NewFallbackFont(latin, thai)
+	if err != nil {
+		t.Fatal(err)
+	}
+	a, ok := f.(interface{ Ascent() int })
+	if !ok {
+		t.Fatal("a chain must expose Ascent")
+	}
+	if a.Ascent() != latin.Ascent() {
+		t.Fatalf("Ascent = %d, want the primary's %d", a.Ascent(), latin.Ascent())
+	}
+	d, ok := f.(interface{ FontData() []byte })
+	if !ok || len(d.FontData()) != len(testFontTTF) {
+		t.Fatal("a chain must expose the primary's sfnt bytes")
+	}
+	sz, ok := f.(interface{ SizePx() int })
+	if !ok || sz.SizePx() != latin.SizePx() {
+		t.Fatal("a chain must expose its em size")
+	}
+}
+
+// TestSyntheticBoldOverChainKeepsAscent is why the forwarders matter here: the
+// reader emboldens a whole chain, and a wrapper that reported ascent 0 would
+// mis-position every heading.
+func TestSyntheticBoldOverChainKeepsAscent(t *testing.T) {
+	latin := newTTFace(t, testFontTTF, 20)
+	thai := newTTFace(t, notosansthai.TTF, 20)
+	chain, _ := NewFallbackFont(latin, thai)
+	bold, err := NewSyntheticBoldFont(chain)
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := bold.(interface{ Ascent() int }).Ascent()
+	if got != latin.Ascent() {
+		t.Fatalf("Ascent through the wrapper = %d, want %d", got, latin.Ascent())
+	}
+}
