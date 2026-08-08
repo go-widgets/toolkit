@@ -107,6 +107,10 @@ func (f *truetypeFont) Measure(text string) int {
 	return total
 }
 
+// invisible reports whether the shaper marked g as not to be painted. Kept as a
+// named helper so Draw and any future back-end apply the same rule.
+func invisible(g shape.Glyph) bool { return g.GID == 0 || g.Invisible }
+
 // Draw paints text anti-aliased with (x, y) as the text top-left corner (the
 // toolkit convention), computing the baseline from the face ascent.
 //
@@ -162,7 +166,12 @@ func (f *truetypeFont) drawShaped(pix *painter.PixelPainter, x, baseline int, te
 	for _, g := range shape.Shape(f.face, text, shape.Options{Direction: textDirection.base()}) {
 		// .notdef (index 0) is the shaper's blank-for-unknown; every other
 		// index the shaper emits is a valid, renderable glyph of this font.
-		if g.GID != 0 {
+		// Invisible marks a default-ignorable the shaper did not consume — a
+		// leftover joiner, variation selector or soft hyphen. It already carries a
+		// zero advance, but the font may well map it to a real glyph (Go Regular
+		// draws a hyphen for U+00AD), so it has to be skipped explicitly or it
+		// would stamp itself on top of the next letter.
+		if !invisible(g) {
 			dr, mask, maskp, _, _ := f.face.GlyphMaskIndex(g.GID, pen+g.XOffset, baseline-g.YOffset)
 			for j := 0; j < dr.Dy(); j++ {
 				for i := 0; i < dr.Dx(); i++ {
