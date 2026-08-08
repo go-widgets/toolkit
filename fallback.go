@@ -48,6 +48,22 @@ func (f *fallbackFont) Advance() int { return f.fonts[0].advance }
 // Height is the primary face's line height.
 func (f *fallbackFont) Height() int { return f.fonts[0].height }
 
+// Ascent is the primary face's baseline offset — the same value Draw aligns
+// every run to, so a caller positioning by the text top gets the answer the
+// chain actually uses. Without this forwarder a chain looked like a Font with no
+// metrics at all, and anything wrapping one (NewSyntheticBoldFont, or a caller
+// probing for the optional interface) fell back to zero or to a guess.
+func (f *fallbackFont) Ascent() int { return f.fonts[0].ascent }
+
+// FontData returns the PRIMARY face's sfnt bytes, implementing painter.Face so a
+// vector back-end can embed a font for selectable text. A chain has no single
+// font, so this is a best effort: the primary is the one that carries the UI's
+// Latin text.
+func (f *fallbackFont) FontData() []byte { return f.fonts[0].data }
+
+// SizePx is the em size the chain was built at; every face in it shares one.
+func (f *fallbackFont) SizePx() int { return f.fonts[0].sizePx }
+
 // pick returns the first face covering r, or the primary when none does (so an
 // unknown rune still lands on the primary's .notdef, matching a single face).
 func (f *fallbackFont) pick(r rune) *truetypeFont {
