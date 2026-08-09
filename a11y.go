@@ -65,16 +65,32 @@ type Accessible interface {
 	A11y() A11yInfo
 }
 
-// CollectA11y returns the A11yInfo for every widget in the slice that
-// implements Accessible, preserving order. A host owns its widget tree, so it
-// passes the flat list it composed; widgets that don't implement Accessible are
-// skipped.
+// CollectA11y returns the A11yInfo for every MEANINGFUL widget in the slice,
+// preserving order. A host owns its widget tree, so it passes the flat list it
+// composed.
+//
+// Two kinds of widget are skipped, for two different reasons. One that does not
+// implement Accessible has nothing to say. One that reports RolePresentation has
+// deliberately said it is layout or decoration — a box, a scrim, a scrollbar —
+// and ARIA's role="presentation" means exactly "look through me to the content
+// inside". Either way the result is the list a reader should announce, with no
+// structural furniture in it.
+//
+// The distinction matters to the toolkit rather than to callers: every widget
+// now answers A11y(), so "described as presentational" and "never described" are
+// no longer the same silence, even though both are filtered out here.
 func CollectA11y(widgets []Widget) []A11yInfo {
 	var out []A11yInfo
 	for _, w := range widgets {
-		if a, ok := w.(Accessible); ok {
-			out = append(out, a.A11y())
+		a, ok := w.(Accessible)
+		if !ok {
+			continue
 		}
+		info := a.A11y()
+		if info.Role == RolePresentation {
+			continue
+		}
+		out = append(out, info)
 	}
 	return out
 }
