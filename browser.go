@@ -130,6 +130,12 @@ type Browser struct {
 	pressKind   browserBtnKind
 
 	zoom float64 // page display scale; clamped to [BrowserMinZoom, BrowserMaxZoom]
+
+	// sbV and sbH carry an in-progress drag of the vertical / horizontal content
+	// scrollbar thumb. They share the same press/drag/release policy (scrollDrag)
+	// as ScrollView and Table, so a thumb drag on the page behaves identically to
+	// every other scrollable widget in the toolkit.
+	sbV, sbH scrollDrag
 }
 
 // TabMode selects how Open allocates tabs.
@@ -164,8 +170,9 @@ type browserTab struct {
 	imgW, imgH int    // render dimensions
 	renderW    int    // width the render was produced for
 
-	links  []BrowserLink
-	scroll int // vertical scroll offset, in content pixels
+	links   []BrowserLink
+	scroll  int // vertical scroll offset, in content pixels
+	scrollX int // horizontal scroll offset, in zoomed-display pixels
 
 	loading     bool
 	progress    float64 // determinate download fraction, 0..1
@@ -515,8 +522,8 @@ func (b *Browser) CloseTab(i int) {
 
 // Deliver hands the widget a finished render for target. When target matches the
 // active tab's current URL the render (pixels + dimensions + width), links and
-// title are stored, loading is cleared and scroll is reset; otherwise it is
-// ignored (a stale or non-active delivery).
+// title are stored, loading is cleared and both scroll offsets are reset;
+// otherwise it is ignored (a stale or non-active delivery).
 func (b *Browser) Deliver(target string, pixels []byte, imgW, imgH, width int, links []BrowserLink, title string) {
 	t := b.activeTab()
 	if t == nil || t.history[t.cursor] != target {
@@ -529,6 +536,7 @@ func (b *Browser) Deliver(target string, pixels []byte, imgW, imgH, width int, l
 	t.title = title
 	t.loading = false
 	t.scroll = 0
+	t.scrollX = 0
 	b.changed()
 }
 
@@ -598,9 +606,9 @@ func (b *Browser) SetZoom(f float64) {
 	}
 	b.zoom = f
 	if t := b.activeTab(); t != nil {
-		if m := b.maxScroll(t, b.contentRect()); t.scroll > m {
-			t.scroll = m
-		}
+		// A zoom change resizes BOTH extents (a smaller zoom shrinks the page, a
+		// larger one grows its width past the column), so re-clamp both offsets.
+		b.clampScroll(t)
 	}
 	b.changed()
 }
@@ -824,6 +832,121 @@ func (b *Browser) maxScroll(t *browserTab, cr Rect) int {
 	return m
 }
 
+// maxScrollX is the largest horizontal scroll offset for t within content cr, in
+// zoomed-display pixels (0 when the page is not wider than cr). At the 1.0 zoom
+// the page is fit-to-width (dispW == cr.W) so this is 0; only zoom > 1 widens the
+// page past the content column and makes horizontal scrolling meaningful.
+func (b *Browser) maxScrollX(t *browserTab, cr Rect) int {
+	dispW, _ := b.pageDisplaySize(t, cr)
+	m := dispW - cr.W
+	if m < 0 {
+		m = 0
+	}
+	return m
+}
+
+// clampScroll pins t's vertical and horizontal offsets back into their legal
+// ranges for the current content rect + zoom. Every mutation of scroll / scrollX
+// (wheel, thumb drag, track page, zoom change) routes through it so an offset can
+// never fall off either extent.
+func (b *Browser) clampScroll(t *browserTab) {
+	cr := b.contentRect()
+	if t.scroll < 0 {
+		t.scroll = 0
+	}
+	if m := b.maxScroll(t, cr); t.scroll > m {
+		t.scroll = m
+	}
+	if t.scrollX < 0 {
+		t.scrollX = 0
+	}
+	if m := b.maxScrollX(t, cr); t.scrollX > m {
+		t.scrollX = m
+	}
+}
+
+// vscrollGeom returns the vertical content scrollbar's geometry (in coordinates
+// RELATIVE to the content rect's top-left) and whether it is live (the page
+// overflows vertically). It is the single definition shared by drawScrollbars
+// (paint) and OnEvent (hit-test + drag), so the drawn thumb and the drag target
+// can never drift apart. The track sits on the content's right edge and is
+// shortened by scrollbarWidth at the bottom when the horizontal bar also shows,
+// leaving the corner clear. The thumb is sized to the visible fraction cr.H/dispH
+// (floored at scrollbarWidth) and positioned from scroll/maxScroll.
+func (b *Browser) vscrollGeom(t *browserTab, cr Rect) (sbGeom, bool) {
+	maxOff := b.maxScroll(t, cr)
+	if maxOff <= 0 || cr.W <= 0 || cr.H <= 0 {
+		return sbGeom{}, false
+	}
+	_, dispH := b.pageDisplaySize(t, cr)
+	trackLen := cr.H
+	if b.maxScrollX(t, cr) > 0 {
+		trackLen -= scrollbarWidth // reserve the corner for the horizontal bar
+	}
+	if trackLen <= 0 {
+		return sbGeom{}, false
+	}
+	thumb := trackLen * cr.H / dispH
+	if thumb < scrollbarWidth {
+		thumb = scrollbarWidth
+	}
+	if thumb > trackLen {
+		thumb = trackLen
+	}
+	travelNum := trackLen - thumb
+	return sbGeom{
+		cross0:     cr.W - scrollbarWidth,
+		trackStart: 0,
+		trackLen:   trackLen,
+		thumbStart: travelNum * t.scroll / maxOff,
+		thumbLen:   thumb,
+		travelNum:  travelNum,
+		travelDen:  maxOff,
+		maxScroll:  maxOff,
+	}, true
+}
+
+// hscrollGeom returns the horizontal content scrollbar's geometry (in coordinates
+// RELATIVE to the content rect's top-left) and whether it is live (the page
+// overflows horizontally, i.e. under zoom > 1). The track sits on the content's
+// bottom edge and is shortened by scrollbarWidth at the right when the vertical
+// bar also shows, leaving the corner clear. The thumb is sized to the visible
+// fraction cr.W/dispW (floored at scrollbarWidth) and positioned from
+// scrollX/maxScrollX.
+func (b *Browser) hscrollGeom(t *browserTab, cr Rect) (sbGeom, bool) {
+	maxOff := b.maxScrollX(t, cr)
+	if maxOff <= 0 || cr.W <= 0 || cr.H <= 0 {
+		return sbGeom{}, false
+	}
+	dispW, _ := b.pageDisplaySize(t, cr)
+	trackLen := cr.W
+	if b.maxScroll(t, cr) > 0 {
+		trackLen -= scrollbarWidth // reserve the corner for the vertical bar
+	}
+	if trackLen <= 0 {
+		return sbGeom{}, false
+	}
+	thumb := trackLen * cr.W / dispW
+	if thumb < scrollbarWidth {
+		thumb = scrollbarWidth
+	}
+	if thumb > trackLen {
+		thumb = trackLen
+	}
+	travelNum := trackLen - thumb
+	return sbGeom{
+		horizontal: true,
+		cross0:     cr.H - scrollbarWidth,
+		trackStart: 0,
+		trackLen:   trackLen,
+		thumbStart: travelNum * t.scrollX / maxOff,
+		thumbLen:   thumb,
+		travelNum:  travelNum,
+		travelDen:  maxOff,
+		maxScroll:  maxOff,
+	}, true
+}
+
 // --- drawing -------------------------------------------------------------
 
 // Draw paints the chrome (tab strip when shown, toolbar) and the content area
@@ -1003,15 +1126,17 @@ func (b *Browser) drawContent(p painter.Painter, theme *Theme) {
 		return
 	}
 	b.drawPage(p, cr, t)
+	b.drawScrollbars(p, theme, cr, t)
 	if t.loading {
 		b.drawProgress(p, theme, cr, t)
 	}
 }
 
 // drawPage blits t's render scaled to the zoomed display size, top-aligned and
-// offset by the tab's scroll; rows outside the content rect are skipped and
-// columns past the content width are clipped (zoom > 1 makes the page wider than
-// cr) so the blit stays within cr.
+// offset by the tab's scroll (vertical) and scrollX (horizontal): it paints the
+// display window [scrollX, scrollX+cr.W) × [scroll, scroll+cr.H) of the zoomed
+// page. Rows and columns outside the content rect are skipped, so the blit always
+// stays within cr while any overflowing side is reachable by scrolling.
 func (b *Browser) drawPage(p painter.Painter, cr Rect, t *browserTab) {
 	if t.imgW <= 0 || t.imgH <= 0 || len(t.pixels) < t.imgW*t.imgH*4 {
 		return
@@ -1027,12 +1152,34 @@ func (b *Browser) drawPage(p painter.Painter, cr Rect, t *browserTab) {
 		}
 		base := (vy * t.imgH / dispH) * t.imgW
 		for vx := 0; vx < dispW; vx++ {
-			if vx >= cr.W {
+			sx := cr.X + vx - t.scrollX
+			if sx < cr.X {
+				continue
+			}
+			if sx >= cr.X+cr.W {
 				break
 			}
 			off := (base + vx*t.imgW/dispW) * 4
-			p.PutPixel(cr.X+vx, sy, RGBA{R: t.pixels[off], G: t.pixels[off+1], B: t.pixels[off+2], A: t.pixels[off+3]})
+			p.PutPixel(sx, sy, RGBA{R: t.pixels[off], G: t.pixels[off+1], B: t.pixels[off+2], A: t.pixels[off+3]})
 		}
+	}
+}
+
+// drawScrollbars paints the vertical (right-edge) and horizontal (bottom-edge)
+// content scrollbars whenever the page overflows the corresponding axis, in the
+// house style shared with ScrollView and Table: a SurfaceAlt track with an Accent
+// thumb sized to the visible fraction. Both read the same vscrollGeom/hscrollGeom
+// the input path hit-tests against, so the drawn thumb and the drag target are one
+// geometry. When both show, each track is shortened by scrollbarWidth so the
+// bottom-right corner stays clear.
+func (b *Browser) drawScrollbars(p painter.Painter, theme *Theme, cr Rect, t *browserTab) {
+	if g, ok := b.vscrollGeom(t, cr); ok {
+		fillRect(p, cr.X+g.cross0, cr.Y+g.trackStart, scrollbarWidth, g.trackLen, theme.SurfaceAlt)
+		fillRect(p, cr.X+g.cross0, cr.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
+	}
+	if g, ok := b.hscrollGeom(t, cr); ok {
+		fillRect(p, cr.X+g.trackStart, cr.Y+g.cross0, g.trackLen, scrollbarWidth, theme.SurfaceAlt)
+		fillRect(p, cr.X+g.thumbStart, cr.Y+g.cross0, g.thumbLen, scrollbarWidth, theme.Accent)
 	}
 }
 
@@ -1088,11 +1235,28 @@ func (b *Browser) OnEvent(ev Event) {
 	case EventClick:
 		b.handleClick(ax, ay)
 	case EventMouseUp:
-		// Release clears the toolbar button's pressed face armed by EventClick.
+		// Release ends any in-progress scrollbar thumb drag ...
+		b.sbV.release()
+		b.sbH.release()
+		// ... and clears the toolbar button's pressed face armed by EventClick.
 		if b.pressActive {
 			b.pressActive = false
 			b.changed()
 		}
+	case EventMouseDrag:
+		// A drag with a scrollbar thumb grabbed maps the pointer to a clamped
+		// offset; with no grab active both drags are no-ops (the content itself is
+		// not draggable).
+		t := b.activeTab()
+		if t == nil {
+			return
+		}
+		cr := b.contentRect()
+		lev := Event{Kind: EventMouseDrag, X: ax - cr.X, Y: ay - cr.Y}
+		gv, okv := b.vscrollGeom(t, cr)
+		b.sbV.drag(gv, okv, lev, func(target int) { t.scroll = target; b.clampScroll(t); b.changed() })
+		gh, okh := b.hscrollGeom(t, cr)
+		b.sbH.drag(gh, okh, lev, func(target int) { t.scrollX = target; b.clampScroll(t); b.changed() })
 	case EventChar:
 		if !b.addrFocused || ev.Code == "" {
 			return
@@ -1121,13 +1285,15 @@ func (b *Browser) OnEvent(ev Event) {
 		if t == nil {
 			return
 		}
-		t.scroll += ev.Delta * BrowserScrollStep
-		if t.scroll < 0 {
-			t.scroll = 0
+		// Shift-wheel scrolls horizontally (the Event model carries a single Delta
+		// plus a Shift modifier rather than a separate horizontal axis); a plain
+		// wheel scrolls vertically as before. Both clamp to their extents.
+		if ev.Shift {
+			t.scrollX += ev.Delta * BrowserScrollStep
+		} else {
+			t.scroll += ev.Delta * BrowserScrollStep
 		}
-		if m := b.maxScroll(t, b.contentRect()); t.scroll > m {
-			t.scroll = m
-		}
+		b.clampScroll(t)
 		b.changed()
 	}
 }
@@ -1196,10 +1362,21 @@ func (b *Browser) handleClick(ax, ay int) {
 	cr := b.contentRect()
 	if cr.Contains(ax, ay) {
 		b.addrFocused = false
-		if t := b.activeTab(); t != nil {
-			if href, ok := b.linkAt(t, cr, ax, ay); ok {
-				b.Navigate(href)
-			}
+		t := b.activeTab()
+		if t == nil {
+			return
+		}
+		// A press on either scrollbar grabs its thumb (or pages the track toward the
+		// click) and consumes the event, so it never falls through to a page link.
+		lev := Event{Kind: EventClick, X: ax - cr.X, Y: ay - cr.Y}
+		if gv, ok := b.vscrollGeom(t, cr); b.sbV.press(gv, ok, lev, cr.H, func(d int) { t.scroll += d; b.clampScroll(t); b.changed() }) {
+			return
+		}
+		if gh, ok := b.hscrollGeom(t, cr); b.sbH.press(gh, ok, lev, cr.W, func(d int) { t.scrollX += d; b.clampScroll(t); b.changed() }) {
+			return
+		}
+		if href, ok := b.linkAt(t, cr, ax, ay); ok {
+			b.Navigate(href)
 		}
 		return
 	}
@@ -1216,7 +1393,7 @@ func (b *Browser) linkAt(t *browserTab, cr Rect, ax, ay int) (string, bool) {
 	if dispH <= 0 {
 		return "", false
 	}
-	rx := (ax - cr.X) * t.imgW / dispW
+	rx := (ax - cr.X + t.scrollX) * t.imgW / dispW
 	ry := (ay - cr.Y + t.scroll) * t.imgH / dispH
 	pt := image.Pt(rx, ry)
 	for _, ln := range t.links {
