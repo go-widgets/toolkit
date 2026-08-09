@@ -520,11 +520,27 @@ func (b *Browser) CloseTab(i int) {
 	b.changed()
 }
 
-// Deliver hands the widget a finished render for target. When target matches the
-// active tab's current URL the render (pixels + dimensions + width), links and
-// title are stored, loading is cleared and both scroll offsets are reset;
-// otherwise it is ignored (a stale or non-active delivery).
+// Deliver hands the widget a finished render for target: it delivers a final
+// stage (loading clears). See DeliverStage. The scroll position was reset when
+// the navigation to target began (startLoad), so a delivered render is shown
+// from wherever the user has scrolled to — deliveries do not yank the page.
 func (b *Browser) Deliver(target string, pixels []byte, imgW, imgH, width int, links []BrowserLink, title string) {
+	b.DeliverStage(target, pixels, imgW, imgH, width, links, title, true)
+}
+
+// DeliverStage delivers one render for target, distinguishing a final render
+// from an intermediate progressive frame. When target matches the active tab's
+// current URL the render (pixels + dimensions + width), links and title are
+// stored; a stale or non-active delivery is ignored.
+//
+// With final=true the load is complete and loading clears. With final=false it
+// is one staged frame of a still-running progressive render (a fast first paint,
+// then refinements): the content updates but loading stays on, so the progress
+// indicator keeps animating and the page does not read as "done" until the
+// final frame lands. Neither form resets the scroll position — that happens once
+// when the navigation begins (startLoad) — so a staged render refines in place
+// instead of snapping to the top on every frame.
+func (b *Browser) DeliverStage(target string, pixels []byte, imgW, imgH, width int, links []BrowserLink, title string, final bool) {
 	t := b.activeTab()
 	if t == nil || t.history[t.cursor] != target {
 		return
@@ -534,9 +550,9 @@ func (b *Browser) Deliver(target string, pixels []byte, imgW, imgH, width int, l
 	t.renderW = width
 	t.links = links
 	t.title = title
-	t.loading = false
-	t.scroll = 0
-	t.scrollX = 0
+	if final {
+		t.loading = false
+	}
 	b.changed()
 }
 
@@ -619,6 +635,10 @@ func (b *Browser) startLoad(t *browserTab, target string) {
 	t.loading = true
 	t.hasProgress = false
 	t.progress = 0
+	// A new navigation starts at the top; deliveries afterward preserve the
+	// scroll, so a progressive render refines in place.
+	t.scroll = 0
+	t.scrollX = 0
 	t.renderW = b.renderWidth()
 	b.changed()
 	if b.OnNavigate != nil {
