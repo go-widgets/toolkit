@@ -341,9 +341,8 @@ func (s *SegmentedBar) A11y() A11yInfo { return A11yInfo{Role: RoleGroup} }
 
 // --- Display ---------------------------------------------------
 
-// A11y reports the Image as an img. Image carries no alt-text field of its
-// own, so Name is left for the host to fill in from context.
-func (i *Image) A11y() A11yInfo { return A11yInfo{Role: RoleImg} }
+// A11y reports the Image as an img named by its Alt text.
+func (i *Image) A11y() A11yInfo { return A11yInfo{Role: RoleImg, Name: i.Alt} }
 
 // A11y reports the Avatar as an img named by its initials.
 func (a *Avatar) A11y() A11yInfo { return A11yInfo{Role: RoleImg, Name: a.Initials} }

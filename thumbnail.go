@@ -31,6 +31,10 @@ type Thumbnail struct {
 	// Label is an optional caption drawn in a strip along the bottom; empty
 	// gives the whole cell to the image.
 	Label string
+	// Alt is the tile's accessible name when it should differ from the visible
+	// Label — a filename shown as the caption, say, while the picture itself is
+	// worth describing. Empty falls back to Label.
+	Alt string
 	// Selected / Hover drive the border (see the type doc). Area selects the
 	// box-averaging downscale over the default nearest-neighbour.
 	Selected bool

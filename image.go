@@ -28,6 +28,12 @@ type Image struct {
 	Pixels []byte    // RGBA bytes, W*H*4 in length
 	W, H   int       // source dimensions
 	Scale  ScaleMode // how the source maps onto the bounds (default ScaleStretch)
+	// Alt is the image's accessible name — the short description a reader
+	// announces in place of the picture. Set it to whatever the source calls the
+	// image (a photo's caption, a chart's summary, a post's alt text); leave it
+	// empty ONLY for decoration that carries no information, which is the same
+	// rule as an empty HTML alt attribute.
+	Alt string
 }
 
 // NewImage wraps pixels (length must equal w*h*4) + the source dimensions in a
