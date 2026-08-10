@@ -60,6 +60,10 @@ type Browser struct {
 	ReloadIcon  func(p painter.Painter, r Rect, ink RGBA)
 	ZoomOutIcon func(p painter.Painter, r Rect, ink RGBA)
 	ZoomInIcon  func(p painter.Painter, r Rect, ink RGBA)
+	// FitIcon is the host-supplied painter for the best-fit zoom button (the
+	// third member of the zoom group, next to zoom-out / zoom-in). Same nil-safe
+	// seam as the other toolbar icons: a nil hook falls back to the text label.
+	FitIcon func(p painter.Painter, r Rect, ink RGBA)
 
 	// LeadingIcon, when set, paints a status glyph at the LEFT of the address
 	// field — e.g. an SSL padlock whose look the host varies by certificate state
@@ -237,6 +241,9 @@ const (
 	// ASCII "-" / "+" render on both the pixel and terminal back-ends.
 	browserZoomOutLabel = "-"
 	browserZoomInLabel  = "+"
+	// browserFitLabel is the best-fit zoom button's text fallback. Plain ASCII so
+	// it renders on both the pixel and terminal back-ends.
+	browserFitLabel = "Fit"
 )
 
 // browserBtnKind identifies one toolbar button so layout, drawing and
@@ -250,6 +257,7 @@ const (
 	browserBtnReload
 	browserBtnZoomOut
 	browserBtnZoomIn
+	browserBtnFit
 )
 
 // btnLabel is a toolbar button's text-fallback label (drawn when its icon hook
@@ -264,8 +272,10 @@ func (b *Browser) btnLabel(k browserBtnKind) string {
 		return browserReloadLabel
 	case browserBtnZoomOut:
 		return browserZoomOutLabel
-	default: // browserBtnZoomIn
+	case browserBtnZoomIn:
 		return browserZoomInLabel
+	default: // browserBtnFit
+		return browserFitLabel
 	}
 }
 
@@ -281,8 +291,10 @@ func (b *Browser) btnIcon(k browserBtnKind) func(p painter.Painter, r Rect, ink 
 		return b.ReloadIcon
 	case browserBtnZoomOut:
 		return b.ZoomOutIcon
-	default: // browserBtnZoomIn
+	case browserBtnZoomIn:
 		return b.ZoomInIcon
+	default: // browserBtnFit
+		return b.FitIcon
 	}
 }
 
@@ -299,8 +311,10 @@ func (b *Browser) btnEnabled(k browserBtnKind) bool {
 		return b.activeTab() != nil
 	case browserBtnZoomOut:
 		return b.CanZoomOut()
-	default: // browserBtnZoomIn
+	case browserBtnZoomIn:
 		return b.CanZoomIn()
+	default: // browserBtnFit
+		return b.CanFit()
 	}
 }
 
@@ -607,6 +621,43 @@ func (b *Browser) ZoomOut() { b.SetZoom(b.zoom - browserZoomStep) }
 // ResetZoom returns the zoom to 1.0 (no-op when already there).
 func (b *Browser) ResetZoom() { b.SetZoom(1.0) }
 
+// CanFit reports whether a best-fit zoom is possible: there is an active tab
+// with a delivered render and a non-empty content rect to fit it into.
+func (b *Browser) CanFit() bool {
+	t := b.activeTab()
+	if t == nil || t.imgW <= 0 || t.imgH <= 0 {
+		return false
+	}
+	cr := b.contentRect()
+	return cr.W > 0 && cr.H > 0
+}
+
+// FitZoom sets the zoom so the WHOLE current page/image fits within the content
+// rect on both axes. The natural display size at zoom 1 is dispW0 = cr.W (pages
+// render fit-to-width) and dispH0 = imgH*cr.W/imgW; the fit factor is
+// min(1, cr.W/dispW0, cr.H/dispH0) — capped at 1 so a page already smaller than
+// the pane is not blown up — then clamped to [BrowserMinZoom, BrowserMaxZoom]
+// by SetZoom (which also re-clamps scroll). It is a no-op when there is no
+// render or the content rect is empty.
+func (b *Browser) FitZoom() {
+	t := b.activeTab()
+	if t == nil || t.imgW <= 0 || t.imgH <= 0 {
+		return
+	}
+	cr := b.contentRect()
+	if cr.W <= 0 || cr.H <= 0 {
+		return
+	}
+	dispW0 := float64(cr.W)
+	dispH0 := float64(t.imgH) * float64(cr.W) / float64(t.imgW)
+	// min(1, width-factor, height-factor). The width factor is cr.W/dispW0, which
+	// is always 1 (pages render fit-to-width, so dispW0 == cr.W); the height factor
+	// cr.H/dispH0 is what actually shrinks a tall page. The 1.0 cap keeps a page
+	// already smaller than the pane from being blown up.
+	fit := math.Min(1.0, math.Min(float64(cr.W)/dispW0, float64(cr.H)/dispH0))
+	b.SetZoom(fit)
+}
+
 // SetZoom sets the page-display zoom, clamped to [BrowserMinZoom, BrowserMaxZoom].
 // A real change re-clamps the active tab's scroll to the new (smaller) extent and
 // fires OnChange; setting the current value is a no-op (no notification).
@@ -699,13 +750,13 @@ func (b *Browser) contentRect() Rect {
 // renderWidth is the pixel width a page is rendered for — the content width.
 func (b *Browser) renderWidth() int { return b.contentRect().W }
 
-// toolbarLayout returns the Back, Forward, Reload, zoom-out and zoom-in button
-// rects and the address field rect for the current toolbar. A button whose icon
-// hook is set is laid out as a square (side = the toolbar's inner height) so the
-// icons form an even row of real buttons; a button with no icon is sized to its
-// text label so the fallback stays legible. The address field fills the
+// toolbarLayout returns the Back, Forward, Reload, zoom-out, zoom-in and best-fit
+// button rects and the address field rect for the current toolbar. A button whose
+// icon hook is set is laid out as a square (side = the toolbar's inner height) so
+// the icons form an even row of real buttons; a button with no icon is sized to
+// its text label so the fallback stays legible. The address field fills the
 // remainder to the right pad.
-func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect) {
+func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, fit, addr Rect) {
 	tr := b.toolbarRect()
 	padY, padX, gap := b.padY(), b.padX(), b.btnGap()
 	btnY := tr.Y + padY
@@ -721,7 +772,7 @@ func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect
 	}
 	back, fwd, reload = sq(), sq(), sq()
 	x += gap
-	zoomOut, zoomIn = sq(), sq()
+	zoomOut, zoomIn, fit = sq(), sq(), sq()
 	x += gap
 	addrW := tr.X + tr.W - padX - x
 	if addrW < 0 {
@@ -735,13 +786,13 @@ func (b *Browser) toolbarLayout() (back, fwd, reload, zoomOut, zoomIn, addr Rect
 // lands on (for press feedback). It returns false when the point is not over any
 // button (e.g. the inter-group gap or the address field).
 func (b *Browser) toolbarBtnAt(ax, ay int) (browserBtnKind, bool) {
-	back, fwd, reload, zoomOut, zoomIn, _ := b.toolbarLayout()
+	back, fwd, reload, zoomOut, zoomIn, fit, _ := b.toolbarLayout()
 	for _, m := range []struct {
 		r Rect
 		k browserBtnKind
 	}{
 		{back, browserBtnBack}, {fwd, browserBtnFwd}, {reload, browserBtnReload},
-		{zoomOut, browserBtnZoomOut}, {zoomIn, browserBtnZoomIn},
+		{zoomOut, browserBtnZoomOut}, {zoomIn, browserBtnZoomIn}, {fit, browserBtnFit},
 	} {
 		if m.r.Contains(ax, ay) {
 			return m.k, true
@@ -751,12 +802,12 @@ func (b *Browser) toolbarBtnAt(ax, ay int) (browserBtnKind, bool) {
 }
 
 // toolbarGroups builds the two segmented ButtonGroups — nav (Back / Forward /
-// Reload) and zoom (out / in) — with each member wired to its action, icon,
-// label fallback, font and disabled state, and positioned over its cluster.
+// Reload) and zoom (out / in / best-fit) — with each member wired to its action,
+// icon, label fallback, font and disabled state, and positioned over its cluster.
 // Draw and click-routing both go through it so the visual and the hit-testing
 // stay in lock-step. addr is the address-field rect.
 func (b *Browser) toolbarGroups() (nav, zoom *ButtonGroup, addr Rect) {
-	back, _, reload, zoomOut, zoomIn, ad := b.toolbarLayout()
+	back, _, reload, zoomOut, _, fit, ad := b.toolbarLayout()
 	addr = ad
 	mk := func(k browserBtnKind, onClick func()) *Button {
 		btn := &Button{Label: b.btnLabel(k), Icon: b.btnIcon(k), OnClick: onClick, PressFeedback: true}
@@ -798,8 +849,13 @@ func (b *Browser) toolbarGroups() (nav, zoom *ButtonGroup, addr Rect) {
 				b.ZoomIn()
 			}
 		}),
+		mk(browserBtnFit, func() {
+			if b.CanFit() {
+				b.FitZoom()
+			}
+		}),
 	)
-	zoom.SetBounds(unionRect(zoomOut, zoomIn))
+	zoom.SetBounds(unionRect(zoomOut, fit))
 	return
 }
 

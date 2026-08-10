@@ -27,8 +27,9 @@ type ScrollView struct {
 	sbV, sbH scrollDrag
 }
 
-// scrollbarWidth is the pixel thickness of a scrollbar track.
-const scrollbarWidth = 8
+// scrollbarWidth is the pixel thickness of a scrollbar track — wide enough that
+// the thumb is comfortably grabbable with the mouse.
+const scrollbarWidth = 12
 
 // viewport is the visible content rect: the bounds minus the always-reserved
 // right scrollbar column and — when the content overflows horizontally — the
