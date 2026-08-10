@@ -371,7 +371,7 @@ func TestNormalizeURL(t *testing.T) {
 func TestBrowserToolbarLayoutClampsAddress(t *testing.T) {
 	b := NewBrowser()
 	b.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 60}) // too narrow for the buttons
-	_, _, _, _, _, addr := b.toolbarLayout()
+	_, _, _, _, _, _, addr := b.toolbarLayout()
 	if addr.W != 0 {
 		t.Fatalf("address width = %d, want clamped to 0", addr.W)
 	}
@@ -411,7 +411,7 @@ func TestBrowserDrawToolbarFaces(t *testing.T) {
 	buf := makeSurface(browserBounds.W, browserBounds.H)
 	b.Draw(newP(buf, browserBounds.W), theme)
 
-	back, fwd, reload, _, _, _ := b.toolbarLayout()
+	back, fwd, reload, _, _, _, _ := b.toolbarLayout()
 	// Enabled buttons paint their fill in Surface; a point at the left inset,
 	// mid-height, is fill (left of the centred label).
 	sample := func(r Rect) RGBA { return pixelAt(buf, browserBounds.W, r.X+3, r.Y+3) }
@@ -429,7 +429,7 @@ func TestBrowserDrawToolbarFaces(t *testing.T) {
 	b2.Open("http://only", "")
 	buf2 := makeSurface(browserBounds.W, browserBounds.H)
 	b2.Draw(newP(buf2, browserBounds.W), theme)
-	back2, fwd2, reload2, _, _, _ := b2.toolbarLayout()
+	back2, fwd2, reload2, _, _, _, _ := b2.toolbarLayout()
 	s2 := func(r Rect) RGBA { return pixelAt(buf2, browserBounds.W, r.X+3, r.Y+3) }
 	if s2(back2) != mutedFace(theme) {
 		t.Fatalf("disabled Back fill = %+v, want mutedFace", s2(back2))
@@ -454,7 +454,7 @@ func TestBrowserToolbarClickPressFeedback(t *testing.T) {
 	theme := DefaultLight()
 	b, _, _, _ := newTestBrowser()
 	b.Open("http://a", "") // an active tab → zoom-in is enabled
-	_, _, _, _, zoomIn, _ := b.toolbarLayout()
+	_, _, _, _, zoomIn, _, _ := b.toolbarLayout()
 	zx, zy := center(zoomIn)
 
 	// Press: click the zoom-in button, then draw.
@@ -490,7 +490,7 @@ func TestBrowserToolbarClickPressFeedback(t *testing.T) {
 func TestBrowserToolbarClickDisabledNoPress(t *testing.T) {
 	b, _, _, _ := newTestBrowser()
 	b.Open("http://only", "") // single entry → Back disabled
-	back, _, _, _, _, addr := b.toolbarLayout()
+	back, _, _, _, _, _, addr := b.toolbarLayout()
 	bx, by := center(back)
 	b.OnEvent(Event{Kind: EventClick, X: bx, Y: by})
 	if b.pressActive {
@@ -520,7 +520,7 @@ func TestBrowserCopyAddress(t *testing.T) {
 	}
 
 	// Click focuses the field (addrBuf := CurrentURL); CopyAddress writes it.
-	_, _, _, _, _, addr := b.toolbarLayout()
+	_, _, _, _, _, _, addr := b.toolbarLayout()
 	cx, cy := center(addr)
 	b.OnEvent(Event{Kind: EventClick, X: cx, Y: cy})
 	if !b.AddressFocused() {
@@ -566,7 +566,7 @@ func TestBrowserCopyAddress(t *testing.T) {
 
 	// A focused-but-empty address copies nothing.
 	b2, _, _, _ := newTestBrowser() // no Open → CurrentURL ""
-	_, _, _, _, _, addr2 := b2.toolbarLayout()
+	_, _, _, _, _, _, addr2 := b2.toolbarLayout()
 	x2, y2 := center(addr2)
 	b2.OnEvent(Event{Kind: EventClick, X: x2, Y: y2})
 	if txt, ok := b2.CopyAddress(); ok || txt != "" {
@@ -625,7 +625,7 @@ func TestBrowserDrawAddressFocusAndCaret(t *testing.T) {
 	theme := DefaultLight()
 	b, _, _, _ := newTestBrowser()
 	b.Open("http://a", "")
-	_, _, _, _, _, addr := b.toolbarLayout()
+	_, _, _, _, _, _, addr := b.toolbarLayout()
 
 	// Unfocused: the address border is drawn in Border, not Accent.
 	buf := makeSurface(browserBounds.W, browserBounds.H)
@@ -768,7 +768,7 @@ func TestBrowserClickToolbarButtons(t *testing.T) {
 	b.Navigate("http://b")
 	b.Navigate("http://c") // cursor 2: Back enabled, Forward disabled
 
-	back, fwd, reload, _, _, addr := b.toolbarLayout()
+	back, fwd, reload, _, _, _, addr := b.toolbarLayout()
 
 	// Forward is disabled here: clicking it is a no-op (guard branch).
 	bx, by := center(fwd)
@@ -804,7 +804,7 @@ func TestBrowserClickToolbarButtons(t *testing.T) {
 
 func TestBrowserClickReloadWithNoTab(t *testing.T) {
 	b, navT, _, _ := newTestBrowser()
-	_, _, reload, _, _, _ := b.toolbarLayout()
+	_, _, reload, _, _, _, _ := b.toolbarLayout()
 	rx, ry := center(reload)
 	b.OnEvent(Event{Kind: EventClick, X: rx, Y: ry}) // no tab: Reload guard skipped
 	if len(*navT) != 0 {
@@ -816,7 +816,7 @@ func TestBrowserClickBackDisabledNoOp(t *testing.T) {
 	b, navT, _, _ := newTestBrowser()
 	b.Open("http://a", "") // single entry: Back disabled
 	n := len(*navT)
-	back, _, _, _, _, _ := b.toolbarLayout()
+	back, _, _, _, _, _, _ := b.toolbarLayout()
 	bx, by := center(back)
 	b.OnEvent(Event{Kind: EventClick, X: bx, Y: by})
 	if len(*navT) != n {
@@ -1055,12 +1055,12 @@ func TestBrowserMaxScrollShortImage(t *testing.T) {
 func TestBrowserZoomLayoutRects(t *testing.T) {
 	b := NewBrowser()
 	b.SetBounds(browserBounds)
-	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
+	back, fwd, reload, zoomOut, zoomIn, fit, addr := b.toolbarLayout()
 
 	tr := b.toolbarRect()
 	btnY := tr.Y + BrowserPadY
 	btnH := tr.H - 2*BrowserPadY
-	for _, r := range []Rect{back, fwd, reload, zoomOut, zoomIn, addr} {
+	for _, r := range []Rect{back, fwd, reload, zoomOut, zoomIn, fit, addr} {
 		if r.Y != btnY || r.H != btnH {
 			t.Fatalf("toolbar item Y/H = %d/%d, want %d/%d", r.Y, r.H, btnY, btnH)
 		}
@@ -1077,8 +1077,14 @@ func TestBrowserZoomLayoutRects(t *testing.T) {
 	if zoomIn.W != btnH {
 		t.Fatalf("zoomIn.W = %d, want btnH %d (square)", zoomIn.W, btnH)
 	}
-	if addr.X != zoomIn.X+zoomIn.W+BrowserBtnGap {
-		t.Fatalf("addr.X = %d, want %d (right after zoomIn)", addr.X, zoomIn.X+zoomIn.W+BrowserBtnGap)
+	if fit.X != zoomIn.X+zoomIn.W {
+		t.Fatalf("fit.X = %d, want %d (adjacent to zoomIn within the zoom group)", fit.X, zoomIn.X+zoomIn.W)
+	}
+	if fit.W != btnH {
+		t.Fatalf("fit.W = %d, want btnH %d (square)", fit.W, btnH)
+	}
+	if addr.X != fit.X+fit.W+BrowserBtnGap {
+		t.Fatalf("addr.X = %d, want %d (right after fit)", addr.X, fit.X+fit.W+BrowserBtnGap)
 	}
 	if addr.X+addr.W != tr.X+tr.W-BrowserPadX {
 		t.Fatalf("addr right edge = %d, want %d", addr.X+addr.W, tr.X+tr.W-BrowserPadX)
@@ -1097,19 +1103,19 @@ func TestBrowserToolbarIconLayoutSquare(t *testing.T) {
 	b.SetBounds(browserBounds)
 	noop := func(p painter.Painter, r Rect, ink RGBA) {}
 	b.BackIcon, b.ForwardIcon, b.ReloadIcon = noop, noop, noop
-	b.ZoomOutIcon, b.ZoomInIcon = noop, noop
+	b.ZoomOutIcon, b.ZoomInIcon, b.FitIcon = noop, noop, noop
 
-	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
+	back, fwd, reload, zoomOut, zoomIn, fit, addr := b.toolbarLayout()
 	tr := b.toolbarRect()
 	btnY := tr.Y + BrowserPadY
 	btnH := tr.H - 2*BrowserPadY
 	// Members are adjacent within a group; a BrowserBtnGap separates the nav group
-	// (after Reload) from the zoom group (after zoom-in / before the address).
+	// (after Reload) from the zoom group (after best-fit / before the address).
 	x := tr.X + BrowserPadX
 	items := []struct {
 		r        Rect
 		gapAfter bool
-	}{{back, false}, {fwd, false}, {reload, true}, {zoomOut, false}, {zoomIn, true}}
+	}{{back, false}, {fwd, false}, {reload, true}, {zoomOut, false}, {zoomIn, false}, {fit, true}}
 	for i, it := range items {
 		if it.r.X != x || it.r.Y != btnY || it.r.W != btnH || it.r.H != btnH {
 			t.Fatalf("icon button %d = %+v, want square {X:%d Y:%d W:%d H:%d}", i, it.r, x, btnY, btnH, btnH)
@@ -1154,7 +1160,7 @@ func TestBrowserDrawToolbarIcons(t *testing.T) {
 	b.BackIcon, b.ForwardIcon, b.ReloadIcon = mk("back"), mk("fwd"), mk("reload")
 	b.ZoomOutIcon, b.ZoomInIcon = mk("zo"), mk("zi")
 
-	back, fwd, reload, zoomOut, zoomIn, _ := b.toolbarLayout()
+	back, fwd, reload, zoomOut, zoomIn, _, _ := b.toolbarLayout()
 	buf := makeSurface(browserBounds.W, browserBounds.H)
 	b.Draw(newP(buf, browserBounds.W), theme)
 
@@ -1323,7 +1329,7 @@ func TestBrowserZoomScaledLinkHit(t *testing.T) {
 func TestBrowserClickZoomButtons(t *testing.T) {
 	b, _, _, _ := newTestBrowser()
 	b.Open("http://a", "")
-	_, _, _, zo, zi, _ := b.toolbarLayout()
+	_, _, _, zo, zi, _, _ := b.toolbarLayout()
 
 	zx, zy := center(zi)
 	b.OnEvent(Event{Kind: EventClick, X: zx, Y: zy})
@@ -1359,6 +1365,101 @@ func TestBrowserClickZoomButtons(t *testing.T) {
 	}
 }
 
+// TestBrowserFitZoom exercises FitZoom on every branch: a tall page fits at a
+// zoom below 1 (clamped to the min when the fit factor undershoots), a
+// moderately tall page fits strictly between the min and 1, a page that already
+// fits stays at 1, and both no-op guards (no render, empty content rect).
+func TestBrowserFitZoom(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+
+	// No render yet: FitZoom is a no-op (CanFit false), zoom stays 1.
+	b.FitZoom()
+	if b.Zoom() != 1.0 || b.CanFit() {
+		t.Fatalf("no-render FitZoom: zoom=%v CanFit=%v, want 1.0/false", b.Zoom(), b.CanFit())
+	}
+
+	cr := b.contentRect()
+
+	// A very tall page: fit = cr.H/(4*cr.H) = 0.25, clamped by SetZoom to the min.
+	deliverPage(b, cr.W, cr.H*4, nil)
+	if !b.CanFit() {
+		t.Fatal("CanFit should be true once a render is delivered")
+	}
+	b.SetZoom(BrowserMaxZoom) // start away from the target so a change is observable
+	b.FitZoom()
+	if b.Zoom() != BrowserMinZoom {
+		t.Fatalf("tall-page FitZoom = %v, want BrowserMinZoom %v (clamped)", b.Zoom(), BrowserMinZoom)
+	}
+	if !(b.Zoom() < 1.0) {
+		t.Fatalf("tall-page FitZoom = %v, want < 1.0", b.Zoom())
+	}
+
+	// A page 1.5× the content height: fit = cr.H/(1.5*cr.H) = 0.667, strictly
+	// between the min and 1 (no clamp).
+	b2, _, _, _ := newTestBrowser()
+	cr2 := b2.contentRect()
+	deliverPage(b2, cr2.W, cr2.H+cr2.H/2, nil)
+	b2.FitZoom()
+	if !(b2.Zoom() > BrowserMinZoom && b2.Zoom() < 1.0) {
+		t.Fatalf("1.5×-page FitZoom = %v, want in (%v, 1.0)", b2.Zoom(), BrowserMinZoom)
+	}
+
+	// A short page (fits already): fit caps at 1.0, so the zoom stays 1.
+	b3, _, _, _ := newTestBrowser()
+	cr3 := b3.contentRect()
+	deliverPage(b3, cr3.W, cr3.H/4, nil)
+	b3.SetZoom(BrowserMaxZoom)
+	b3.FitZoom()
+	if b3.Zoom() != 1.0 {
+		t.Fatalf("short-page FitZoom = %v, want 1.0 (capped)", b3.Zoom())
+	}
+
+	// An empty content rect (chrome taller than the widget): no-op guard.
+	b4, _, _, _ := newTestBrowser()
+	crE := b4.contentRect()
+	deliverPage(b4, crE.W, crE.H*4, nil)
+	b4.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 0}) // content rect collapses to zero height
+	if b4.CanFit() {
+		t.Fatal("CanFit should be false with an empty content rect")
+	}
+	b4.SetZoom(BrowserMaxZoom)
+	b4.FitZoom()
+	if b4.Zoom() != BrowserMaxZoom {
+		t.Fatalf("empty-rect FitZoom changed zoom to %v, want it left at %v", b4.Zoom(), BrowserMaxZoom)
+	}
+}
+
+// TestBrowserClickFitButton drives the best-fit toolbar button: clicking it with
+// a delivered tall render fits the page (zoom < 1), and with no render the
+// disabled button is an inert no-op.
+func TestBrowserClickFitButton(t *testing.T) {
+	b, _, _, _ := newTestBrowser()
+
+	// No render: the fit button is disabled, so a click leaves the zoom untouched.
+	_, _, _, _, _, fit, _ := b.toolbarLayout()
+	fx, fy := center(fit)
+	b.SetZoom(BrowserMaxZoom)
+	b.OnEvent(Event{Kind: EventClick, X: fx, Y: fy})
+	if b.Zoom() != BrowserMaxZoom {
+		t.Fatalf("disabled fit click changed zoom to %v", b.Zoom())
+	}
+
+	// With a tall render the fit button applies FitZoom (zoom drops below 1).
+	cr := b.contentRect()
+	deliverPage(b, cr.W, cr.H*4, nil)
+	b.SetZoom(BrowserMaxZoom)
+	_, _, _, _, _, fit, _ = b.toolbarLayout()
+	fx, fy = center(fit)
+	b.addrFocused = true
+	b.OnEvent(Event{Kind: EventClick, X: fx, Y: fy})
+	if !(b.Zoom() < 1.0) {
+		t.Fatalf("fit-button click zoom = %v, want < 1.0", b.Zoom())
+	}
+	if b.addrFocused {
+		t.Fatal("a fit-button click should defocus the address field")
+	}
+}
+
 // TestBrowserDrawZoomButtonsDimmedAtClamp asserts the zoom buttons read enabled
 // (Surface fill) mid-range and dimmed (mutedFace) at their respective clamps,
 // exactly like Back/Forward at the history ends.
@@ -1366,7 +1467,7 @@ func TestBrowserDrawZoomButtonsDimmedAtClamp(t *testing.T) {
 	theme := DefaultLight()
 	b, _, _, _ := newTestBrowser()
 	b.Open("http://a", "")
-	_, _, _, zo, zi, _ := b.toolbarLayout()
+	_, _, _, zo, zi, _, _ := b.toolbarLayout()
 	fillAt := func(buf []byte, r Rect) RGBA { return pixelAt(buf, browserBounds.W, r.X+3, r.Y+r.H/2) }
 
 	// Mid zoom: both enabled.
@@ -1447,7 +1548,7 @@ func TestBrowserAddressLeadingAndBookmark(t *testing.T) {
 		t.Fatalf("leading/bookmark icons not drawn: lead=%d star=%d", leadCalls, starCalls)
 	}
 
-	_, _, _, _, _, addr := b.toolbarLayout()
+	_, _, _, _, _, _, addr := b.toolbarLayout()
 	lead, tz, star := b.addrZones(addr)
 	if lead.W != addr.H || star.X != addr.X+addr.W-addr.H {
 		t.Fatalf("zones: lead=%+v star=%+v", lead, star)
@@ -1520,7 +1621,7 @@ func TestBrowserScaleLayout(t *testing.T) {
 	}
 
 	// Toolbar layout: pads/gap/button squares all doubled, exact coords.
-	back, fwd, reload, zoomOut, zoomIn, addr := b.toolbarLayout()
+	back, fwd, reload, zoomOut, zoomIn, fit, addr := b.toolbarLayout()
 	btnY := tr.Y + 2*BrowserPadY // 58
 	btnH := tr.H - 2*(2*BrowserPadY)
 	if back != (Rect{X: tr.X + 2*BrowserPadX, Y: btnY, W: btnH, H: btnH}) { // {8,58,68,68}
@@ -1529,11 +1630,19 @@ func TestBrowserScaleLayout(t *testing.T) {
 	if fwd.X != back.X+btnH || reload.X != fwd.X+btnH {
 		t.Fatalf("scaled nav chain: fwd=%+v reload=%+v", fwd, reload)
 	}
-	if zoomOut.X != reload.X+btnH+2*BrowserBtnGap || zoomIn.X != zoomOut.X+btnH {
-		t.Fatalf("scaled zoom group: zoomOut=%+v zoomIn=%+v", zoomOut, zoomIn)
+	if zoomOut.X != reload.X+btnH+2*BrowserBtnGap || zoomIn.X != zoomOut.X+btnH || fit.X != zoomIn.X+btnH {
+		t.Fatalf("scaled zoom group: zoomOut=%+v zoomIn=%+v fit=%+v", zoomOut, zoomIn, fit)
 	}
-	if addr.X != zoomIn.X+btnH+2*BrowserBtnGap || addr.X+addr.W != tr.X+tr.W-2*BrowserPadX {
-		t.Fatalf("scaled addr = %+v", addr)
+	// The address field starts right after the (gapped) zoom group and fills the
+	// remainder to the right pad, clamped at zero — at Scale 2 the six scaled
+	// buttons consume the whole 400-wide toolbar, so the remainder clamps to 0.
+	wantAddrX := fit.X + btnH + 2*BrowserBtnGap
+	wantAddrW := tr.X + tr.W - 2*BrowserPadX - wantAddrX
+	if wantAddrW < 0 {
+		wantAddrW = 0
+	}
+	if addr.X != wantAddrX || addr.W != wantAddrW {
+		t.Fatalf("scaled addr = %+v, want X=%d W=%d", addr, wantAddrX, wantAddrW)
 	}
 
 	// Tab pills + close boxes scale (inset 2→4 / 4→8, close width 14→28).
@@ -1550,7 +1659,7 @@ func TestBrowserScaleLayout(t *testing.T) {
 	b1, _, _, _ := newTestBrowser()
 	b1.Open("http://a", "")
 	b1.Open("http://b", "")
-	back1, _, _, _, _, _ := b1.toolbarLayout()
+	back1, _, _, _, _, _, _ := b1.toolbarLayout()
 	if back.H <= back1.H || b.tabStripRect().H <= b1.tabStripRect().H {
 		t.Fatalf("Scale=2 chrome not larger than Scale=1: btnH %d vs %d", back.H, back1.H)
 	}
@@ -1575,10 +1684,10 @@ func TestBrowserScaleDefaultIdentity(t *testing.T) {
 	if b0.progressH() != b1.progressH() {
 		t.Fatalf("progressH 0 vs 1: %d/%d", b0.progressH(), b1.progressH())
 	}
-	l0 := [6]Rect{}
-	l1 := [6]Rect{}
-	l0[0], l0[1], l0[2], l0[3], l0[4], l0[5] = b0.toolbarLayout()
-	l1[0], l1[1], l1[2], l1[3], l1[4], l1[5] = b1.toolbarLayout()
+	l0 := [7]Rect{}
+	l1 := [7]Rect{}
+	l0[0], l0[1], l0[2], l0[3], l0[4], l0[5], l0[6] = b0.toolbarLayout()
+	l1[0], l1[1], l1[2], l1[3], l1[4], l1[5], l1[6] = b1.toolbarLayout()
 	if l0 != l1 {
 		t.Fatalf("toolbarLayout Scale 0 vs 1 differ: %+v vs %+v", l0, l1)
 	}
@@ -1621,7 +1730,7 @@ func TestBrowserHideChromeClicksInert(t *testing.T) {
 	b.Navigate("http://b")
 	b.Navigate("http://c") // Back enabled, Forward disabled
 	// Capture where the toolbar button + address WOULD be (chrome shown), then hide.
-	back, _, _, _, _, addr := b.toolbarLayout()
+	back, _, _, _, _, _, addr := b.toolbarLayout()
 	b.HideChrome = true
 
 	before := b.CurrentURL()

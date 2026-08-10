@@ -47,7 +47,7 @@ func TestScrollViewClipsChildToViewport(t *testing.T) {
 	if pixelAt(buf, w, 10, 50) == red { // row 50 > viewport H 40
 		t.Fatal("child painted below the viewport (not clipped)")
 	}
-	if pixelAt(buf, w, 35, 20) == red { // x=35 ≥ W−scrollbarWidth (32)
+	if pixelAt(buf, w, 35, 20) == red { // x=35 ≥ W−scrollbarWidth (28)
 		t.Fatal("child painted into the scrollbar column (not clipped)")
 	}
 }
@@ -80,14 +80,20 @@ func TestScrollViewClampsToMax(t *testing.T) {
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	sv.SetContentSize(200, 300)
 	sv.Scroll(10000, 10000)
-	// Content is wider than the viewport (200 > 100-8=92), so a horizontal
-	// scrollbar reserves the bottom row and the viewport height shrinks to
-	// 60-8=52. maxY = 300-52 = 248; maxX = 200-92 = 108.
-	if sv.OffsetY != 248 {
-		t.Fatalf("OffsetY clamp: got %d, want 248", sv.OffsetY)
+	// Content is wider than the viewport (200 > 100-scrollbarWidth), so a
+	// horizontal scrollbar reserves the bottom row and the viewport height shrinks
+	// by scrollbarWidth. Express the clamps in terms of scrollbarWidth so they
+	// track the shared track thickness: viewport = bounds - scrollbarWidth,
+	// clamp = content - viewport.
+	viewW := 100 - scrollbarWidth
+	viewH := 60 - scrollbarWidth
+	wantY := 300 - viewH
+	wantX := 200 - viewW
+	if sv.OffsetY != wantY {
+		t.Fatalf("OffsetY clamp: got %d, want %d", sv.OffsetY, wantY)
 	}
-	if sv.OffsetX != 108 {
-		t.Fatalf("OffsetX clamp: got %d, want 108", sv.OffsetX)
+	if sv.OffsetX != wantX {
+		t.Fatalf("OffsetX clamp: got %d, want %d", sv.OffsetX, wantX)
 	}
 }
 
@@ -632,7 +638,7 @@ func TestListBoxScrollbarThumbRendersOnOverflow(t *testing.T) {
 	buf := makeSurface(w, h)
 	l.Draw(newP(buf, w), theme)
 
-	trackX := 50 - scrollbarWidth // 42
+	trackX := 50 - scrollbarWidth // 38
 	foundTrack := false
 	for y := 90; y < 100; y++ {
 		if pixelAt(buf, w, trackX+3, y) == theme.SurfaceAlt {

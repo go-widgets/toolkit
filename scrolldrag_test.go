@@ -74,7 +74,7 @@ func TestSBGeomScrollForGrabStart(t *testing.T) {
 func TestTreeTableScrollbarDragPagesAndSelects(t *testing.T) {
 	tt := NewTreeTable([]TreeTableColumn{{Title: "Name"}}, manyTreeTableLeaves(20))
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90}) // wr=3, total=20, max=17
-	trackX := 200 - scrollbarWidth                // 192
+	trackX := 200 - scrollbarWidth                // 188
 	// Geometry: trackTop=24, trackH=66, thumbH=9, thumb at [24,33) when ScrollRow=0.
 
 	// Press ON the thumb, then drag down the track: ScrollRow rises
@@ -143,7 +143,7 @@ func TestListBoxScrollbarDragPagesAndSelects(t *testing.T) {
 	l := NewListBox(manyItems(20)) // RowHeight=18
 	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	// Geometry: visibleRows=4, contentH=360, max=16, thumbH=10, thumb [0,10).
-	trackX := 100 - scrollbarWidth // 92
+	trackX := 100 - scrollbarWidth // 88
 
 	before := l.ScrollRow
 	l.OnEvent(Event{Kind: EventClick, X: trackX + 3, Y: 3})
@@ -330,53 +330,60 @@ func newOverflowScrollView() *ScrollView {
 
 func TestScrollViewVerticalScrollbarDrag(t *testing.T) {
 	sv := newOverflowScrollView()
-	// viewport 32x32; vertical thumb x-band [32,40), y-thumb [0,8) at Offset 0.
+	// The overflow reserves a scrollbarWidth track on each axis, so the viewport
+	// shrinks to 40-scrollbarWidth on both; the clamp is content-viewport and a
+	// page equals the viewport. Both scale with the shared track thickness.
+	viewport := 40 - scrollbarWidth
+	clamp := 200 - viewport
+	// vertical thumb x-band [40-scrollbarWidth,40), y-thumb [0,8) at Offset 0.
 	sv.OnEvent(Event{Kind: EventClick, X: 34, Y: 3})
 	if !sv.sbV.active {
 		t.Fatal("pressing the vertical thumb should begin a drag")
 	}
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 34, Y: 20})
-	if !(sv.OffsetY > 0 && sv.OffsetY < 168) {
-		t.Fatalf("mid drag OffsetY = %d, want strictly between 0 and 168", sv.OffsetY)
+	if !(sv.OffsetY > 0 && sv.OffsetY < clamp) {
+		t.Fatalf("mid drag OffsetY = %d, want strictly between 0 and %d", sv.OffsetY, clamp)
 	}
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 34, Y: 40})
-	if sv.OffsetY != 168 {
-		t.Fatalf("drag past the end OffsetY = %d, want 168 (clamped)", sv.OffsetY)
+	if sv.OffsetY != clamp {
+		t.Fatalf("drag past the end OffsetY = %d, want %d (clamped)", sv.OffsetY, clamp)
 	}
 	sv.OnEvent(Event{Kind: EventMouseUp})
 	if sv.sbV.active {
 		t.Fatal("EventMouseUp should end the vertical drag")
 	}
 
-	// Track press below the thumb pages down one viewport (32 px).
+	// Track press below the thumb pages down one viewport.
 	sv.OffsetY = 0
 	sv.OnEvent(Event{Kind: EventClick, X: 34, Y: 20})
-	if sv.OffsetY != 32 {
-		t.Fatalf("vertical page-down OffsetY = %d, want 32", sv.OffsetY)
+	if sv.OffsetY != viewport {
+		t.Fatalf("vertical page-down OffsetY = %d, want %d", sv.OffsetY, viewport)
 	}
 }
 
 func TestScrollViewHorizontalScrollbarDrag(t *testing.T) {
 	sv := newOverflowScrollView()
-	// horizontal thumb y-band [32,40), x-thumb [0,8) at Offset 0.
+	viewport := 40 - scrollbarWidth
+	clamp := 200 - viewport
+	// horizontal thumb y-band [40-scrollbarWidth,40), x-thumb [0,8) at Offset 0.
 	sv.OnEvent(Event{Kind: EventClick, X: 3, Y: 34})
 	if !sv.sbH.active {
 		t.Fatal("pressing the horizontal thumb should begin a drag")
 	}
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 34})
-	if sv.OffsetX != 168 {
-		t.Fatalf("drag past the end OffsetX = %d, want 168 (clamped)", sv.OffsetX)
+	if sv.OffsetX != clamp {
+		t.Fatalf("drag past the end OffsetX = %d, want %d (clamped)", sv.OffsetX, clamp)
 	}
 	sv.OnEvent(Event{Kind: EventMouseUp})
 	if sv.sbH.active {
 		t.Fatal("EventMouseUp should end the horizontal drag")
 	}
 
-	// Track press right of the thumb pages right one viewport (32 px).
+	// Track press right of the thumb pages right one viewport.
 	sv.OffsetX = 0
 	sv.OnEvent(Event{Kind: EventClick, X: 20, Y: 34})
-	if sv.OffsetX != 32 {
-		t.Fatalf("horizontal page-right OffsetX = %d, want 32", sv.OffsetX)
+	if sv.OffsetX != viewport {
+		t.Fatalf("horizontal page-right OffsetX = %d, want %d", sv.OffsetX, viewport)
 	}
 }
 
