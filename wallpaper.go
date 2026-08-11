@@ -161,12 +161,6 @@ func (w *Wallpaper) paintTile(p painter.Painter, r Rect) {
 	}
 }
 
-// samplePixel reads the RGBA at (x, y) from a w-wide RGBA byte buffer.
-func samplePixel(buf []byte, w, x, y int) RGBA {
-	o := (y*w + x) * 4
-	return RGBA{R: buf[o], G: buf[o+1], B: buf[o+2], A: buf[o+3]}
-}
-
 // lerpRGBA interpolates from a (num==0) to b (num==den-1) linearly. den<=1
 // returns a. The result is opaque.
 func lerpRGBA(a, b RGBA, num, den int) RGBA {

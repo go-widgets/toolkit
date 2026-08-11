@@ -4,7 +4,12 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"image"
+
+	"github.com/go-images/images"
+	"github.com/go-widgets/painter"
+)
 
 // Thumbnail renders a source RGBA buffer scaled down (aspect-preserved,
 // centred) into its bounds, with an optional caption strip and a
@@ -14,9 +19,22 @@ import "github.com/go-widgets/painter"
 // snapshot with a label under it.
 //
 // Downscale quality: Nearest (the zero value) is one sample per destination
-// pixel — fast, fine for a live-updating peek. Area averages the whole source
-// box that maps to each destination pixel, so a large snapshot shrunk to a
-// small tile stays legible instead of shimmering; use it for static previews.
+// pixel — fast, fine for a live-updating peek. Area averages the source region
+// each destination pixel covers, so a large snapshot shrunk to a small tile
+// stays legible instead of shimmering; use it for static previews.
+//
+// The average comes from go-images (images.Area, the same box filter as PIL's
+// Image.BOX and OpenCV's INTER_AREA) rather than from a loop written here: it
+// is an image-processing operation and go-images is where those live. It is
+// also weighted by fractional coverage where the toolkit's own loop truncated
+// the box to whole source pixels, so an uneven ratio now averages what it
+// actually covers.
+//
+// Because a scaled image depends only on the source and the target size, it is
+// computed once and kept. A caller that overwrites the CONTENTS of Pixels in
+// place must call Invalidate; assigning a new buffer through SetPixels does it
+// for them. This is the static-preview case by construction — a live-updating
+// peek wants Nearest, which keeps no cache and reads Pixels every frame.
 //
 // Selection: Selected draws a 2-px Accent border (the switcher's current
 // choice); Hover draws a 1-px Accent border (the pointer is over the tile).
@@ -42,6 +60,25 @@ type Thumbnail struct {
 	Area     bool
 	// OnClick fires on EventClick (nil-safe) so a container can select the tile.
 	OnClick func()
+
+	// areaCache holds the last Area downscale, valid for the source and the
+	// destination size recorded beside it.
+	areaCache          []byte
+	areaW, areaH       int
+	areaSrcW, areaSrcH int
+	areaSrcLen         int
+}
+
+// SetPixels replaces the source image and drops any cached downscale.
+func (t *Thumbnail) SetPixels(pixels []byte, w, h int) {
+	t.Pixels, t.IW, t.IH = pixels, w, h
+	t.Invalidate()
+}
+
+// Invalidate drops the cached Area downscale. Call it after overwriting the
+// contents of Pixels in place; SetPixels already does.
+func (t *Thumbnail) Invalidate() {
+	t.areaCache, t.areaW, t.areaH = nil, 0, 0
 }
 
 // ThumbnailLabelPad is the vertical padding above + below the caption text in
@@ -109,40 +146,44 @@ func (t *Thumbnail) drawNearest(p painter.Painter, dst Rect) {
 	blitImage(p, dst, dst, t.Pixels, t.IW, t.IH)
 }
 
-// drawArea averages the source box that maps to each destination pixel — a box
-// (area) downscale that keeps a large snapshot legible when shrunk hard.
+// drawArea blits the cached area downscale, computing it first if the source or
+// the destination size has changed since it was made.
 func (t *Thumbnail) drawArea(p painter.Painter, dst Rect) {
-	for dy := 0; dy < dst.H; dy++ {
-		sy0 := dy * t.IH / dst.H
-		sy1 := (dy + 1) * t.IH / dst.H
-		if sy1 <= sy0 {
-			sy1 = sy0 + 1
-		}
-		for dx := 0; dx < dst.W; dx++ {
-			sx0 := dx * t.IW / dst.W
-			sx1 := (dx + 1) * t.IW / dst.W
-			if sx1 <= sx0 {
-				sx1 = sx0 + 1
-			}
-			p.PutPixel(dst.X+dx, dst.Y+dy, t.boxAverage(sx0, sy0, sx1, sy1))
-		}
+	if !t.areaValid(dst) {
+		t.buildArea(dst)
 	}
+	// The cache is already the destination size, so this is a 1:1 blit and the
+	// painter copies it a row at a time.
+	blitImage(p, dst, dst, t.areaCache, dst.W, dst.H)
 }
 
-// boxAverage is the mean RGBA over the source box [sx0,sx1) x [sy0,sy1).
-func (t *Thumbnail) boxAverage(sx0, sy0, sx1, sy1 int) RGBA {
-	var sr, sg, sb, sa, n int
-	for sy := sy0; sy < sy1; sy++ {
-		for sx := sx0; sx < sx1; sx++ {
-			c := samplePixel(t.Pixels, t.IW, sx, sy)
-			sr += int(c.R)
-			sg += int(c.G)
-			sb += int(c.B)
-			sa += int(c.A)
-			n++
-		}
+// areaValid reports whether the cache was made from this source at this size.
+func (t *Thumbnail) areaValid(dst Rect) bool {
+	return t.areaCache != nil &&
+		t.areaW == dst.W && t.areaH == dst.H &&
+		t.areaSrcW == t.IW && t.areaSrcH == t.IH && t.areaSrcLen == len(t.Pixels)
+}
+
+// buildArea scales the source down once, through go-images rather than a loop
+// of our own. The source is wrapped, not copied: image.RGBA is a header over
+// exactly the bytes Pixels already holds.
+func (t *Thumbnail) buildArea(dst Rect) {
+	src := &image.RGBA{
+		Pix:    t.Pixels,
+		Stride: t.IW * 4,
+		Rect:   image.Rect(0, 0, t.IW, t.IH),
 	}
-	return RGBA{R: uint8(sr / n), G: uint8(sg / n), B: uint8(sb / n), A: uint8(sa / n)}
+	// The error case is dst.W or dst.H being non-positive, which Draw has
+	// already excluded; falling back to nearest rather than panicking keeps a
+	// future caller's mistake to a worse picture instead of a crash.
+	out, err := images.Resize(src, dst.W, dst.H, images.Area)
+	if err != nil {
+		t.areaCache, t.areaW, t.areaH = nil, 0, 0
+		return
+	}
+	t.areaCache = out.Pix
+	t.areaW, t.areaH = dst.W, dst.H
+	t.areaSrcW, t.areaSrcH, t.areaSrcLen = t.IW, t.IH, len(t.Pixels)
 }
 
 // OnEvent fires OnClick on EventClick; other event kinds are ignored. OnClick
