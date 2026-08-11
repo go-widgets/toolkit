@@ -153,11 +153,24 @@ const (
 // Shift-click extends a range from the anchor). Hosts that don't track
 // modifiers simply leave them false, which preserves the original
 // single-selection behaviour everywhere.
+//
+// Alt and Meta report the two remaining desktop modifiers, so a host can
+// deliver a platform-native accelerator a widget could not otherwise tell
+// apart from a plain Ctrl chord. Alt is the ⌥ Option key on macOS and the Alt
+// key on X11/Wayland/Windows; Meta is the ⌘ Command key on macOS and the
+// Super/Windows/logo key elsewhere. They let a file manager distinguish, for
+// example, ⌘V (paste) from ⌘⌥V (paste-as-move) — a distinction Ctrl/Shift
+// alone cannot express. Like Ctrl/Shift they default false, so a host that
+// does not track them (or a widget that ignores them) behaves exactly as
+// before; only code that opts in by reading them sees any change.
 type Event struct {
 	Kind        EventKind
 	X, Y        int
 	Code        string
 	Ctrl, Shift bool
+	// Alt is the Option (⌥) / Alt modifier; Meta is the Command (⌘) / Super
+	// (Windows/logo) modifier. Both default false. See the type doc above.
+	Alt, Meta bool
 	// Delta is the scroll amount, in ROWS, for an EventScroll: positive
 	// scrolls down / forward (toward the end of the content), negative
 	// scrolls up / back. It is zero and ignored on every other event kind.
