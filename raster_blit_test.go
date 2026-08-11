@@ -260,6 +260,15 @@ func TestMigratedWidgetsPaintIdentically(t *testing.T) {
 // the new code against itself would prove nothing about that, so the pre-
 // migration implementations are reproduced here verbatim and compared against.
 
+// samplePixel reads the RGBA at (x, y) from a w-wide RGBA byte buffer. It lived
+// in wallpaper.go until every widget moved onto the painter's primitive; the
+// pre-migration reference implementations below are now its only callers, so it
+// belongs with them rather than in the library.
+func samplePixel(buf []byte, w, x, y int) RGBA {
+	o := (y*w + x) * 4
+	return RGBA{R: buf[o], G: buf[o+1], B: buf[o+2], A: buf[o+3]}
+}
+
 func refCover(p painter.Painter, r Rect, pix []byte, iw, ih int) {
 	scaledW, scaledH := r.W, ih*r.W/iw
 	if scaledH < r.H {
@@ -372,3 +381,150 @@ func BenchmarkImageWithPrimitive(b *testing.B)     { benchWidget(b, benchImage()
 func BenchmarkImagePerPixel(b *testing.B)          { benchWidget(b, benchImage(), false) }
 func BenchmarkWallpaperWithPrimitive(b *testing.B) { benchWidget(b, benchWallpaper(), true) }
 func BenchmarkWallpaperPerPixel(b *testing.B)      { benchWidget(b, benchWallpaper(), false) }
+
+// thumb builds a Thumbnail with an Area downscale over a gradient source.
+func thumb(iw, ih, bw, bh int) *Thumbnail {
+	t := NewThumbnail(gradient(iw, ih), iw, ih)
+	t.Area = true
+	t.SetBounds(Rect{X: 0, Y: 0, W: bw, H: bh})
+	return t
+}
+
+func drawn(t *Thumbnail, w, h int) *painter.PixelPainter {
+	s := surface(w, h)
+	t.Draw(s, DefaultDark())
+	return s
+}
+
+// The scaled image depends only on the source and the target size, so it is
+// computed once -- and the second frame must paint exactly what the first did.
+func TestThumbnailAreaCacheRepaintsIdentically(t *testing.T) {
+	th := thumb(32, 24, 16, 12)
+	first := drawn(th, 16, 12)
+	second := drawn(th, 16, 12)
+	sameBytes(t, "second frame", second, first)
+	if th.areaCache == nil {
+		t.Fatal("nothing was cached, so the test proves nothing about a cache")
+	}
+}
+
+// Resizing the tile invalidates by itself: the cache records the size it was
+// built for.
+func TestThumbnailAreaCacheFollowsTheBounds(t *testing.T) {
+	th := thumb(32, 24, 16, 12)
+	drawn(th, 20, 20)
+	small := len(th.areaCache)
+
+	th.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 15})
+	drawn(th, 20, 20)
+	if len(th.areaCache) == small {
+		t.Error("the cache was not rebuilt for the new size")
+	}
+
+	// And the picture matches a freshly built thumbnail of that size.
+	fresh := thumb(32, 24, 20, 15)
+	sameBytes(t, "after resize", drawn(th, 20, 20), drawn(fresh, 20, 20))
+}
+
+// A new source through SetPixels invalidates; overwriting Pixels in place needs
+// Invalidate, which is the documented contract.
+func TestThumbnailAreaCacheInvalidation(t *testing.T) {
+	th := thumb(32, 24, 16, 12)
+	before := drawn(th, 16, 12)
+
+	other := gradient(32, 24)
+	for i := range other {
+		other[i] = 255 - other[i]
+	}
+
+	// In place, without Invalidate: the cache legitimately still stands.
+	copy(th.Pixels, other)
+	stale := drawn(th, 16, 12)
+	sameBytes(t, "in place without Invalidate", stale, before)
+
+	// Invalidate, and the new contents appear.
+	th.Invalidate()
+	after := drawn(th, 16, 12)
+	var differs bool
+	for i := range after.Buf {
+		if after.Buf[i] != before.Buf[i] {
+			differs = true
+			break
+		}
+	}
+	if !differs {
+		t.Error("Invalidate did not rebuild from the new contents")
+	}
+
+	// SetPixels invalidates on the caller's behalf.
+	th2 := thumb(32, 24, 16, 12)
+	drawn(th2, 16, 12)
+	th2.SetPixels(other, 32, 24)
+	if th2.areaCache != nil {
+		t.Error("SetPixels left a stale cache behind")
+	}
+	sameBytes(t, "SetPixels", drawn(th2, 16, 12), after)
+}
+
+// A destination the resize cannot serve leaves no cache rather than panicking.
+func TestThumbnailAreaRejectsAnImpossibleSize(t *testing.T) {
+	th := thumb(32, 24, 16, 12)
+	th.buildArea(Rect{X: 0, Y: 0, W: 0, H: 4})
+	if th.areaCache != nil {
+		t.Error("an impossible size produced a cache")
+	}
+}
+
+// Area must actually differ from nearest on a source that aliases, or the mode
+// would be pointless.
+func TestThumbnailAreaDiffersFromNearest(t *testing.T) {
+	// Vertical one-pixel stripes: nearest lands on one phase, the average sees
+	// both. The tile has to be big enough to have an interior -- the border
+	// covers every pixel of a tile a few pixels tall, which would make any two
+	// downscales agree.
+	const sw, sh = 128, 32
+	src := make([]byte, sw*sh*4)
+	for y := 0; y < sh; y++ {
+		for x := 0; x < sw; x++ {
+			v := byte(0)
+			if x%2 == 0 {
+				v = 255
+			}
+			o := (y*sw + x) * 4
+			src[o], src[o+1], src[o+2], src[o+3] = v, v, v, 255
+		}
+	}
+	mk := func(area bool) *painter.PixelPainter {
+		t := NewThumbnail(src, sw, sh)
+		t.Area = area
+		t.SetBounds(Rect{X: 0, Y: 0, W: 32, H: 8})
+		return drawn(t, 32, 8)
+	}
+	near, area := mk(false), mk(true)
+	var differs bool
+	for i := range near.Buf {
+		if near.Buf[i] != area.Buf[i] {
+			differs = true
+			break
+		}
+	}
+	if !differs {
+		t.Error("the area downscale matched nearest on a source that aliases")
+	}
+}
+
+// What the cache is worth: the same tile repainted, as an Exposé grid does.
+func benchThumb(b *testing.B, area bool) {
+	t := NewThumbnail(gradient(800, 600), 800, 600)
+	t.Area = area
+	t.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 150})
+	s := surface(200, 150)
+	theme := DefaultDark()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		t.Draw(s, theme)
+	}
+}
+
+func BenchmarkThumbnailArea(b *testing.B)    { benchThumb(b, true) }
+func BenchmarkThumbnailNearest(b *testing.B) { benchThumb(b, false) }
