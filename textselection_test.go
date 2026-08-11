@@ -14,10 +14,10 @@ import (
 // caret math and highlight rects are exactly predictable.
 type sixPxFont struct{}
 
-func (sixPxFont) Height() int                                          { return 10 }
-func (sixPxFont) Advance() int                                         { return 6 }
-func (sixPxFont) Measure(s string) int                                 { return len([]rune(s)) * 6 }
-func (sixPxFont) Draw(_ painter.Painter, _, _ int, _ string, _ RGBA)   {}
+func (sixPxFont) Height() int                                        { return 10 }
+func (sixPxFont) Advance() int                                       { return 6 }
+func (sixPxFont) Measure(s string) int                               { return len([]rune(s)) * 6 }
+func (sixPxFont) Draw(_ painter.Painter, _, _ int, _ string, _ RGBA) {}
 
 // ttOrFixed returns the 6px monospace font for deterministic measuring.
 func ttOrFixed() Font { return sixPxFont{} }
@@ -83,8 +83,8 @@ func TestTextSelectionWithinRun(t *testing.T) {
 func TestTextSelectionAcrossLines(t *testing.T) {
 	s := makeSel()
 	// From mid-first-line (char 6, "world") across to mid-second-line (char 6).
-	s.Begin(6*6, 3)  // start at char 6 of line 1 ("world")
-	s.Drag(6*6, 13)  // to char 6 of line 2 ("second")
+	s.Begin(6*6, 3) // start at char 6 of line 1 ("world")
+	s.Drag(6*6, 13) // to char 6 of line 2 ("second")
 	s.End()
 	if got := s.SelectedText(); got != "world\nsecond" {
 		t.Fatalf("cross-line selection = %q, want %q", got, "world\nsecond")
@@ -149,7 +149,7 @@ func TestTextSelectionSetRunsFiltersAndClamps(t *testing.T) {
 	s := &TextSelection{}
 	s.SetRuns([]TextRun{
 		{Text: "keep", Bounds: Rect{X: 0, Y: 0, W: 24, H: 10}, Font: f},
-		{Text: "", Bounds: Rect{X: 0, Y: 10, W: 10, H: 10}, Font: f}, // empty → dropped
+		{Text: "", Bounds: Rect{X: 0, Y: 10, W: 10, H: 10}, Font: f},    // empty → dropped
 		{Text: "zero", Bounds: Rect{X: 0, Y: 20, W: 0, H: 10}, Font: f}, // zero-area → dropped
 	})
 	if len(s.runs) != 1 {
@@ -252,8 +252,8 @@ func TestTextSelectionDrawHighlight(t *testing.T) {
 		{Text: "midnofont", Bounds: Rect{X: 0, Y: 10, W: 54, H: 10}}, // nil font
 		{Text: "bot", Bounds: Rect{X: 0, Y: 20, W: 18, H: 10}, Font: f},
 	})
-	s.Begin(0, 3)      // start of "top"
-	s.Drag(18, 23)     // end of "bot"
+	s.Begin(0, 3)  // start of "top"
+	s.Drag(18, 23) // end of "bot"
 	s.End()
 	buf2 := makeSurface(60, 40)
 	s.Draw(newP(buf2, 60), col)

@@ -105,7 +105,7 @@ func TestTableColumnAtFrozenScrolled(t *testing.T) {
 	}
 
 	// Scroll so D (natural [180,240)) comes into the scrollable viewport.
-	tb.ScrollXTo(90) // screen X of a scrolled col = natural - 90
+	tb.ScrollXTo(90)                       // screen X of a scrolled col = natural - 90
 	if got := tb.columnAt(100); got != 3 { // nat = 100+90 = 190 ∈ D
 		t.Fatalf("after scroll, columnAt(100)=%d, want 3 (D)", got)
 	}

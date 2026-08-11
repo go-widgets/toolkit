@@ -364,7 +364,7 @@ func TestListBoxMultiSelectCtrlToggle(t *testing.T) {
 	l.MultiSelect = true
 	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 
-	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 0}) // plain: select row 0
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 0})                           // plain: select row 0
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 2, Ctrl: true}) // Ctrl: add row 2
 
 	got := l.SelectedIndices()
@@ -388,7 +388,7 @@ func TestListBoxMultiSelectShiftRangeForward(t *testing.T) {
 	l.MultiSelect = true
 	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 
-	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 1}) // anchor row 1
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 1})              // anchor row 1
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 3, Shift: true}) // extend to row 3
 
 	got := l.SelectedIndices()
@@ -411,7 +411,7 @@ func TestListBoxMultiSelectShiftRangeBackward(t *testing.T) {
 	l.MultiSelect = true
 	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 
-	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 3}) // anchor row 3
+	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 3})              // anchor row 3
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: l.RowHeight * 1, Shift: true}) // extend up to row 1
 
 	got := l.SelectedIndices()
@@ -585,7 +585,7 @@ func TestListBoxWindowedDrawOnlyPaintsVisibleRows(t *testing.T) {
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // exactly 5 rows visible
 	l.ScrollRow = 3                              // window = rows [3,8)
-	l.Selected = 5                                // in-window
+	l.Selected = 5                               // in-window
 	buf := makeSurface(w, h)
 	l.Draw(newP(buf, w), theme)
 

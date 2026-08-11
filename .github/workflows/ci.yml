@@ -27,6 +27,13 @@ jobs:
           check-latest: true
           cache: true
 
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l .)
+          [ -z "$unformatted" ] || {
+            echo "::error::not gofmt-clean:"; echo "$unformatted"
+            gofmt -d $unformatted; exit 1; }
+
       - name: go vet
         run: go vet ./...
 

@@ -44,10 +44,10 @@ func TestPagingToolbarNavigation(t *testing.T) {
 	pt.OnChange = func(p int) { pages = append(pages, p) }
 	l := pt.layout()
 
-	ptClick(pt, l.prev) // 3 → 2
-	ptClick(pt, l.next) // 2 → 3
+	ptClick(pt, l.prev)  // 3 → 2
+	ptClick(pt, l.next)  // 2 → 3
 	ptClick(pt, l.first) // 3 → 1
-	ptClick(pt, l.last) // 1 → 5
+	ptClick(pt, l.last)  // 1 → 5
 	if pt.Page != 5 {
 		t.Fatalf("final Page = %d, want 5", pt.Page)
 	}
@@ -126,8 +126,8 @@ func TestPagingToolbarInertClicks(t *testing.T) {
 	fired := false
 	pt.OnChange = func(int) { fired = true }
 
-	pt.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"}) // not a click
-	ptClick(pt, pt.layout().info)                        // indicator, inert
+	pt.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})  // not a click
+	ptClick(pt, pt.layout().info)                         // indicator, inert
 	pt.OnEvent(Event{Kind: EventClick, X: 5000, Y: 5000}) // far outside
 	if fired || pt.Page != 3 {
 		t.Fatalf("inert clicks changed state: fired %v Page %d", fired, pt.Page)
