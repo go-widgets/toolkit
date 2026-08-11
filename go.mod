@@ -2,7 +2,7 @@ module github.com/go-widgets/toolkit
 
 go 1.26.4
 
-require github.com/go-widgets/painter v0.2.0
+require github.com/go-widgets/painter v0.4.0
 
 require github.com/go-opentype/opentype v0.5.0
 
