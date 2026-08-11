@@ -598,3 +598,33 @@ func BenchmarkBrowserPage(b *testing.B) {
 		br.drawPage(s, cr, tab)
 	}
 }
+
+// What a line of text costs today: every covered pixel goes through PutPixel,
+// which shifts, bounds-tests, clip-tests and blends one pixel at a time.
+func BenchmarkTruetypeLabel(b *testing.B) {
+	tt, err := NewTrueTypeFont(testFontTTF, 16)
+	if err != nil {
+		b.Fatal(err)
+	}
+	s := surface(600, 40)
+	const text = "The quick brown fox jumps over the lazy dog"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tt.Draw(s, 4, 4, text, RGBA{R: 220, G: 220, B: 220, A: 255})
+	}
+}
+
+// Measure shapes the same run without blitting a single pixel, so the gap
+// between the two says how much of drawing a label is glyph coverage and how
+// much is deciding which glyphs to draw.
+func BenchmarkTruetypeShapeOnly(b *testing.B) {
+	tt, err := NewTrueTypeFont(testFontTTF, 16)
+	if err != nil {
+		b.Fatal(err)
+	}
+	const text = "The quick brown fox jumps over the lazy dog"
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		tt.Measure(text)
+	}
+}

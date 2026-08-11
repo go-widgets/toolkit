@@ -7,6 +7,7 @@ package toolkit
 import (
 	"bytes"
 	_ "embed"
+	"fmt"
 	"testing"
 
 	"github.com/go-opentype/bidi"
@@ -436,5 +437,66 @@ func TestTrueTypeLTRShapedByteIdentical(t *testing.T) {
 
 	if !bytes.Equal(shaped, isolated) {
 		t.Fatal("LTR Latin shaped render differs from the naive isolated layout: byte-identity broken")
+	}
+}
+
+// --- shaped-run cache ----------------------------------------------------
+
+// A cached run must be the run the shaper produced, not merely a run: the same
+// text measures and paints identically however many times it is drawn.
+func TestShapedRunCacheRepeatsTheShaper(t *testing.T) {
+	f := newTTFace(t, testFontTTF, 16)
+	const s = "Wave off, fjord!"
+
+	first := f.Measure(s)
+	if len(f.shapeCache) != 1 {
+		t.Fatalf("cache holds %d runs after one measure, want 1", len(f.shapeCache))
+	}
+	if second := f.Measure(s); second != first {
+		t.Errorf("second measure = %d, first = %d", second, first)
+	}
+
+	// And the pixels match a font that has never cached anything.
+	fresh := newTTFace(t, testFontTTF, 16)
+	a := &painter.PixelPainter{Buf: make([]byte, 200*30*4), Width: 200, Height: 30}
+	b := &painter.PixelPainter{Buf: make([]byte, 200*30*4), Width: 200, Height: 30}
+	f.Draw(a, 2, 2, s, RGBA{R: 255, G: 255, B: 255, A: 255})
+	fresh.Draw(b, 2, 2, s, RGBA{R: 255, G: 255, B: 255, A: 255})
+	for i := range a.Buf {
+		if a.Buf[i] != b.Buf[i] {
+			t.Fatalf("byte %d differs between a cached and an uncached font", i)
+		}
+	}
+}
+
+// The paragraph direction is part of the key: reordering must not be served
+// from a run shaped under the other direction.
+func TestShapedRunCacheKeyedByDirection(t *testing.T) {
+	f := newTTFace(t, testFontTTF, 16)
+	const s = "abc"
+
+	f.Measure(s)
+	SetTextDirection(DirRTL)
+	defer SetTextDirection(DirLTR)
+	f.Measure(s)
+
+	if len(f.shapeCache) != 2 {
+		t.Errorf("cache holds %d runs, want one per direction", len(f.shapeCache))
+	}
+}
+
+// An unbounded stream of distinct strings -- a text editor, a browser -- must
+// not grow the cache without limit.
+func TestShapedRunCacheIsBounded(t *testing.T) {
+	f := newTTFace(t, testFontTTF, 16)
+	for i := 0; i < maxShapedRuns+10; i++ {
+		f.Measure(fmt.Sprintf("run %d", i))
+	}
+	if len(f.shapeCache) > maxShapedRuns {
+		t.Errorf("cache holds %d runs, over the %d bound", len(f.shapeCache), maxShapedRuns)
+	}
+	// Emptied rather than trimmed, so what remains is what arrived after.
+	if len(f.shapeCache) == 0 {
+		t.Error("the cache is empty, so it is not caching at all")
 	}
 }
