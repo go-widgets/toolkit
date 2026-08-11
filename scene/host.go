@@ -105,6 +105,21 @@ func (r *HostRoot) Invalidate(w toolkit.Widget) { r.scene.Invalidate(w) }
 // invalidation. Most callers only need [HostRoot.Invalidate].
 func (r *HostRoot) Scene() *Scene { return r.scene }
 
+// Children exposes the single wrapped child container so a generic tree walk
+// descends from the host root INTO the application tree instead of stopping at
+// it. Every other toolkit container answers the Children() []toolkit.Widget
+// convention; HostRoot did not, so a walker built on it — the accessibility
+// walk [github.com/go-widgets/toolkit.WalkA11y] the platform bridges consume,
+// the window drag-and-drop controller, [CollectRuns] — reached nothing under a
+// desktop app's root and consumers had to unwrap via Scene().Root().Widget()
+// by hand.
+//
+// The returned widget is exactly that: the live container Scene().Root().Widget()
+// exposes, which itself yields the application's root. This is purely structural
+// — it exposes the existing child for traversal and changes neither rendering
+// nor damage.
+func (r *HostRoot) Children() []toolkit.Widget { return []toolkit.Widget{r.bg} }
+
 // bgContainer is the scene root HostRoot builds over the application tree: a
 // single-child container whose own chrome is a full-bounds background fill. As
 // a [SelfDrawer] the scene repaints just that fill inside the damage (and skips
