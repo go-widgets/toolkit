@@ -106,13 +106,7 @@ func (t *Thumbnail) Draw(p painter.Painter, theme *Theme) {
 
 // drawNearest samples one source pixel per destination pixel.
 func (t *Thumbnail) drawNearest(p painter.Painter, dst Rect) {
-	for dy := 0; dy < dst.H; dy++ {
-		sy := dy * t.IH / dst.H
-		for dx := 0; dx < dst.W; dx++ {
-			sx := dx * t.IW / dst.W
-			p.PutPixel(dst.X+dx, dst.Y+dy, samplePixel(t.Pixels, t.IW, sx, sy))
-		}
-	}
+	blitImage(p, dst, dst, t.Pixels, t.IW, t.IH)
 }
 
 // drawArea averages the source box that maps to each destination pixel — a box

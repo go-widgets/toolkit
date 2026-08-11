@@ -20,3 +20,11 @@ github.com/go-widgets/painter v0.2.0 h1:C7anwlKLYnlTeCK90xKYvy0srxYXqhuvyDFismlf
 github.com/go-widgets/painter v0.2.0/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
 github.com/go-widgets/painter v0.4.0 h1:F7gc2ZJR8sIhVibjnQr6EEp/Fxbh8rDvSXpfAB9lgHA=
 github.com/go-widgets/painter v0.4.0/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
+github.com/go-widgets/painter v0.5.0 h1:SnG3Pxngfs4vBXT1NhELP2Wh8aCOU0x4XNn29EnygmE=
+github.com/go-widgets/painter v0.5.0/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
+github.com/go-widgets/painter v0.6.0 h1:Iw7zapuznjm6wbD1BUFKP/gczVmlHp5yju0JOIdR4MY=
+github.com/go-widgets/painter v0.6.0/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
+github.com/go-widgets/painter v0.7.0 h1:N+xEs5hzg+8Cd257tK/8vYQ1yrXezwdsqD3NYwCzI4k=
+github.com/go-widgets/painter v0.7.0/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
+github.com/go-widgets/painter v0.7.1 h1:Y71u7+gFX3pcg5T0FawHydfFrRQqUen7IwItFgAcA3E=
+github.com/go-widgets/painter v0.7.1/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=

@@ -62,15 +62,7 @@ func (i *Image) Draw(p painter.Painter, theme *Theme) {
 	if i.Scale == ScaleFit {
 		dst = FitBounds(i.W, i.H, dst)
 	}
-	for dy := 0; dy < dst.H; dy++ {
-		sy := dy * i.H / dst.H
-		for dx := 0; dx < dst.W; dx++ {
-			sx := dx * i.W / dst.W
-			sOff := (sy*i.W + sx) * 4
-			ink := RGBA{R: i.Pixels[sOff], G: i.Pixels[sOff+1], B: i.Pixels[sOff+2], A: i.Pixels[sOff+3]}
-			p.PutPixel(dst.X+dx, dst.Y+dy, ink)
-		}
-	}
+	blitImage(p, dst, dst, i.Pixels, i.W, i.H)
 }
 
 // FitBounds returns the largest rect of source aspect (srcW:srcH) that fits
