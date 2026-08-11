@@ -43,22 +43,46 @@ type A11yNode struct {
 // knows what its own screen reader does with one.
 func WalkA11y(w Widget) []A11yNode {
 	var out []A11yNode
-	var walk func(Widget)
-	walk = func(x Widget) {
+	var walk func(x Widget, dx, dy int)
+	walk = func(x Widget, dx, dy int) {
 		if x == nil {
 			return
 		}
 		if a, ok := x.(Accessible); ok {
 			if info := a.A11y(); info.Role != RolePresentation {
-				out = append(out, A11yNode{A11yInfo: info, Rect: x.Bounds()})
+				r := x.Bounds()
+				r.X, r.Y = r.X+dx, r.Y+dy
+				out = append(out, A11yNode{A11yInfo: info, Rect: r})
 			}
+		}
+		if o, ok := x.(childOffsetter); ok {
+			ox, oy := o.ChildOffset()
+			dx, dy = dx+ox, dy+oy
 		}
 		if c, ok := x.(childContainer); ok {
 			for _, child := range c.Children() {
-				walk(child)
+				walk(child, dx, dy)
 			}
 		}
 	}
-	walk(w)
+	walk(w, 0, 0)
 	return out
+}
+
+// childOffsetter is implemented by a widget that PAINTS its children at a
+// translated origin — a scrolled viewport being the only case today.
+//
+// This toolkit has no viewport in the painting model: clipping exists
+// (painter.Clipper) but coordinate translation does not, so ScrollView draws by
+// moving its child's bounds and putting them back. Everything reading bounds
+// outside Draw — this walk included — therefore sees the UNSCROLLED position.
+// Measured before this existed: a button painted at y=50 under a 250px scroll
+// was reported at y=300, which points a screen reader 250 pixels below the
+// control it is describing.
+//
+// Declaring the offset is the smallest honest fix. The real one is a viewport
+// that translates as well as clips, at which point this interface disappears
+// and the bounds are simply correct.
+type childOffsetter interface {
+	ChildOffset() (dx, dy int)
 }
