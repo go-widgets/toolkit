@@ -137,41 +137,26 @@ func (w *Wallpaper) paintCover(p painter.Painter, r Rect) {
 	}
 	ox := r.X + (r.W-scaledW)/2
 	oy := r.Y + (r.H-scaledH)/2
-	for dy := 0; dy < r.H; dy++ {
-		sy := clampInt((r.Y+dy-oy)*w.IH/scaledH, 0, w.IH-1)
-		for dx := 0; dx < r.W; dx++ {
-			sx := clampInt((r.X+dx-ox)*w.IW/scaledW, 0, w.IW-1)
-			p.PutPixel(r.X+dx, r.Y+dy, samplePixel(w.Pixels, w.IW, sx, sy))
-		}
-	}
+	// The scaled image covers r by construction, so painting it whole and
+	// letting the clip crop the overflow samples exactly what the per-pixel
+	// version sampled -- its clamp never bit inside r.
+	blitImage(p, Rect{X: ox, Y: oy, W: scaledW, H: scaledH}, r, w.Pixels, w.IW, w.IH)
 }
 
 // paintCenter blits the image 1:1 centred in r, clipping to r.
 func (w *Wallpaper) paintCenter(p painter.Painter, r Rect) {
 	ox := r.X + (r.W-w.IW)/2
 	oy := r.Y + (r.H-w.IH)/2
-	for sy := 0; sy < w.IH; sy++ {
-		dy := oy + sy
-		if dy < r.Y || dy >= r.Y+r.H {
-			continue
-		}
-		for sx := 0; sx < w.IW; sx++ {
-			dx := ox + sx
-			if dx < r.X || dx >= r.X+r.W {
-				continue
-			}
-			p.PutPixel(dx, dy, samplePixel(w.Pixels, w.IW, sx, sy))
-		}
-	}
+	blitImage(p, Rect{X: ox, Y: oy, W: w.IW, H: w.IH}, r, w.Pixels, w.IW, w.IH)
 }
 
 // paintTile repeats the image 1:1 from the top-left to cover r.
 func (w *Wallpaper) paintTile(p painter.Painter, r Rect) {
-	for dy := 0; dy < r.H; dy++ {
-		sy := dy % w.IH
-		for dx := 0; dx < r.W; dx++ {
-			sx := dx % w.IW
-			p.PutPixel(r.X+dx, r.Y+dy, samplePixel(w.Pixels, w.IW, sx, sy))
+	// One 1:1 blit per tile: each is a whole image at its own origin, and the
+	// clip trims the tiles that run off the right and bottom edges.
+	for ty := r.Y; ty < r.Y+r.H; ty += w.IH {
+		for tx := r.X; tx < r.X+r.W; tx += w.IW {
+			blitImage(p, Rect{X: tx, Y: ty, W: w.IW, H: w.IH}, r, w.Pixels, w.IW, w.IH)
 		}
 	}
 }
