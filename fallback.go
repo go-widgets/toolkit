@@ -144,14 +144,14 @@ func (f *fallbackFont) Measure(text string) int {
 // baseline. On a non-pixel painter it reorders bidi and hands runes to the
 // painter, mirroring truetypeFont.
 func (f *fallbackFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
-	pix, isPixel := p.(*painter.PixelPainter)
-	if !isPixel {
+	mp, canMask := p.(painter.MaskPainter)
+	if _, isCell := p.(*painter.CellPainter); !canMask || isCell {
 		p.Text(x, y, visualText(text), ink)
 		return
 	}
 	baseline := y + f.fonts[0].ascent
 	pen := x
 	for _, run := range f.runs(text) {
-		pen = run.font.drawShaped(pix, pen, baseline, run.text, ink)
+		pen = run.font.drawShaped(mp, pen, baseline, run.text, ink)
 	}
 }
