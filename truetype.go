@@ -185,26 +185,30 @@ func invisible(g shape.Glyph) bool { return g.GID == 0 || g.Invisible }
 // to .notdef, index 0) are not painted, matching the bitmap font's
 // blank-for-unknown behaviour.
 func (f *truetypeFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
-	pix, isPixel := p.(*painter.PixelPainter)
-	if !isPixel {
-		visual := visualText(text)
-		// A face-aware back-end embeds this face and renders real text; the
-		// pixel scan-conversion below is only for raster painters.
-		if fp, ok := p.(painter.FacePainter); ok {
-			fp.TextFace(x, y, visual, f, ink)
-			return
-		}
-		// Non-face painter: hand the reordered runes to the plain Text primitive.
-		p.Text(x, y, visual, ink)
+	// A face-aware back-end embeds this face and renders real, selectable text,
+	// which beats any rasterisation, so it is asked first even if it can also
+	// take a mask.
+	if fp, ok := p.(painter.FacePainter); ok {
+		fp.TextFace(x, y, visualText(text), f, ink)
 		return
 	}
-	f.drawShaped(pix, x, y+f.ascent, text, ink)
+	// A cell grid is asked BEFORE the mask capability, not after: a CellPainter
+	// does implement painter.MaskPainter, but a 16-pixel glyph spread over 16
+	// rows of cells is not text. A terminal's own Text primitive is its real
+	// renderer, one rune per cell.
+	if _, isCell := p.(*painter.CellPainter); !isCell {
+		if mp, ok := p.(painter.MaskPainter); ok {
+			f.drawShaped(mp, x, y+f.ascent, text, ink)
+			return
+		}
+	}
+	p.Text(x, y, visualText(text), ink)
 }
 
 // drawShaped shapes + blits text with an explicit baseline (so a fallback chain
 // can align runs from different faces to one common baseline). Returns the pen
 // advance.
-func (f *truetypeFont) drawShaped(pix *painter.PixelPainter, x, baseline int, text string, ink RGBA) int {
+func (f *truetypeFont) drawShaped(mp painter.MaskPainter, x, baseline int, text string, ink RGBA) int {
 	pen := x
 	for _, g := range f.shaped(text) {
 		// .notdef (index 0) is the shaper's blank-for-unknown; every other
@@ -215,17 +219,21 @@ func (f *truetypeFont) drawShaped(pix *painter.PixelPainter, x, baseline int, te
 		// draws a hyphen for U+00AD), so it has to be skipped explicitly or it
 		// would stamp itself on top of the next letter.
 		if !invisible(g) {
-			dr, mask, maskp, _, _ := f.face.GlyphMaskIndex(g.GID, pen+g.XOffset, baseline-g.YOffset)
-			for j := 0; j < dr.Dy(); j++ {
-				for i := 0; i < dr.Dx(); i++ {
-					a := mask.AlphaAt(maskp.X+i, maskp.Y+j).A
-					if a == 0 {
-						continue
-					}
-					alpha := uint8(uint32(a) * uint32(ink.A) / 255)
-					pix.PutPixel(dr.Min.X+i, dr.Min.Y+j, RGBA{R: ink.R, G: ink.G, B: ink.B, A: alpha})
-				}
+			dr, mask, maskp, _, ok := f.face.GlyphMaskIndex(g.GID, pen+g.XOffset, baseline-g.YOffset)
+			// A glyph with an advance but no coverage -- a space -- comes back
+			// with no mask at all. The loop this replaced never noticed, because
+			// an empty rectangle simply never entered its body; handing the
+			// rectangle to a primitive means saying so explicitly.
+			if !ok || mask == nil || dr.Empty() {
+				pen += g.XAdvance
+				continue
 			}
+			// The glyph is a window into the face's mask, so the painter is
+			// handed that window -- the sub-slice starting at the glyph's own
+			// corner, plus the atlas stride -- rather than a copy of it.
+			mp.DrawMask(
+				Rect{X: dr.Min.X, Y: dr.Min.Y, W: dr.Dx(), H: dr.Dy()},
+				mask.Pix[mask.PixOffset(maskp.X, maskp.Y):], mask.Stride, ink)
 		}
 		pen += g.XAdvance
 	}
