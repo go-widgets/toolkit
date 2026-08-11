@@ -473,8 +473,8 @@ func TestMenuCheckableWithSeparatorAndSubmenuUnaffected(t *testing.T) {
 	fired := false
 	m := NewMenu([]MenuItem{
 		{Label: "Toggle", Action: func() { fired = true }, Checkable: true}, // row 0
-		{Separator: true},                                                  // row 1 (h = MenuSeparatorH)
-		{Label: "More", Submenu: sub},                                      // row 2 (nil Action -> disabled)
+		{Separator: true},             // row 1 (h = MenuSeparatorH)
+		{Label: "More", Submenu: sub}, // row 2 (nil Action -> disabled)
 	})
 	m.SetBounds(Rect{X: 0, Y: 0, W: 140, H: 100})
 	m.Draw(newP(makeSurface(140, 100), 140), DefaultLight())

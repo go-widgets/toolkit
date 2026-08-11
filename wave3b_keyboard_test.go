@@ -889,6 +889,6 @@ func TestMenuBarKeyboardDisabledAndNilMenu(t *testing.T) {
 	mb.Names = []string{"A", "B", "C"}
 	mb.Menus = []*Menu{NewMenu(nil), NewMenu(nil)} // shorter than Names
 	mb.SetBounds(Rect{X: 0, Y: 0, W: 200, H: MenuBarH})
-	mb.Active = 2 // >= len(Menus)
+	mb.Active = 2                 // >= len(Menus)
 	mb.OnEvent(kd3b("ArrowDown")) // must not panic, no highlight
 }

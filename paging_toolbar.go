@@ -147,8 +147,8 @@ func drawReloadIcon(p painter.Painter, rc Rect, ink RGBA) {
 	ax := int(cx + radius*math.Cos(-60*math.Pi/180))
 	ay := int(cy + radius*math.Sin(-60*math.Pi/180))
 	for i := 0; i < 4; i++ {
-		fillRect(p, ax-i, ay, 1, 1, ink)   // horizontal leg (leftward)
-		fillRect(p, ax, ay-i, 1, 1, ink)   // vertical leg (upward)
+		fillRect(p, ax-i, ay, 1, 1, ink) // horizontal leg (leftward)
+		fillRect(p, ax, ay-i, 1, 1, ink) // vertical leg (upward)
 	}
 }
 
