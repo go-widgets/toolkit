@@ -21,9 +21,24 @@ type damageRenderer interface {
 var (
 	_ toolkit.Widget = (*HostRoot)(nil)
 	_ damageRenderer = (*HostRoot)(nil)
+	_ childProvider  = (*HostRoot)(nil)
 	_ SelfDrawer     = (*bgContainer)(nil)
 	_ childProvider  = (*bgContainer)(nil)
 )
+
+// a11yLeaf is an accessible leaf widget: a generic tree walk
+// (toolkit.WalkA11y) that descends into the tree reports it, so finding it
+// under a HostRoot proves the walk reached the application tree.
+type a11yLeaf struct {
+	toolkit.Base
+	name string
+}
+
+func (l *a11yLeaf) Draw(painter.Painter, *toolkit.Theme) {}
+
+func (l *a11yLeaf) A11y() toolkit.A11yInfo {
+	return toolkit.A11yInfo{Role: toolkit.RoleButton, Name: l.name}
+}
 
 // fullRepaint reproduces a damage-UNAWARE host's frame: clear to the theme
 // background, then draw the application root — the exact reference the
@@ -203,5 +218,41 @@ func TestHostRootDelegation(t *testing.T) {
 	rects := root.RenderDamaged(p, theme)
 	if len(rects) != 1 || rects[0] != (Rect{X: 0, Y: 0, W: 50, H: 40}) {
 		t.Fatalf("cell damage = %v, want one full-cell rect", rects)
+	}
+}
+
+// TestHostRootWalkA11yDescends is the traversal gate: the generic accessibility
+// walk (toolkit.WalkA11y, the same seam the platform bridges consume), handed a
+// HostRoot, must descend through it into the application tree and reach a leaf.
+// Before HostRoot exposed Children() the walk stopped at the root — HostRoot is
+// not itself Accessible and reported no children — and found nothing, forcing
+// consumers to unwrap by hand via Scene().Root().Widget().
+func TestHostRootWalkA11yDescends(t *testing.T) {
+	leaf := &a11yLeaf{name: "OK"}
+	leaf.SetBounds(Rect{X: 4, Y: 6, W: 20, H: 12})
+	appRoot := newGroup(Rect{X: 0, Y: 0, W: 50, H: 40}, red, leaf)
+
+	root := NewHostRoot(appRoot)
+	root.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 40})
+
+	got := toolkit.WalkA11y(root)
+	if len(got) != 1 {
+		t.Fatalf("WalkA11y(HostRoot) = %d nodes, want 1 (walk did not descend into the app tree)", len(got))
+	}
+	if got[0].Name != "OK" || got[0].Role != toolkit.RoleButton {
+		t.Fatalf("leaf a11y = %+v, want button %q", got[0].A11yInfo, "OK")
+	}
+	// The leaf's placement comes through in surface coordinates verbatim,
+	// proving a real descent to the laid-out leaf, not a stray match.
+	if got[0].Rect != (Rect{X: 4, Y: 6, W: 20, H: 12}) {
+		t.Fatalf("leaf rect = %v, want the laid-out bounds {4,6,20,12}", got[0].Rect)
+	}
+
+	// The wrapper is now transparent to the walk: descending from the HostRoot
+	// yields exactly what walking the unwrapped child (the old manual escape
+	// hatch) does.
+	unwrapped := toolkit.WalkA11y(root.Scene().Root().Widget())
+	if len(unwrapped) != len(got) {
+		t.Fatalf("walk via HostRoot (%d nodes) != walk via unwrapped child (%d nodes)", len(got), len(unwrapped))
 	}
 }
