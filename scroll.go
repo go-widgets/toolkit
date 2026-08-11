@@ -206,10 +206,34 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 		if canClip {
 			clr.PushClip(vp)
 		}
+		// Scroll by translating the PAINT, not by moving the child.
+		//
+		// This used to set the child's bounds to the viewport origin MINUS the
+		// scroll offset, draw, and put them back. Geometry that changes for the
+		// duration of a paint is invisible to anything reading it between
+		// frames — the accessibility bridges do exactly that — so a control
+		// could be announced a whole viewport away from where it was painted.
+		//
+		// The child's own X/Y were never used even then (only its width and
+		// height were kept), so placing it at the viewport origin loses
+		// nothing and is simply true: that is where the content starts, and
+		// the offset says how far it has scrolled away.
 		cb := s.Child.Bounds()
-		s.Child.SetBounds(Rect{X: r.X - s.OffsetX, Y: r.Y - s.OffsetY, W: cb.W, H: cb.H})
+		tr, canTranslate := p.(painter.Translator)
+		if canTranslate {
+			s.Child.SetBounds(Rect{X: r.X, Y: r.Y, W: cb.W, H: cb.H})
+			tr.PushTranslate(-s.OffsetX, -s.OffsetY)
+		} else {
+			// A back-end with no translation still has to scroll, so fall back
+			// to the old shape rather than showing the content unscrolled.
+			s.Child.SetBounds(Rect{X: r.X - s.OffsetX, Y: r.Y - s.OffsetY, W: cb.W, H: cb.H})
+		}
 		s.Child.Draw(p, theme)
-		s.Child.SetBounds(cb)
+		if canTranslate {
+			tr.PopTranslate()
+		} else {
+			s.Child.SetBounds(cb)
+		}
 		if canClip {
 			clr.PopClip()
 		}
