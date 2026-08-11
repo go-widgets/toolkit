@@ -105,6 +105,10 @@ func (h *HeaderBar) Children() []Widget {
 	return out
 }
 
+// Children exposes the material's child so generic walks (accessibility,
+// material collection) descend into it.
+func (m *Material) Children() []Widget { return nonNil(m.Child) }
+
 // Children yields every tab's page.
 func (n *Notebook) Children() []Widget {
 	out := make([]Widget, 0, len(n.Tabs))
