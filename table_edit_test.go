@@ -40,14 +40,14 @@ func TestTableCellEditBeginTypeCommit(t *testing.T) {
 	if tb.editRow != 0 || tb.editCol != 1 || tb.editor == nil {
 		t.Fatalf("after click: editRow=%d editCol=%d editor=%v, want 0,1,non-nil", tb.editRow, tb.editCol, tb.editor)
 	}
-	if tb.editor.Text != "1" {
-		t.Fatalf("editor seeded with %q, want %q", tb.editor.Text, "1")
+	if tb.editor.CellValue() != "1" {
+		t.Fatalf("editor seeded with %q, want %q", tb.editor.CellValue(), "1")
 	}
 
 	// Type a character (routes to the editor) then commit with Enter.
 	tb.OnEvent(Event{Kind: EventChar, Code: "9"})
-	if tb.editor.Text != "19" {
-		t.Fatalf("after typing, editor=%q, want %q", tb.editor.Text, "19")
+	if tb.editor.CellValue() != "19" {
+		t.Fatalf("after typing, editor=%q, want %q", tb.editor.CellValue(), "19")
 	}
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 
@@ -119,8 +119,8 @@ func TestTableCellEditClickOtherCellCommits(t *testing.T) {
 	if tb.editRow != 1 || tb.editCol != 1 {
 		t.Fatalf("new editor at (%d,%d), want (1,1)", tb.editRow, tb.editCol)
 	}
-	if tb.editor.Text != "2" {
-		t.Fatalf("new editor seeded %q, want %q", tb.editor.Text, "2")
+	if tb.editor.CellValue() != "2" {
+		t.Fatalf("new editor seeded %q, want %q", tb.editor.CellValue(), "2")
 	}
 }
 
@@ -149,8 +149,8 @@ func TestTableCellEditKeyRoutingBackspace(t *testing.T) {
 	tb := editableTable()
 	tb.OnEvent(editClickCol1(0)) // editor "1"
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if tb.editor.Text != "" {
-		t.Fatalf("after Backspace editor=%q, want empty", tb.editor.Text)
+	if tb.editor.CellValue() != "" {
+		t.Fatalf("after Backspace editor=%q, want empty", tb.editor.CellValue())
 	}
 }
 
@@ -211,10 +211,10 @@ func TestTableBeginEditRaggedRow(t *testing.T) {
 	tb.OnCellEdit = func(_, _ int, v string) { gotVal, calls = v, calls+1 }
 
 	tb.beginEdit(0, 1)
-	if tb.editor == nil || tb.editor.Text != "" {
+	if tb.editor == nil || tb.editor.CellValue() != "" {
 		t.Fatalf("ragged-row editor seed = %v, want empty", tb.editor)
 	}
-	tb.editor.Text = "new"
+	tb.editor.SetCellValue("new")
 	tb.commitEdit()
 	if len(tb.Rows[0]) != 1 {
 		t.Fatalf("ragged Row was widened to %d cells, want left at 1", len(tb.Rows[0]))
@@ -241,7 +241,7 @@ func TestTableCommitEditNotEditingNoOp(t *testing.T) {
 func TestTableCommitEditNilCallbackNoPanic(t *testing.T) {
 	tb := editableTable()
 	tb.beginEdit(0, 1)
-	tb.editor.Text = "z"
+	tb.editor.SetCellValue("z")
 	tb.commitEdit() // OnCellEdit nil
 	if tb.Rows[0][1] != "z" {
 		t.Fatalf("Rows[0][1]=%q, want %q", tb.Rows[0][1], "z")

@@ -181,10 +181,36 @@ type Table struct {
 	OnSelect func(row int)
 
 	// editRow/editCol point at the cell whose inline editor is open (both
-	// -1 = none; NewTable seeds them). editor is the live text field while
-	// an edit is in progress. See beginEdit/commitEdit/cancelEdit.
+	// -1 = none; NewTable seeds them). editor is the live editing control
+	// (the stock text field, or a column's custom Editor) while an edit is in
+	// progress. editErr holds a rejected commit's validation error (nil while
+	// the open value is valid or no edit is in progress). See
+	// beginEdit/commitEdit/cancelEdit.
 	editRow, editCol int
-	editor           *Entry
+	editor           CellEditor
+	editErr          error
+
+	// EditActivation selects how a click begins an inline edit on an Editable
+	// cell (see TableEditActivation): the zero value EditOnSingleClick keeps
+	// the original "one click edits" behaviour, EditOnDoubleClick makes a
+	// single click select and a double-click (or Enter on the cursor row) edit
+	// -- the desktop details-view idiom -- and EditManual disables click/key
+	// activation so only BeginEdit opens an editor.
+	EditActivation TableEditActivation
+
+	// OnCellEditRejected fires when a committed edit fails its column's
+	// Validate rule: the Table has NOT written the value and leaves the editor
+	// open. row/col name the cell, value is the rejected text, err is the
+	// rule's error (its Error() is the message to surface). Nil is safe.
+	OnCellEditRejected func(row, col int, value string, err error)
+
+	// SelfSort opts the Table into sorting its own Rows on a Sortable header
+	// click: it calls SortByColumn (reordering Rows in place through the
+	// column's Comparator) before firing OnSort, so a host need not re-sort
+	// and hand the data back. The zero value (false) keeps the original
+	// content-only behaviour -- a header click only updates the indicator and
+	// fires OnSort, never touching Rows.
+	SelfSort bool
 
 	// ShowSummary, when true, appends a grand-total footer line (a distinct
 	// SurfaceAlt band, drawn as the LAST visual line of the body) that shows
@@ -303,6 +329,42 @@ type TableColumn struct {
 	// (AggregateNone) leaves the column blank on every summary line, so a
 	// column that opts out is byte-identical to before this field existed.
 	Aggregate TableAggregate
+
+	// Editor is the per-column editor seam: when set, beginEdit calls it to
+	// build the CellEditor overlaid on a cell of this column instead of the
+	// stock text field, so a column can edit through a numeric field, a
+	// drop-down, a date picker, ... The zero value (nil) uses the default
+	// text editor, byte-identical to before this field existed. See
+	// CellEditor.
+	Editor func() CellEditor
+	// Validate, when set, is run against an edit's proposed value at commit
+	// time (Enter). A non-nil error rejects the commit: the value is NOT
+	// written into Rows, the editor stays open for correction, EditError
+	// reports the error, and OnCellEditRejected fires. The zero value (nil)
+	// accepts every value, so a column that opts out commits exactly as
+	// before. It is the toolkit's own validation.Rule shape, so the stock
+	// rules (Required, MinLen, Pattern, All, ...) wire straight in.
+	Validate Rule
+	// Comparator orders two of this column's cell strings for SortByColumn
+	// (and, on the GroupBy column, for ArrangeGroups): it returns <0 when a
+	// sorts before b, 0 when equal, >0 when after. The zero value (nil) uses
+	// defaultCellCompare (numeric when both cells parse as numbers, else
+	// lexicographic), so a column that opts out sorts sensibly without any
+	// wiring.
+	Comparator func(a, b string) int
+	// GroupKey derives the grouping key from a cell value when this column is
+	// the GroupBy column: rows sharing a key fall in one group and the key is
+	// the group header's label (e.g. a first-letter or date-bucket key). The
+	// zero value (nil) groups by the raw cell value, byte-identical to before
+	// this field existed.
+	GroupKey func(cell string) string
+	// AggregateFunc is the custom-aggregate seam: when set, it reduces the
+	// column's cells over a summary line's row range to the displayed string,
+	// overriding the built-in Aggregate (so a column can show a median, a
+	// "min–max" span, a distinct count, ...). It receives one entry per row in
+	// range (ragged rows contribute ""). The zero value (nil) uses the
+	// built-in Aggregate, byte-identical to before this field existed.
+	AggregateFunc func(cells []string) string
 }
 
 // TableAggregate names the reduction applied to a column's cells on a
@@ -328,6 +390,79 @@ const (
 	// AggregateMax is the largest of the column's numeric cells.
 	AggregateMax
 )
+
+// TableEditActivation selects how a click (and Enter) begins an inline edit on
+// an Editable cell. It only governs how an edit STARTS; commit/cancel and the
+// editor itself are unchanged across the modes.
+type TableEditActivation int
+
+const (
+	// EditOnSingleClick is the default: a single click on an Editable cell
+	// opens its editor immediately, byte-identical to before this field
+	// existed.
+	EditOnSingleClick TableEditActivation = iota
+	// EditOnDoubleClick makes a single click select the cell's row and a
+	// double-click (an EventClick tagged Code == TableDoubleClick) open the
+	// editor -- the desktop details-view rename idiom. In this mode Enter on
+	// the cursor row also opens the first Editable column's editor.
+	EditOnDoubleClick
+	// EditManual disables click- and key-driven activation entirely: an
+	// Editable cell edits only when the host calls BeginEdit.
+	EditManual
+)
+
+// TableDoubleClick is the Event.Code a host tags onto an EventClick to mark it
+// a double-click, so a Table in EditOnDoubleClick mode can tell the second
+// click of a double-click from a fresh single click without the toolkit
+// growing a dedicated double-click EventKind.
+const TableDoubleClick = "double"
+
+// CellEditor is the editing control a Table overlays on a cell while an inline
+// edit is in progress. The default is a text field (see newTextCellEditor);
+// TableColumn.Editor is the per-column seam that swaps in another control -- a
+// numeric field, a drop-down, a date picker. A CellEditor is a Widget (so the
+// Table sizes and draws it over the cell) plus the four hooks the commit
+// machinery needs.
+type CellEditor interface {
+	Widget
+	// CellValue returns the editor's current text, read when the edit commits
+	// and written back into the row.
+	CellValue() string
+	// SetCellValue seeds the editor with the cell's current text when the edit
+	// opens.
+	SetCellValue(string)
+	// OnCellSubmit registers the callback the editor fires when the user
+	// accepts the value (e.g. Enter) so the Table commits the edit.
+	OnCellSubmit(func())
+	// Focus gives (true) or removes (false) keyboard focus.
+	Focus(bool)
+}
+
+// textCellEditor adapts the stock Entry to the CellEditor seam. It embeds the
+// *Entry so the Widget methods (Bounds/SetBounds/Draw/HitTest/OnEvent) and the
+// editing behaviour are exactly the Entry's -- the default editor is
+// byte-identical to the pre-seam inline editor.
+type textCellEditor struct{ *Entry }
+
+func (e textCellEditor) CellValue() string     { return e.Text }
+func (e textCellEditor) SetCellValue(s string) { e.Text = s; e.Cursor = len([]rune(s)) }
+func (e textCellEditor) OnCellSubmit(fn func()) {
+	e.Entry.OnSubmit = func(string) { fn() }
+}
+func (e textCellEditor) Focus(b bool) { e.SetFocused(b) }
+
+// newTextCellEditor builds the default text editor for cell (row,col), seeded
+// with val and inheriting the Table's font so complex text edits legibly.
+func (t *Table) newTextCellEditor(val string) CellEditor {
+	en := NewEntry(val)
+	en.Font = t.Font
+	return textCellEditor{en}
+}
+
+// tableErrorBorder is the stroke colour of an editing cell whose pending value
+// failed validation -- the same brick red the Alert widget's error face uses,
+// so a rejected edit reads as an error consistently across the toolkit.
+var tableErrorBorder = RGB(0xC0, 0x30, 0x30)
 
 // TableIconFunc paints a Table's optional per-row leading icon into the
 // square rect r using ink. It is deliberately the exact signature of the
@@ -624,8 +759,15 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// its row (off-view rows simply draw outside the buffer, harmlessly).
 	if t.editRow >= 0 && t.editor != nil {
 		if vi := t.visualIndex(t.editRow); vi >= 0 {
-			t.editor.SetBounds(t.cellRect(t.editRow, t.editCol))
+			rc := t.cellRect(t.editRow, t.editCol)
+			t.editor.SetBounds(rc)
 			t.editor.Draw(p, theme)
+			// A rejected (failing-validation) pending value rings the editing
+			// cell in the error colour so the reason it will not commit is
+			// visible without leaving the cell.
+			if t.editErr != nil {
+				strokeRect(p, rc.X, rc.Y, rc.W, rc.H, tableErrorBorder)
+			}
 		}
 	}
 	t.drawFocusRing(p, theme, r)
@@ -1254,6 +1396,22 @@ type tableLine struct {
 // the numeric kinds. A numeric aggregate with no numeric cell in range yields
 // "" so an all-text column reads blank rather than "0".
 func (t *Table) aggregate(agg TableAggregate, col, start, end int) string {
+	// A column's custom AggregateFunc overrides the built-in reduction: it
+	// receives one entry per row in range (ragged rows contribute ""), so a
+	// column can display a median, a distinct count, a "min-max" span, etc.
+	if col >= 0 && col < len(t.Columns) {
+		if fn := t.Columns[col].AggregateFunc; fn != nil {
+			cells := make([]string, 0, end-start)
+			for r := start; r < end; r++ {
+				if col < len(t.Rows[r]) {
+					cells = append(cells, t.Rows[r][col])
+				} else {
+					cells = append(cells, "")
+				}
+			}
+			return fn(cells)
+		}
+	}
 	switch agg {
 	case AggregateNone:
 		return ""
@@ -1308,13 +1466,20 @@ func formatAggregate(f float64) string {
 	return strconv.FormatFloat(f, 'f', 2, 64)
 }
 
-// groupValue returns row r's value in the GroupBy column, or "" when the row
-// is too short to have that cell (which then forms its own "" group).
+// groupValue returns row r's grouping key: the GroupBy column's cell value
+// (or "" when the row is too short to have that cell), passed through the
+// column's GroupKey deriver when one is set. Rows sharing a key group together
+// and the key labels the group header. It is only called while grouped(), so
+// GroupBy indexes a real column.
 func (t *Table) groupValue(r int) string {
+	cell := ""
 	if t.GroupBy < len(t.Rows[r]) {
-		return t.Rows[r][t.GroupBy]
+		cell = t.Rows[r][t.GroupBy]
 	}
-	return ""
+	if gk := t.Columns[t.GroupBy].GroupKey; gk != nil {
+		return gk(cell)
+	}
+	return cell
 }
 
 // lines builds the ordered visual-line list for the line-model body. Grouped,
@@ -1642,6 +1807,12 @@ func (t *Table) handleKey(ev Event) {
 	}
 	switch ev.Code {
 	case "Enter", " ", "Space":
+		// In EditOnDoubleClick mode Enter opens the cursor row's first
+		// Editable column (the desktop rename-on-Enter idiom); otherwise it
+		// activates the cursor row exactly as before.
+		if ev.Code == "Enter" && t.beginEditCursor() {
+			return
+		}
 		t.activateCursor()
 		return
 	}
@@ -1686,6 +1857,42 @@ func (t *Table) activateCursor() {
 	if t.MultiSelect {
 		t.SetRowSelection(t.Selected)
 	}
+}
+
+// editActivates reports whether an EventClick on an Editable cell should open
+// its editor, per EditActivation: every click in EditOnSingleClick (the
+// default), only a double-click (Code TableDoubleClick) in EditOnDoubleClick,
+// never in EditManual.
+func (t *Table) editActivates(ev Event) bool {
+	switch t.EditActivation {
+	case EditOnDoubleClick:
+		return ev.Code == TableDoubleClick
+	case EditManual:
+		return false
+	default: // EditOnSingleClick
+		return true
+	}
+}
+
+// beginEditCursor opens the cursor row's first Editable column for editing and
+// reports whether an editor actually opened. It is the Enter-to-edit path,
+// active only in EditOnDoubleClick mode (so single-click and manual tables keep
+// Enter as a pure row activation); an out-of-range cursor or a row with no
+// Editable column is a no-op that returns false.
+func (t *Table) beginEditCursor() bool {
+	if t.EditActivation != EditOnDoubleClick {
+		return false
+	}
+	if t.Selected < 0 || t.Selected >= len(t.Rows) {
+		return false
+	}
+	for c := range t.Columns {
+		if t.Columns[c].Editable {
+			t.beginEdit(t.Selected, c)
+			return t.editor != nil
+		}
+	}
+	return false
 }
 
 // extendRowSelection grows the multi-row selection by one row in the arrow's
@@ -1887,36 +2094,85 @@ func (t *Table) beginEdit(row, col int) {
 	if col < len(t.Rows[row]) {
 		val = t.Rows[row][col]
 	}
-	e := NewEntry(val)
-	e.SetFocused(true)
-	e.Font = t.Font // inherit the table's face so CJK/complex text edits legibly
-	e.OnSubmit = func(string) { t.commitEdit() }
-	t.editRow, t.editCol, t.editor = row, col, e
+	var ed CellEditor
+	if f := t.Columns[col].Editor; f != nil {
+		ed = f()
+	} else {
+		ed = t.newTextCellEditor(val)
+	}
+	ed.SetCellValue(val)
+	ed.Focus(true)
+	ed.OnCellSubmit(func() { t.commitEdit() })
+	t.editRow, t.editCol, t.editor, t.editErr = row, col, ed, nil
 }
 
-// commitEdit writes the open editor's text back into Rows, fires OnCellEdit
-// (nil-safe) and closes the editor. It is a no-op when no edit is in
-// progress. A cell whose row is shorter than editCol (a ragged Row) is left
-// untouched -- there is no slot to write.
+// BeginEdit opens an inline editor over cell (row,col) programmatically -- the
+// command-style entry point a view model (or a host in EditManual mode) uses to
+// start an edit without a click. It applies the same guards as a click-driven
+// edit: an out-of-range cell or a column that is not Editable is a no-op.
+func (t *Table) BeginEdit(row, col int) { t.beginEdit(row, col) }
+
+// commitEdit validates the open editor's text against the column's Validate
+// rule and, when it passes, writes it back into Rows, fires OnCellEdit
+// (nil-safe) and closes the editor. A rejected value is left in the still-open
+// editor: Rows is untouched, EditError reports the rule's error and
+// OnCellEditRejected fires. It is a no-op when no edit is in progress. A cell
+// whose row is shorter than editCol (a ragged Row) is left untouched -- there
+// is no slot to write.
 func (t *Table) commitEdit() {
 	if t.editRow < 0 || t.editor == nil {
 		return
 	}
-	r, c, v := t.editRow, t.editCol, t.editor.Text
+	r, c, v := t.editRow, t.editCol, t.editor.CellValue()
+	if rule := t.Columns[c].Validate; rule != nil {
+		if err := rule(v); err != nil {
+			t.editErr = err
+			if t.OnCellEditRejected != nil {
+				t.OnCellEditRejected(r, c, v, err)
+			}
+			return
+		}
+	}
 	if r < len(t.Rows) && c < len(t.Rows[r]) {
 		t.Rows[r][c] = v
 	}
-	t.editRow, t.editCol, t.editor = -1, -1, nil
+	t.editRow, t.editCol, t.editor, t.editErr = -1, -1, nil, nil
 	if t.OnCellEdit != nil {
 		t.OnCellEdit(r, c, v)
 	}
 }
 
+// CommitEdit is the public trigger for committing the open edit (Enter's path)
+// -- a command a view model binds to. It is a no-op when no edit is in
+// progress, and honours the column's Validate rule exactly like an Enter
+// commit.
+func (t *Table) CommitEdit() { t.commitEdit() }
+
 // cancelEdit discards the open editor without touching Rows or firing
-// OnCellEdit. It is a no-op when no edit is in progress.
+// OnCellEdit, clearing any validation error.
 func (t *Table) cancelEdit() {
-	t.editRow, t.editCol, t.editor = -1, -1, nil
+	t.editRow, t.editCol, t.editor, t.editErr = -1, -1, nil, nil
 }
+
+// CancelEdit is the public trigger for discarding the open edit (Escape's
+// path) -- a command a view model binds to. It is a no-op when no edit is in
+// progress.
+func (t *Table) CancelEdit() { t.cancelEdit() }
+
+// Editing reports the cell whose inline editor is currently open. editing is
+// false (and row/col are -1) when no edit is in progress -- the observable
+// getter a view model reads to reflect edit state.
+func (t *Table) Editing() (row, col int, editing bool) {
+	if t.editRow < 0 || t.editor == nil {
+		return -1, -1, false
+	}
+	return t.editRow, t.editCol, true
+}
+
+// EditError returns the validation error of the open edit's last rejected
+// commit, or nil when the pending value is valid (or no edit is in progress).
+// It is what surfaces the reason an edit would not commit.
+func (t *Table) EditError() error { return t.editErr }
 
 // rowInsertIndexAt returns the drag-to-reorder insertion index for a
 // Table-local y coordinate: 0..len(Rows) inclusive, where len(Rows)
@@ -2020,15 +2276,146 @@ func (t *Table) reorderRow(from, to int) {
 // direction. The Table never touches Rows itself; the host re-sorts
 // and hands the Table its updated data.
 func (t *Table) toggleSort(col int) {
+	asc := true
 	if t.SortColumn == col {
-		t.SortAsc = !t.SortAsc
+		asc = !t.SortAsc
+	}
+	if t.SelfSort {
+		// SortByColumn reorders Rows and sets SortColumn/SortAsc itself.
+		t.SortByColumn(col, asc)
 	} else {
-		t.SortColumn = col
-		t.SortAsc = true
+		t.SortColumn, t.SortAsc = col, asc
 	}
 	if t.OnSort != nil {
-		t.OnSort(col, t.SortAsc)
+		t.OnSort(col, asc)
 	}
+}
+
+// defaultCellCompare orders two cell strings: numerically when BOTH parse as
+// float64 (so "9" sorts before "10", not after), otherwise lexicographically.
+// It is the ordering SortByColumn and ArrangeGroups use for a column that
+// supplies no Comparator.
+func defaultCellCompare(a, b string) int {
+	af, aerr := strconv.ParseFloat(a, 64)
+	bf, berr := strconv.ParseFloat(b, 64)
+	if aerr == nil && berr == nil {
+		switch {
+		case af < bf:
+			return -1
+		case af > bf:
+			return 1
+		default:
+			return 0
+		}
+	}
+	return strings.Compare(a, b)
+}
+
+// cellAt returns row r's cell in column c, or "" when the row is too short
+// (ragged) -- the safe reader SortByColumn/ArrangeGroups compare through.
+func (t *Table) cellAt(r, c int) string {
+	if r >= 0 && r < len(t.Rows) && c >= 0 && c < len(t.Rows[r]) {
+		return t.Rows[r][c]
+	}
+	return ""
+}
+
+// SortByColumn reorders Rows in place by column col, ascending or descending,
+// using the column's Comparator (or defaultCellCompare when it has none), and
+// records the result in SortColumn/SortAsc so the header shows the indicator.
+// The sort is stable, so rows equal under the comparator keep their prior
+// order. Selected, the multi-row selection set and the expanded-row set all
+// follow their rows to the new positions, and ScrollRow is re-clamped. An
+// out-of-range col is a no-op. This is the opt-in counterpart to the
+// content-only OnSort path -- a host or view model calls it (or sets SelfSort
+// to have header clicks call it) to let the Table own its ordering.
+func (t *Table) SortByColumn(col int, ascending bool) {
+	if col < 0 || col >= len(t.Columns) {
+		return
+	}
+	cmp := t.Columns[col].Comparator
+	if cmp == nil {
+		cmp = defaultCellCompare
+	}
+	order := make([]int, len(t.Rows))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		c := cmp(t.cellAt(order[a], col), t.cellAt(order[b], col))
+		if !ascending {
+			c = -c
+		}
+		return c < 0
+	})
+	t.applyRowOrder(order)
+	t.SortColumn, t.SortAsc = col, ascending
+}
+
+// ArrangeGroups reorders Rows so the GroupBy column's groups become contiguous
+// and are themselves ordered by that column's Comparator (applied to the group
+// keys, honouring GroupKey), the prerequisite the grouped line model needs
+// (it gathers CONSECUTIVE runs of a shared key and does not sort). The sort is
+// stable, so rows within a group keep their prior order, and Selected /
+// selection / expansion follow their rows. It is a no-op unless grouping is
+// active (GroupBy names a real column). Call it after loading or mutating Rows
+// out of group order; a host that already delivers grouped-ordered rows need
+// not.
+func (t *Table) ArrangeGroups() {
+	if !t.grouped() {
+		return
+	}
+	cmp := t.Columns[t.GroupBy].Comparator
+	if cmp == nil {
+		cmp = defaultCellCompare
+	}
+	order := make([]int, len(t.Rows))
+	for i := range order {
+		order[i] = i
+	}
+	sort.SliceStable(order, func(a, b int) bool {
+		return cmp(t.groupValue(order[a]), t.groupValue(order[b])) < 0
+	})
+	t.applyRowOrder(order)
+}
+
+// applyRowOrder permutes Rows so the new row i is the old row order[i], then
+// remaps Selected, the multi-row selection set and the expanded-row set through
+// the inverse permutation so every piece of per-row state follows its row to
+// its new index instead of pointing at whatever row slid into the old slot. It
+// re-clamps ScrollRow since the visible window's contents changed. order must
+// be a permutation of [0,len(Rows)) -- SortByColumn and ArrangeGroups build it
+// that way.
+func (t *Table) applyRowOrder(order []int) {
+	inv := make([]int, len(order))
+	newRows := make([][]string, len(order))
+	for newI, oldI := range order {
+		newRows[newI] = t.Rows[oldI]
+		inv[oldI] = newI
+	}
+	t.Rows = newRows
+	if t.Selected >= 0 && t.Selected < len(inv) {
+		t.Selected = inv[t.Selected]
+	}
+	if len(t.selectedRows) > 0 {
+		remap := make(map[int]bool, len(t.selectedRows))
+		for i := range t.selectedRows {
+			if i >= 0 && i < len(inv) {
+				remap[inv[i]] = true
+			}
+		}
+		t.selectedRows = remap
+	}
+	if len(t.expanded) > 0 {
+		remap := make(map[int]bool, len(t.expanded))
+		for i := range t.expanded {
+			if i >= 0 && i < len(inv) {
+				remap[inv[i]] = true
+			}
+		}
+		t.expanded = remap
+	}
+	t.ScrollRow = t.clampScrollRow()
 }
 
 // OnEvent implements header-click sorting, separator drag-resize, and
@@ -2124,9 +2511,13 @@ func (t *Table) OnEvent(ev Event) {
 			return
 		}
 		// A click on an Editable cell opens an inline editor over it
-		// (and takes precedence over row selection/drag for that cell).
+		// (and takes precedence over row selection/drag for that cell) --
+		// but only when EditActivation says this click activates: a single
+		// click in EditOnSingleClick (the default), a double-click (Code
+		// TableDoubleClick) in EditOnDoubleClick, never in EditManual. A
+		// non-activating click falls through so the cell's row can select.
 		if row >= 0 {
-			if col := t.columnAt(ev.X); col >= 0 && col < len(t.Columns) && t.Columns[col].Editable {
+			if col := t.columnAt(ev.X); col >= 0 && col < len(t.Columns) && t.Columns[col].Editable && t.editActivates(ev) {
 				t.beginEdit(row, col)
 				return
 			}
