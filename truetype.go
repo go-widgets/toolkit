@@ -35,6 +35,49 @@ type truetypeFont struct {
 	advance int            // width of a space — the fallback monospace-ish step
 	height  int            // line height (ascent + descent + line gap)
 	ascent  int            // baseline offset from the text top
+
+	// shapeCache holds shaped runs; see shaped.
+	shapeCache map[shapedKey][]shape.Glyph
+}
+
+// shapedKey identifies a shaped run. The shaper's output depends on the face,
+// the string and the paragraph direction -- and on nothing else, in particular
+// not on where the run is painted -- so those are the whole key. The face is
+// implicit: the cache hangs off the font.
+type shapedKey struct {
+	text string
+	dir  TextDirection
+}
+
+// maxShapedRuns bounds the cache. A UI redraws a small, stable set of labels,
+// but a text editor or a browser can feed it unbounded distinct strings, so it
+// is emptied wholesale when it fills rather than being allowed to grow. Dropping
+// everything costs one re-shape of the runs still on screen and needs no
+// bookkeeping per entry, which an LRU would.
+const maxShapedRuns = 512
+
+// shaped returns the positioned glyphs for text, shaping it only the first time
+// it is seen. Shaping a 43-character label costs about 6 microseconds and 25
+// allocations totalling 7.8 KB, and a repaint re-shapes every label on screen:
+// the allocation, not the arithmetic, is what makes text expensive, because it
+// is the garbage collector that ends up paying.
+//
+// The returned slice is the cache's own. Callers read it and must not write to
+// it.
+func (f *truetypeFont) shaped(text string) []shape.Glyph {
+	k := shapedKey{text: text, dir: textDirection}
+	if g, ok := f.shapeCache[k]; ok {
+		return g
+	}
+	g := shape.Shape(f.face, text, shape.Options{Direction: textDirection.base()})
+	if f.shapeCache == nil {
+		f.shapeCache = make(map[shapedKey][]shape.Glyph)
+	}
+	if len(f.shapeCache) >= maxShapedRuns {
+		clear(f.shapeCache)
+	}
+	f.shapeCache[k] = g
+	return g
 }
 
 // FontData returns the original TrueType/OpenType sfnt bytes, implementing
@@ -101,7 +144,7 @@ func (f *truetypeFont) Height() int { return f.height }
 // "iii" is still narrower than "MMM"; an empty string measures 0.
 func (f *truetypeFont) Measure(text string) int {
 	total := 0
-	for _, g := range shape.Shape(f.face, text, shape.Options{Direction: textDirection.base()}) {
+	for _, g := range f.shaped(text) {
 		total += g.XAdvance
 	}
 	return total
@@ -163,7 +206,7 @@ func (f *truetypeFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) 
 // advance.
 func (f *truetypeFont) drawShaped(pix *painter.PixelPainter, x, baseline int, text string, ink RGBA) int {
 	pen := x
-	for _, g := range shape.Shape(f.face, text, shape.Options{Direction: textDirection.base()}) {
+	for _, g := range f.shaped(text) {
 		// .notdef (index 0) is the shaper's blank-for-unknown; every other
 		// index the shaper emits is a valid, renderable glyph of this font.
 		// Invisible marks a default-ignorable the shaper did not consume — a
