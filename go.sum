@@ -28,3 +28,5 @@ github.com/go-widgets/painter v0.7.0 h1:N+xEs5hzg+8Cd257tK/8vYQ1yrXezwdsqD3NYwCz
 github.com/go-widgets/painter v0.7.0/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
 github.com/go-widgets/painter v0.7.1 h1:Y71u7+gFX3pcg5T0FawHydfFrRQqUen7IwItFgAcA3E=
 github.com/go-widgets/painter v0.7.1/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
+github.com/go-widgets/painter v0.8.0 h1:QeBiNalv84+qvjRJ/SywMNXHaxHA0lF5uN0oJCQX01s=
+github.com/go-widgets/painter v0.8.0/go.mod h1:ccmlkH2UmcXQh6rt9Fu2eDt2RI0B5V0POaGmUKeW0EQ=
