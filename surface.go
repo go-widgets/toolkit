@@ -131,13 +131,16 @@ func (s *Surface) Children() []Widget {
 }
 
 // surfaceProxy stands for one thing the application drew, so the accessibility
-// walk finds a tree where there is only a rectangle of pixels. It paints
-// nothing: the application already painted it.
+// walk finds a tree where there is only a rectangle of pixels.
+//
+// It deliberately does NOT override Draw: Base's no-op default is already
+// exactly right -- the application painted this long before anyone asked what
+// it was -- and an empty override of my own would be a function with no
+// statements, which reports as 0.0% and fails the per-function coverage gate
+// for having nothing to cover.
 type surfaceProxy struct {
 	Base
 	info A11yInfo
 }
-
-func (p *surfaceProxy) Draw(painter.Painter, *Theme) {}
 
 func (p *surfaceProxy) A11y() A11yInfo { return p.info }
