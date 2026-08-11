@@ -135,6 +135,15 @@ const (
 	// their integer values for any host that persists them.
 	EventMouseMove
 
+	// EventSecondaryClick fires on a secondary (right / two-finger / long-press)
+	// button press inside the widget — the gesture a desktop user expects to open
+	// a context menu. It carries the same widget-local X/Y and modifier fields as
+	// EventClick; it is a press, with no paired release event, because opening a
+	// menu needs only the down. A host that has no secondary button (or chooses
+	// not to map one) simply never sends it, and a widget that does not handle it
+	// is unaffected.
+	EventSecondaryClick
+
 	// eventKindEnd is the exclusive upper bound of valid EventKind
 	// values — not itself a valid kind. Its sole purpose is letting
 	// TestEventKindValuesAreDistinct assert exhaustive coverage: any
