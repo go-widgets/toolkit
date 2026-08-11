@@ -111,6 +111,17 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"viewswitcher", func() Widget { return NewViewSwitcher([]string{"Day", "Week", "Month"}, 0) }},
 		{"markdownview", func() Widget { return NewMarkdownView("# Title\n\n- one\n- two\n\nparagraph") }},
 		{"loadmask", func() Widget { m := NewLoadMask("Loading…"); m.Active = true; return m }},
+		{"material-sidebar", func() Widget {
+			m := NewMaterial(MaterialSidebar)
+			src := make([]byte, 400*300*4)
+			for i := range src {
+				src[i] = byte(i)
+			}
+			m.SetSource(src, 400, 300)
+			m.Child = NewLabel("Sidebar")
+			return m
+		}},
+		{"material-hud-nosource", func() Widget { return NewMaterial(MaterialHUD) }},
 		{"barchart-dense", func() Widget { // more bars than pixels -> must clip
 			v := make([]float64, 300)
 			for i := range v {
