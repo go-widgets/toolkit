@@ -1221,24 +1221,14 @@ func (b *Browser) drawPage(p painter.Painter, cr Rect, t *browserTab) {
 	if dispH < 1 {
 		return
 	}
-	for vy := 0; vy < dispH; vy++ {
-		sy := cr.Y + vy - t.scroll
-		if sy < cr.Y || sy >= cr.Y+cr.H {
-			continue
-		}
-		base := (vy * t.imgH / dispH) * t.imgW
-		for vx := 0; vx < dispW; vx++ {
-			sx := cr.X + vx - t.scrollX
-			if sx < cr.X {
-				continue
-			}
-			if sx >= cr.X+cr.W {
-				break
-			}
-			off := (base + vx*t.imgW/dispW) * 4
-			p.PutPixel(sx, sy, RGBA{R: t.pixels[off], G: t.pixels[off+1], B: t.pixels[off+2], A: t.pixels[off+3]})
-		}
-	}
+	// The whole zoomed page is placed at the scrolled origin and the content
+	// rect crops it. Walking the destination and skipping what falls outside --
+	// which is what this did -- computes the same pixels, but a pixel at a time
+	// and with the crop decided per pixel; the painter decides it once and
+	// copies rows.
+	blitImage(p,
+		Rect{X: cr.X - t.scrollX, Y: cr.Y - t.scroll, W: dispW, H: dispH},
+		cr, t.pixels, t.imgW, t.imgH)
 }
 
 // drawScrollbars paints the vertical (right-edge) and horizontal (bottom-edge)

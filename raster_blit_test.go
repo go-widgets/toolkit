@@ -528,3 +528,73 @@ func benchThumb(b *testing.B, area bool) {
 
 func BenchmarkThumbnailArea(b *testing.B)    { benchThumb(b, true) }
 func BenchmarkThumbnailNearest(b *testing.B) { benchThumb(b, false) }
+
+// refPage is the loop Browser.drawPage used to be: walk the zoomed page,
+// subtract the scroll, and skip whatever falls outside the content rect. The
+// blit changed shape -- the page is now placed once and cropped -- so the old
+// code is reproduced here and compared against, not the new code against
+// itself.
+func refPage(p painter.Painter, cr Rect, pix []byte, imgW, imgH, dispW, dispH, scroll, scrollX int) {
+	for vy := 0; vy < dispH; vy++ {
+		sy := cr.Y + vy - scroll
+		if sy < cr.Y || sy >= cr.Y+cr.H {
+			continue
+		}
+		base := (vy * imgH / dispH) * imgW
+		for vx := 0; vx < dispW; vx++ {
+			sx := cr.X + vx - scrollX
+			if sx < cr.X {
+				continue
+			}
+			if sx >= cr.X+cr.W {
+				break
+			}
+			off := (base + vx*imgW/dispW) * 4
+			p.PutPixel(sx, sy, RGBA{R: pix[off], G: pix[off+1], B: pix[off+2], A: pix[off+3]})
+		}
+	}
+}
+
+func TestBrowserPaintsThePageItPaintedBeforeTheMigration(t *testing.T) {
+	// Scroll positions chosen to exercise both axes, both ends, and the case
+	// where the page is smaller than the viewport.
+	for _, sc := range []struct{ y, x int }{{0, 0}, {40, 0}, {0, 25}, {37, 19}, {1000, 1000}} {
+		t.Run("", func(t *testing.T) {
+			mk := func() (*Browser, Rect, *browserTab, int, int) {
+				b := NewBrowser()
+				b.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
+				b.Open("http://a", "")
+				cr := b.contentRect()
+				b.Deliver("http://a", gradient(64, 90), 64, 90, cr.W, nil, "")
+				tab := b.activeTab()
+				tab.scroll, tab.scrollX = sc.y, sc.x
+				dispW, dispH := b.pageDisplaySize(tab, cr)
+				return b, cr, tab, dispW, dispH
+			}
+
+			b, cr, tab, dispW, dispH := mk()
+			got := surface(120, 100)
+			b.drawPage(got, cr, tab)
+
+			want := surface(120, 100)
+			refPage(want, cr, tab.pixels, tab.imgW, tab.imgH, dispW, dispH, sc.y, sc.x)
+
+			sameBytes(t, "page", got, want)
+		})
+	}
+}
+
+func BenchmarkBrowserPage(b *testing.B) {
+	br := NewBrowser()
+	br.SetBounds(Rect{X: 0, Y: 0, W: 1000, H: 700})
+	br.Open("http://a", "")
+	cr := br.contentRect()
+	br.Deliver("http://a", gradient(900, 4000), 900, 4000, cr.W, nil, "")
+	tab := br.activeTab()
+	tab.scroll = 500
+	s := surface(1000, 700)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		br.drawPage(s, cr, tab)
+	}
+}
