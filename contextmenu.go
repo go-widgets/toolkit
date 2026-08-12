@@ -43,27 +43,7 @@ func (c *ContextMenu) Close() { c.Open = false }
 // menuSize measures the popup: width is the widest row (label + shortcut or
 // submenu chevron) floored at ContextMenuMinW; height is the summed row heights
 // plus the 4px body inset.
-func (c *ContextMenu) menuSize() (w, h int) {
-	w = ContextMenuMinW
-	h = 4
-	for _, it := range c.Menu.Items {
-		if it.Separator {
-			h += MenuSeparatorH
-			continue
-		}
-		rowW := 16 + c.textWidth(it.Label)
-		if it.Submenu != nil {
-			rowW += 12
-		} else if it.Shortcut != "" {
-			rowW += 12 + c.textWidth(it.Shortcut)
-		}
-		if rowW > w {
-			w = rowW
-		}
-		h += MenuRowH
-	}
-	return w, h
-}
+func (c *ContextMenu) menuSize() (w, h int) { return c.Menu.preferredSize() }
 
 // MenuBounds is the rect the Menu occupies: the measured size placed at the
 // anchor, then shifted so it stays fully inside the surface (c.Bounds()).
