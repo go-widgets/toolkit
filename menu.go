@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"math"
+
+	"github.com/go-widgets/painter"
+)
 
 // MenuItem is one row in a Menu. Label is the human text; Action is
 // the callback fired on click. A nil Action turns the row into a
@@ -40,6 +44,14 @@ type MenuItem struct {
 	Checkable  bool
 	Checked    bool
 	RadioGroup int
+
+	// Icon, when set, paints a leading glyph in the row's icon cell, to the left
+	// of the label. The Menu reserves an icon gutter (shifting every row's label
+	// right) whenever ANY item has one, so labels stay aligned. It is handed the
+	// square cell rect to fill and the row's current ink (so the glyph inverts on
+	// a hovered row and greys out on a disabled one), keeping the toolkit free of
+	// any particular icon set — the host draws whatever it likes into the cell.
+	Icon func(p painter.Painter, cell Rect, ink RGBA)
 }
 
 // isCheckish reports whether it should reserve/paint a check or
@@ -55,6 +67,13 @@ type Menu struct {
 	Items   []MenuItem
 	Hover   int // index of hovered row, -1 if none
 	OnClose func()
+
+	// Scale multiplies every fixed metric — row height, insets, gutters, the
+	// check/submenu glyphs — so a HiDPI host gets a crisp, correctly sized menu
+	// instead of one laid out in raw pixels. A host that renders at the backing
+	// pixel ratio (optionally times a UI zoom) sets Scale to it, mirroring
+	// Browser.Scale. Zero or negative means 1: unscaled, byte-identical to before.
+	Scale float64
 
 	// OnItemToggle fires when activating a checkable or radio row changes its
 	// Checked state (before the row's Action and OnClose run). i is the row
@@ -98,15 +117,48 @@ const MenuCheckGutterW = 14
 // NewMenu builds a Menu with the given items + Hover and openSub at -1.
 func NewMenu(items []MenuItem) *Menu { return &Menu{Items: items, Hover: -1, openSub: -1} }
 
+// scale is the effective scale factor: Scale when positive, else 1.
+func (m *Menu) scale() float64 {
+	if m.Scale <= 0 {
+		return 1
+	}
+	return m.Scale
+}
+
+// sc scales a fixed pixel metric to the menu's scale, rounding to the nearest
+// device pixel. Every geometry metric (draw AND hit-test) goes through it so the
+// two stay consistent at any scale.
+func (m *Menu) sc(v int) int { return int(math.Round(float64(v) * m.scale())) }
+
+// hasIconGutter reports whether any item carries an Icon, so Draw reserves an
+// icon cell before every label (keeping them aligned).
+func (m *Menu) hasIconGutter() bool {
+	for i := range m.Items {
+		if m.Items[i].Icon != nil {
+			return true
+		}
+	}
+	return false
+}
+
+// iconGutterW is the width reserved for the leading icon cell when any item has
+// an Icon: a square the height of a row, else zero.
+func (m *Menu) iconGutterW() int {
+	if m.hasIconGutter() {
+		return m.sc(MenuRowH)
+	}
+	return 0
+}
+
 // rowsHeight is the total pixel height of every row (MenuRowH, or MenuSeparatorH
 // for separators) — the body content height without the inset.
 func (m *Menu) rowsHeight() int {
 	h := 0
 	for i := range m.Items {
 		if m.Items[i].Separator {
-			h += MenuSeparatorH
+			h += m.sc(MenuSeparatorH)
 		} else {
-			h += MenuRowH
+			h += m.sc(MenuRowH)
 		}
 	}
 	return h
@@ -117,7 +169,7 @@ func (m *Menu) rowsHeight() int {
 // viewport (Bounds().H), floored at 0. Zero when the whole menu fits, so a
 // normally-sized menu never scrolls.
 func (m *Menu) maxScroll() int {
-	over := m.rowsHeight() + 4 - m.Bounds().H
+	over := m.rowsHeight() + m.sc(4) - m.Bounds().H
 	if over < 0 {
 		over = 0
 	}
@@ -151,10 +203,10 @@ func (m *Menu) scrollHoverIntoView() {
 	if m.Hover < 0 {
 		return
 	}
-	top := m.rowTop(m.Hover) // content-space top (>= 2)
+	top := m.rowTop(m.Hover) // content-space top (>= sc(2))
 	if m.scroll > top {
 		m.scroll = top
-	} else if bot := top + MenuRowH; m.scroll < bot-m.Bounds().H {
+	} else if bot := top + m.sc(MenuRowH); m.scroll < bot-m.Bounds().H {
 		m.scroll = bot - m.Bounds().H
 	}
 	m.scroll = m.clampedScroll()
@@ -179,23 +231,25 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	gutter := 0
 	if m.hasCheckGutter() {
-		gutter = MenuCheckGutterW
+		gutter = m.sc(MenuCheckGutterW)
 	}
+	iconGutter := m.iconGutterW()
+	rowH, sepH, inset := m.sc(MenuRowH), m.sc(MenuSeparatorH), m.sc(8)
 	// Clip the rows to the bounds and paint from -scroll, so a menu whose rows
 	// overflow its (host-clamped) height scrolls instead of spilling past the
 	// surface. When every row fits, maxScroll == 0 pins scroll to 0 and the clip
 	// covers the whole body — byte-identical to the unscrolled render.
 	withClip(p, r, func() {
-		y := r.Y + 2 - m.clampedScroll()
+		y := r.Y + m.sc(2) - m.clampedScroll()
 		for i, it := range m.Items {
 			if it.Separator {
-				sep := y + MenuSeparatorH/2
-				fillRect(p, r.X+4, sep, r.W-8, 1, theme.SurfaceAlt)
-				y += MenuSeparatorH
+				sep := y + sepH/2
+				fillRect(p, r.X+m.sc(4), sep, r.W-m.sc(8), max(1, m.sc(1)), theme.SurfaceAlt)
+				y += sepH
 				continue
 			}
 			if i == m.Hover && (it.Action != nil || it.Submenu != nil) {
-				fillRect(p, r.X+1, y, r.W-2, MenuRowH, theme.Accent)
+				fillRect(p, r.X+m.sc(1), y, r.W-m.sc(2), rowH, theme.Accent)
 			}
 			ink := theme.OnSurface
 			switch {
@@ -204,19 +258,22 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 			case i == m.Hover:
 				ink = theme.Background // hovered row: invert ink
 			}
-			textY := y + (MenuRowH-m.glyphHeight())/2
-			if it.isCheckish() && it.Checked {
-				m.drawCheckGlyph(p, r.X+8, y, it.RadioGroup != 0, ink)
+			if it.Icon != nil {
+				side := m.sc(16)
+				off := (rowH - side) / 2
+				it.Icon(p, Rect{X: r.X + m.sc(3) + off, Y: y + off, W: side, H: side}, ink)
 			}
-			m.drawText(p, r.X+8+gutter, textY, it.Label, ink)
+			textY := y + (rowH-m.glyphHeight())/2
+			if it.isCheckish() && it.Checked {
+				m.drawCheckGlyph(p, r.X+inset+iconGutter, y, it.RadioGroup != 0, ink)
+			}
+			m.drawText(p, r.X+inset+iconGutter+gutter, textY, it.Label, ink)
 			if it.Submenu != nil {
 				// ▶ chevron on the right edge to signal a nested menu.
-				// Flat left (tallest column, x = cx-1), point on right
-				// (1-pixel tip, x = cx+2).
-				cx := r.X + r.W - 8
-				cy := y + MenuRowH/2
-				for t := 0; t < 4; t++ {
-					fillRect(p, cx+2-t, cy-t, 1, 1+2*t, ink)
+				cx := r.X + r.W - inset
+				cy := y + rowH/2
+				for t := 0; t < m.sc(4); t++ {
+					fillRect(p, cx+m.sc(2)-t, cy-t, max(1, m.sc(1)), max(1, m.sc(1))+2*t, ink)
 				}
 			} else if it.Shortcut != "" {
 				// Right-align the shortcut hint in a muted tone. Skipped when
@@ -224,14 +281,14 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 				// right edge). Muted ink follows the row's active/inactive
 				// state so a hovered row's shortcut inverts too.
 				sw := m.textWidth(it.Shortcut)
-				sx := r.X + r.W - 8 - sw
+				sx := r.X + r.W - inset - sw
 				shortcutInk := theme.SurfaceAlt
 				if i == m.Hover && it.Action != nil {
 					shortcutInk = theme.Background
 				}
 				m.drawText(p, sx, textY, it.Shortcut, shortcutInk)
 			}
-			y += MenuRowH
+			y += rowH
 		}
 	})
 	// An open submenu is painted last so it overlays the body: its child Menu
@@ -249,17 +306,18 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 // a plain checkable item. gx is the gutter's left edge, rowY the
 // row's top (widget-local), both in the same frame as Draw's y.
 func (m *Menu) drawCheckGlyph(p painter.Painter, gx, rowY int, radio bool, ink RGBA) {
-	const glyphBox = 10
-	boxY := rowY + (MenuRowH-glyphBox)/2
+	glyphBox := m.sc(10)
+	dot := max(1, m.sc(1))
+	boxY := rowY + (m.sc(MenuRowH)-glyphBox)/2
 	if radio {
-		fillRect(p, gx+3, boxY+3, glyphBox-6, glyphBox-6, ink)
+		fillRect(p, gx+m.sc(3), boxY+m.sc(3), glyphBox-m.sc(6), glyphBox-m.sc(6), ink)
 		return
 	}
 	for t := 0; t < 3; t++ {
-		fillRect(p, gx+t, boxY+5+t, 1, 1, ink)
+		fillRect(p, gx+m.sc(t), boxY+m.sc(5+t), dot, dot, ink)
 	}
 	for t := 0; t < 5; t++ {
-		fillRect(p, gx+2+t, boxY+8-t, 1, 1, ink)
+		fillRect(p, gx+m.sc(2+t), boxY+m.sc(8-t), dot, dot, ink)
 	}
 }
 
@@ -349,7 +407,7 @@ func (m *Menu) OnEvent(ev Event) {
 	case EventScroll:
 		// Native wheel scroll: one notch moves one row. A no-op when the whole
 		// menu already fits (maxScroll == 0).
-		m.scrollBy(ev.Delta * MenuRowH)
+		m.scrollBy(ev.Delta * m.sc(MenuRowH))
 	case EventClick:
 		m.activate(m.rowAt(ev.Y))
 	}
@@ -441,12 +499,12 @@ func (m *Menu) subBounds(idx int) Rect {
 // the heights (MenuRowH, or MenuSeparatorH for separators) of the rows above it
 // past the 2px body inset.
 func (m *Menu) rowTop(idx int) int {
-	cy := 2
+	cy := m.sc(2)
 	for k := 0; k < idx && k < len(m.Items); k++ {
 		if m.Items[k].Separator {
-			cy += MenuSeparatorH
+			cy += m.sc(MenuSeparatorH)
 		} else {
-			cy += MenuRowH
+			cy += m.sc(MenuRowH)
 		}
 	}
 	return cy
@@ -457,28 +515,29 @@ func (m *Menu) rowTop(idx int) int {
 // height is the summed row heights plus the 4px body inset. Used to size a
 // submenu when it opens.
 func (m *Menu) preferredSize() (w, h int) {
-	w = MenuMinW
-	h = 4
+	w = m.sc(MenuMinW)
+	h = m.sc(4)
 	gutter := 0
 	if m.hasCheckGutter() {
-		gutter = MenuCheckGutterW
+		gutter = m.sc(MenuCheckGutterW)
 	}
+	iconGutter := m.iconGutterW()
 	for i := range m.Items {
 		it := &m.Items[i]
 		if it.Separator {
-			h += MenuSeparatorH
+			h += m.sc(MenuSeparatorH)
 			continue
 		}
-		rowW := 16 + gutter + m.textWidth(it.Label)
+		rowW := m.sc(16) + iconGutter + gutter + m.textWidth(it.Label)
 		if it.Submenu != nil {
-			rowW += 12
+			rowW += m.sc(12)
 		} else if it.Shortcut != "" {
-			rowW += 12 + m.textWidth(it.Shortcut)
+			rowW += m.sc(12) + m.textWidth(it.Shortcut)
 		}
 		if rowW > w {
 			w = rowW
 		}
-		h += MenuRowH
+		h += m.sc(MenuRowH)
 	}
 	return w, h
 }
@@ -536,14 +595,14 @@ func (m *Menu) rowAt(y int) int {
 	// so a click / hover after scrolling resolves to the row actually under the
 	// pointer. At scroll == 0 this is the original mapping.
 	ey := y + m.clampedScroll()
-	if ey < 2 {
+	if ey < m.sc(2) {
 		return -1
 	}
-	cy := 2
+	cy := m.sc(2)
 	for i, it := range m.Items {
-		h := MenuRowH
+		h := m.sc(MenuRowH)
 		if it.Separator {
-			h = MenuSeparatorH
+			h = m.sc(MenuSeparatorH)
 		}
 		if ey >= cy && ey < cy+h {
 			return i
