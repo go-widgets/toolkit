@@ -49,6 +49,11 @@ func (s *Spinner) Tick(deltaSeconds float64) {
 	s.Phase -= math.Floor(s.Phase)
 }
 
+// Animating reports whether the spinner still needs frames: true exactly when
+// it is Active, so a host stops repainting once the spinner is stopped. It makes
+// Spinner an [Animator], driven by [TickTree] / [TreeAnimating].
+func (s *Spinner) Animating() bool { return s.Active }
+
 // Draw paints the spinner when Active, dispatching on Style. It is a no-op when
 // inactive or given empty bounds.
 func (s *Spinner) Draw(p painter.Painter, theme *Theme) {

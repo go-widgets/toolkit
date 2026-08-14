@@ -30,6 +30,23 @@ type ProgressBar struct {
 // label.
 func NewProgressBar() *ProgressBar { return &ProgressBar{} }
 
+// Tick advances the indeterminate sweep by deltaSeconds, wrapping Phase modulo
+// 1 so it stays bounded. A determinate bar (the default) has no animation, so
+// Tick is a no-op for it — matching what Animating reports. Together they make
+// an indeterminate ProgressBar an [Animator], driven by [TickTree] /
+// [TreeAnimating].
+func (pb *ProgressBar) Tick(deltaSeconds float64) {
+	if !pb.Indeterminate {
+		return
+	}
+	pb.Phase += deltaSeconds
+	pb.Phase -= math.Floor(pb.Phase)
+}
+
+// Animating reports whether the bar still needs frames: true exactly when it is
+// Indeterminate (a determinate bar is a static fill and needs no repaint).
+func (pb *ProgressBar) Animating() bool { return pb.Indeterminate }
+
 // SetFraction clamps + assigns Fraction. 0 = empty, 1 = full.
 func (p *ProgressBar) SetFraction(f float64) {
 	if f < 0 {
