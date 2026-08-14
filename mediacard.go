@@ -115,3 +115,8 @@ func (c *MediaCard) Draw(p painter.Painter, theme *Theme) {
 		c.Meta.Draw(p, theme)
 	}
 }
+
+// A11y reports the media card as a group named by its title.
+func (c *MediaCard) A11y() A11yInfo {
+	return A11yInfo{Role: RoleGroup, Name: c.Title}
+}

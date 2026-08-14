@@ -110,3 +110,8 @@ func (c *ArticleCard) Draw(p painter.Painter, theme *Theme) {
 		c.Meta.Draw(p, theme)
 	}
 }
+
+// A11y reports the article card as a group named by its title.
+func (c *ArticleCard) A11y() A11yInfo {
+	return A11yInfo{Role: RoleGroup, Name: c.Title}
+}

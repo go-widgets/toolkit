@@ -108,3 +108,9 @@ func (m *CardMeta) Draw(p painter.Painter, theme *Theme) {
 	}
 	m.drawText(p, r.X, ty, line, dimInk(theme))
 }
+
+// A11y reports the meta strip as static text carrying its joined byline; a
+// hidden strip names nothing.
+func (m *CardMeta) A11y() A11yInfo {
+	return A11yInfo{Role: RoleText, Name: m.line()}
+}

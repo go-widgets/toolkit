@@ -139,3 +139,9 @@ func (c *LinkCard) Draw(p painter.Painter, theme *Theme) {
 		c.Meta.Draw(p, theme)
 	}
 }
+
+// A11y reports the link card as a group named by its title, with the source
+// domain as its value.
+func (c *LinkCard) A11y() A11yInfo {
+	return A11yInfo{Role: RoleGroup, Name: c.Title, Value: c.Domain}
+}
