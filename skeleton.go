@@ -146,6 +146,23 @@ func (s *Skeleton) SetPhase(t float64) *Skeleton {
 	return s
 }
 
+// Tick advances the shimmer sweep by deltaSeconds, wrapping Phase modulo 1 so
+// it stays bounded. It advances only while Animated (a flat, un-animated
+// Skeleton needs no frames), matching what Animating reports. Together they make
+// an animated Skeleton an [Animator], driven by [TickTree] / [TreeAnimating] —
+// the per-frame counterpart of the absolute-clock SetPhase.
+func (s *Skeleton) Tick(deltaSeconds float64) {
+	if !s.Animated {
+		return
+	}
+	s.Phase += deltaSeconds
+	s.Phase -= math.Floor(s.Phase)
+}
+
+// Animating reports whether the skeleton still needs frames: true exactly when
+// its shimmer is Animated (a static placeholder needs no repaint).
+func (s *Skeleton) Animating() bool { return s.Animated }
+
 // effLineH / effLineGap / effLastFrac / textBarRadius resolve the tuning
 // fields to their defaults when left at the zero value.
 func (s *Skeleton) effLineH() int {
@@ -325,6 +342,23 @@ func (g *SkeletonGroup) SetPhase(t float64) *SkeletonGroup {
 	g.Animated = true
 	return g
 }
+
+// Tick advances the group's shimmer sweep by deltaSeconds, wrapping Phase
+// modulo 1. It advances only while Animated and cascades to every child at Draw
+// time (Draw copies the group's Phase into each child), so ticking the group is
+// enough to animate the whole composition. Together with Animating this makes
+// SkeletonGroup an [Animator] driven by [TickTree] / [TreeAnimating].
+func (g *SkeletonGroup) Tick(deltaSeconds float64) {
+	if !g.Animated {
+		return
+	}
+	g.Phase += deltaSeconds
+	g.Phase -= math.Floor(g.Phase)
+}
+
+// Animating reports whether the group still needs frames: true exactly when its
+// shimmer is Animated.
+func (g *SkeletonGroup) Animating() bool { return g.Animated }
 
 // Draw positions each child relative to the group's Bounds, forwards
 // the shimmer state, and paints it.

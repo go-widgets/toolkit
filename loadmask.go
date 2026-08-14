@@ -43,6 +43,12 @@ func NewLoadMask(message string) *LoadMask {
 // inactive, but cheap to keep calling).
 func (m *LoadMask) Tick(deltaSeconds float64) { m.spinner.Tick(deltaSeconds) }
 
+// Animating reports whether the mask still needs frames: true exactly when it
+// is Active. Together with Tick this makes LoadMask an [Animator], so a host
+// drives its busy spinner through [TickTree] / [TreeAnimating] with no manual
+// bookkeeping.
+func (m *LoadMask) Animating() bool { return m.Active }
+
 // HitTest reports whether the mask should catch a pointer event: only while
 // Active, so an inactive mask is fully transparent to clicks and an active one
 // shields the content beneath it (the modal-scrim idiom, see Backdrop). While
