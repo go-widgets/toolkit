@@ -67,6 +67,14 @@ type PostCard struct {
 	// default (DefaultPostCardTitleLines).
 	MaxTitleLines int
 
+	// Per-element fonts give the card its type hierarchy — a larger bold title
+	// over a smaller muted subtitle / meta, and a small pill — instead of one
+	// uniform size. Each is optional: a nil font falls back to the card's
+	// EffectiveFont (Base.Font, else the package font), so the zero value keeps
+	// the previous single-font behaviour. TitleFont sizes the headline lines,
+	// SubtitleFont the channel text, MetaFont the footer, PillFont the badge label.
+	TitleFont, SubtitleFont, MetaFont, PillFont Font
+
 	// Built leaves, rebuilt from the fields on every assemble so Children reflects
 	// the current content. They are the SelectableText runs CollectRuns lifts out.
 	subtitleLbl *Label
@@ -115,24 +123,46 @@ func (c *PostCard) maxLines() int {
 	return DefaultPostCardTitleLines
 }
 
-// badgeRowH is the badge row's height, or 0 when neither a pill nor a subtitle is
-// shown (the row then collapses and reserves no space).
-func (c *PostCard) badgeRowH() int {
-	if c.Pill == "" && c.Subtitle == "" {
-		return 0
+// titleFont / subtitleFont / metaFont / pillFont resolve each element's font,
+// falling back to the card's EffectiveFont when the caller left it nil.
+func (c *PostCard) titleFont() Font    { return orFont(c.TitleFont, c.EffectiveFont()) }
+func (c *PostCard) subtitleFont() Font { return orFont(c.SubtitleFont, c.EffectiveFont()) }
+func (c *PostCard) metaFont() Font     { return orFont(c.MetaFont, c.EffectiveFont()) }
+func (c *PostCard) pillFont() Font     { return orFont(c.PillFont, c.EffectiveFont()) }
+
+// orFont returns f when non-nil, else the fallback.
+func orFont(f, fallback Font) Font {
+	if f != nil {
+		return f
 	}
-	return c.glyphHeight() + 2*BadgePadY
+	return fallback
+}
+
+// badgeRowH is the badge row's height, or 0 when neither a pill nor a subtitle is
+// shown (the row then collapses and reserves no space). It is the taller of the
+// pill (its font plus the badge's vertical padding) and the subtitle font.
+func (c *PostCard) badgeRowH() int {
+	h := 0
+	if c.Pill != "" {
+		h = c.pillFont().Height() + 2*BadgePadY
+	}
+	if c.Subtitle != "" {
+		if sh := c.subtitleFont().Height(); sh > h {
+			h = sh
+		}
+	}
+	return h
 }
 
 // titleSlot is the vertical slot one wrapped title line occupies.
-func (c *PostCard) titleSlot() int { return c.glyphHeight() + CardLineSpacing }
+func (c *PostCard) titleSlot() int { return c.titleFont().Height() + CardLineSpacing }
 
 // metaH is the meta line's height, or 0 when no meta is shown.
 func (c *PostCard) metaH() int {
 	if c.Meta == "" {
 		return 0
 	}
-	return c.glyphHeight()
+	return c.metaFont().Height()
 }
 
 // contentWidth is the text width the title wraps into at outer width outerW: the
@@ -153,7 +183,7 @@ func (c *PostCard) contentWidth(outerW int) int {
 // titleLines word-wraps the title to content width cw and clamps it to maxLines,
 // ellipsising the last kept line on overflow. An empty title yields no lines.
 func (c *PostCard) titleLines(cw int) []string {
-	f := c.EffectiveFont()
+	f := c.titleFont()
 	return clampLines(f, wrapText(f, c.Title, cw), c.maxLines(), cw)
 }
 
@@ -215,7 +245,6 @@ func (c *PostCard) innerRect() Rect {
 // meta line to the bottom; the thumbnail, when present, is pinned to the top of a
 // fixed right-hand column.
 func (c *PostCard) assemble(inner Rect) *HBox {
-	f := c.EffectiveFont()
 	contentW := inner.W
 	if c.hasThumb() {
 		tw, _ := c.thumbSize()
@@ -234,10 +263,12 @@ func (c *PostCard) assemble(inner Rect) *HBox {
 		row.Spacing = CardGapX
 		if c.Pill != "" {
 			badge := &Badge{Text: c.Pill, Fill: c.PillColor, Ink: c.pillInk()}
-			row.AddFixed(badge, f.Measure(c.Pill)+2*BadgePadX)
+			badge.Font = c.pillFont()
+			row.AddFixed(badge, c.pillFont().Measure(c.Pill)+2*BadgePadX)
 		}
 		if c.Subtitle != "" {
 			c.subtitleLbl = NewLabel(c.Subtitle)
+			c.subtitleLbl.Font = c.subtitleFont()
 			c.subtitleLbl.Ellipsis = true
 			c.subtitleLbl.VAlign = VMiddle
 			row.AddFlex(c.subtitleLbl, 1)
@@ -250,6 +281,7 @@ func (c *PostCard) assemble(inner Rect) *HBox {
 	c.titleLbls = nil
 	for _, ln := range c.titleLines(contentW) {
 		lbl := NewLabel(ln)
+		lbl.Font = c.titleFont()
 		lbl.Ellipsis = true
 		c.titleLbls = append(c.titleLbls, lbl)
 		col.AddFixed(lbl, c.titleSlot())
@@ -260,6 +292,7 @@ func (c *PostCard) assemble(inner Rect) *HBox {
 	c.metaLbl = nil
 	if c.Meta != "" {
 		c.metaLbl = NewLabel(c.Meta)
+		c.metaLbl.Font = c.metaFont()
 		c.metaLbl.Ellipsis = true
 		c.metaLbl.VAlign = VBottom
 		col.AddFixed(c.metaLbl, c.metaH())
