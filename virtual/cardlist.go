@@ -172,7 +172,7 @@ func (c *CardList[T]) renderCard(p painter.Painter, th *toolkit.Theme, r toolkit
 		p.FillRect(r, veil)
 	}
 	if st.Selected {
-		p.StrokeRect(r, th.Accent, cardSelectRingWidth)
+		p.StrokeRect(r, th.Accent, toolkit.Scaled(cardSelectRingWidth))
 	}
 }
 
@@ -200,7 +200,7 @@ func (c *CardList[T]) drawStrip(p painter.Painter, th *toolkit.Theme, top bool, 
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
-	sh := cardStripHeight
+	sh := toolkit.Scaled(cardStripHeight)
 	if sh > r.H {
 		sh = r.H
 	}
@@ -209,7 +209,7 @@ func (c *CardList[T]) drawStrip(p painter.Painter, th *toolkit.Theme, top bool, 
 		y = r.Y + r.H - sh
 	}
 	p.FillRect(toolkit.Rect{X: r.X, Y: y, W: r.W, H: sh}, th.Surface)
-	d := cardStripSpinnerSize
+	d := toolkit.Scaled(cardStripSpinnerSize)
 	if d > sh {
 		d = sh
 	}

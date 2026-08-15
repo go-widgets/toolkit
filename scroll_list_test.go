@@ -80,13 +80,13 @@ func TestScrollViewClampsToMax(t *testing.T) {
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	sv.SetContentSize(200, 300)
 	sv.Scroll(10000, 10000)
-	// Content is wider than the viewport (200 > 100-scrollbarWidth), so a
+	// Content is wider than the viewport (200 > 100-scrollGutter), so a
 	// horizontal scrollbar reserves the bottom row and the viewport height shrinks
-	// by scrollbarWidth. Express the clamps in terms of scrollbarWidth so they
-	// track the shared track thickness: viewport = bounds - scrollbarWidth,
-	// clamp = content - viewport.
-	viewW := 100 - scrollbarWidth
-	viewH := 60 - scrollbarWidth
+	// by the gutter. Express the clamps in terms of scrollGutter (track + the
+	// normalized content gap) so they track the shared inset: viewport =
+	// bounds - scrollGutter, clamp = content - viewport.
+	viewW := 100 - scrollGutter()
+	viewH := 60 - scrollGutter()
 	wantY := 300 - viewH
 	wantX := 200 - viewW
 	if sv.OffsetY != wantY {

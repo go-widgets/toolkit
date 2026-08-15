@@ -49,11 +49,11 @@ const (
 )
 
 // CardHeaderH is the height of the header strip when Title != "" (a function,
-// as it derives from the active font's GlyphHeight).
-func CardHeaderH() int { return GlyphHeight() + 2*CardPadY }
+// as it derives from the active font's GlyphHeight and the metric-scaled pad).
+func CardHeaderH() int { return GlyphHeight() + 2*scaled(CardPadY) }
 
 // CardFooterH is the height of the footer strip when Footer != "".
-func CardFooterH() int { return GlyphHeight() + 2*CardPadY }
+func CardFooterH() int { return GlyphHeight() + 2*scaled(CardPadY) }
 
 // NewCard constructs a Card with the given title, body + footer.
 // Any of the three may be "" to skip that zone.
@@ -74,7 +74,7 @@ func (c *Card) Draw(p painter.Painter, theme *Theme) {
 	if c.Title != "" {
 		fillRect(p, r.X, r.Y, r.W, CardHeaderH(), theme.SurfaceAlt)
 		ty := r.Y + (CardHeaderH()-c.glyphHeight())/2
-		c.drawText(p, r.X+CardPadX, ty, c.Title, theme.OnSurface)
+		c.drawText(p, r.X+scaled(CardPadX), ty, c.Title, theme.OnSurface)
 		// Divider between header and body.
 		fillRect(p, r.X, r.Y+CardHeaderH(), r.W, 1, theme.Border)
 		bodyTop = r.Y + CardHeaderH() + 1
@@ -84,16 +84,16 @@ func (c *Card) Draw(p painter.Painter, theme *Theme) {
 		footerY := r.Y + r.H - CardFooterH()
 		fillRect(p, r.X, footerY, r.W, CardFooterH(), theme.SurfaceAlt)
 		ty := footerY + (CardFooterH()-c.glyphHeight())/2
-		c.drawText(p, r.X+CardPadX, ty, c.Footer, theme.OnSurface)
+		c.drawText(p, r.X+scaled(CardPadX), ty, c.Footer, theme.OnSurface)
 		// Divider between body and footer.
 		fillRect(p, r.X, footerY-1, r.W, 1, theme.Border)
 	}
 
 	if c.Body != "" {
-		lineH := c.glyphHeight() + CardLineSpacing
-		y := bodyTop + CardPadY
+		lineH := c.glyphHeight() + scaled(CardLineSpacing)
+		y := bodyTop + scaled(CardPadY)
 		for _, ln := range strings.Split(c.Body, "\n") {
-			c.drawText(p, r.X+CardPadX, y, ln, theme.OnSurface)
+			c.drawText(p, r.X+scaled(CardPadX), y, ln, theme.OnSurface)
 			y += lineH
 		}
 	}

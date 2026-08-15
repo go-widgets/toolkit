@@ -36,3 +36,10 @@ func MetricScale() float64 { return metricScale }
 // scale. It is the single seam every widget's pixel constant passes through, so
 // scaling stays consistent across the toolkit.
 func scaled(v int) int { return int(float64(v)*metricScale + 0.5) }
+
+// Scaled is the exported form of [scaled]: it rounds a base (logical-pixel)
+// metric to device pixels at the current [MetricScale]. Sibling packages that
+// compose these widgets (e.g. the virtual list feed) route their own fixed
+// metrics through it so they scale in lockstep with the core widgets instead of
+// re-deriving the rounding.
+func Scaled(v int) int { return scaled(v) }

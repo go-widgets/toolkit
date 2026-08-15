@@ -81,7 +81,7 @@ const TreeIndentW = 16
 // NewTreeView builds a TreeView rooted at root (which may be nil for
 // an empty initial view).
 func NewTreeView(root *TreeNode) *TreeView {
-	return &TreeView{Root: root, RowHeight: 18}
+	return &TreeView{Root: root, RowHeight: scaled(18)}
 }
 
 // flatten populates rows by walking Root in depth-first order +
@@ -109,7 +109,7 @@ func (t *TreeView) walkTree(n *TreeNode, depth int) {
 // same "0 means default" fallback everywhere it's needed.
 func (t *TreeView) rowHeight() int {
 	if t.RowHeight <= 0 {
-		return 18
+		return scaled(18)
 	}
 	return t.RowHeight
 }
@@ -399,7 +399,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 
 	rowW := r.W
 	if windowed {
-		rowW = r.W - scrollbarWidth
+		rowW = r.W - scrollGutter()
 	}
 	start, end := 0, total
 	if windowed {
@@ -432,7 +432,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 			ink = theme.Background
 		}
 		fillRect(p, r.X, y, rowW, rh, bg)
-		indent := r.X + row.depth*TreeIndentW
+		indent := r.X + row.depth*scaled(TreeIndentW)
 		// Chevron if the node has children: ▶ collapsed, ▼ expanded.
 		// The wide base sits away from the pointing direction: for ▼
 		// the widest row is at the top (y = cy-1) narrowing to the tip
@@ -440,7 +440,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 		// the left (x = cx-1) narrowing to the tip on the right (x =
 		// cx+2).
 		if len(row.node.Children) > 0 {
-			cx := indent + 4
+			cx := indent + scaled(4)
 			cy := y + rh/2
 			if row.node.Expanded {
 				for q := 0; q < 4; q++ {
@@ -453,7 +453,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 			}
 		}
 		textY := y + (rh-t.glyphHeight())/2
-		t.drawText(p, indent+TreeChevronW, textY, row.node.Label, ink)
+		t.drawText(p, indent+scaled(TreeChevronW), textY, row.node.Label, ink)
 	}
 	if clr != nil {
 		clr.PopClip()
@@ -477,13 +477,14 @@ func (t *TreeView) scrollbarGeom() (sbGeom, bool) {
 		return sbGeom{}, false
 	}
 	thumbH := r.H * wr / total
-	if thumbH < 8 {
-		thumbH = 8
+	if thumbH < scaled(8) {
+		thumbH = scaled(8)
 	}
 	maxScroll := total - wr // > 0 here (total > wr)
 	scroll := t.clampScrollRow(t.ScrollRow, total, wr)
 	return sbGeom{
-		cross0:     r.W - scrollbarWidth,
+		cross0:     r.W - scrollbarTrack(),
+		crossW:     scrollbarTrack(),
 		trackStart: 0,
 		trackLen:   r.H,
 		thumbStart: scroll * (r.H - thumbH) / maxScroll,
@@ -500,8 +501,9 @@ func (t *TreeView) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	// The caller only invokes this while windowed, which is exactly when
 	// scrollbarGeom reports live, so the ok flag is always true here.
 	g, _ := t.scrollbarGeom()
-	fillRect(p, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen, theme.SurfaceAlt)
-	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
+	track := scrollbarTrack()
+	fillRect(p, r.X+g.cross0, r.Y+g.trackStart, track, g.trackLen, theme.SurfaceAlt)
+	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen, theme.Accent)
 }
 
 // NodeAt returns the TreeNode at widget-local (x, y) in the current
@@ -608,8 +610,8 @@ func (t *TreeView) OnEvent(ev Event) {
 		return
 	}
 	row := t.rows[idx]
-	chevronX := row.depth*TreeIndentW + 4
-	if ev.X >= chevronX-3 && ev.X < chevronX+8 && len(row.node.Children) > 0 {
+	chevronX := row.depth*scaled(TreeIndentW) + scaled(4)
+	if ev.X >= chevronX-scaled(3) && ev.X < chevronX+scaled(8) && len(row.node.Children) > 0 {
 		row.node.Expanded = !row.node.Expanded
 		// Toggling a subtree can shrink (collapse) or grow (expand) the
 		// visible row count out from under ScrollRow: re-flatten +

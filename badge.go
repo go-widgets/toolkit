@@ -63,9 +63,9 @@ func NewBadge(text string) *Badge { return &Badge{Text: text} }
 func (b *Badge) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	if r.W == 0 {
-		r.W = b.textWidth(b.Text) + 2*BadgePadX
+		r.W = b.textWidth(b.Text) + 2*scaled(BadgePadX)
 		if r.H == 0 {
-			r.H = b.glyphHeight() + 2*BadgePadY
+			r.H = b.glyphHeight() + 2*scaled(BadgePadY)
 		}
 		b.SetBounds(r)
 	}

@@ -330,17 +330,18 @@ func newOverflowScrollView() *ScrollView {
 
 func TestScrollViewVerticalScrollbarDrag(t *testing.T) {
 	sv := newOverflowScrollView()
-	// The overflow reserves a scrollbarWidth track on each axis, so the viewport
-	// shrinks to 40-scrollbarWidth on both; the clamp is content-viewport and a
-	// page equals the viewport. Both scale with the shared track thickness.
-	viewport := 40 - scrollbarWidth
+	// The overflow reserves a scrollGutter (track + normalized gap) on each axis,
+	// so the content viewport shrinks to 40-scrollGutter on both; the clamp is
+	// content-viewport and a page equals the viewport. The track itself stays a
+	// scrollbarWidth column, so the thumb x-band is unchanged.
+	viewport := 40 - scrollGutter()
 	clamp := 200 - viewport
 	// vertical thumb x-band [40-scrollbarWidth,40), y-thumb [0,8) at Offset 0.
 	sv.OnEvent(Event{Kind: EventClick, X: 34, Y: 3})
 	if !sv.sbV.active {
 		t.Fatal("pressing the vertical thumb should begin a drag")
 	}
-	sv.OnEvent(Event{Kind: EventMouseDrag, X: 34, Y: 20})
+	sv.OnEvent(Event{Kind: EventMouseDrag, X: 34, Y: 10})
 	if !(sv.OffsetY > 0 && sv.OffsetY < clamp) {
 		t.Fatalf("mid drag OffsetY = %d, want strictly between 0 and %d", sv.OffsetY, clamp)
 	}
@@ -363,7 +364,7 @@ func TestScrollViewVerticalScrollbarDrag(t *testing.T) {
 
 func TestScrollViewHorizontalScrollbarDrag(t *testing.T) {
 	sv := newOverflowScrollView()
-	viewport := 40 - scrollbarWidth
+	viewport := 40 - scrollGutter()
 	clamp := 200 - viewport
 	// horizontal thumb y-band [40-scrollbarWidth,40), x-thumb [0,8) at Offset 0.
 	sv.OnEvent(Event{Kind: EventClick, X: 3, Y: 34})
