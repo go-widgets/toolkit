@@ -37,6 +37,19 @@ type TreeView struct {
 	OnActivate func(node *TreeNode)
 	RowHeight  int // default 18
 
+	// RowRenderer, when non-nil, draws each row's CONTENT (right of the
+	// chevron) instead of the default node.Label text. contentRect is the
+	// row rectangle AFTER the chevron + indent, already inset for the
+	// scrollbar gutter; the TreeView still paints the selection background,
+	// the chevron, and owns scroll/hit-test/keyboard. selected reports
+	// whether the row is the current Selected node (or, in MultiSelect mode,
+	// a member of the selection set); ink is the resolved text colour
+	// (theme.OnSurface, or theme.Background when selected). This is the
+	// rich-row seam: a host can draw an icon/pastille + label + count badge +
+	// spinner. The zero value (nil) keeps the original one-line Label render,
+	// byte-identical to before this field existed.
+	RowRenderer func(p painter.Painter, theme *Theme, contentRect Rect, node *TreeNode, selected bool, ink RGBA)
+
 	// ScrollRow is the index, into the current visible-flattened node
 	// list, of the top row Draw paints. It's clamped on every Draw /
 	// OnEvent to [0, max(0, visibleCount-windowRows)], so it's always
@@ -452,8 +465,19 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 				}
 			}
 		}
-		textY := y + (rh-t.glyphHeight())/2
-		t.drawText(p, indent+scaled(TreeChevronW), textY, row.node.Label, ink)
+		if t.RowRenderer != nil {
+			// Rich-row seam: hand the host the content rect right of the
+			// chevron + indent, bounded by the (gutter-inset) row width.
+			contentX := indent + scaled(TreeChevronW)
+			contentW := r.X + rowW - contentX
+			if contentW < 0 {
+				contentW = 0
+			}
+			t.RowRenderer(p, theme, Rect{X: contentX, Y: y, W: contentW, H: rh}, row.node, isSel, ink)
+		} else {
+			textY := y + (rh-t.glyphHeight())/2
+			t.drawText(p, indent+scaled(TreeChevronW), textY, row.node.Label, ink)
+		}
 	}
 	if clr != nil {
 		clr.PopClip()
@@ -504,6 +528,25 @@ func (t *TreeView) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	track := scrollbarTrack()
 	fillRect(p, r.X+g.cross0, r.Y+g.trackStart, track, g.trackLen, theme.SurfaceAlt)
 	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen, theme.Accent)
+}
+
+// RowContentWidth returns the pixel width RowRenderer's contentRect gets for a
+// row at the given depth: the widget width, minus the scrollbar gutter when the
+// tree currently overflows its window, minus the chevron column and this depth's
+// indent. It uses the same windowing decision Draw does, so a host can lay out
+// (measure/elide) rich content before painting. Never negative (clamped to 0).
+func (t *TreeView) RowContentWidth(depth int) int {
+	r := t.Bounds()
+	t.flatten()
+	rowW := r.W
+	if wr := t.windowRows(); wr > 0 && len(t.rows) > wr {
+		rowW -= scrollGutter()
+	}
+	w := rowW - depth*scaled(TreeIndentW) - scaled(TreeChevronW)
+	if w < 0 {
+		w = 0
+	}
+	return w
 }
 
 // NodeAt returns the TreeNode at widget-local (x, y) in the current
