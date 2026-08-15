@@ -63,6 +63,13 @@ type PostCard struct {
 	// ThumbW / ThumbH size the thumbnail column; a non-positive value selects the
 	// default (DefaultPostCardThumbW / DefaultPostCardThumbH).
 	ThumbW, ThumbH int
+	// ThumbPlaceholder is the muted label drawn in the thumbnail box when the post
+	// declares media but no decoded Thumbnail has landed yet (e.g. "image", "video").
+	// A non-empty value reserves the thumbnail column even while Thumbnail is nil, so
+	// the card does not reflow (grow a column) when the image finally arrives; the
+	// box shows the label centred on the SurfaceAlt ground until then, reproducing
+	// the historical "loading" card. Empty draws no column unless Thumbnail is set.
+	ThumbPlaceholder string
 	// MaxTitleLines caps the wrapped title; a non-positive value selects the
 	// default (DefaultPostCardTitleLines).
 	MaxTitleLines int
@@ -98,8 +105,15 @@ func NewPostCard(pill, subtitle, title, meta string) *PostCard {
 	return &PostCard{Pill: pill, Subtitle: subtitle, Title: title, Meta: meta}
 }
 
-// hasThumb reports whether the card carries a thumbnail column (a non-nil image).
+// hasThumb reports whether the card carries a decoded thumbnail image.
 func (c *PostCard) hasThumb() bool { return c.Thumbnail != nil }
+
+// reservesThumb reports whether the card reserves a thumbnail column at all: it
+// does so both when a decoded image is present and when only a placeholder label
+// is set (media declared, image not yet landed). Column geometry keys off this so
+// a card measured before its image arrives already holds the column, and mounting
+// the image later does not reflow the layout.
+func (c *PostCard) reservesThumb() bool { return c.Thumbnail != nil || c.ThumbPlaceholder != "" }
 
 // thumbSize is the thumbnail column's pixel size: the caller's ThumbW / ThumbH
 // when positive, else the defaults.
@@ -172,7 +186,7 @@ func (c *PostCard) metaH() int {
 // present. Clamped to at least 1 so a pathologically narrow card still wraps.
 func (c *PostCard) contentWidth(outerW int) int {
 	cw := outerW - 2*scaled(CardPadX)
-	if c.hasThumb() {
+	if c.reservesThumb() {
 		tw, _ := c.thumbSize()
 		cw -= tw + scaled(CardGapX)
 	}
@@ -196,7 +210,7 @@ func (c *PostCard) titleLines(cw int) []string {
 func (c *PostCard) contentHeight(cw int) int {
 	n := len(c.titleLines(cw))
 	h := c.badgeRowH() + n*c.titleSlot() + scaled(CardGapY) + c.metaH()
-	if c.hasThumb() {
+	if c.reservesThumb() {
 		if _, th := c.thumbSize(); th > h {
 			h = th
 		}
@@ -248,7 +262,7 @@ func (c *PostCard) innerRect() Rect {
 // fixed right-hand column.
 func (c *PostCard) assemble(inner Rect) *HBox {
 	contentW := inner.W
-	if c.hasThumb() {
+	if c.reservesThumb() {
 		tw, _ := c.thumbSize()
 		contentW -= tw + scaled(CardGapX)
 	}
@@ -303,11 +317,11 @@ func (c *PostCard) assemble(inner Rect) *HBox {
 	root := NewHBox()
 	root.Spacing = scaled(CardGapX)
 	root.AddFlex(col, 1)
-	if c.hasThumb() {
+	if c.reservesThumb() {
 		tw, th := c.thumbSize()
 		tcol := NewVBox()
 		tcol.Spacing = 0
-		tcol.AddFixed(&postThumb{img: c.Thumbnail}, th)
+		tcol.AddFixed(&postThumb{img: c.Thumbnail, placeholder: c.ThumbPlaceholder, phFont: c.metaFont()}, th)
 		tcol.AddFlex(NewLabel(""), 1) // pin the image to the top of the column
 		root.AddFixed(tcol, tw)
 	}
@@ -364,16 +378,21 @@ func (c *PostCard) A11y() A11yInfo {
 
 // postThumb is the leaf widget that paints a PostCard's thumbnail box: a muted
 // SurfaceAlt ground with the image (when present) scaled to fit inside it,
-// preserving aspect ratio and centred. It is laid out like any other child by the
-// thumbnail column's box.
+// preserving aspect ratio and centred. When no image has landed but a placeholder
+// label is set, it draws that label centred in muted ink instead, so a card whose
+// media has not decoded yet reads as a labelled "loading" box rather than a blank
+// one. It is laid out like any other child by the thumbnail column's box.
 type postThumb struct {
 	Base
-	img *image.RGBA
+	img         *image.RGBA
+	placeholder string
+	phFont      Font
 }
 
 // Draw fills the box with the theme's SurfaceAlt then blits the image scaled to
-// fit (aspect-preserving, centred). A nil or zero-extent image leaves just the
-// muted ground; an empty box paints nothing.
+// fit (aspect-preserving, centred). With no image it leaves the muted ground, and
+// draws the placeholder label centred in dim ink when one is set; an empty box
+// paints nothing.
 func (t *postThumb) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	if r.W <= 0 || r.H <= 0 {
@@ -381,6 +400,7 @@ func (t *postThumb) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
 	if t.img == nil {
+		t.drawPlaceholder(p, theme, r)
 		return
 	}
 	b := t.img.Bounds()
@@ -404,4 +424,21 @@ func (t *postThumb) Draw(p painter.Painter, theme *Theme) {
 	dy := r.Y + (r.H-dh)/2
 	pix, pw, ph := rgbaPixels(t.img)
 	blitImage(p, Rect{X: dx, Y: dy, W: dw, H: dh}, r, pix, pw, ph)
+}
+
+// drawPlaceholder centres the placeholder label in the box in dim ink, matching
+// the historical "loading" thumbnail. It is a no-op when no label or font is set,
+// or when the label would not fit the box.
+func (t *postThumb) drawPlaceholder(p painter.Painter, theme *Theme, r Rect) {
+	if t.placeholder == "" || t.phFont == nil {
+		return
+	}
+	tw := t.phFont.Measure(t.placeholder)
+	th := t.phFont.Height()
+	if tw > r.W || th > r.H {
+		return
+	}
+	x := r.X + (r.W-tw)/2
+	y := r.Y + (r.H-th)/2
+	t.phFont.Draw(p, x, y, t.placeholder, dimInk(theme))
 }

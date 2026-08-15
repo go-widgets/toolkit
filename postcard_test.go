@@ -271,6 +271,75 @@ func TestPostThumbDraw(t *testing.T) {
 	}
 }
 
+func TestPostCardReservesThumbPlaceholder(t *testing.T) {
+	// A placeholder-only card (media declared, image not yet decoded) reserves the
+	// thumbnail column, so the default 72-tall thumb box dominates the 29-tall
+	// natural content: contentH=72; +12=84 — the same height a real image yields, so
+	// the card does not reflow when the image later lands.
+	c := NewPostCard("SRC", "chan", "Hi", "meta")
+	c.ThumbPlaceholder = "image"
+	if !c.reservesThumb() {
+		t.Fatal("a placeholder should reserve the thumbnail column")
+	}
+	if c.hasThumb() {
+		t.Fatal("a placeholder-only card has no decoded image")
+	}
+	if got := c.Measure(200); got != 84 {
+		t.Fatalf("placeholder-reserved card: want 84, got %d", got)
+	}
+	// The decoded image landing keeps the exact same geometry: no reflow.
+	c.Thumbnail = cardImg(10, 10)
+	if got := c.Measure(200); got != 84 {
+		t.Fatalf("image landing must not reflow: want 84, got %d", got)
+	}
+	// A bare card with neither image nor placeholder reserves nothing.
+	if (&PostCard{}).reservesThumb() {
+		t.Fatal("an empty card reserves no thumbnail column")
+	}
+}
+
+func TestPostThumbPlaceholder(t *testing.T) {
+	th := DefaultLight()
+	font := (&PostCard{}).metaFont() // package default bitmap font (advance 6, height 7)
+	ink := dimInk(th)
+
+	// A fitting label is drawn in dim ink over the muted ground.
+	buf := makeSurface(60, 40)
+	fit := &postThumb{placeholder: "img", phFont: font}
+	fit.SetBounds(Rect{X: 5, Y: 5, W: 50, H: 30})
+	fit.Draw(newP(buf, 60), th)
+	if !hasColor(buf, 60, ink) {
+		t.Fatal("a fitting placeholder label should be drawn in dim ink")
+	}
+
+	// No font: the label is skipped, leaving only the ground.
+	buf = makeSurface(60, 40)
+	noFont := &postThumb{placeholder: "img"}
+	noFont.SetBounds(Rect{X: 5, Y: 5, W: 50, H: 30})
+	noFont.Draw(newP(buf, 60), th)
+	if hasColor(buf, 60, ink) {
+		t.Fatal("a placeholder with no font must be skipped")
+	}
+
+	// A label wider than the box is skipped (Measure 6*17 > 20).
+	buf = makeSurface(30, 40)
+	wide := &postThumb{placeholder: "a very long label", phFont: font}
+	wide.SetBounds(Rect{X: 2, Y: 2, W: 20, H: 30})
+	wide.Draw(newP(buf, 30), th)
+	if hasColor(buf, 30, ink) {
+		t.Fatal("a label wider than the box must be skipped")
+	}
+
+	// A box shorter than the label height (7) is skipped.
+	buf = makeSurface(60, 20)
+	short := &postThumb{placeholder: "x", phFont: font}
+	short.SetBounds(Rect{X: 2, Y: 2, W: 50, H: 5})
+	short.Draw(newP(buf, 60), th)
+	if hasColor(buf, 60, ink) {
+		t.Fatal("a label taller than the box must be skipped")
+	}
+}
+
 func TestPostThumbDegenerateFit(t *testing.T) {
 	th := DefaultLight()
 	// A very tall image in a short, wide box drives the width-bound dh to 0,
