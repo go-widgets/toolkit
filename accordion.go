@@ -104,7 +104,7 @@ func (a *Accordion) sectionRects() (headers, bodies []Rect) {
 	headers = make([]Rect, n)
 	bodies = make([]Rect, n)
 
-	remaining := r.H - ExpanderHeaderH*n
+	remaining := r.H - ExpanderHeaderHeight()*n
 	if remaining < 0 {
 		remaining = 0
 	}
@@ -123,8 +123,8 @@ func (a *Accordion) sectionRects() (headers, bodies []Rect) {
 	y := r.Y
 	seen := 0
 	for i := 0; i < n; i++ {
-		headers[i] = Rect{X: r.X, Y: y, W: r.W, H: ExpanderHeaderH}
-		y += ExpanderHeaderH
+		headers[i] = Rect{X: r.X, Y: y, W: r.W, H: ExpanderHeaderHeight()}
+		y += ExpanderHeaderHeight()
 		if a.isExpanded(i) {
 			h := perBody
 			seen++
@@ -149,9 +149,9 @@ func (a *Accordion) Draw(p painter.Painter, theme *Theme) {
 		hr := headers[i]
 		fillRect(p, hr.X, hr.Y, hr.W, hr.H, theme.SurfaceAlt)
 		cx := hr.X + 6
-		cy := hr.Y + ExpanderHeaderH/2
+		cy := hr.Y + ExpanderHeaderHeight()/2
 		drawDisclosureChevron(p, cx, cy, a.isExpanded(i), theme.OnSurface)
-		textY := hr.Y + (ExpanderHeaderH-a.glyphHeight())/2
+		textY := hr.Y + (ExpanderHeaderHeight()-a.glyphHeight())/2
 		a.drawText(p, hr.X+16, textY, sec.Title, theme.OnSurface)
 		if sec.Body == nil {
 			continue

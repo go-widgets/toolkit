@@ -22,14 +22,28 @@ func fillRect(p painter.Painter, x, y, w, h int, c RGBA) {
 	p.FillRect(painter.Rect{X: x, Y: y, W: w, H: h}, c)
 }
 
-// strokeRect paints a 1-pixel border on the outline of (x, y, w, h)
-// with c. Used by widgets that draw a frame around their body —
-// Button, Frame, focus indicator, etc.
+// strokeRect paints a one-LOGICAL-pixel border on the outline of (x, y, w, h)
+// with c. Used by widgets that draw a frame around their body — Button, Frame,
+// focus indicator, etc.
+//
+// One logical pixel, not one device pixel: a border is a metric like any other,
+// and at twice the resolution it has to be twice as thick or it reads as a
+// hairline against chrome that grew around it. This one line is why Button,
+// Card, Badge, ProgressBar and every other framed widget scale at all.
 func strokeRect(p painter.Painter, x, y, w, h int, c RGBA) {
 	if w <= 0 || h <= 0 {
 		return
 	}
-	p.StrokeRect(painter.Rect{X: x, Y: y, W: w, H: h}, c, 1)
+	p.StrokeRect(painter.Rect{X: x, Y: y, W: w, H: h}, c, strokeWidth())
+}
+
+// strokeWidth is one logical pixel in device pixels, never less than one: a
+// border rounded to zero is a border that disappeared.
+func strokeWidth() int {
+	if w := scaled(1); w > 1 {
+		return w
+	}
+	return 1
 }
 
 // fillRoundRect fills (x, y, w, h) with c, corners rounded to radius, through
@@ -43,12 +57,13 @@ func fillRoundRect(p painter.Painter, x, y, w, h, radius int, c RGBA) {
 	p.FillRoundRect(painter.Rect{X: x, Y: y, W: w, H: h}, radius, c)
 }
 
-// strokeRoundRect paints a 1-pixel rounded border on (x, y, w, h) with c.
+// strokeRoundRect paints a one-logical-pixel rounded border on (x, y, w, h)
+// with c. See strokeRect on the thickness.
 func strokeRoundRect(p painter.Painter, x, y, w, h, radius int, c RGBA) {
 	if w <= 0 || h <= 0 {
 		return
 	}
-	p.StrokeRoundRect(painter.Rect{X: x, Y: y, W: w, H: h}, radius, c, 1)
+	p.StrokeRoundRect(painter.Rect{X: x, Y: y, W: w, H: h}, radius, c, strokeWidth())
 }
 
 // drawLine paints a 1-unit-wide line from (x0, y0) to (x1, y1) with c using

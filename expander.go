@@ -21,8 +21,14 @@ type Expander struct {
 	OnExpand func(expanded bool)
 }
 
-// ExpanderHeaderH is the pixel height of the clickable header row.
+// ExpanderHeaderH is the LOGICAL height of the clickable header row. Use
+// [ExpanderHeaderHeight] for the height to lay out with: at a metric scale
+// above 1 the header is taller, like every other metric.
 const ExpanderHeaderH = 24
+
+// ExpanderHeaderHeight is the header height in device pixels at the current
+// [MetricScale].
+func ExpanderHeaderHeight() int { return scaled(ExpanderHeaderH) }
 
 // NewExpander builds an Expander with a label + initial content
 // widget (may be nil to render header-only).
@@ -35,11 +41,11 @@ func NewExpander(label string, content Widget) *Expander {
 func (e *Expander) Draw(p painter.Painter, theme *Theme) {
 	r := e.Bounds()
 	// Header background.
-	fillRect(p, r.X, r.Y, r.W, ExpanderHeaderH, theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y, r.W, ExpanderHeaderHeight(), theme.SurfaceAlt)
 	// Chevron: small triangle in Theme.OnSurface. Collapsed → right-
 	// pointing (▶), expanded → down-pointing (▼). 5-px tall.
 	cx := r.X + 6
-	cy := r.Y + ExpanderHeaderH/2
+	cy := r.Y + ExpanderHeaderHeight()/2
 	if e.Expanded {
 		// ▼ : flat top (widest row), point at bottom (narrow tip).
 		// At t=0 the 1-pixel tip lands at cy+2; at t=4 the 9-pixel
@@ -55,16 +61,16 @@ func (e *Expander) Draw(p painter.Painter, theme *Theme) {
 			fillRect(p, cx+2-t, cy-t, 1, 1+2*t, theme.OnSurface)
 		}
 	}
-	textY := r.Y + (ExpanderHeaderH-e.glyphHeight())/2
+	textY := r.Y + (ExpanderHeaderHeight()-e.glyphHeight())/2
 	e.drawText(p, r.X+16, textY, e.Label, theme.OnSurface)
 	if e.Expanded && e.Content != nil {
-		body := Rect{X: r.X, Y: r.Y + ExpanderHeaderH, W: r.W, H: r.H - ExpanderHeaderH}
+		body := Rect{X: r.X, Y: r.Y + ExpanderHeaderHeight(), W: r.W, H: r.H - ExpanderHeaderHeight()}
 		e.Content.SetBounds(body)
 		e.Content.Draw(p, theme)
 	}
 	// Focus ring around the clickable header row (paints nothing when unfocused,
 	// so an unfocused render is byte-identical).
-	e.drawFocusRing(p, theme, Rect{X: r.X, Y: r.Y, W: r.W, H: ExpanderHeaderH})
+	e.drawFocusRing(p, theme, Rect{X: r.X, Y: r.Y, W: r.W, H: ExpanderHeaderHeight()})
 }
 
 // OnEvent: click on the header toggles Expanded + fires OnExpand;
@@ -84,17 +90,17 @@ func (e *Expander) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
 	}
-	if ev.Y < ExpanderHeaderH {
+	if ev.Y < ExpanderHeaderHeight() {
 		e.toggle()
 		return
 	}
 	if e.Expanded && e.Content != nil {
-		// Content occupies the body below the ExpanderHeaderH-tall header. Bound
+		// Content occupies the body below the ExpanderHeaderHeight()-tall header. Bound
 		// it (matching Draw) and translate the click into its local frame, so a
 		// click on interactive content isn't shifted down by the header height
 		// (plus the Expander's own origin) and misrouted.
 		r := e.Bounds()
-		body := Rect{X: r.X, Y: r.Y + ExpanderHeaderH, W: r.W, H: r.H - ExpanderHeaderH}
+		body := Rect{X: r.X, Y: r.Y + ExpanderHeaderHeight(), W: r.W, H: r.H - ExpanderHeaderHeight()}
 		e.Content.SetBounds(body)
 		e.Content.OnEvent(translateEvent(ev, r, body))
 	}
