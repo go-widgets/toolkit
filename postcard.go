@@ -111,7 +111,9 @@ func (c *PostCard) thumbSize() (w, h int) {
 	if h <= 0 {
 		h = DefaultPostCardThumbH
 	}
-	return w, h
+	// The caller's ThumbW/H (and the defaults) are logical pixels; scale them to
+	// device pixels so the thumbnail column tracks the rest of the card's metrics.
+	return scaled(w), scaled(h)
 }
 
 // maxLines is the effective title line cap: MaxTitleLines when positive, else
@@ -144,7 +146,7 @@ func orFont(f, fallback Font) Font {
 func (c *PostCard) badgeRowH() int {
 	h := 0
 	if c.Pill != "" {
-		h = c.pillFont().Height() + 2*BadgePadY
+		h = c.pillFont().Height() + 2*scaled(BadgePadY)
 	}
 	if c.Subtitle != "" {
 		if sh := c.subtitleFont().Height(); sh > h {
@@ -155,7 +157,7 @@ func (c *PostCard) badgeRowH() int {
 }
 
 // titleSlot is the vertical slot one wrapped title line occupies.
-func (c *PostCard) titleSlot() int { return c.titleFont().Height() + CardLineSpacing }
+func (c *PostCard) titleSlot() int { return c.titleFont().Height() + scaled(CardLineSpacing) }
 
 // metaH is the meta line's height, or 0 when no meta is shown.
 func (c *PostCard) metaH() int {
@@ -169,10 +171,10 @@ func (c *PostCard) metaH() int {
 // card inset by CardPadX on each side, less the thumbnail column and its gap when
 // present. Clamped to at least 1 so a pathologically narrow card still wraps.
 func (c *PostCard) contentWidth(outerW int) int {
-	cw := outerW - 2*CardPadX
+	cw := outerW - 2*scaled(CardPadX)
 	if c.hasThumb() {
 		tw, _ := c.thumbSize()
-		cw -= tw + CardGapX
+		cw -= tw + scaled(CardGapX)
 	}
 	if cw < 1 {
 		cw = 1
@@ -193,7 +195,7 @@ func (c *PostCard) titleLines(cw int) []string {
 // height instead so the image is never clipped by a short card.
 func (c *PostCard) contentHeight(cw int) int {
 	n := len(c.titleLines(cw))
-	h := c.badgeRowH() + n*c.titleSlot() + CardGapY + c.metaH()
+	h := c.badgeRowH() + n*c.titleSlot() + scaled(CardGapY) + c.metaH()
 	if c.hasThumb() {
 		if _, th := c.thumbSize(); th > h {
 			h = th
@@ -206,7 +208,7 @@ func (c *PostCard) contentHeight(cw int) int {
 // column height plus the CardPadY inset top and bottom. A feed list allocates
 // exactly this, and Draw fills exactly this, because both drive off contentHeight.
 func (c *PostCard) Measure(width int) int {
-	return 2*CardPadY + c.contentHeight(c.contentWidth(width))
+	return 2*scaled(CardPadY) + c.contentHeight(c.contentWidth(width))
 }
 
 // pillInk is the pill's text colour: PillInk when set, else a readable ink
@@ -235,7 +237,7 @@ func readableInk(bg RGBA) RGBA {
 // innerRect is the content rectangle: the card's Bounds inset by CardPadX / Y.
 func (c *PostCard) innerRect() Rect {
 	r := c.Bounds()
-	return Rect{X: r.X + CardPadX, Y: r.Y + CardPadY, W: r.W - 2*CardPadX, H: r.H - 2*CardPadY}
+	return Rect{X: r.X + scaled(CardPadX), Y: r.Y + scaled(CardPadY), W: r.W - 2*scaled(CardPadX), H: r.H - 2*scaled(CardPadY)}
 }
 
 // assemble (re)builds the card's widget tree from the current fields and lays it
@@ -248,7 +250,7 @@ func (c *PostCard) assemble(inner Rect) *HBox {
 	contentW := inner.W
 	if c.hasThumb() {
 		tw, _ := c.thumbSize()
-		contentW -= tw + CardGapX
+		contentW -= tw + scaled(CardGapX)
 	}
 	if contentW < 1 {
 		contentW = 1
@@ -260,11 +262,11 @@ func (c *PostCard) assemble(inner Rect) *HBox {
 	c.subtitleLbl = nil
 	if c.badgeRowH() > 0 {
 		row := NewHBox()
-		row.Spacing = CardGapX
+		row.Spacing = scaled(CardGapX)
 		if c.Pill != "" {
 			badge := &Badge{Text: c.Pill, Fill: c.PillColor, Ink: c.pillInk()}
 			badge.Font = c.pillFont()
-			row.AddFixed(badge, c.pillFont().Measure(c.Pill)+2*BadgePadX)
+			row.AddFixed(badge, c.pillFont().Measure(c.Pill)+2*scaled(BadgePadX))
 		}
 		if c.Subtitle != "" {
 			c.subtitleLbl = NewLabel(c.Subtitle)
@@ -299,7 +301,7 @@ func (c *PostCard) assemble(inner Rect) *HBox {
 	}
 
 	root := NewHBox()
-	root.Spacing = CardGapX
+	root.Spacing = scaled(CardGapX)
 	root.AddFlex(col, 1)
 	if c.hasThumb() {
 		tw, th := c.thumbSize()

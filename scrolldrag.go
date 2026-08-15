@@ -23,10 +23,22 @@ package toolkit
 type sbGeom struct {
 	horizontal           bool
 	cross0               int // cross-axis start of the track column
+	crossW               int // cross-axis track thickness; 0 => scrollbarWidth (see crossWidth)
 	trackStart, trackLen int // along-axis track extent
 	thumbStart, thumbLen int // along-axis thumb extent
 	travelNum, travelDen int // thumbStart = trackStart + scroll*travelNum/travelDen
 	maxScroll            int // largest legal scroll value; clamp bound
+}
+
+// crossWidth is the track's cross-axis thickness. A widget that lays its track
+// out at a metric-scaled thickness sets crossW so the hit-test band matches the
+// painted track at any scale; the widgets that still paint an unscaled track
+// leave it 0 and fall back to scrollbarWidth, so their behaviour is unchanged.
+func (g sbGeom) crossWidth() int {
+	if g.crossW > 0 {
+		return g.crossW
+	}
+	return scrollbarWidth
 }
 
 // along returns the along-axis component of a widget-local point.
@@ -49,14 +61,14 @@ func (g sbGeom) cross(x, y int) int {
 // track column.
 func (g sbGeom) onTrack(x, y int) bool {
 	c, a := g.cross(x, y), g.along(x, y)
-	return c >= g.cross0 && c < g.cross0+scrollbarWidth &&
+	return c >= g.cross0 && c < g.cross0+g.crossWidth() &&
 		a >= g.trackStart && a < g.trackStart+g.trackLen
 }
 
 // onThumb reports whether widget-local (x, y) falls on the thumb.
 func (g sbGeom) onThumb(x, y int) bool {
 	c, a := g.cross(x, y), g.along(x, y)
-	return c >= g.cross0 && c < g.cross0+scrollbarWidth &&
+	return c >= g.cross0 && c < g.cross0+g.crossWidth() &&
 		a >= g.thumbStart && a < g.thumbStart+g.thumbLen
 }
 

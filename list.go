@@ -122,7 +122,7 @@ func NewListBox(items []string) *ListBox {
 	return &ListBox{
 		Items:         items,
 		Selected:      -1,
-		RowHeight:     18,
+		RowHeight:     scaled(18),
 		pressedRow:    -1,
 		dropIndicator: -1,
 	}
@@ -178,9 +178,9 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 	vr := l.visibleRows()
 	overflow := len(l.Items) > vr
 
-	cr := r // content rect: full bounds, minus the scrollbar column if any
+	cr := r // content rect: full bounds, minus the scrollbar gutter if any
 	if overflow {
-		cr.W -= scrollbarWidth
+		cr.W -= scrollGutter()
 	}
 
 	var clr painter.Clipper
@@ -217,7 +217,7 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 		} else {
 			// Vertically centre the 7-px glyph inside the row.
 			textY := y + (l.RowHeight-l.glyphHeight())/2
-			l.drawText(p, cr.X+4, textY, item, ink)
+			l.drawText(p, cr.X+scaled(4), textY, item, ink)
 		}
 	}
 
@@ -352,14 +352,15 @@ func (l *ListBox) scrollToSelected() {
 // rather than a pixel offset, since ListBox only ever scrolls by
 // full rows.
 func (l *ListBox) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
-	trackX := r.X + r.W - scrollbarWidth
-	fillRect(p, trackX, r.Y, scrollbarWidth, r.H, theme.SurfaceAlt)
+	track := scrollbarTrack()
+	trackX := r.X + r.W - track
+	fillRect(p, trackX, r.Y, track, r.H, theme.SurfaceAlt)
 
 	g, ok := l.scrollbarGeom()
 	if !ok {
 		return
 	}
-	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
+	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen, theme.Accent)
 }
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and
@@ -374,8 +375,8 @@ func (l *ListBox) scrollbarGeom() (sbGeom, bool) {
 		return sbGeom{}, false
 	}
 	thumbH := r.H * r.H / contentH
-	if thumbH < 8 {
-		thumbH = 8
+	if thumbH < scaled(8) {
+		thumbH = scaled(8)
 	}
 	max := l.maxScrollRow()
 	thumbY := 0
@@ -383,7 +384,8 @@ func (l *ListBox) scrollbarGeom() (sbGeom, bool) {
 		thumbY = l.clampedScrollRow() * (r.H - thumbH) / max
 	}
 	return sbGeom{
-		cross0:     r.W - scrollbarWidth,
+		cross0:     r.W - scrollbarTrack(),
+		crossW:     scrollbarTrack(),
 		trackStart: 0,
 		trackLen:   r.H,
 		thumbStart: thumbY,

@@ -27,19 +27,38 @@ type ScrollView struct {
 	sbV, sbH scrollDrag
 }
 
-// scrollbarWidth is the pixel thickness of a scrollbar track — wide enough that
-// the thumb is comfortably grabbable with the mouse.
+// scrollbarWidth is the LOGICAL pixel thickness of a scrollbar track — wide
+// enough that the thumb is comfortably grabbable with the mouse. Routed through
+// [scrollbarTrack] so a HiDPI host gets a track scaled to its device pixels.
 const scrollbarWidth = 12
 
+// scrollbarGap is the LOGICAL pixel gap the scrolled content is inset by ON TOP
+// of the scrollbar track, so the content never sits flush against the thumb.
+// Every scrollable reader widget (ScrollView, ListBox, TreeView) insets its
+// content by the same [scrollGutter], so the gap reads identically across them.
+const scrollbarGap = 4
+
+// scrollbarTrack is the device-pixel thickness of a scrollbar track at the
+// current metric scale. The track column is painted this wide, and the drag
+// hit-band matches it via sbGeom.crossW.
+func scrollbarTrack() int { return scaled(scrollbarWidth) }
+
+// scrollGutter is the device-pixel width the scrolled content is inset by to
+// clear the scrollbar: the scaled track thickness plus a scaled normalized gap.
+// Because ScrollView, ListBox and TreeView all inset by this one value, content
+// never touches the thumb and the gap is the same everywhere.
+func scrollGutter() int { return scaled(scrollbarWidth) + scaled(scrollbarGap) }
+
 // viewport is the visible content rect: the bounds minus the always-reserved
-// right scrollbar column and — when the content overflows horizontally — the
-// bottom scrollbar row.
+// right scrollbar gutter and — when the content overflows horizontally — the
+// bottom scrollbar gutter. The gutter is the track plus a normalized gap, so the
+// content stops short of the track rather than butting against it.
 func (s *ScrollView) viewport() Rect {
 	r := s.Bounds()
-	vw := r.W - scrollbarWidth
+	vw := r.W - scrollGutter()
 	vh := r.H
 	if s.contentW > vw {
-		vh -= scrollbarWidth
+		vh -= scrollGutter()
 	}
 	return Rect{X: r.X, Y: r.Y, W: vw, H: vh}
 }
@@ -100,12 +119,13 @@ func (s *ScrollView) vscrollGeom() (sbGeom, bool) {
 		return sbGeom{}, false
 	}
 	thumbH := vp.H * vp.H / s.contentH
-	if thumbH < 8 {
-		thumbH = 8
+	if thumbH < scaled(8) {
+		thumbH = scaled(8)
 	}
 	maxOff := s.contentH - vp.H // > 0 here
 	return sbGeom{
-		cross0:     r.W - scrollbarWidth,
+		cross0:     r.W - scrollbarTrack(),
+		crossW:     scrollbarTrack(),
 		trackStart: 0,
 		trackLen:   vp.H,
 		thumbStart: s.OffsetY * (vp.H - thumbH) / maxOff,
@@ -126,13 +146,14 @@ func (s *ScrollView) hscrollGeom() (sbGeom, bool) {
 		return sbGeom{}, false
 	}
 	thumbW := vp.W * vp.W / s.contentW
-	if thumbW < 8 {
-		thumbW = 8
+	if thumbW < scaled(8) {
+		thumbW = scaled(8)
 	}
 	maxOff := s.contentW - vp.W // > 0 here
 	return sbGeom{
 		horizontal: true,
-		cross0:     r.H - scrollbarWidth,
+		cross0:     r.H - scrollbarTrack(),
+		crossW:     scrollbarTrack(),
 		trackStart: 0,
 		trackLen:   vp.W,
 		thumbStart: s.OffsetX * (vp.W - thumbW) / maxOff,
@@ -241,18 +262,19 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 	// Vertical scrollbar (right edge), sized to the viewport height so it leaves
 	// the corner for a horizontal bar. The track is always painted; the thumb
 	// comes from vscrollGeom so Draw + OnEvent share one definition of it.
-	trackX := r.X + r.W - scrollbarWidth
-	fillRect(p, trackX, r.Y, scrollbarWidth, vp.H, theme.SurfaceAlt)
+	track := scrollbarTrack()
+	trackX := r.X + r.W - track
+	fillRect(p, trackX, r.Y, track, vp.H, theme.SurfaceAlt)
 	if g, ok := s.vscrollGeom(); ok {
-		fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
+		fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen, theme.Accent)
 	}
 	// Horizontal scrollbar (bottom edge), only when the content overflows
 	// horizontally (which is exactly when the viewport reserved the bottom row).
 	if s.contentW > vp.W {
-		trackY := r.Y + r.H - scrollbarWidth
-		fillRect(p, r.X, trackY, vp.W, scrollbarWidth, theme.SurfaceAlt)
+		trackY := r.Y + r.H - track
+		fillRect(p, r.X, trackY, vp.W, track, theme.SurfaceAlt)
 		if g, ok := s.hscrollGeom(); ok {
-			fillRect(p, r.X+g.thumbStart, trackY, g.thumbLen, scrollbarWidth, theme.Accent)
+			fillRect(p, r.X+g.thumbStart, trackY, g.thumbLen, track, theme.Accent)
 		}
 	}
 }

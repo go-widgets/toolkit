@@ -254,7 +254,9 @@ func (v *VirtualList[T]) rowHeightFn() func(i int) int {
 	if v.RowHeight != nil {
 		return v.RowHeight
 	}
-	return func(int) int { return DefaultRowHeight }
+	// DefaultRowHeight is a logical-pixel metric; scale it to device pixels so a
+	// HiDPI feed's default rows track the rest of the toolkit's scaled chrome.
+	return func(int) int { return toolkit.Scaled(DefaultRowHeight) }
 }
 
 // ensure lazily (re)subscribes when Model changes and (re)builds the height

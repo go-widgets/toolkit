@@ -43,13 +43,13 @@ const (
 // on every side) that the card lays its content into. A card's Draw calls this
 // first, then positions its blocks inside the returned rect.
 func cardFrame(p painter.Painter, theme *Theme, r Rect) Rect {
-	fillRoundRect(p, r.X, r.Y, r.W, r.H, CardCornerRadius, theme.Surface)
-	strokeRoundRect(p, r.X, r.Y, r.W, r.H, CardCornerRadius, theme.Border)
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, scaled(CardCornerRadius), theme.Surface)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, scaled(CardCornerRadius), theme.Border)
 	return Rect{
-		X: r.X + CardPadX,
-		Y: r.Y + CardPadY,
-		W: r.W - 2*CardPadX,
-		H: r.H - 2*CardPadY,
+		X: r.X + scaled(CardPadX),
+		Y: r.Y + scaled(CardPadY),
+		W: r.W - 2*scaled(CardPadX),
+		H: r.H - 2*scaled(CardPadY),
 	}
 }
 
@@ -97,7 +97,7 @@ func textBlockHeight(f Font, n int) int {
 	if n <= 0 {
 		return 0
 	}
-	return n*f.Height() + (n-1)*CardLineSpacing
+	return n*f.Height() + (n-1)*scaled(CardLineSpacing)
 }
 
 // stackLayout lays block heights out top-to-bottom, inserting CardGapY between
@@ -116,7 +116,7 @@ func stackLayout(blocks []int) (ys []int, total int) {
 			continue
 		}
 		if prev {
-			y += CardGapY
+			y += scaled(CardGapY)
 			ys[i] = y
 		}
 		y += b
@@ -130,7 +130,7 @@ func stackLayout(blocks []int) (ys []int, total int) {
 // over-long unbreakable word). It returns the y just past the block.
 func (b *Base) drawTextBlock(p painter.Painter, x, y, width int, lines []string, ink RGBA) int {
 	f := b.EffectiveFont()
-	lineH := f.Height() + CardLineSpacing
+	lineH := f.Height() + scaled(CardLineSpacing)
 	for _, ln := range lines {
 		if f.Measure(ln) > width {
 			ln = ellipsize(f, ln, width)
