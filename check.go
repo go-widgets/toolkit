@@ -20,15 +20,19 @@ type CheckButton struct {
 	OnToggle func(checked bool)
 }
 
-// checkBoxSize is the default pixel side length of the box (used when Size == 0).
+// checkBoxSize is the default LOGICAL side length of the box (used when
+// Size == 0); the effective size is this at the current metric scale.
 const checkBoxSize = 12
+
+// checkLabelGap is the logical gap between the box and its label.
+const checkLabelGap = 4
 
 // boxSize returns the effective box side length.
 func (c *CheckButton) boxSize() int {
 	if c.Size > 0 {
-		return c.Size
+		return c.Size // a caller-chosen size is already in the units it chose
 	}
-	return checkBoxSize
+	return scaled(checkBoxSize)
 }
 
 // NewCheckButton constructs a CheckButton with the given label +
@@ -55,7 +59,11 @@ func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, boxY, box, box, fill)
 	strokeRect(p, r.X, boxY, box, box, border)
 	if c.Checked {
-		if c.Size > 0 {
+		if box != checkBoxSize {
+			// Any box that is not the classic 12 -- a caller-chosen Size, or the
+			// default one at a metric scale above 1 -- gets the proportional
+			// tick, so the mark grows with the box instead of sitting in its
+			// top-left corner.
 			drawCheckmark(p, r.X, boxY, box, tick)
 		} else {
 			// The classic fixed 12px checkmark (byte-identical to prior releases).
@@ -69,7 +77,7 @@ func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 	}
 	// Label to the right of the box, vertically centred on glyph row.
 	textY := r.Y + (r.H-c.glyphHeight())/2
-	c.drawText(p, r.X+box+4, textY, c.Label, labelInk)
+	c.drawText(p, r.X+box+scaled(checkLabelGap), textY, c.Label, labelInk)
 	c.drawFocusRing(p, theme, r)
 }
 

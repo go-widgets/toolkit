@@ -10,7 +10,7 @@ import (
 	"github.com/go-widgets/painter"
 )
 
-// GaugeThickness is the default arc stroke width in pixels, used when
+// GaugeThickness is the default arc stroke width in LOGICAL pixels, used when
 // Gauge.Thickness is left at its zero value. It leaves room inside the
 // ring for the centred Caption on the toolkit's 5x7 font while keeping
 // the track visually prominent.
@@ -114,7 +114,7 @@ func (g *Gauge) Draw(p painter.Painter, theme *Theme) {
 	}
 	thick := g.Thickness
 	if thick <= 0 {
-		thick = GaugeThickness
+		thick = scaled(GaugeThickness)
 	}
 	innerR := outerR - thick
 	if innerR < 0 {

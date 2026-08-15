@@ -26,9 +26,9 @@ type Switch struct {
 	OnToggle func(on bool)
 }
 
-// switchPad is the inset from the track edge to the knob's edge, in
-// pixels. Matches the visual gap most iOS-style switches use so the
-// knob never touches the track border.
+// switchPad is the inset from the track edge to the knob's edge, in LOGICAL
+// pixels. Matches the visual gap most iOS-style switches use so the knob never
+// touches the track border.
 const switchPad = 2
 
 // NewSwitch constructs a Switch with the given initial state. The
@@ -55,14 +55,15 @@ func (s *Switch) Draw(p painter.Painter, theme *Theme) {
 	// Fully-rounded pill track + circular knob -- the iOS/macOS switch shape.
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, r.H/2, track)
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, r.H/2, border)
-	knobH := r.H - 2*switchPad
+	pad := scaled(switchPad)
+	knobH := r.H - 2*pad
 	knobW := knobH
-	knobX := r.X + switchPad
+	knobX := r.X + pad
 	if s.On {
-		knobX = r.X + r.W - knobW - switchPad
+		knobX = r.X + r.W - knobW - pad
 	}
-	fillRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, knob)
-	strokeRoundRect(p, knobX, r.Y+switchPad, knobW, knobH, knobH/2, border)
+	fillRoundRect(p, knobX, r.Y+pad, knobW, knobH, knobH/2, knob)
+	strokeRoundRect(p, knobX, r.Y+pad, knobW, knobH, knobH/2, border)
 	s.drawFocusRing(p, theme, r)
 }
 
