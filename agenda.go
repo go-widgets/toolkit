@@ -120,8 +120,8 @@ type Agenda struct {
 }
 
 // Agenda sizing constants, exported like TableRowHeight / GanttHeaderH so a host
-// can measure the widget before it has a surface: AgendaHeaderH + hours*
-// AgendaHourH gives the natural height and AgendaGutterW is the fixed hour-label
+// can measure the widget before it has a surface: scaled(AgendaHeaderH) + hours*
+// AgendaHourH gives the natural height and scaled(AgendaGutterW) is the fixed hour-label
 // gutter width.
 const (
 	// AgendaHeaderH is the pixel height of the day-name header row (also the
@@ -248,11 +248,11 @@ func (a *Agenda) blockRect(ox, oy int, ev AgendaEvent) (Rect, bool) {
 		return Rect{}, false
 	}
 	s, e := a.hourRange()
-	gridX := ox + AgendaGutterW
-	gridY := oy + AgendaHeaderH
-	gridW := a.Bounds().W - AgendaGutterW
+	gridX := ox + scaled(AgendaGutterW)
+	gridY := oy + scaled(AgendaHeaderH)
+	gridW := a.Bounds().W - scaled(AgendaGutterW)
 	nHours := e - s
-	gridH := nHours * AgendaHourH
+	gridH := nHours * scaled(AgendaHourH)
 	startMin := s * 60
 	endMin := e * 60
 	visMin := nHours * 60
@@ -307,15 +307,15 @@ func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 
 	s, e := a.hourRange()
 	nDays := len(a.DayNames)
-	gridX := r.X + AgendaGutterW
-	gridY := r.Y + AgendaHeaderH
-	gridW := r.W - AgendaGutterW
-	gridBottom := gridY + (e-s)*AgendaHourH
+	gridX := r.X + scaled(AgendaGutterW)
+	gridY := r.Y + scaled(AgendaHeaderH)
+	gridW := r.W - scaled(AgendaGutterW)
+	gridBottom := gridY + (e-s)*scaled(AgendaHourH)
 	colX := func(d int) int { return gridX + d*gridW/nDays }
 
 	// Header band + gutter/grid separators.
-	fillRect(p, r.X, r.Y, r.W, AgendaHeaderH, theme.SurfaceAlt)
-	fillRect(p, r.X, r.Y+AgendaHeaderH-1, r.W, 1, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, scaled(AgendaHeaderH), theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y+scaled(AgendaHeaderH)-1, r.W, 1, theme.Border)
 	fillRect(p, gridX, r.Y, 1, r.H, theme.Border)
 
 	gridRect := Rect{X: gridX, Y: gridY, W: r.X + r.W - gridX, H: r.Y + r.H - gridY}
@@ -323,7 +323,7 @@ func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 	// Hour rules across the grid + vertical day-column separators.
 	withClip(p, gridRect, func() {
 		for hr := s; hr <= e; hr++ {
-			y := gridY + (hr-s)*AgendaHourH
+			y := gridY + (hr-s)*scaled(AgendaHourH)
 			fillRect(p, gridX, y, gridW, 1, theme.Border)
 		}
 		// colX divides by nDays, so the column rules only run when there is at
@@ -336,8 +336,8 @@ func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 	})
 
 	// Day-name header labels, clipped to the header band.
-	withClip(p, Rect{X: gridX, Y: r.Y, W: r.X + r.W - gridX, H: AgendaHeaderH}, func() {
-		hy := r.Y + (AgendaHeaderH-a.glyphHeight())/2
+	withClip(p, Rect{X: gridX, Y: r.Y, W: r.X + r.W - gridX, H: scaled(AgendaHeaderH)}, func() {
+		hy := r.Y + (scaled(AgendaHeaderH)-a.glyphHeight())/2
 		for d, name := range a.DayNames {
 			cw := colX(d+1) - colX(d)
 			a.drawText(p, colX(d)+(cw-a.textWidth(name))/2, hy, name, theme.OnSurface)
@@ -345,11 +345,11 @@ func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 	})
 
 	// Hour labels down the gutter, clipped to the gutter area.
-	withClip(p, Rect{X: r.X, Y: gridY, W: AgendaGutterW, H: r.Y + r.H - gridY}, func() {
+	withClip(p, Rect{X: r.X, Y: gridY, W: scaled(AgendaGutterW), H: r.Y + r.H - gridY}, func() {
 		for hr := s; hr < e; hr++ {
-			y := gridY + (hr-s)*AgendaHourH
+			y := gridY + (hr-s)*scaled(AgendaHourH)
 			lbl := agendaHourLabel(hr)
-			a.drawText(p, r.X+AgendaGutterW-4-a.textWidth(lbl), y+(AgendaHourH-a.glyphHeight())/2, lbl, dimInk(theme))
+			a.drawText(p, r.X+scaled(AgendaGutterW)-4-a.textWidth(lbl), y+(scaled(AgendaHourH)-a.glyphHeight())/2, lbl, dimInk(theme))
 		}
 	})
 
@@ -433,14 +433,14 @@ func (a *Agenda) monthDayAt(x, y int) (int, int, int, bool) {
 	if !ok {
 		return 0, 0, 0, false
 	}
-	if y < AgendaHeaderH {
+	if y < scaled(AgendaHeaderH) {
 		return 0, 0, 0, false
 	}
 	W := a.Bounds().W
 	first := WeekdayOfFirst(yy, m)
 	dim := DaysInMonth(yy, m)
 	rows := (first + dim + 6) / 7
-	row := (y - AgendaHeaderH) / AgendaDayCellH
+	row := (y - scaled(AgendaHeaderH)) / scaled(AgendaDayCellH)
 	if row >= rows {
 		return 0, 0, 0, false
 	}
@@ -575,10 +575,10 @@ func (a *Agenda) monthChips(ox, oy int) (chips []agendaChip, overflows []agendaO
 	w := a.Bounds().W
 	first := WeekdayOfFirst(y, m)
 	dim := DaysInMonth(y, m)
-	cellsY := oy + AgendaHeaderH
+	cellsY := oy + scaled(AgendaHeaderH)
 	top := a.glyphHeight() + 4
-	slot := agendaChipH + 2
-	maxSlots := (AgendaDayCellH - top) / slot
+	slot := scaled(agendaChipH) + 2
+	maxSlots := (scaled(AgendaDayCellH) - top) / slot
 
 	byDay := make([][]int, dim+1)
 	for i, ev := range a.Events {
@@ -598,7 +598,7 @@ func (a *Agenda) monthChips(ox, oy int) (chips []agendaChip, overflows []agendaO
 		col, row := idx%7, idx/7
 		cellX := monthColX(ox, w, col)
 		cellW := monthColX(ox, w, col+1) - cellX
-		cellY := cellsY + row*AgendaDayCellH
+		cellY := cellsY + row*scaled(AgendaDayCellH)
 		shown, ofN := len(evs), 0
 		if shown > maxSlots {
 			shown = maxSlots - 1
@@ -606,11 +606,11 @@ func (a *Agenda) monthChips(ox, oy int) (chips []agendaChip, overflows []agendaO
 		}
 		for k := 0; k < shown; k++ {
 			cy := cellY + top + k*slot
-			chips = append(chips, agendaChip{idx: evs[k], rect: Rect{X: cellX + 2, Y: cy, W: cellW - 4, H: agendaChipH}})
+			chips = append(chips, agendaChip{idx: evs[k], rect: Rect{X: cellX + 2, Y: cy, W: cellW - 4, H: scaled(agendaChipH)}})
 		}
 		if ofN > 0 {
 			cy := cellY + top + shown*slot
-			overflows = append(overflows, agendaOverflow{rect: Rect{X: cellX + 2, Y: cy, W: cellW - 4, H: agendaChipH}, n: ofN})
+			overflows = append(overflows, agendaOverflow{rect: Rect{X: cellX + 2, Y: cy, W: cellW - 4, H: scaled(agendaChipH)}, n: ofN})
 		}
 	}
 	return chips, overflows
@@ -626,10 +626,10 @@ func (a *Agenda) drawMonth(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 
 	// Weekday header band + labels.
-	fillRect(p, r.X, r.Y, r.W, AgendaHeaderH, theme.SurfaceAlt)
-	fillRect(p, r.X, r.Y+AgendaHeaderH-1, r.W, 1, theme.Border)
-	hy := r.Y + (AgendaHeaderH-a.glyphHeight())/2
-	withClip(p, Rect{X: r.X, Y: r.Y, W: r.W, H: AgendaHeaderH}, func() {
+	fillRect(p, r.X, r.Y, r.W, scaled(AgendaHeaderH), theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y+scaled(AgendaHeaderH)-1, r.W, 1, theme.Border)
+	hy := r.Y + (scaled(AgendaHeaderH)-a.glyphHeight())/2
+	withClip(p, Rect{X: r.X, Y: r.Y, W: r.W, H: scaled(AgendaHeaderH)}, func() {
 		for c := 0; c < 7; c++ {
 			name := ""
 			if c < len(a.DayNames) {
@@ -648,11 +648,11 @@ func (a *Agenda) drawMonth(p painter.Painter, theme *Theme) {
 	first := WeekdayOfFirst(y, m)
 	dim := DaysInMonth(y, m)
 	rows := (first + dim + 6) / 7
-	cellsY := r.Y + AgendaHeaderH
+	cellsY := r.Y + scaled(AgendaHeaderH)
 	py, pm := prevMonth(y, m)
 	pdim := DaysInMonth(py, pm)
 
-	gridRect := Rect{X: r.X, Y: cellsY, W: r.W, H: rows * AgendaDayCellH}
+	gridRect := Rect{X: r.X, Y: cellsY, W: r.W, H: rows * scaled(AgendaDayCellH)}
 	// Never let the grid clip (and thus the cells) extend past the widget's
 	// own bottom edge: a box shorter than the natural six-row height must clip
 	// the overflowing rows, not paint outside Bounds().
@@ -665,8 +665,8 @@ func (a *Agenda) drawMonth(p painter.Painter, theme *Theme) {
 				idx := row*7 + col
 				cellX := monthColX(r.X, r.W, col)
 				cellW := monthColX(r.X, r.W, col+1) - cellX
-				cellY := cellsY + row*AgendaDayCellH
-				strokeRect(p, cellX, cellY, cellW, AgendaDayCellH, theme.Border)
+				cellY := cellsY + row*scaled(AgendaDayCellH)
+				strokeRect(p, cellX, cellY, cellW, scaled(AgendaDayCellH), theme.Border)
 				var num int
 				ink := theme.OnSurface
 				switch {
@@ -694,12 +694,12 @@ func (a *Agenda) drawMonth(p painter.Painter, theme *Theme) {
 				strokeRoundRect(p, c.rect.X, c.rect.Y, c.rect.W, c.rect.H, agendaChipRadius, theme.Accent)
 			}
 			withClip(p, c.rect, func() {
-				a.drawText(p, c.rect.X+2, c.rect.Y+(agendaChipH-a.glyphHeight())/2, ev.Title, theme.Background)
+				a.drawText(p, c.rect.X+2, c.rect.Y+(scaled(agendaChipH)-a.glyphHeight())/2, ev.Title, theme.Background)
 			})
 		}
 		for _, o := range overflows {
 			withClip(p, o.rect, func() {
-				a.drawText(p, o.rect.X+2, o.rect.Y+(agendaChipH-a.glyphHeight())/2, "+"+itoa(o.n), dimInk(theme))
+				a.drawText(p, o.rect.X+2, o.rect.Y+(scaled(agendaChipH)-a.glyphHeight())/2, "+"+itoa(o.n), dimInk(theme))
 			})
 		}
 	})
@@ -751,11 +751,11 @@ func (a *Agenda) miniLayout() (specs []miniSpec, cols, rows int) {
 }
 
 // miniMonthBox returns the pixel rectangle of the idx-th mini month, tiled left
-// to right then top to bottom over cols×rows with AgendaMiniMonthGap between
+// to right then top to bottom over cols×rows with scaled(AgendaMiniMonthGap) between
 // them, with the region's top-left at (ox, oy).
 func (a *Agenda) miniMonthBox(ox, oy, idx, cols, rows int) Rect {
 	W, H := a.Bounds().W, a.Bounds().H
-	gap := AgendaMiniMonthGap
+	gap := scaled(AgendaMiniMonthGap)
 	mw := (W - (cols-1)*gap) / cols
 	mh := (H - (rows-1)*gap) / rows
 	c, row := idx%cols, idx/cols

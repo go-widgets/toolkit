@@ -42,8 +42,8 @@ func (c *ScatterChart) NearestPoint(localX, localY int) (series, point int, pt S
 	for si, s := range c.Series {
 		for pi, q := range s {
 			x, y := c.project(q, xr, yr)
-			x = clampInt(x, r.X, r.X+r.W-ScatterDot)
-			y = clampInt(y, r.Y, r.Y+r.H-ScatterDot)
+			x = clampInt(x, r.X, r.X+r.W-scaled(ScatterDot))
+			y = clampInt(y, r.Y, r.Y+r.H-scaled(ScatterDot))
 			if d := (x-tx)*(x-tx) + (y-ty)*(y-ty); d < best {
 				best, series, point, pt, ok = d, si, pi, q, true
 			}
@@ -60,10 +60,10 @@ func NewScatterChart(series [][]ScatterPoint) *ScatterChart {
 	return &ScatterChart{Series: series}
 }
 
-// plot is the drawable rectangle inside the axes (shared ChartPad margin).
+// plot is the drawable rectangle inside the axes (shared scaled(ChartPad) margin).
 func (c *ScatterChart) plot() Rect {
 	r := c.Bounds()
-	return Rect{X: r.X + ChartPad, Y: r.Y, W: r.W - ChartPad, H: r.H - ChartPad}
+	return Rect{X: r.X + scaled(ChartPad), Y: r.Y, W: r.W - scaled(ChartPad), H: r.H - scaled(ChartPad)}
 }
 
 // ranges returns the (minX,maxX) and (minY,maxY) spans over every point and
@@ -136,19 +136,19 @@ func (c *ScatterChart) Draw(p painter.Painter, theme *Theme) {
 		col := c.seriesColor(si)
 		for _, pt := range s {
 			x, y := c.project(pt, xr, yr)
-			// Keep the whole ScatterDot×ScatterDot marker inside Bounds(): a
+			// Keep the whole scaled(ScatterDot)×scaled(ScatterDot) marker inside Bounds(): a
 			// point projected onto the right/bottom plot edge would otherwise
 			// spill one dot-width past r.
-			x = clampInt(x, r.X, r.X+r.W-ScatterDot)
-			y = clampInt(y, r.Y, r.Y+r.H-ScatterDot)
-			fillRect(p, x, y, ScatterDot, ScatterDot, col)
+			x = clampInt(x, r.X, r.X+r.W-scaled(ScatterDot))
+			y = clampInt(y, r.Y, r.Y+r.H-scaled(ScatterDot))
+			fillRect(p, x, y, scaled(ScatterDot), scaled(ScatterDot), col)
 		}
 	}
 	if c.Hover && c.HoverSeries >= 0 && c.HoverSeries < len(c.Series) &&
 		c.HoverPoint >= 0 && c.HoverPoint < len(c.Series[c.HoverSeries]) {
 		x, y := c.project(c.Series[c.HoverSeries][c.HoverPoint], xr, yr)
-		x = clampInt(x, r.X, r.X+r.W-ScatterDot)
-		y = clampInt(y, r.Y, r.Y+r.H-ScatterDot)
+		x = clampInt(x, r.X, r.X+r.W-scaled(ScatterDot))
+		y = clampInt(y, r.Y, r.Y+r.H-scaled(ScatterDot))
 		strokeRect(p, clampInt(x-2, r.X, r.X+r.W-6), clampInt(y-2, r.Y, r.Y+r.H-6), 6, 6, theme.OnSurface)
 	}
 }

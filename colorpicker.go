@@ -68,10 +68,18 @@ const (
 	ColorPickerEyedropSize = 20
 
 	// ColorPickerWidth and ColorPickerHeight are the picker's natural
-	// (unclamped) footprint -- convenient for a host's layout pass.
+	// (unclamped) LOGICAL footprint. Use [ColorPickerNaturalSize] for the
+	// footprint to lay out with: at a metric scale above 1 it is larger, like
+	// every other metric.
 	ColorPickerWidth  = ColorPickerSquareSize + ColorPickerGap + ColorPickerHueStripW
 	ColorPickerHeight = ColorPickerSquareSize + ColorPickerGap + ColorPickerAlphaH + ColorPickerGap + ColorPickerSwatchSize
 )
+
+// ColorPickerNaturalSize is the picker's footprint in device pixels at the
+// current [MetricScale].
+func ColorPickerNaturalSize() (w, h int) {
+	return scaled(ColorPickerWidth), scaled(ColorPickerHeight)
+}
 
 // NewColorPicker builds a picker seeded from initial, converting its RGB to
 // HSV and carrying its alpha through unchanged.
@@ -182,33 +190,33 @@ func to8(v float64) uint8 {
 
 // svRectLocal is the saturation/value square, top-left of the picker.
 func (c *ColorPicker) svRectLocal() Rect {
-	return Rect{X: 0, Y: 0, W: ColorPickerSquareSize, H: ColorPickerSquareSize}
+	return Rect{X: 0, Y: 0, W: scaled(ColorPickerSquareSize), H: scaled(ColorPickerSquareSize)}
 }
 
 // hueRectLocal is the vertical hue strip, to the right of the SV square.
 func (c *ColorPicker) hueRectLocal() Rect {
-	return Rect{X: ColorPickerSquareSize + ColorPickerGap, Y: 0, W: ColorPickerHueStripW, H: ColorPickerSquareSize}
+	return Rect{X: scaled(ColorPickerSquareSize) + scaled(ColorPickerGap), Y: 0, W: scaled(ColorPickerHueStripW), H: scaled(ColorPickerSquareSize)}
 }
 
 // alphaRectLocal is the horizontal alpha slider beneath the square + strip.
 func (c *ColorPicker) alphaRectLocal() Rect {
-	return Rect{X: 0, Y: ColorPickerSquareSize + ColorPickerGap, W: ColorPickerWidth, H: ColorPickerAlphaH}
+	return Rect{X: 0, Y: scaled(ColorPickerSquareSize) + scaled(ColorPickerGap), W: ColorPickerWidth, H: scaled(ColorPickerAlphaH)}
 }
 
 // swatchRectLocal is the solid preview swatch, bottom-left.
 func (c *ColorPicker) swatchRectLocal() Rect {
-	y := ColorPickerSquareSize + ColorPickerGap + ColorPickerAlphaH + ColorPickerGap
-	return Rect{X: 0, Y: y, W: ColorPickerSwatchSize, H: ColorPickerSwatchSize}
+	y := scaled(ColorPickerSquareSize) + scaled(ColorPickerGap) + scaled(ColorPickerAlphaH) + scaled(ColorPickerGap)
+	return Rect{X: 0, Y: y, W: scaled(ColorPickerSwatchSize), H: scaled(ColorPickerSwatchSize)}
 }
 
 // eyedropRectLocal is the eyedropper button, beside the swatch.
 func (c *ColorPicker) eyedropRectLocal() Rect {
 	sw := c.swatchRectLocal()
 	return Rect{
-		X: sw.X + sw.W + ColorPickerGap,
-		Y: sw.Y + (ColorPickerSwatchSize-ColorPickerEyedropSize)/2,
-		W: ColorPickerEyedropSize,
-		H: ColorPickerEyedropSize,
+		X: sw.X + sw.W + scaled(ColorPickerGap),
+		Y: sw.Y + (scaled(ColorPickerSwatchSize)-scaled(ColorPickerEyedropSize))/2,
+		W: scaled(ColorPickerEyedropSize),
+		H: scaled(ColorPickerEyedropSize),
 	}
 }
 

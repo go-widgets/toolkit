@@ -31,7 +31,7 @@ type TimePicker struct {
 }
 
 // TimePicker layout constants. Cells are laid out left-to-right from the
-// widget's top-left; tpBtnW is the width of the up/down affordance column
+// widget's top-left; scaled(tpBtnW) is the width of the up/down affordance column
 // stacked on the right of each spinner cell.
 const (
 	tpCellW  = 34 // width of an hour / minute spinner cell
@@ -131,25 +131,25 @@ func (tp *TimePicker) hourText() string {
 func (tp *TimePicker) layout() (hourCell, colon, minCell, ampmCell Rect) {
 	r := tp.Bounds()
 	x := r.X
-	hourCell = Rect{X: x, Y: r.Y, W: tpCellW, H: r.H}
-	x += tpCellW
-	colon = Rect{X: x, Y: r.Y, W: tpColonW, H: r.H}
-	x += tpColonW
-	minCell = Rect{X: x, Y: r.Y, W: tpCellW, H: r.H}
-	x += tpCellW
+	hourCell = Rect{X: x, Y: r.Y, W: scaled(tpCellW), H: r.H}
+	x += scaled(tpCellW)
+	colon = Rect{X: x, Y: r.Y, W: scaled(tpColonW), H: r.H}
+	x += scaled(tpColonW)
+	minCell = Rect{X: x, Y: r.Y, W: scaled(tpCellW), H: r.H}
+	x += scaled(tpCellW)
 	if tp.Use12h {
-		ampmCell = Rect{X: x, Y: r.Y, W: tpAmPmW, H: r.H}
+		ampmCell = Rect{X: x, Y: r.Y, W: scaled(tpAmPmW), H: r.H}
 	}
 	return
 }
 
 // spinButtons splits a spinner cell into its ▲ (up, top) and ▼ (down, bottom)
-// button rectangles — the column of width tpBtnW on the cell's right edge.
+// button rectangles — the column of width scaled(tpBtnW) on the cell's right edge.
 func spinButtons(cell Rect) (up, down Rect) {
-	bx := cell.X + cell.W - tpBtnW
+	bx := cell.X + cell.W - scaled(tpBtnW)
 	half := cell.H / 2
-	up = Rect{X: bx, Y: cell.Y, W: tpBtnW, H: half}
-	down = Rect{X: bx, Y: cell.Y + half, W: tpBtnW, H: cell.H - half}
+	up = Rect{X: bx, Y: cell.Y, W: scaled(tpBtnW), H: half}
+	down = Rect{X: bx, Y: cell.Y + half, W: scaled(tpBtnW), H: cell.H - half}
 	return
 }
 

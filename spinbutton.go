@@ -65,16 +65,16 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	textY := r.Y + (r.H-s.glyphHeight())/2
 	s.drawText(p, r.X+4, textY, text, textC)
 	// Two buttons on the right, vertically stacked.
-	btnX := r.X + r.W - spinButtonW
+	btnX := r.X + r.W - scaled(spinButtonW)
 	half := r.H / 2
-	fillRect(p, btnX, r.Y, spinButtonW, half, btnC)
-	fillRect(p, btnX, r.Y+half, spinButtonW, r.H-half, btnC)
-	strokeRect(p, btnX, r.Y, spinButtonW, half, borderC)
-	strokeRect(p, btnX, r.Y+half, spinButtonW, r.H-half, borderC)
+	fillRect(p, btnX, r.Y, scaled(spinButtonW), half, btnC)
+	fillRect(p, btnX, r.Y+half, scaled(spinButtonW), r.H-half, btnC)
+	strokeRect(p, btnX, r.Y, scaled(spinButtonW), half, borderC)
+	strokeRect(p, btnX, r.Y+half, scaled(spinButtonW), r.H-half, borderC)
 	// Uniform stepper glyphs drawn as vector bars, centred in each button, so
 	// the "+" and "−" align exactly — unlike font glyphs, whose hyphen-minus
 	// sits at x-height while the plus is centred, making the pair look ragged.
-	cx := btnX + spinButtonW/2
+	cx := btnX + scaled(spinButtonW)/2
 	const bar = 7 // arm length of the +/− (odd, so it centres on cx)
 	ink := glyphC
 	cyUp := r.Y + half/2
@@ -114,7 +114,7 @@ func (s *SpinButton) OnEvent(ev Event) {
 		return
 	}
 	r := s.Bounds()
-	if ev.X < r.W-spinButtonW {
+	if ev.X < r.W-scaled(spinButtonW) {
 		return // body click: no action in v0.2 (would open keypad)
 	}
 	if ev.Y < r.H/2 {

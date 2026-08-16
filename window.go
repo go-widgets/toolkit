@@ -89,13 +89,13 @@ func NewWindow(title string, body Widget) *Window {
 // titleBarRect is the full title-bar band in surface coordinates.
 func (w *Window) titleBarRect() Rect {
 	r := w.Bounds()
-	return Rect{X: r.X, Y: r.Y, W: r.W, H: WindowTitleH}
+	return Rect{X: r.X, Y: r.Y, W: r.W, H: scaled(WindowTitleH)}
 }
 
 // bodyAreaRect is the content area below the title bar in surface coordinates.
 func (w *Window) bodyAreaRect() Rect {
 	r := w.Bounds()
-	return Rect{X: r.X, Y: r.Y + WindowTitleH, W: r.W, H: r.H - WindowTitleH}
+	return Rect{X: r.X, Y: r.Y + scaled(WindowTitleH), W: r.W, H: r.H - scaled(WindowTitleH)}
 }
 
 // gripRect is the bottom-right resize grip square in surface coordinates.
@@ -115,8 +115,8 @@ func (w *Window) toolRects() map[WindowRegion]Rect {
 		if !enabled {
 			return
 		}
-		x -= windowToolW
-		out[reg] = Rect{X: x, Y: r.Y, W: windowToolW, H: WindowTitleH}
+		x -= scaled(windowToolW)
+		out[reg] = Rect{X: x, Y: r.Y, W: scaled(windowToolW), H: scaled(WindowTitleH)}
 	}
 	place(WindowClose, w.Closable)
 	place(WindowMinimize, w.Minimizable)
@@ -191,7 +191,7 @@ func (w *Window) Draw(p painter.Painter, theme *Theme) {
 	tb := w.titleBarRect()
 	fillRect(p, tb.X, tb.Y, tb.W, tb.H, theme.Surface)
 	strokeRect(p, tb.X, tb.Y, tb.W, tb.H, theme.Border)
-	titleY := tb.Y + (WindowTitleH-w.glyphHeight())/2
+	titleY := tb.Y + (scaled(WindowTitleH)-w.glyphHeight())/2
 	w.drawText(p, tb.X+8, titleY, w.Title, theme.OnSurface)
 	for reg, rc := range w.toolRects() {
 		w.drawTool(p, reg, rc, theme.OnSurface)

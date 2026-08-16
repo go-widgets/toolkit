@@ -68,10 +68,10 @@ func (c *AreaChart) yRange() (float64, float64) {
 	return mn, mx
 }
 
-// plot is the drawable rectangle inside the axes (shared ChartPad margin).
+// plot is the drawable rectangle inside the axes (shared scaled(ChartPad) margin).
 func (c *AreaChart) plot() Rect {
 	r := c.Bounds()
-	return Rect{X: r.X + ChartPad, Y: r.Y, W: r.W - ChartPad, H: r.H - ChartPad}
+	return Rect{X: r.X + scaled(ChartPad), Y: r.Y, W: r.W - scaled(ChartPad), H: r.H - scaled(ChartPad)}
 }
 
 // pointAt maps index i of series s to a pixel in the plot area.
@@ -103,7 +103,7 @@ func (c *AreaChart) ValueAt(localX int) (index int, value float64, ok bool) {
 	if span < 1 {
 		return 0, s[0], true
 	}
-	rel := localX - ChartPad
+	rel := localX - scaled(ChartPad)
 	idx := clampInt((2*rel*(n-1)+span)/(2*span), 0, n-1)
 	return idx, s[idx], true
 }

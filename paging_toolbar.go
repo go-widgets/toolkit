@@ -78,20 +78,20 @@ func (pt *PagingToolbar) layout() pagingLayout {
 	r := pt.Bounds()
 	x, y := r.X, r.Y
 	btn := func() Rect {
-		rc := Rect{X: x, Y: y, W: PagingBtnW, H: PagingBtnH}
-		x += PagingBtnW + PagingGap
+		rc := Rect{X: x, Y: y, W: scaled(PagingBtnW), H: scaled(PagingBtnH)}
+		x += scaled(PagingBtnW) + scaled(PagingGap)
 		return rc
 	}
 	var l pagingLayout
 	l.first = btn()
 	l.prev = btn()
-	iw := pt.textWidth(pt.info()) + 2*pagingInfoPad
-	l.info = Rect{X: x, Y: y, W: iw, H: PagingBtnH}
-	x += iw + PagingGap
+	iw := pt.textWidth(pt.info()) + 2*scaled(pagingInfoPad)
+	l.info = Rect{X: x, Y: y, W: iw, H: scaled(PagingBtnH)}
+	x += iw + scaled(PagingGap)
 	l.next = btn()
 	l.last = btn()
 	if pt.ShowRefresh {
-		x += PagingGap // extra separation before the refresh button
+		x += scaled(PagingGap) // extra separation before the refresh button
 		l.refresh = btn()
 		l.hasRefresh = true
 	}

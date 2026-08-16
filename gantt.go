@@ -84,8 +84,8 @@ const (
 const ganttEdgeGrab = 5
 
 // Gantt sizing constants, exported like TableRowHeight / TableHeaderHeight so a
-// host can measure a chart before it has a surface (rows*GanttRowH +
-// GanttHeaderH gives the natural height; GanttLabelW is the fixed gutter width).
+// host can measure a chart before it has a surface (rows*scaled(GanttRowH) +
+// GanttHeaderH gives the natural height; scaled(GanttLabelW) is the fixed gutter width).
 const (
 	// GanttRowH is the pixel height of one task row.
 	GanttRowH = 24
@@ -152,25 +152,25 @@ func (g *Gantt) Draw(p painter.Painter, theme *Theme) {
 	r := g.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 
-	axisX := r.X + GanttLabelW
-	axisW := r.W - GanttLabelW
+	axisX := r.X + scaled(GanttLabelW)
+	axisW := r.W - scaled(GanttLabelW)
 	units := g.axisUnits()
 	colX := func(c int) int {
 		return axisX + int(float64(c)/float64(units)*float64(axisW))
 	}
 
 	// Header band + gutter separator.
-	fillRect(p, r.X, r.Y, r.W, GanttHeaderH, theme.SurfaceAlt)
-	fillRect(p, r.X, r.Y+GanttHeaderH-1, r.W, 1, theme.Border)
+	fillRect(p, r.X, r.Y, r.W, scaled(GanttHeaderH), theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y+scaled(GanttHeaderH)-1, r.W, 1, theme.Border)
 	fillRect(p, axisX, r.Y, 1, r.H, theme.Border)
 
 	// Tick rules + column index labels, clipped to the axis area.
 	axisRect := Rect{X: axisX, Y: r.Y, W: r.X + r.W - axisX, H: r.H}
-	tickTop := r.Y + (GanttHeaderH-g.glyphHeight())/2
+	tickTop := r.Y + (scaled(GanttHeaderH)-g.glyphHeight())/2
 	withClip(p, axisRect, func() {
 		for c := 0; c <= units; c++ {
 			x := colX(c)
-			fillRect(p, x, r.Y+GanttHeaderH, 1, r.H-GanttHeaderH, theme.Border)
+			fillRect(p, x, r.Y+scaled(GanttHeaderH), 1, r.H-scaled(GanttHeaderH), theme.Border)
 			g.drawText(p, x+2, tickTop, strconv.Itoa(c), dimInk(theme))
 		}
 	})
@@ -179,16 +179,16 @@ func (g *Gantt) Draw(p painter.Painter, theme *Theme) {
 	// scroll offset and clip the row band to below the header so a scrolled-out
 	// row never paints over the header, ticks or gutter separator. At scroll ==
 	// 0 the band contains every (fitting) row, leaving the render identical.
-	bodyClip := Rect{X: r.X, Y: r.Y + GanttHeaderH, W: r.W, H: r.H - GanttHeaderH}
+	bodyClip := Rect{X: r.X, Y: r.Y + scaled(GanttHeaderH), W: r.W, H: r.H - scaled(GanttHeaderH)}
 	scroll := g.clampedScroll()
 	withClip(p, bodyClip, func() {
 		for i, tk := range g.Tasks {
-			rowY := r.Y + GanttHeaderH + (i-scroll)*GanttRowH
+			rowY := r.Y + scaled(GanttHeaderH) + (i-scroll)*scaled(GanttRowH)
 			if g.Selected == i {
-				fillRect(p, r.X, rowY, r.W, GanttRowH, ganttSelectInk(theme))
+				fillRect(p, r.X, rowY, r.W, scaled(GanttRowH), ganttSelectInk(theme))
 			}
-			labelY := rowY + (GanttRowH-g.glyphHeight())/2
-			withClip(p, Rect{X: r.X, Y: rowY, W: GanttLabelW, H: GanttRowH}, func() {
+			labelY := rowY + (scaled(GanttRowH)-g.glyphHeight())/2
+			withClip(p, Rect{X: r.X, Y: rowY, W: scaled(GanttLabelW), H: scaled(GanttRowH)}, func() {
 				g.drawText(p, r.X+TableCellPadX, labelY, tk.Label, theme.OnSurface)
 			})
 
@@ -201,8 +201,8 @@ func (g *Gantt) Draw(p painter.Painter, theme *Theme) {
 			if barW < 1 {
 				barW = 1
 			}
-			barY := rowY + ganttBarPadY
-			barH := GanttRowH - 2*ganttBarPadY
+			barY := rowY + scaled(ganttBarPadY)
+			barH := scaled(GanttRowH) - 2*scaled(ganttBarPadY)
 			withClip(p, axisRect, func() {
 				fillRect(p, barX, barY, barW, barH, fill)
 				if tk.Progress > 0 {
@@ -221,11 +221,11 @@ func (g *Gantt) Draw(p painter.Painter, theme *Theme) {
 // visibleRows is the number of task rows the body window (Bounds height minus
 // the fixed header band) can show at once, floored at 0.
 func (g *Gantt) visibleRows() int {
-	h := g.Bounds().H - GanttHeaderH
+	h := g.Bounds().H - scaled(GanttHeaderH)
 	if h < 0 {
 		return 0
 	}
-	return h / GanttRowH
+	return h / scaled(GanttRowH)
 }
 
 // maxScroll is the highest scroll that still fills the body window:
@@ -264,19 +264,19 @@ func (g *Gantt) ScrollBy(delta int) {
 // widget's left edge), the local-space twin of Draw's colX (which adds r.X).
 // Used to place bars for hit-testing an edge grab.
 func (g *Gantt) barXLocal(c int) int {
-	axisW := g.Bounds().W - GanttLabelW
-	return GanttLabelW + int(float64(c)/float64(g.axisUnits())*float64(axisW))
+	axisW := g.Bounds().W - scaled(GanttLabelW)
+	return scaled(GanttLabelW) + int(float64(c)/float64(g.axisUnits())*float64(axisW))
 }
 
 // unitAtLocal maps a widget-local x to the nearest axis column, clamped to
 // [0, units]. A degenerate (<=0) axis width collapses to column 0.
 func (g *Gantt) unitAtLocal(localX int) int {
-	axisW := g.Bounds().W - GanttLabelW
+	axisW := g.Bounds().W - scaled(GanttLabelW)
 	if axisW <= 0 {
 		return 0
 	}
 	units := g.axisUnits()
-	u := int(math.Round(float64(localX-GanttLabelW) / float64(axisW) * float64(units)))
+	u := int(math.Round(float64(localX-scaled(GanttLabelW)) / float64(axisW) * float64(units)))
 	return clampInt(u, 0, units)
 }
 
@@ -286,10 +286,10 @@ func (g *Gantt) unitAtLocal(localX int) int {
 // in that viewport slot. Exposed so a host can hit-test a right-click and build
 // a context menu for that task.
 func (g *Gantt) TaskAt(x, y int) int {
-	if y < GanttHeaderH {
+	if y < scaled(GanttHeaderH) {
 		return -1
 	}
-	row := (y-GanttHeaderH)/GanttRowH + g.clampedScroll()
+	row := (y-scaled(GanttHeaderH))/scaled(GanttRowH) + g.clampedScroll()
 	if row < 0 || row >= len(g.Tasks) {
 		return -1
 	}
@@ -322,9 +322,9 @@ func (g *Gantt) OnEvent(ev Event) {
 		g.edited = false
 		startX, endX := g.barXLocal(tk.Start), g.barXLocal(tk.End)
 		switch {
-		case ev.X >= startX-ganttEdgeGrab && ev.X <= startX+ganttEdgeGrab:
+		case ev.X >= startX-scaled(ganttEdgeGrab) && ev.X <= startX+scaled(ganttEdgeGrab):
 			g.editing, g.editIdx, g.editMode = true, row, ganttResizeStart
-		case ev.X >= endX-ganttEdgeGrab && ev.X <= endX+ganttEdgeGrab:
+		case ev.X >= endX-scaled(ganttEdgeGrab) && ev.X <= endX+scaled(ganttEdgeGrab):
 			g.editing, g.editIdx, g.editMode = true, row, ganttResizeEnd
 		case ev.X > startX && ev.X < endX:
 			g.editing, g.editIdx, g.editMode = true, row, ganttMove

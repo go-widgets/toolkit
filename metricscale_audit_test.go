@@ -115,13 +115,23 @@ type scaleReport struct {
 // Tolerance is one pixel, for the odd metric that rounds.
 func auditScaling(t *testing.T, name string, w, h int, build func() Widget) scaleReport {
 	t.Helper()
-	draw := func(scale int) ([]byte, int, int) {
+	// A widget that cannot be drawn at all is a finding, not a reason for the
+	// whole audit to die: one nil dereference in one Draw would take the other
+	// hundred-and-twenty widgets' results with it.
+	var panicked string
+	draw := func(scale int) (buf []byte, bw, bh int) {
+		defer func() {
+			if r := recover(); r != nil {
+				panicked = fmt.Sprintf("Draw panicked at scale %d: %v", scale, r)
+				buf, bw, bh = makeSurface(w*scale, h*scale), w*scale, h*scale
+			}
+		}()
 		defer SetMetricScale(1)
 		defer SetFont(NewBitmapFont(1))
 		SetMetricScale(float64(scale))
 		SetFont(NewBitmapFont(scale))
-		bw, bh := w*scale, h*scale
-		buf := makeSurface(bw, bh)
+		bw, bh = w*scale, h*scale
+		buf = makeSurface(bw, bh)
 		wd := build()
 		wd.SetBounds(Rect{X: 0, Y: 0, W: bw, H: bh})
 		wd.Draw(newP(buf, bw), DefaultDark())
@@ -129,6 +139,9 @@ func auditScaling(t *testing.T, name string, w, h int, build func() Widget) scal
 	}
 	one, w1, h1 := draw(1)
 	two, w2, h2 := draw(2)
+	if panicked != "" {
+		return scaleReport{name, panicked}
+	}
 
 	for _, axis := range []struct {
 		name   string
@@ -241,6 +254,70 @@ func TestMetricScaleAudit(t *testing.T) {
 		{"Tooltip", 120, 28, func() Widget { return &Tooltip{} }},
 		{"ViewSwitcher", 200, 32, func() Widget { return &ViewSwitcher{} }},
 		{"WindowDecoration", 300, 40, func() Widget { return &WindowDecoration{} }},
+		{"Accordion", 240, 200, func() Widget { return &Accordion{} }},
+		{"AgendaSidebar", 200, 300, func() Widget { return &AgendaSidebar{} }},
+		{"AreaChart", 240, 160, func() Widget { return &AreaChart{} }},
+		{"ArticleCard", 260, 120, func() Widget { return &ArticleCard{} }},
+		{"BarChart", 240, 160, func() Widget { return &BarChart{} }},
+		{"Base", 100, 60, func() Widget { return &Base{} }},
+		{"Breadcrumbs", 300, 26, func() Widget { return &Breadcrumbs{} }},
+		{"Browser", 320, 240, func() Widget { return &Browser{} }},
+		{"Calendar", 240, 200, func() Widget { return &Calendar{} }},
+		{"Carousel", 300, 180, func() Widget { return &Carousel{} }},
+		{"ColumnBrowser", 320, 200, func() Widget { return &ColumnBrowser{} }},
+		{"CommandPalette", 320, 240, func() Widget { return &CommandPalette{} }},
+		{"ContextMenu", 160, 120, func() Widget { return &ContextMenu{} }},
+		{"DatePicker", 240, 200, func() Widget { return NewDatePicker(2026, 8, 16) }},
+		{"DateRangePicker", 300, 220, func() Widget { return NewDateRangePicker(2026, 8) }},
+		{"Diff", 320, 200, func() Widget { return &Diff{} }},
+		{"Dock", 300, 60, func() Widget { return &Dock{} }},
+		{"FileChooser", 320, 240, func() Widget {
+			return NewFileChooser(&TreeNode{Label: "/"}, func(*TreeNode) []string { return []string{"a", "b"} })
+		}},
+		{"FontChooser", 320, 240, func() Widget { return &FontChooser{} }},
+		{"GalleryView", 320, 240, func() Widget { return &GalleryView{} }},
+		{"Gantt", 320, 200, func() Widget { return &Gantt{} }},
+		{"Grid", 240, 160, func() Widget { return &Grid{} }},
+		{"GroupCard", 260, 160, func() Widget { return &GroupCard{} }},
+		{"HBox", 240, 60, func() Widget { return &HBox{} }},
+		{"IconGrid", 240, 200, func() Widget { return &IconGrid{} }},
+		{"Kanban", 320, 240, func() Widget { return &Kanban{} }},
+		{"LineChart", 240, 160, func() Widget { return &LineChart{} }},
+		{"ListBox", 200, 160, func() Widget { return &ListBox{} }},
+		{"MarkdownEditor", 320, 240, func() Widget { return &MarkdownEditor{} }},
+		{"MarkdownView", 320, 240, func() Widget { return &MarkdownView{} }},
+		{"MediaCard", 260, 160, func() Widget { return &MediaCard{} }},
+		{"MenuBar", 320, 28, func() Widget { return &MenuBar{} }},
+		{"Notebook", 320, 200, func() Widget { return &Notebook{} }},
+		{"PagingToolbar", 320, 32, func() Widget { return &PagingToolbar{} }},
+		{"PieChart", 200, 200, func() Widget { return &PieChart{} }},
+		{"PostCard", 280, 200, func() Widget { return &PostCard{} }},
+		{"PropertyGrid", 260, 200, func() Widget { return NewPropertyGrid() }},
+		{"RadarChart", 220, 220, func() Widget { return &RadarChart{} }},
+		{"ScatterChart", 240, 160, func() Widget { return &ScatterChart{} }},
+		{"ScrollView", 220, 160, func() Widget { return &ScrollView{} }},
+		{"Skeleton", 220, 40, func() Widget { return &Skeleton{} }},
+		{"SkeletonGroup", 220, 120, func() Widget { return &SkeletonGroup{} }},
+		{"SourceList", 200, 240, func() Widget { return &SourceList{} }},
+		{"Sparkline", 160, 40, func() Widget { return &Sparkline{} }},
+		{"SpinButton", 160, 30, func() Widget { return &SpinButton{} }},
+		{"Stack", 220, 160, func() Widget { return &Stack{} }},
+		{"StatusArea", 220, 28, func() Widget { return &StatusArea{} }},
+		{"StatusIcon", 28, 28, func() Widget { return &StatusIcon{} }},
+		{"Surface", 220, 160, func() Widget { return &Surface{} }},
+		{"Table", 320, 200, func() Widget { return &Table{} }},
+		{"TerminalView", 320, 200, func() Widget { return &TerminalView{} }},
+		{"TextView", 320, 200, func() Widget { return &TextView{} }},
+		{"TimePicker", 220, 160, func() Widget { return &TimePicker{} }},
+		{"Timeline", 260, 200, func() Widget { return &Timeline{} }},
+		{"Toast", 260, 60, func() Widget { return &Toast{} }},
+		{"TreeTable", 320, 220, func() Widget { return &TreeTable{} }},
+		{"TreeView", 240, 200, func() Widget { return &TreeView{} }},
+		{"VBox", 160, 240, func() Widget { return &VBox{} }},
+		{"Viewport", 240, 180, func() Widget { return &Viewport{} }},
+		{"Wallpaper", 320, 240, func() Widget { return &Wallpaper{} }},
+		{"Window", 320, 240, func() Widget { return &Window{} }},
+		{"Wizard", 320, 240, func() Widget { return &Wizard{} }},
 	}
 
 	var broken []scaleReport

@@ -78,7 +78,7 @@ func (c *RadarChart) drawHover(p painter.Painter, theme *Theme) {
 		return
 	}
 	r := c.Bounds()
-	radius := min(r.W, r.H)/2 - ChartPad - 2*c.glyphHeight()
+	radius := min(r.W, r.H)/2 - scaled(ChartPad) - 2*c.glyphHeight()
 	cx, cy := r.X+r.W/2, r.Y+r.H/2
 	x, y := vertex(cx, cy, radius, c.HoverAxis, n, 1)
 	drawLine(p, cx, cy, x, y, theme.Accent)
@@ -200,7 +200,7 @@ func (c *RadarChart) Draw(p painter.Painter, theme *Theme) {
 	// Reserve a band around the grid for the axis labels so they sit inside
 	// the widget rather than clipping at the edges.
 	labelPad := 2 * c.glyphHeight()
-	radius := min(r.W, r.H)/2 - ChartPad - labelPad
+	radius := min(r.W, r.H)/2 - scaled(ChartPad) - labelPad
 	if radius < 1 {
 		return
 	}
