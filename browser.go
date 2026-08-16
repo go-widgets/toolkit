@@ -321,11 +321,12 @@ func (b *Browser) btnEnabled(k browserBtnKind) bool {
 // NewBrowser builds an empty Browser in the default MultiTab mode at 1.0 zoom.
 func NewBrowser() *Browser { return &Browser{zoom: 1.0} }
 
-// scale is the effective chrome scale factor: Scale when positive, else 1 (the
-// zero value and any non-positive value mean "no scaling").
+// scale is the effective chrome scale factor: Scale when positive, else the
+// toolkit's own [MetricScale]. See Menu.scale on why it defers rather than
+// multiplies.
 func (b *Browser) scale() float64 {
 	if b.Scale <= 0 {
-		return 1
+		return MetricScale()
 	}
 	return b.Scale
 }

@@ -72,7 +72,9 @@ type Menu struct {
 	// check/submenu glyphs — so a HiDPI host gets a crisp, correctly sized menu
 	// instead of one laid out in raw pixels. A host that renders at the backing
 	// pixel ratio (optionally times a UI zoom) sets Scale to it, mirroring
-	// Browser.Scale. Zero or negative means 1: unscaled, byte-identical to before.
+	// Browser.Scale. Zero or negative defers to the toolkit-wide [MetricScale],
+	// which is 1 unless a host set it -- so a menu that is told nothing still
+	// follows the one knob a HiDPI host is documented to turn.
 	Scale float64
 
 	// OnItemToggle fires when activating a checkable or radio row changes its
@@ -117,10 +119,16 @@ const MenuCheckGutterW = 14
 // NewMenu builds a Menu with the given items + Hover and openSub at -1.
 func NewMenu(items []MenuItem) *Menu { return &Menu{Items: items, Hover: -1, openSub: -1} }
 
-// scale is the effective scale factor: Scale when positive, else 1.
+// scale is the effective scale factor: Scale when positive, else the toolkit's
+// own [MetricScale].
+//
+// Falling back to the global rather than to 1 is what makes a menu obey a host
+// that set the one documented knob. It REPLACES rather than multiplies, so a
+// host that sets the field -- as one that predates the global does -- gets
+// exactly what it asked for and nothing is scaled twice.
 func (m *Menu) scale() float64 {
 	if m.Scale <= 0 {
-		return 1
+		return MetricScale()
 	}
 	return m.Scale
 }
