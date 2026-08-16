@@ -34,6 +34,16 @@ type Focusable interface {
 // widgets simply do not embed it and stay non-focusable.
 type focusState struct {
 	focused bool
+	// FocusRingRadius, when > 0, draws the focus ring as a rounded rectangle of
+	// that corner radius (in device units) instead of the default 1-pixel square
+	// inset — for a widget whose body is a rounded field (a pill-shaped search
+	// box). Zero keeps the classic square ring, so every widget that does not set
+	// it renders byte-for-byte as before.
+	FocusRingRadius int
+	// FocusRingWidth is the rounded ring's stroke thickness; it applies only when
+	// FocusRingRadius > 0, and a value < 1 is treated as 1. Ignored for the square
+	// ring.
+	FocusRingWidth int
 }
 
 // SetFocused records whether this widget holds keyboard focus.
@@ -49,6 +59,14 @@ func (f *focusState) Focused() bool { return f.focused }
 // their Draw with their own Bounds so the ring sits on top of their content.
 func (f *focusState) drawFocusRing(p painter.Painter, theme *Theme, r Rect) {
 	if !f.focused {
+		return
+	}
+	if f.FocusRingRadius > 0 {
+		w := f.FocusRingWidth
+		if w < 1 {
+			w = 1
+		}
+		p.StrokeRoundRect(painter.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}, f.FocusRingRadius, theme.Accent, w)
 		return
 	}
 	strokeRect(p, r.X+1, r.Y+1, r.W-2, r.H-2, theme.Accent)
