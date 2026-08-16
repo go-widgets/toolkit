@@ -73,6 +73,14 @@ type TreeView struct {
 	// shown. The zero value (false) keeps the original root-visible behaviour.
 	HideRoot bool
 
+	// HideScrollbar suppresses the TreeView's own overflow scrollbar (track +
+	// thumb) while keeping every other behaviour — the gutter inset, row-based
+	// scrolling, keyboard and hit-testing — unchanged. It is for a host that draws
+	// its OWN scrollbar over the tree so every panel in its UI shares one bar
+	// style; that host reads ScrollExtent to size and position it. The zero value
+	// (false) draws the built-in scrollbar as before.
+	HideScrollbar bool
+
 	// selected is the multi-select set. Only consulted when
 	// MultiSelect is true. Selected remains the "anchor" node used as
 	// the start of a Shift range: it follows plain + Ctrl clicks, but
@@ -500,10 +508,26 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 	if clr != nil {
 		clr.PopClip()
 	}
-	if windowed {
+	if windowed && !t.HideScrollbar {
 		t.drawScrollbar(p, theme, r)
 	}
 	t.drawFocusRing(p, theme, r)
+}
+
+// ScrollExtent reports the tree's vertical scroll state in ROW units: the clamped
+// index of the first visible row, how many whole rows fit the window, and the
+// total visible (expand-aware) row count. shown is false when the tree fits its
+// window and no scrollbar is warranted. A host that suppresses the built-in bar
+// (HideScrollbar) and draws its own reads this to size and position a matching
+// one.
+func (t *TreeView) ScrollExtent() (offset, window, total int, shown bool) {
+	t.flatten()
+	total = len(t.rows)
+	window = t.windowRows()
+	if window <= 0 || total <= window {
+		return 0, window, total, false
+	}
+	return t.clampScrollRow(t.ScrollRow, total, window), window, total, true
 }
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and
