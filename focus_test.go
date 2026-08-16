@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "testing"
+import (
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
 
 // fakeFocusable is a minimal Focusable test double that records every
 // SetFocused call so tests can assert exactly when focus toggled.
@@ -265,5 +269,31 @@ func TestFocusRing_HandleKey(t *testing.T) {
 	}
 	if got := r.Current(); got != 0 {
 		t.Fatalf("unconsumed key must not move focus: Current() = %d, want 0", got)
+	}
+}
+
+func TestDrawFocusRingRounded(t *testing.T) {
+	th := DefaultLight()
+	r := Rect{X: 2, Y: 2, W: 16, H: 16}
+
+	// Unfocused: paints nothing (no accent anywhere).
+	buf := make([]byte, 4*20*20)
+	(&focusState{}).drawFocusRing(painter.NewPixelPainter(buf, 20, 20), th, r)
+	if hasColor(buf, 20, th.Accent) {
+		t.Fatal("an unfocused widget must paint no focus ring")
+	}
+
+	// Focused rounded ring (Radius > 0, Width < 1 -> defaults to 1): accent painted.
+	buf = make([]byte, 4*20*20)
+	(&focusState{focused: true, FocusRingRadius: 4}).drawFocusRing(painter.NewPixelPainter(buf, 20, 20), th, r)
+	if !hasColor(buf, 20, th.Accent) {
+		t.Fatal("a rounded focus ring should paint the accent")
+	}
+
+	// Focused square ring (Radius == 0): the classic branch also paints accent.
+	buf = make([]byte, 4*20*20)
+	(&focusState{focused: true}).drawFocusRing(painter.NewPixelPainter(buf, 20, 20), th, r)
+	if !hasColor(buf, 20, th.Accent) {
+		t.Fatal("the square focus ring should paint the accent")
 	}
 }
