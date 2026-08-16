@@ -72,28 +72,57 @@ func NewBitmapFont(scale int) Font {
 // defaultFont is the unscaled 5x7 bitmap — the toolkit's out-of-the-box font.
 var defaultFont = &bitmapFont{Scale: 1}
 
-// activeFont is the font every widget currently lays out + renders against.
-var activeFont Font = defaultFont
+// activeFont is the font a host CHOSE, or nil for "whatever the toolkit's own
+// scale says". Nil is not the same as the default font: it is what lets the
+// built-in type follow [SetMetricScale] while a font the host picked stays
+// exactly the size it picked.
+var activeFont Font
 
-// SetFont makes f the active font. A nil f restores the built-in default. All
-// subsequent layout (GlyphHeight / GlyphAdvance) and DrawText use it.
-func SetFont(f Font) {
-	if f == nil {
-		f = defaultFont
+// SetFont makes f the active font. A nil f gives the built-in bitmap back, at
+// whatever the current [MetricScale] is. All subsequent layout (GlyphHeight /
+// GlyphAdvance) and DrawText use it.
+func SetFont(f Font) { activeFont = f }
+
+// CurrentFont returns the font widgets lay out and draw with: the one a host
+// set, or the built-in bitmap at the current metric scale.
+//
+// The built-in scales because a host that turned the one documented HiDPI knob
+// should not get chrome at twice the size around type that stayed put -- which
+// is a worse interface than the one it had before it asked. A host that chose a
+// font chose its size too, so that one is left alone: the same rule Menu and
+// Browser follow for their own Scale fields.
+func CurrentFont() Font {
+	if activeFont != nil {
+		return activeFont
 	}
-	activeFont = f
+	return scaledDefaultFont()
 }
 
-// CurrentFont returns the active font.
-func CurrentFont() Font { return activeFont }
+// scaledDefaultFont is the built-in bitmap at the current metric scale, cached
+// so the common path allocates nothing.
+func scaledDefaultFont() Font {
+	n := int(MetricScale() + 0.5)
+	if n < 1 {
+		n = 1
+	}
+	if n == 1 {
+		return defaultFont
+	}
+	if cachedScaledFont == nil || cachedScaledFont.Scale != n {
+		cachedScaledFont = &bitmapFont{Scale: n}
+	}
+	return cachedScaledFont
+}
+
+var cachedScaledFont *bitmapFont
 
 // GlyphHeight is the active font's glyph box height. It is a function (not a
 // const) so widgets re-read it after SetFont; layout dimensions that derive
 // from it are likewise functions.
-func GlyphHeight() int { return activeFont.Height() }
+func GlyphHeight() int { return CurrentFont().Height() }
 
 // GlyphAdvance is the active font's horizontal step from one glyph to the next.
-func GlyphAdvance() int { return activeFont.Advance() }
+func GlyphAdvance() int { return CurrentFont().Advance() }
 
 // font5x7 is the 5-column x 7-row bitmap font table. Each entry is one
 // glyph: 5 bytes, one per column, low 7 bits encode the rows from top
@@ -193,13 +222,13 @@ var font5x7 = map[byte][5]byte{
 // text in the active font. It defers to the active font's Measure so a
 // proportional font (see NewTrueTypeFont) reports its true rendered width; the
 // built-in bitmap font is monospace, so it still equals len(text)*GlyphAdvance.
-func TextWidth(text string) int { return activeFont.Measure(text) }
+func TextWidth(text string) int { return CurrentFont().Measure(text) }
 
 // DrawText paints text left-to-right starting at (x, y) in widget-local
 // coordinates, using the active font (see SetFont). It is a thin wrapper over
 // the active Font's Draw so every widget's text rendering follows a font swap.
 func DrawText(p painter.Painter, x, y int, text string, ink RGBA) {
-	activeFont.Draw(p, x, y, text, ink)
+	CurrentFont().Draw(p, x, y, text, ink)
 }
 
 // Draw paints text with the bitmap font. On a *painter.PixelPainter (the WUI +
