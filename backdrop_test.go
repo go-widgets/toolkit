@@ -175,3 +175,25 @@ func TestBackdropHitTestRoutesThroughOverlay(t *testing.T) {
 		t.Fatalf("interactive Backdrop scrim did not swallow the click")
 	}
 }
+
+func TestBackdropRadius(t *testing.T) {
+	fill := painter.RGB(0x30, 0x60, 0x90)
+	th := DefaultLight()
+	const w, h = 24, 24
+
+	// Radius 0: a plain fill covers every pixel including the corners.
+	square := bdRender(&Backdrop{Fill: fill}, w, h, th)
+	if bdPx(square, w, 0, 0) != fill {
+		t.Fatalf("square backdrop should fill the corner, got %v", bdPx(square, w, 0, 0))
+	}
+
+	// Radius > 0: the fill is a rounded rect — the centre is filled but the very
+	// corner is left unpainted (zero ground), proving FillRoundRect was taken.
+	round := bdRender(&Backdrop{Fill: fill, Radius: 8}, w, h, th)
+	if bdPx(round, w, w/2, h/2) != fill {
+		t.Fatalf("rounded backdrop should fill the centre, got %v", bdPx(round, w, w/2, h/2))
+	}
+	if bdPx(round, w, 0, 0) == fill {
+		t.Fatal("rounded backdrop should NOT fill the sharp corner")
+	}
+}

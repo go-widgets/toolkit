@@ -40,6 +40,13 @@ type Backdrop struct {
 	Grid painter.RGBA
 	// Step is the grid spacing in painter units. Step <= 0 draws no grid.
 	Step int
+	// Radius rounds the filled rectangle's corners by that many units. The zero
+	// value (0) fills a plain rectangle, byte-identical to before this field
+	// existed; a positive value fills a rounded rectangle — the ground of a pill /
+	// chip / badge a host composites an icon or label over, so that ground is a
+	// widget rather than a hand-drawn FillRoundRect. A grid (Step > 0) is drawn as
+	// before, unaffected by the rounding.
+	Radius int
 	// Interactive makes the Backdrop catch pointer events. The zero value
 	// (false) is event-transparent: HitTest returns false so clicks pass
 	// through to whatever is composited over the backdrop — the least-
@@ -68,7 +75,8 @@ func (b *Backdrop) HitTest(px, py int) bool {
 }
 
 // Draw fills the bounds and overlays the grid. An empty rectangle paints
-// nothing; a non-positive Step paints only the fill.
+// nothing; a non-positive Step paints only the fill. A positive Radius fills a
+// rounded rectangle instead of a plain one.
 func (b *Backdrop) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	if r.W <= 0 || r.H <= 0 {
@@ -78,7 +86,11 @@ func (b *Backdrop) Draw(p painter.Painter, theme *Theme) {
 	if fill == (painter.RGBA{}) {
 		fill = theme.Background
 	}
-	p.FillRect(r, fill)
+	if b.Radius > 0 {
+		fillRoundRect(p, r.X, r.Y, r.W, r.H, b.Radius, fill)
+	} else {
+		p.FillRect(r, fill)
+	}
 	if b.Step <= 0 {
 		return
 	}
