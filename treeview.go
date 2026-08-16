@@ -63,6 +63,16 @@ type TreeView struct {
 	// behaves exactly as before: only Selected is tracked/painted.
 	MultiSelect bool
 
+	// HideRoot omits the Root node's own row and renders its children as the
+	// top-level rows (at depth 0), turning the single-rooted tree into a forest.
+	// The Root still owns the children (its Expanded flag is ignored — its
+	// children are always shown), but it is never itself a visible row, so it is
+	// not selectable or hit-testable; a host that wants a "select everything" row
+	// makes it the first child instead of the root. Selection, keyboard and
+	// hit-testing operate on the visible children exactly as when the root is
+	// shown. The zero value (false) keeps the original root-visible behaviour.
+	HideRoot bool
+
 	// selected is the multi-select set. Only consulted when
 	// MultiSelect is true. Selected remains the "anchor" node used as
 	// the start of a Shift range: it follows plain + Ctrl clicks, but
@@ -102,6 +112,14 @@ func NewTreeView(root *TreeNode) *TreeView {
 func (t *TreeView) flatten() {
 	t.rows = t.rows[:0]
 	if t.Root == nil {
+		return
+	}
+	if t.HideRoot {
+		// Forest mode: the root is a hidden container; show its children as the
+		// top-level rows (always, regardless of the root's Expanded flag).
+		for _, c := range t.Root.Children {
+			t.walkTree(c, 0)
+		}
 		return
 	}
 	t.walkTree(t.Root, 0)
