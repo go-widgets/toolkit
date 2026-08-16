@@ -37,20 +37,20 @@ func NewRadioButton(label string) *RadioButton {
 // a smaller Accent-filled rect sits inside as the radio dot.
 func (r *RadioButton) Draw(p painter.Painter, theme *Theme) {
 	b := r.Bounds()
-	boxY := b.Y + (b.H-radioBoxSize)/2
+	boxY := b.Y + (b.H-scaled(radioBoxSize))/2
 	// A disabled radio mutes its mark, dot and label; the enabled draw is
 	// unchanged (the branch is only taken when Disabled).
 	face, border, dot, labelInk := theme.Surface, theme.Border, theme.Accent, theme.OnBackground
 	if r.Disabled {
 		face, border, dot, labelInk = mutedFace(theme), mutedInk(theme), mutedInk(theme), mutedInk(theme)
 	}
-	fillRect(p, b.X, boxY, radioBoxSize, radioBoxSize, face)
-	strokeRect(p, b.X, boxY, radioBoxSize, radioBoxSize, border)
+	fillRect(p, b.X, boxY, scaled(radioBoxSize), scaled(radioBoxSize), face)
+	strokeRect(p, b.X, boxY, scaled(radioBoxSize), scaled(radioBoxSize), border)
 	if r.Checked {
-		fillRect(p, b.X+3, boxY+3, radioBoxSize-6, radioBoxSize-6, dot)
+		fillRect(p, b.X+3, boxY+3, scaled(radioBoxSize)-6, scaled(radioBoxSize)-6, dot)
 	}
 	textY := b.Y + (b.H-r.glyphHeight())/2
-	r.drawText(p, b.X+radioBoxSize+4, textY, r.Label, labelInk)
+	r.drawText(p, b.X+scaled(radioBoxSize)+4, textY, r.Label, labelInk)
 	r.drawFocusRing(p, theme, b)
 }
 

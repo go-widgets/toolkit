@@ -52,13 +52,13 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 
 	// 3 channel tracks.
-	channelW := r.W - 2*ColorChooserPadX
+	channelW := r.W - 2*scaled(ColorChooserPadX)
 	for i, ch := range [3]string{"R", "G", "B"} {
-		y := r.Y + ColorChooserChannelPadY + i*ColorChooserChannelH
+		y := r.Y + scaled(ColorChooserChannelPadY) + i*scaled(ColorChooserChannelH)
 		labelX := r.X + 2
-		c.drawText(p, labelX, y+(ColorChooserChannelH-c.glyphHeight())/2, ch, theme.OnSurface)
-		trackX := r.X + ColorChooserPadX + 12
-		trackY := y + ColorChooserChannelH/2 - 2
+		c.drawText(p, labelX, y+(scaled(ColorChooserChannelH)-c.glyphHeight())/2, ch, theme.OnSurface)
+		trackX := r.X + scaled(ColorChooserPadX) + 12
+		trackY := y + scaled(ColorChooserChannelH)/2 - 2
 		trackW := channelW - 12
 		fillRect(p, trackX, trackY, trackW, 4, theme.SurfaceAlt)
 		strokeRect(p, trackX, trackY, trackW, 4, theme.Border)
@@ -69,8 +69,8 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	// Preview swatch in the right margin (centred on the chooser body).
 	previewX := r.X + r.W - 48
 	previewY := r.Y + 8
-	fillRect(p, previewX, previewY, 40, ColorChooserPreviewH, c.Color)
-	strokeRect(p, previewX, previewY, 40, ColorChooserPreviewH, theme.Border)
+	fillRect(p, previewX, previewY, 40, scaled(ColorChooserPreviewH), c.Color)
+	strokeRect(p, previewX, previewY, 40, scaled(ColorChooserPreviewH), theme.Border)
 	// Hex string under the swatch, right-aligned to the widget's edge so a
 	// 7-char "#RRGGBB" — wider than the 40px swatch — never spills past the
 	// right border (clamped so it also never runs off the left).
@@ -79,7 +79,7 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	if hexX < r.X+2 {
 		hexX = r.X + 2
 	}
-	c.drawText(p, hexX, previewY+ColorChooserPreviewH+2, hex, theme.OnSurface)
+	c.drawText(p, hexX, previewY+scaled(ColorChooserPreviewH)+2, hex, theme.OnSurface)
 }
 
 // OnEvent moves a channel knob by press + drag. An EventClick on a track grabs
@@ -117,8 +117,8 @@ func (c *ColorChooser) channelAt(y int, r Rect) int {
 		return -1
 	}
 	for i := 0; i < 3; i++ {
-		yMin := ColorChooserChannelPadY + i*ColorChooserChannelH
-		yMax := yMin + ColorChooserChannelH
+		yMin := scaled(ColorChooserChannelPadY) + i*scaled(ColorChooserChannelH)
+		yMax := yMin + scaled(ColorChooserChannelH)
 		if y >= yMin && y < yMax {
 			return i
 		}
@@ -131,8 +131,8 @@ func (c *ColorChooser) channelAt(y int, r Rect) int {
 // fires OnChange. Shared by the click and drag arms so a press and a scrub land
 // on identical values for the same x.
 func (c *ColorChooser) setChannelFromX(i, x int, r Rect) {
-	trackX := ColorChooserPadX + 12
-	channelW := r.W - 2*ColorChooserPadX
+	trackX := scaled(ColorChooserPadX) + 12
+	channelW := r.W - 2*scaled(ColorChooserPadX)
 	trackW := channelW - 12
 	switch {
 	case x < trackX:
