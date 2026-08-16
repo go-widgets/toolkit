@@ -172,14 +172,14 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 	// Header: month / year, centred, flanked by prev/next arrows.
 	hdr := monthName(c.Month) + " " + itoa(c.Year)
 	hx := r.X + (r.W-c.textWidth(hdr))/2
-	hy := r.Y + (CalendarHeaderH-c.glyphHeight())/2
+	hy := r.Y + (scaled(CalendarHeaderH)-c.glyphHeight())/2
 	c.drawText(p, hx, hy, hdr, theme.OnSurface)
-	c.drawText(p, r.X+(CalendarNavW-c.textWidth("<"))/2, hy, "<", theme.OnSurface)
-	c.drawText(p, r.X+r.W-CalendarNavW+(CalendarNavW-c.textWidth(">"))/2, hy, ">", theme.OnSurface)
+	c.drawText(p, r.X+(scaled(CalendarNavW)-c.textWidth("<"))/2, hy, "<", theme.OnSurface)
+	c.drawText(p, r.X+r.W-scaled(CalendarNavW)+(scaled(CalendarNavW)-c.textWidth(">"))/2, hy, ">", theme.OnSurface)
 	// Weekday row.
-	weekdayY := r.Y + CalendarHeaderH
+	weekdayY := r.Y + scaled(CalendarHeaderH)
 	for i, label := range weekdayLabels {
-		cx := r.X + i*CalendarCellW + (CalendarCellW-c.textWidth(label))/2
+		cx := r.X + i*scaled(CalendarCellW) + (scaled(CalendarCellW)-c.textWidth(label))/2
 		c.drawText(p, cx, weekdayY+2, label, theme.OnSurface)
 	}
 	// Day grid.
@@ -190,8 +190,8 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 		idx := first + d - 1
 		col := idx % 7
 		row := idx / 7
-		cx := r.X + col*CalendarCellW
-		cy := gridY + row*CalendarCellH
+		cx := r.X + col*scaled(CalendarCellW)
+		cy := gridY + row*scaled(CalendarCellH)
 		bg := theme.Surface
 		ink := theme.OnSurface
 		isToday := (c.TodayY == c.Year && c.TodayM == c.Month && c.TodayD == d)
@@ -201,9 +201,9 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 		} else if isToday {
 			bg = theme.SurfaceAlt
 		}
-		fillRect(p, cx, cy, CalendarCellW, CalendarCellH, bg)
+		fillRect(p, cx, cy, scaled(CalendarCellW), scaled(CalendarCellH), bg)
 		txt := itoa(d)
-		c.drawText(p, cx+(CalendarCellW-c.textWidth(txt))/2, cy+(CalendarCellH-c.glyphHeight())/2, txt, ink)
+		c.drawText(p, cx+(scaled(CalendarCellW)-c.textWidth(txt))/2, cy+(scaled(CalendarCellH)-c.glyphHeight())/2, txt, ink)
 	}
 	// Border LAST, so day-cell fills (which start at r.X for the first column
 	// and can reach the right/bottom edges) never erase the frame — the
@@ -224,24 +224,24 @@ func (c *Calendar) OnEvent(ev Event) {
 		return
 	}
 	// Header row: prev/next month arrows.
-	if ev.Y < CalendarHeaderH {
+	if ev.Y < scaled(CalendarHeaderH) {
 		w := c.Bounds().W
-		if ev.X < CalendarNavW {
+		if ev.X < scaled(CalendarNavW) {
 			c.PrevMonth()
-		} else if ev.X >= w-CalendarNavW {
+		} else if ev.X >= w-scaled(CalendarNavW) {
 			c.NextMonth()
 		}
 		return
 	}
-	gridY := CalendarHeaderH + c.glyphHeight() + 4
+	gridY := scaled(CalendarHeaderH) + c.glyphHeight() + 4
 	if ev.Y < gridY {
 		return
 	}
-	col := ev.X / CalendarCellW
+	col := ev.X / scaled(CalendarCellW)
 	if col < 0 || col > 6 {
 		return
 	}
-	row := (ev.Y - gridY) / CalendarCellH
+	row := (ev.Y - gridY) / scaled(CalendarCellH)
 	first := WeekdayOfFirst(c.Year, c.Month)
 	idx := row*7 + col
 	if idx < first {

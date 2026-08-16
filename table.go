@@ -21,7 +21,7 @@ import (
 // Visual (per row):
 //
 //	+----------------+--------+-------------+
-//	| Header A       | Hdr B  | Header C    |  <- TableHeaderHeight, SurfaceAlt
+//	| Header A       | Hdr B  | Header C    |  <- scaled(TableHeaderHeight), SurfaceAlt
 //	+----------------+--------+-------------+
 //	| row 0 cell 0   | 0.1    | 0.2         |  <- TableRowHeight, Surface
 //	| row 1 cell 0   | 1.1    | 1.2         |  <- TableRowHeight, Background
@@ -72,7 +72,7 @@ type Table struct {
 	// the first column whether or not a given row carries a glyph.
 	//
 	// When RowIcon is set, Draw reserves a fixed leading gutter
-	// (TableCellPadX + TableIconSize) inside the FIRST column, paints the
+	// (TableCellPadX + scaled(TableIconSize)) inside the FIRST column, paints the
 	// row's icon there in the row's own ink (accent-inverted on the
 	// selected row, OnSurface otherwise), and shifts that column's text
 	// right by the gutter. Column boundaries, separators, sort, scroll
@@ -583,9 +583,9 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	gutter := t.leadGutter()
 
 	// --- Header row ------------------------------------------------
-	fillRect(p, r.X, r.Y, r.W, TableHeaderHeight, theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y, r.W, scaled(TableHeaderHeight), theme.SurfaceAlt)
 	// 1-px bottom-edge stroke separates the header from the body.
-	fillRect(p, r.X, r.Y+TableHeaderHeight-1, r.W, 1, theme.Border)
+	fillRect(p, r.X, r.Y+scaled(TableHeaderHeight)-1, r.W, 1, theme.Border)
 	// Header cell titles. sortCol collapses an out-of-range SortColumn
 	// to -1, mirroring how Draw resolves Selected below -- an
 	// unconstructed or stale Table never crashes drawing an indicator
@@ -594,8 +594,8 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	if t.SortColumn >= 0 && t.SortColumn < len(t.Columns) {
 		sortCol = t.SortColumn
 	}
-	hty := r.Y + (TableHeaderHeight-t.glyphHeight())/2
-	hmid := r.Y + TableHeaderHeight/2
+	hty := r.Y + (scaled(TableHeaderHeight)-t.glyphHeight())/2
+	hmid := r.Y + scaled(TableHeaderHeight)/2
 	if !t.hScrollable() {
 		hx := r.X
 		for i := range t.Columns {
@@ -609,7 +609,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		f := t.frozenCount()
 		fx := r.X + t.frozenWidth(widths)
 		right := r.X + t.contentWidth()
-		withClip(p, Rect{X: fx, Y: r.Y, W: right - fx, H: TableHeaderHeight}, func() {
+		withClip(p, Rect{X: fx, Y: r.Y, W: right - fx, H: scaled(TableHeaderHeight)}, func() {
 			for i := f; i < len(t.Columns); i++ {
 				t.paintHeaderCell(p, theme, widths, t.columnScreenX(r.X, widths, i), hty, hmid, i, sortCol)
 			}
@@ -620,7 +620,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	}
 
 	// --- Body ------------------------------------------------------
-	bodyY := r.Y + TableHeaderHeight
+	bodyY := r.Y + scaled(TableHeaderHeight)
 	if len(t.Rows) == 0 {
 		// "(no data)" centred horizontally within the widget, sitting
 		// one TableRowHeight below the header.
@@ -840,8 +840,8 @@ func (t *Table) paintCell(p painter.Painter, widths []int, gutter, cellX, cty, y
 		}
 		if t.iconGutter() > 0 {
 			if draw, ok := t.resolveRowIcon(i); ok {
-				iconY := y + (TableRowHeight-TableIconSize)/2
-				draw(p, Rect{X: cellX + TableCellPadX, Y: iconY, W: TableIconSize, H: TableIconSize}, ink)
+				iconY := y + (TableRowHeight-scaled(TableIconSize))/2
+				draw(p, Rect{X: cellX + TableCellPadX, Y: iconY, W: scaled(TableIconSize), H: scaled(TableIconSize)}, ink)
 			}
 			cellX += t.iconGutter()
 		}
@@ -883,7 +883,7 @@ func (t *Table) drawGroupHeader(p painter.Painter, theme *Theme, r Rect, y int, 
 	fillRect(p, r.X, y, r.W, TableRowHeight, theme.SurfaceAlt)
 	chevX := r.X + TableCellPadX + 4
 	drawDisclosureChevron(p, chevX, y+TableRowHeight/2, !ln.collapsed, theme.OnSurface)
-	tx := r.X + TableCellPadX + TableIconSize
+	tx := r.X + TableCellPadX + scaled(TableIconSize)
 	ty := y + (TableRowHeight-t.glyphHeight())/2
 	t.drawText(p, tx, ty, ln.group+" ("+strconv.Itoa(ln.count)+")", theme.OnSurface)
 }
@@ -967,7 +967,7 @@ func (t *Table) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and
 // whether it is live (the body overflows). The header never scrolls, so the
-// track spans only [TableHeaderHeight, r.H). It is the single definition of the
+// track spans only [scaled(TableHeaderHeight), r.H). It is the single definition of the
 // track + thumb shared by drawScrollbar and OnEvent. The thumb is sized + placed
 // in the visual-line pixel space (lineCount()*TableRowHeight) so groups + detail
 // rows count toward the extent, exactly as the previous inline math did; the
@@ -979,8 +979,8 @@ func (t *Table) scrollbarGeom() (sbGeom, bool) {
 		return sbGeom{}, false
 	}
 	r := t.Bounds()
-	trackTop := TableHeaderHeight
-	trackH := r.H - TableHeaderHeight
+	trackTop := scaled(TableHeaderHeight)
+	trackH := r.H - scaled(TableHeaderHeight)
 	contentH := t.lineCount() * TableRowHeight
 	thumbH := trackH * trackH / contentH
 	if thumbH < tableScrollbarThumbMin {
@@ -1103,7 +1103,7 @@ func cellTextX(b *Base, cellX, cellW int, text string, align Align) int {
 
 // iconGutter is the leading pixel gutter reserved inside the first
 // column for a per-row icon: TableCellPadX (the icon's own left inset,
-// matching a cell's normal text inset) plus TableIconSize. It is 0 --
+// matching a cell's normal text inset) plus scaled(TableIconSize). It is 0 --
 // and every gutter-aware branch in Draw a no-op -- while RowIcon is nil,
 // which is what keeps the no-icon render byte-identical to before this
 // feature existed.
@@ -1111,7 +1111,7 @@ func (t *Table) iconGutter() int {
 	if t.RowIcon == nil {
 		return 0
 	}
-	return TableCellPadX + TableIconSize
+	return TableCellPadX + scaled(TableIconSize)
 }
 
 // disclosureGutter is the leading pixel gutter reserved inside the first
@@ -1123,7 +1123,7 @@ func (t *Table) disclosureGutter() int {
 	if t.RowDetail == nil {
 		return 0
 	}
-	return TableCellPadX + TableIconSize
+	return TableCellPadX + scaled(TableIconSize)
 }
 
 // leadGutter is the total leading gutter carved from column 0: the disclosure
@@ -1296,7 +1296,7 @@ func (t *Table) SetColumnWidth(col, w int) {
 // body to Bounds() so that partial row never paints past the widget's
 // own edge (see the PushClip call in Draw).
 func (t *Table) bodyVisibleRows() int {
-	h := t.Bounds().H - TableHeaderHeight
+	h := t.Bounds().H - scaled(TableHeaderHeight)
 	if h <= 0 {
 		return 0
 	}
@@ -2022,10 +2022,10 @@ func (t *Table) SelectRowRange(a, b int) {
 func (t *Table) RowAt(x, y int) int { return t.rowAt(y) }
 
 func (t *Table) rowAt(localY int) int {
-	if localY < TableHeaderHeight {
+	if localY < scaled(TableHeaderHeight) {
 		return -1
 	}
-	vi := t.clampScrollRow() + (localY-TableHeaderHeight)/TableRowHeight
+	vi := t.clampScrollRow() + (localY-scaled(TableHeaderHeight))/TableRowHeight
 	if !t.useLineModel() {
 		if vi < 0 || vi >= len(t.Rows) {
 			return -1
@@ -2046,10 +2046,10 @@ func (t *Table) rowAt(localY int) int {
 // there are no group headers to hit). It is how a click discovers a group
 // header to toggle.
 func (t *Table) lineAt(localY int) (tableLine, bool) {
-	if localY < TableHeaderHeight || !t.grouped() {
+	if localY < scaled(TableHeaderHeight) || !t.grouped() {
 		return tableLine{}, false
 	}
-	vi := t.clampScrollRow() + (localY-TableHeaderHeight)/TableRowHeight
+	vi := t.clampScrollRow() + (localY-scaled(TableHeaderHeight))/TableRowHeight
 	lines := t.lines()
 	if vi < 0 || vi >= len(lines) {
 		return tableLine{}, false
@@ -2067,7 +2067,7 @@ func (t *Table) lineAt(localY int) (tableLine, bool) {
 func (t *Table) cellRect(row, col int) Rect {
 	r := t.Bounds()
 	widths := t.columnWidths(t.contentWidth())
-	y := r.Y + TableHeaderHeight + (t.visualIndex(row)-t.clampScrollRow())*TableRowHeight
+	y := r.Y + scaled(TableHeaderHeight) + (t.visualIndex(row)-t.clampScrollRow())*TableRowHeight
 	cellX := t.columnScreenX(r.X, widths, col)
 	cellW := widths[col]
 	if col == 0 {
@@ -2186,10 +2186,10 @@ func (t *Table) EditError() error { return t.editErr }
 // indicator would.
 func (t *Table) rowInsertIndexAt(localY int) int {
 	scroll := t.clampScrollRow()
-	if localY < TableHeaderHeight {
+	if localY < scaled(TableHeaderHeight) {
 		return scroll
 	}
-	idx := scroll + (localY-TableHeaderHeight+TableRowHeight/2)/TableRowHeight
+	idx := scroll + (localY-scaled(TableHeaderHeight)+TableRowHeight/2)/TableRowHeight
 	if idx > len(t.Rows) {
 		idx = len(t.Rows)
 	}
@@ -2482,7 +2482,7 @@ func (t *Table) OnEvent(ev Event) {
 		if ev.Y < 0 {
 			return
 		}
-		if ev.Y < TableHeaderHeight {
+		if ev.Y < scaled(TableHeaderHeight) {
 			if sep := t.ColumnSeparatorAt(ev.X); sep >= 0 {
 				t.resizing = true
 				t.resizingCol = sep

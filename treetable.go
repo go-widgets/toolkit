@@ -117,11 +117,11 @@ func (t *TreeTable) walk(n *TreeTableNode, depth int) {
 // spilling past Bounds(). 0 means "don't virtualize" (Bounds().H not yet
 // set), so a TreeTable used before SetBounds paints every row.
 func (t *TreeTable) bodyVisibleRows() int {
-	h := t.Bounds().H - TreeTableHeaderHeight
+	h := t.Bounds().H - scaled(TreeTableHeaderHeight)
 	if h <= 0 {
 		return 0
 	}
-	return h / TreeTableRowHeight
+	return h / scaled(TreeTableRowHeight)
 }
 
 // clampScrollRow confines row to [0, max(0, total-window)], the range
@@ -361,17 +361,17 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 	widths := t.columnWidths(bodyW)
 
 	// --- Header row --------------------------------------------------
-	fillRect(p, r.X, r.Y, bodyW, TreeTableHeaderHeight, theme.SurfaceAlt)
-	fillRect(p, r.X, r.Y+TreeTableHeaderHeight-1, bodyW, 1, theme.Border)
+	fillRect(p, r.X, r.Y, bodyW, scaled(TreeTableHeaderHeight), theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y+scaled(TreeTableHeaderHeight)-1, bodyW, 1, theme.Border)
 	hx := r.X
-	hty := r.Y + (TreeTableHeaderHeight-t.glyphHeight())/2
+	hty := r.Y + (scaled(TreeTableHeaderHeight)-t.glyphHeight())/2
 	for i, col := range t.Columns {
 		t.drawText(p, cellTextX(&t.Base, hx, widths[i], col.Title, col.Align), hty, col.Title, theme.OnBackground)
 		hx += widths[i]
 	}
 
 	// --- Body ----------------------------------------------------------
-	bodyY := r.Y + TreeTableHeaderHeight
+	bodyY := r.Y + scaled(TreeTableHeaderHeight)
 	start, end := 0, total
 	if windowed {
 		start = t.ScrollRow
@@ -388,23 +388,23 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 	onAccent := accentInk(theme)
 	for i := start; i < end; i++ {
 		row := t.rows[i]
-		y := bodyY + (i-start)*TreeTableRowHeight
+		y := bodyY + (i-start)*scaled(TreeTableRowHeight)
 		bg := theme.Surface
 		ink := theme.OnSurface
 		if row.node == t.Selected {
 			bg = theme.Accent
 			ink = onAccent
 		}
-		fillRect(p, r.X, y, bodyW, TreeTableRowHeight, bg)
+		fillRect(p, r.X, y, bodyW, scaled(TreeTableRowHeight), bg)
 		cx := r.X
-		cty := y + (TreeTableRowHeight-t.glyphHeight())/2
+		cty := y + (scaled(TreeTableRowHeight)-t.glyphHeight())/2
 		for j, col := range t.Columns {
 			cellW := widths[j]
 			if j == 0 {
 				indent := r.X + row.depth*TreeIndentW
 				if len(row.node.Children) > 0 {
 					cxg := indent + 4
-					cyg := y + TreeTableRowHeight/2
+					cyg := y + scaled(TreeTableRowHeight)/2
 					// ▾ (expanded): flat top narrowing to a point at the
 					// bottom. ▸ (collapsed): flat left narrowing to a
 					// point on the right. Same 4-row fillRect technique
@@ -447,7 +447,7 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and
 // whether it is live (the flattened list overflows the window). The header sits
-// above the track and never scrolls, so the track spans only [TreeTableHeaderHeight,
+// above the track and never scrolls, so the track spans only [scaled(TreeTableHeaderHeight),
 // r.H). It is the single definition of the track + thumb shared by drawScrollbar
 // and OnEvent, using the same row-count proportion TreeView uses.
 func (t *TreeTable) scrollbarGeom() (sbGeom, bool) {
@@ -458,8 +458,8 @@ func (t *TreeTable) scrollbarGeom() (sbGeom, bool) {
 	if wr <= 0 || total <= wr {
 		return sbGeom{}, false
 	}
-	trackTop := TreeTableHeaderHeight
-	trackH := r.H - TreeTableHeaderHeight
+	trackTop := scaled(TreeTableHeaderHeight)
+	trackH := r.H - scaled(TreeTableHeaderHeight)
 	thumbH := trackH * wr / total
 	if thumbH < 8 {
 		thumbH = 8
@@ -496,13 +496,13 @@ func (t *TreeTable) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 // below the last row. It does not mutate ScrollRow (unlike OnEvent). Exposed so
 // a host can hit-test a right-click and build a context menu for that node.
 func (t *TreeTable) NodeAt(x, y int) *TreeTableNode {
-	if y < TreeTableHeaderHeight {
+	if y < scaled(TreeTableHeaderHeight) {
 		return nil
 	}
 	t.flatten()
 	total := len(t.rows)
 	wr := t.bodyVisibleRows()
-	localIdx := (y - TreeTableHeaderHeight) / TreeTableRowHeight
+	localIdx := (y - scaled(TreeTableHeaderHeight)) / scaled(TreeTableRowHeight)
 	if wr > 0 && total > wr && localIdx >= wr {
 		return nil
 	}
@@ -587,15 +587,15 @@ func (t *TreeTable) OnEvent(ev Event) {
 	windowed := wr > 0 && total > wr
 	t.ScrollRow = t.clampScrollRow(t.ScrollRow, total, wr)
 
-	if ev.Y < TreeTableHeaderHeight {
+	if ev.Y < scaled(TreeTableHeaderHeight) {
 		// Header row: no sort/resize behaviour on a TreeTable — a click
 		// there is simply a no-op.
 		return
 	}
-	localIdx := (ev.Y - TreeTableHeaderHeight) / TreeTableRowHeight
+	localIdx := (ev.Y - scaled(TreeTableHeaderHeight)) / scaled(TreeTableRowHeight)
 	if windowed && localIdx >= wr {
 		// Below the last painted row (only possible when the body height
-		// isn't an exact multiple of TreeTableRowHeight): nothing was
+		// isn't an exact multiple of scaled(TreeTableRowHeight)): nothing was
 		// drawn there.
 		return
 	}

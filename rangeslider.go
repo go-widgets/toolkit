@@ -78,11 +78,11 @@ func (s *RangeSlider) axis() (start, length int) {
 // clamped to range. Vertical is flipped so the top is Max.
 func (s *RangeSlider) valueAt(coord int) float64 {
 	_, length := s.axis()
-	span := length - scaleThumbSize
+	span := length - scaled(scaleThumbSize)
 	if span <= 0 {
 		return s.Min
 	}
-	pos := float64(coord-scaleThumbSize/2) / float64(span)
+	pos := float64(coord-scaled(scaleThumbSize)/2) / float64(span)
 	if s.Orientation == Vertical {
 		pos = 1 - pos
 	}
@@ -106,14 +106,14 @@ func (s *RangeSlider) thumbPos(v float64) int {
 	if s.Orientation == Vertical {
 		pos = 1 - pos
 	}
-	return start + int(pos*float64(length-scaleThumbSize))
+	return start + int(pos*float64(length-scaled(scaleThumbSize)))
 }
 
 // Draw paints the rounded track, the Accent band between the two handles, and
 // a circular white thumb at each handle -- matching Scale's macOS styling.
 func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
-	const trackThick = 4
+	trackThick := scaled(scaleTrackThickness)
 	trackR := trackThick / 2
 	lowP := s.thumbPos(s.Low)
 	highP := s.thumbPos(s.High)
@@ -122,15 +122,15 @@ func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 		fillRoundRect(p, trackX, r.Y, trackThick, r.H, trackR, theme.SurfaceAlt)
 		// High sits at the top (smaller Y), Low at the bottom; the band runs
 		// between their centres.
-		bandY := highP + scaleThumbSize/2
+		bandY := highP + scaled(scaleThumbSize)/2
 		bandH := lowP - highP
 		if bandH > 0 {
 			fillRoundRect(p, trackX, bandY, trackThick, bandH, trackR, theme.Accent)
 		}
-		tx := r.X + (r.W-scaleThumbSize)/2
+		tx := r.X + (r.W-scaled(scaleThumbSize))/2
 		for _, ty := range []int{lowP, highP} {
-			fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
-			strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
+			fillRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, theme.Surface)
+			strokeRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, theme.Border)
 		}
 		s.drawFocusRing(p, theme, r)
 		return
@@ -138,15 +138,15 @@ func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 	trackY := r.Y + (r.H-trackThick)/2
 	fillRoundRect(p, r.X, trackY, r.W, trackThick, trackR, theme.SurfaceAlt)
 	// Accent band spans from the low thumb centre to the high thumb centre.
-	bandX := lowP + scaleThumbSize/2
+	bandX := lowP + scaled(scaleThumbSize)/2
 	bandW := highP - lowP
 	if bandW > 0 {
 		fillRoundRect(p, bandX, trackY, bandW, trackThick, trackR, theme.Accent)
 	}
-	ty := r.Y + (r.H-scaleThumbSize)/2
+	ty := r.Y + (r.H-scaled(scaleThumbSize))/2
 	for _, tx := range []int{lowP, highP} {
-		fillRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Surface)
-		strokeRoundRect(p, tx, ty, scaleThumbSize, scaleThumbSize, scaleThumbSize/2, theme.Border)
+		fillRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, theme.Surface)
+		strokeRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, theme.Border)
 	}
 	s.drawFocusRing(p, theme, r)
 }
@@ -170,8 +170,8 @@ func (s *RangeSlider) OnEvent(ev Event) {
 		// the same widget-local frame as coord (thumbPos returns an absolute
 		// coordinate, so subtract the axis start). Without this, clicking one
 		// thumb grabs the other when the slider is not at the origin.
-		lowC := s.thumbPos(s.Low) - start + scaleThumbSize/2
-		highC := s.thumbPos(s.High) - start + scaleThumbSize/2
+		lowC := s.thumbPos(s.Low) - start + scaled(scaleThumbSize)/2
+		highC := s.thumbPos(s.High) - start + scaled(scaleThumbSize)/2
 		dl, dh := abs(coord-lowC), abs(coord-highC)
 		switch {
 		case dl < dh:

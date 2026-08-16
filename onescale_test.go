@@ -79,3 +79,21 @@ func TestMenuRowHeightFollowsWhicheverScaleIsSet(t *testing.T) {
 		t.Errorf("a menu at twice the scale is %d tall against %d at one: it did not grow", global, base)
 	}
 }
+
+// ColorPickerNaturalSize is the device-pixel form of the picker's logical
+// footprint constants, which are compile-time and so cannot scale themselves.
+func TestColorPickerNaturalSize(t *testing.T) {
+	w, h := ColorPickerNaturalSize()
+	if w != ColorPickerWidth || h != ColorPickerHeight {
+		t.Errorf("at scale 1 the natural size is %dx%d, want the logical %dx%d",
+			w, h, ColorPickerWidth, ColorPickerHeight)
+	}
+
+	SetMetricScale(2)
+	defer SetMetricScale(1)
+	w2, h2 := ColorPickerNaturalSize()
+	if w2 != 2*ColorPickerWidth || h2 != 2*ColorPickerHeight {
+		t.Errorf("at scale 2 the natural size is %dx%d, want %dx%d -- a host laying out to it "+
+			"would give the picker half the room it needs", w2, h2, 2*ColorPickerWidth, 2*ColorPickerHeight)
+	}
+}

@@ -694,24 +694,24 @@ func (b *MenuBar) NameOriginX(i int) int {
 // Draw paints the bar + every name + a highlight on the Active name.
 func (b *MenuBar) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
-	fillRect(p, r.X, r.Y, r.W, MenuBarH, theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y, r.W, scaled(MenuBarH), theme.SurfaceAlt)
 	for i, name := range b.Names {
 		iw := b.NameWidth(i)
 		ix := r.X + b.NameOriginX(i)
 		ink := theme.OnSurface
 		switch {
 		case i == b.Active:
-			fillRect(p, ix, r.Y, iw, MenuBarH, theme.Accent)
+			fillRect(p, ix, r.Y, iw, scaled(MenuBarH), theme.Accent)
 			ink = theme.Background
 		case b.hoverName == i+1:
 			// A hovered (but not open) name raises to Surface — a subtle
 			// lighter cell against the SurfaceAlt bar. Skipped for the active
 			// name, whose Accent highlight already wins.
-			fillRect(p, ix, r.Y, iw, MenuBarH, theme.Surface)
+			fillRect(p, ix, r.Y, iw, scaled(MenuBarH), theme.Surface)
 		}
 		tw := b.textWidth(name)
 		textX := ix + (iw-tw)/2
-		textY := r.Y + (MenuBarH-b.glyphHeight())/2
+		textY := r.Y + (scaled(MenuBarH)-b.glyphHeight())/2
 		b.drawText(p, textX, textY, name, ink)
 	}
 }
@@ -727,7 +727,7 @@ func (b *MenuBar) OnEvent(ev Event) {
 	case EventMouseMove:
 		// Track the name under the pointer for the hover highlight; clear it
 		// when the pointer leaves the strip.
-		if ev.Y < 0 || ev.Y >= MenuBarH {
+		if ev.Y < 0 || ev.Y >= scaled(MenuBarH) {
 			b.hoverName = 0
 			return
 		}
@@ -742,7 +742,7 @@ func (b *MenuBar) OnEvent(ev Event) {
 			cx += w
 		}
 	case EventClick:
-		if ev.Y >= MenuBarH {
+		if ev.Y >= scaled(MenuBarH) {
 			return
 		}
 		// Auto-sized widths: walk the names + find whichever cell

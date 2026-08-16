@@ -86,18 +86,18 @@ func NewFileChooser(root *TreeNode, listFiles func(dir *TreeNode) []string) *Fil
 // SetBounds positions the child widgets at the chosen split.
 func (f *FileChooser) SetBounds(r Rect) {
 	f.Base.SetBounds(r)
-	pathY := r.Y + r.H - FileChooserButtonStripH - FileChooserPathH
-	stripY := r.Y + r.H - FileChooserButtonStripH
+	pathY := r.Y + r.H - scaled(FileChooserButtonStripH) - scaled(FileChooserPathH)
+	stripY := r.Y + r.H - scaled(FileChooserButtonStripH)
 	bodyH := pathY - r.Y
 	treeW := r.W * FileChooserTreeRatio / 100
 	listW := r.W - treeW
 	f.tree.SetBounds(Rect{X: r.X, Y: r.Y, W: treeW, H: bodyH})
 	f.list.SetBounds(Rect{X: r.X + treeW, Y: r.Y, W: listW, H: bodyH})
-	f.pathEntry.SetBounds(Rect{X: r.X, Y: pathY, W: r.W, H: FileChooserPathH})
+	f.pathEntry.SetBounds(Rect{X: r.X, Y: pathY, W: r.W, H: scaled(FileChooserPathH)})
 	bw := DialogButtonW
 	gap := 8
-	f.openButton.SetBounds(Rect{X: r.X + r.W - bw - gap, Y: stripY + 4, W: bw, H: FileChooserButtonStripH - 8})
-	f.cancelButton.SetBounds(Rect{X: r.X + r.W - 2*bw - 2*gap, Y: stripY + 4, W: bw, H: FileChooserButtonStripH - 8})
+	f.openButton.SetBounds(Rect{X: r.X + r.W - bw - gap, Y: stripY + 4, W: bw, H: scaled(FileChooserButtonStripH) - 8})
+	f.cancelButton.SetBounds(Rect{X: r.X + r.W - 2*bw - 2*gap, Y: stripY + 4, W: bw, H: scaled(FileChooserButtonStripH) - 8})
 }
 
 // Draw paints the composite.

@@ -49,10 +49,10 @@ func (c *BarChart) top() float64 {
 }
 
 // plot is the drawable rectangle inside the axes (shared geometry with
-// LineChart's ChartPad margin).
+// LineChart's scaled(ChartPad) margin).
 func (c *BarChart) plot() Rect {
 	r := c.Bounds()
-	return Rect{X: r.X + ChartPad, Y: r.Y, W: r.W - ChartPad, H: r.H - ChartPad}
+	return Rect{X: r.X + scaled(ChartPad), Y: r.Y, W: r.W - scaled(ChartPad), H: r.H - scaled(ChartPad)}
 }
 
 // ValueAt maps a widget-local x to the bar under it, returning its index and
@@ -67,7 +67,7 @@ func (c *BarChart) ValueAt(localX int) (index int, value float64, ok bool) {
 	if slot < 1 {
 		slot = 1
 	}
-	rel := localX - ChartPad
+	rel := localX - scaled(ChartPad)
 	if rel < 0 {
 		return 0, 0, false
 	}
@@ -93,7 +93,7 @@ func (c *BarChart) Draw(p painter.Painter, theme *Theme) {
 	if slot < 1 {
 		slot = 1
 	}
-	bw := slot - BarGutter
+	bw := slot - scaled(BarGutter)
 	if bw < 1 {
 		bw = 1
 	}

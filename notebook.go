@@ -28,9 +28,9 @@ const (
 	TabRight
 )
 
-// Notebook is a tabbed container. A NotebookTabStripH-thick strip on the side
+// Notebook is a tabbed container. A scaled(NotebookTabStripH)-thick strip on the side
 // chosen by TabSide (Top by default) hosts the tabs; the rest is the active
-// page's body. For Top/Bottom the tabs run horizontally (each NotebookTabWidth
+// page's body. For Top/Bottom the tabs run horizontally (each scaled(NotebookTabWidth)
 // wide, shrunk to fit); for Left/Right they stack vertically (each
 // NotebookTabStripH tall) and the strip SCROLLS: the mouse wheel over a
 // vertical strip shifts the stacked tabs (clamped at both ends), and arrow-key
@@ -67,27 +67,27 @@ func (n *Notebook) stripRect() Rect {
 	r := n.Bounds()
 	switch n.TabSide {
 	case TabBottom:
-		return Rect{X: r.X, Y: r.Y + r.H - NotebookTabStripH, W: r.W, H: NotebookTabStripH}
+		return Rect{X: r.X, Y: r.Y + r.H - scaled(NotebookTabStripH), W: r.W, H: scaled(NotebookTabStripH)}
 	case TabLeft:
-		return Rect{X: r.X, Y: r.Y, W: NotebookTabWidth, H: r.H}
+		return Rect{X: r.X, Y: r.Y, W: scaled(NotebookTabWidth), H: r.H}
 	case TabRight:
-		return Rect{X: r.X + r.W - NotebookTabWidth, Y: r.Y, W: NotebookTabWidth, H: r.H}
+		return Rect{X: r.X + r.W - scaled(NotebookTabWidth), Y: r.Y, W: scaled(NotebookTabWidth), H: r.H}
 	default: // TabTop
-		return Rect{X: r.X, Y: r.Y, W: r.W, H: NotebookTabStripH}
+		return Rect{X: r.X, Y: r.Y, W: r.W, H: scaled(NotebookTabStripH)}
 	}
 }
 
 // tabW is the per-tab width for the horizontal (Top/Bottom) strips: the
-// nominal NotebookTabWidth, shrunk so that ALL tabs fit within the notebook's
+// nominal scaled(NotebookTabWidth), shrunk so that ALL tabs fit within the notebook's
 // width when there are too many to fit at the nominal width. Without this the
 // strip laid tabs at a fixed 80px each and overflowed the widget's box once
 // nTabs*80 exceeded Bounds().W (e.g. 4 tabs in a ~296px notebook).
 func (n *Notebook) tabW() int {
 	nt := len(n.Tabs)
 	if nt == 0 {
-		return NotebookTabWidth
+		return scaled(NotebookTabWidth)
 	}
-	tw := NotebookTabWidth
+	tw := scaled(NotebookTabWidth)
 	if fit := n.Bounds().W / nt; fit < tw {
 		tw = fit
 	}
@@ -100,16 +100,16 @@ func (n *Notebook) tabRect(i int) Rect {
 	switch n.TabSide {
 	case TabBottom:
 		tw := n.tabW()
-		return Rect{X: r.X + i*tw, Y: r.Y + r.H - NotebookTabStripH, W: tw, H: NotebookTabStripH}
+		return Rect{X: r.X + i*tw, Y: r.Y + r.H - scaled(NotebookTabStripH), W: tw, H: scaled(NotebookTabStripH)}
 	case TabLeft:
-		ty := r.Y + (i-n.clampedTabScroll())*NotebookTabStripH
-		return Rect{X: r.X, Y: ty, W: NotebookTabWidth, H: NotebookTabStripH}
+		ty := r.Y + (i-n.clampedTabScroll())*scaled(NotebookTabStripH)
+		return Rect{X: r.X, Y: ty, W: scaled(NotebookTabWidth), H: scaled(NotebookTabStripH)}
 	case TabRight:
-		ty := r.Y + (i-n.clampedTabScroll())*NotebookTabStripH
-		return Rect{X: r.X + r.W - NotebookTabWidth, Y: ty, W: NotebookTabWidth, H: NotebookTabStripH}
+		ty := r.Y + (i-n.clampedTabScroll())*scaled(NotebookTabStripH)
+		return Rect{X: r.X + r.W - scaled(NotebookTabWidth), Y: ty, W: scaled(NotebookTabWidth), H: scaled(NotebookTabStripH)}
 	default: // TabTop
 		tw := n.tabW()
-		return Rect{X: r.X + i*tw, Y: r.Y, W: tw, H: NotebookTabStripH}
+		return Rect{X: r.X + i*tw, Y: r.Y, W: tw, H: scaled(NotebookTabStripH)}
 	}
 }
 
@@ -126,7 +126,7 @@ func (n *Notebook) visibleTabs() int {
 	if h < 0 {
 		h = 0
 	}
-	return h / NotebookTabStripH
+	return h / scaled(NotebookTabStripH)
 }
 
 // maxTabScroll is the highest tabScroll that still fills a vertical strip:
@@ -196,13 +196,13 @@ func (n *Notebook) bodyRect() Rect {
 	r := n.Bounds()
 	switch n.TabSide {
 	case TabBottom:
-		return Rect{X: r.X, Y: r.Y, W: r.W, H: r.H - NotebookTabStripH}
+		return Rect{X: r.X, Y: r.Y, W: r.W, H: r.H - scaled(NotebookTabStripH)}
 	case TabLeft:
-		return Rect{X: r.X + NotebookTabWidth, Y: r.Y, W: r.W - NotebookTabWidth, H: r.H}
+		return Rect{X: r.X + scaled(NotebookTabWidth), Y: r.Y, W: r.W - scaled(NotebookTabWidth), H: r.H}
 	case TabRight:
-		return Rect{X: r.X, Y: r.Y, W: r.W - NotebookTabWidth, H: r.H}
+		return Rect{X: r.X, Y: r.Y, W: r.W - scaled(NotebookTabWidth), H: r.H}
 	default: // TabTop
-		return Rect{X: r.X, Y: r.Y + NotebookTabStripH, W: r.W, H: r.H - NotebookTabStripH}
+		return Rect{X: r.X, Y: r.Y + scaled(NotebookTabStripH), W: r.W, H: r.H - scaled(NotebookTabStripH)}
 	}
 }
 

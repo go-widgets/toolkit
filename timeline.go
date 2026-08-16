@@ -102,7 +102,7 @@ func TimelineEventH() int { return GlyphHeight() + 4 }
 func (tl *Timeline) eventBlockH(ev TimelineEvent) int {
 	h := TimelineEventH()
 	if ev.Detail != "" {
-		h += TimelineDetailGap + tl.glyphHeight()
+		h += scaled(TimelineDetailGap) + tl.glyphHeight()
 	}
 	return h
 }
@@ -110,7 +110,7 @@ func (tl *Timeline) eventBlockH(ev TimelineEvent) int {
 // contentH is the total pixel height the vertical event list occupies,
 // including the top + bottom padding bands, used to clamp the scroll offset.
 func (tl *Timeline) contentH() int {
-	h := 2 * TimelinePadY
+	h := 2 * scaled(TimelinePadY)
 	for _, ev := range tl.Events {
 		h += tl.eventBlockH(ev)
 	}
@@ -162,7 +162,7 @@ func (tl *Timeline) EventAt(x, y int) int {
 	if tl.Horizontal || x < 0 || x >= tl.Bounds().W {
 		return -1
 	}
-	cy := TimelinePadY - tl.clampedScrollY()
+	cy := scaled(TimelinePadY) - tl.clampedScrollY()
 	for i, ev := range tl.Events {
 		h := tl.eventBlockH(ev)
 		if y >= cy && y < cy+h {
@@ -226,27 +226,27 @@ func (tl *Timeline) Draw(p painter.Painter, theme *Theme) {
 	r := tl.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 
-	railX := r.X + TimelinePadX + TimelineMarkerW/2
-	railY := r.Y + TimelinePadY
-	railH := r.H - 2*TimelinePadY
+	railX := r.X + scaled(TimelinePadX) + scaled(TimelineMarkerW)/2
+	railY := r.Y + scaled(TimelinePadY)
+	railH := r.H - 2*scaled(TimelinePadY)
 	fillRect(p, railX, railY, 1, railH, theme.Border)
 
-	textX := r.X + TimelinePadX + TimelineMarkerW
+	textX := r.X + scaled(TimelinePadX) + scaled(TimelineMarkerW)
 	// Shift the event window up by the scroll offset and clip it to Bounds so a
 	// long log never bleeds past the widget. At scrollY == 0 the clip contains
 	// the whole (fitting) list, leaving the render byte-identical.
-	y := r.Y + TimelinePadY - tl.clampedScrollY()
+	y := r.Y + scaled(TimelinePadY) - tl.clampedScrollY()
 	withClip(p, r, func() {
 		for _, ev := range tl.Events {
-			markerX := railX - TimelineMarkerSize/2
-			markerY := y + (tl.glyphHeight()-TimelineMarkerSize)/2
-			fillRect(p, markerX, markerY, TimelineMarkerSize, TimelineMarkerSize,
+			markerX := railX - scaled(TimelineMarkerSize)/2
+			markerY := y + (tl.glyphHeight()-scaled(TimelineMarkerSize))/2
+			fillRect(p, markerX, markerY, scaled(TimelineMarkerSize), scaled(TimelineMarkerSize),
 				timelineMarkerInk(ev.Kind, theme))
 			tl.drawText(p, textX, y, ev.Title, theme.OnSurface)
 			blockH := TimelineEventH()
 			if ev.Detail != "" {
-				tl.drawText(p, textX, y+tl.glyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
-				blockH += TimelineDetailGap + tl.glyphHeight()
+				tl.drawText(p, textX, y+tl.glyphHeight()+scaled(TimelineDetailGap), ev.Detail, dimInk(theme))
+				blockH += scaled(TimelineDetailGap) + tl.glyphHeight()
 			}
 			y += blockH
 		}
@@ -262,29 +262,29 @@ func (tl *Timeline) drawHorizontal(p painter.Painter, theme *Theme) {
 	r := tl.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 
-	railY := r.Y + TimelinePadY + TimelineMarkerW/2
-	railX := r.X + TimelinePadX
-	railW := r.W - 2*TimelinePadX
+	railY := r.Y + scaled(TimelinePadY) + scaled(TimelineMarkerW)/2
+	railX := r.X + scaled(TimelinePadX)
+	railW := r.W - 2*scaled(TimelinePadX)
 	fillRect(p, railX, railY, railW, 1, theme.Border)
 
-	textY := r.Y + TimelinePadY + TimelineMarkerW
-	x := r.X + TimelinePadX
+	textY := r.Y + scaled(TimelinePadY) + scaled(TimelineMarkerW)
+	x := r.X + scaled(TimelinePadX)
 	for _, ev := range tl.Events {
 		colW := tl.textWidth(ev.Title)
 		if w := tl.textWidth(ev.Detail); w > colW {
 			colW = w
 		}
-		if colW < TimelineMarkerSize {
-			colW = TimelineMarkerSize
+		if colW < scaled(TimelineMarkerSize) {
+			colW = scaled(TimelineMarkerSize)
 		}
-		markerX := x + (colW-TimelineMarkerSize)/2
-		markerY := railY - TimelineMarkerSize/2
-		fillRect(p, markerX, markerY, TimelineMarkerSize, TimelineMarkerSize,
+		markerX := x + (colW-scaled(TimelineMarkerSize))/2
+		markerY := railY - scaled(TimelineMarkerSize)/2
+		fillRect(p, markerX, markerY, scaled(TimelineMarkerSize), scaled(TimelineMarkerSize),
 			timelineMarkerInk(ev.Kind, theme))
 		tl.drawText(p, x, textY, ev.Title, theme.OnSurface)
 		if ev.Detail != "" {
-			tl.drawText(p, x, textY+tl.glyphHeight()+TimelineDetailGap, ev.Detail, dimInk(theme))
+			tl.drawText(p, x, textY+tl.glyphHeight()+scaled(TimelineDetailGap), ev.Detail, dimInk(theme))
 		}
-		x += colW + TimelinePadX
+		x += colW + scaled(TimelinePadX)
 	}
 }
