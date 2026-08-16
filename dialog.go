@@ -44,18 +44,18 @@ func (d *Dialog) SetBounds(r Rect) {
 	if d.Content != nil {
 		body := Rect{
 			X: r.X,
-			Y: r.Y + DialogTitleH,
+			Y: r.Y + scaled(DialogTitleH),
 			W: r.W,
-			H: r.H - DialogTitleH - DialogButtonStripH,
+			H: r.H - scaled(DialogTitleH) - scaled(DialogButtonStripH),
 		}
 		d.Content.SetBounds(body)
 	}
 	// Right-align the action buttons in the bottom strip.
-	stripY := r.Y + r.H - DialogButtonStripH
+	stripY := r.Y + r.H - scaled(DialogButtonStripH)
 	bx := r.X + r.W - 8
 	for i := len(d.Buttons) - 1; i >= 0; i-- {
-		bx -= DialogButtonW
-		d.Buttons[i].SetBounds(Rect{X: bx, Y: stripY + 4, W: DialogButtonW - 8, H: DialogButtonStripH - 8})
+		bx -= scaled(DialogButtonW)
+		d.Buttons[i].SetBounds(Rect{X: bx, Y: stripY + 4, W: scaled(DialogButtonW) - 8, H: scaled(DialogButtonStripH) - 8})
 		bx -= 8 // gap
 	}
 }
@@ -66,16 +66,16 @@ func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Background)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	// Title bar.
-	fillRect(p, r.X, r.Y, r.W, DialogTitleH, theme.SurfaceAlt)
-	titleY := r.Y + (DialogTitleH-d.glyphHeight())/2
+	fillRect(p, r.X, r.Y, r.W, scaled(DialogTitleH), theme.SurfaceAlt)
+	titleY := r.Y + (scaled(DialogTitleH)-d.glyphHeight())/2
 	d.drawText(p, r.X+8, titleY, d.Title, theme.OnSurface)
 	// Content.
 	if d.Content != nil {
 		d.Content.Draw(p, theme)
 	}
 	// Action strip.
-	stripY := r.Y + r.H - DialogButtonStripH
-	fillRect(p, r.X, stripY, r.W, DialogButtonStripH, theme.SurfaceAlt)
+	stripY := r.Y + r.H - scaled(DialogButtonStripH)
+	fillRect(p, r.X, stripY, r.W, scaled(DialogButtonStripH), theme.SurfaceAlt)
 	for _, b := range d.Buttons {
 		b.Draw(p, theme)
 	}
@@ -95,7 +95,7 @@ func (d *Dialog) OnEvent(ev Event) {
 		// Content occupies the body between the title bar and the button strip
 		// (bounded in SetBounds). Translate the event into its local frame — the
 		// buttons above already reconstruct absolute coords, but the content was
-		// forwarded raw, so a click on interactive content landed DialogTitleH
+		// forwarded raw, so a click on interactive content landed scaled(DialogTitleH)
 		// too low (plus the Dialog's own origin).
 		d.Content.OnEvent(translateEvent(ev, d.Bounds(), d.Content.Bounds()))
 	}

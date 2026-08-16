@@ -30,7 +30,7 @@ const ProgressCircleStroke = 4
 // Spinner (a rotating radial line) and Avatar (a rounded square).
 //
 // Layout: an outer square filled in theme.SurfaceAlt (the "track"),
-// an inner square inset by ProgressCircleStroke on all sides filled
+// an inner square inset by scaled(ProgressCircleStroke) on all sides filled
 // in theme.Surface (the "hole" that the caption sits in), and a
 // horizontal Accent band inside the ring whose height is proportional
 // to Fraction. The band grows from the bottom edge upward for the
@@ -62,13 +62,13 @@ func (pc *ProgressCircle) SetFraction(f float64) {
 // bypassing SetFraction still render a valid frame.
 func (pc *ProgressCircle) Draw(p painter.Painter, theme *Theme) {
 	r := pc.Bounds()
-	// Fall back to a square of ProgressCircleSize when Bounds is
+	// Fall back to a square of scaled(ProgressCircleSize) when Bounds is
 	// zero-sized. Callers that place the widget with SetBounds keep
 	// full control; callers that just call Draw get a sensible
 	// default without a helper.
 	if r.W <= 0 || r.H <= 0 {
-		r.W = ProgressCircleSize
-		r.H = ProgressCircleSize
+		r.W = scaled(ProgressCircleSize)
+		r.H = scaled(ProgressCircleSize)
 	}
 	// Clamp to a square from the smaller of (W, H) so the widget
 	// still reads as "roughly circular" when the caller passes a
@@ -79,12 +79,12 @@ func (pc *ProgressCircle) Draw(p painter.Painter, theme *Theme) {
 	}
 	// Outer track fill.
 	fillRect(p, r.X, r.Y, side, side, theme.SurfaceAlt)
-	// Inner hole (leaves a ring of ProgressCircleStroke pixels).
+	// Inner hole (leaves a ring of scaled(ProgressCircleStroke) pixels).
 	inner := Rect{
-		X: r.X + ProgressCircleStroke,
-		Y: r.Y + ProgressCircleStroke,
-		W: side - 2*ProgressCircleStroke,
-		H: side - 2*ProgressCircleStroke,
+		X: r.X + scaled(ProgressCircleStroke),
+		Y: r.Y + scaled(ProgressCircleStroke),
+		W: side - 2*scaled(ProgressCircleStroke),
+		H: side - 2*scaled(ProgressCircleStroke),
 	}
 	if inner.W > 0 && inner.H > 0 {
 		fillRect(p, inner.X, inner.Y, inner.W, inner.H, theme.Surface)
@@ -99,17 +99,17 @@ func (pc *ProgressCircle) Draw(p painter.Painter, theme *Theme) {
 	if f > 1 {
 		f = 1
 	}
-	ringInnerY := r.Y + ProgressCircleStroke
-	ringInnerH := side - 2*ProgressCircleStroke
+	ringInnerY := r.Y + scaled(ProgressCircleStroke)
+	ringInnerH := side - 2*scaled(ProgressCircleStroke)
 	if ringInnerH > 0 {
 		bandH := int(float64(ringInnerH) * f)
 		if bandH > 0 {
 			bandY := ringInnerY + ringInnerH - bandH
 			// Left ring column.
-			fillRect(p, r.X, bandY, ProgressCircleStroke, bandH, theme.Accent)
+			fillRect(p, r.X, bandY, scaled(ProgressCircleStroke), bandH, theme.Accent)
 			// Right ring column.
-			fillRect(p, r.X+side-ProgressCircleStroke, bandY,
-				ProgressCircleStroke, bandH, theme.Accent)
+			fillRect(p, r.X+side-scaled(ProgressCircleStroke), bandY,
+				scaled(ProgressCircleStroke), bandH, theme.Accent)
 		}
 	}
 	// Percentage caption centred in the inner square. f is already

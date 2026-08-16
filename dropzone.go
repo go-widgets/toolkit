@@ -73,24 +73,24 @@ func (d *DropZone) Draw(p painter.Painter, theme *Theme) {
 		border = theme.Accent
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
-	step := DropZoneDashLen + DropZoneDashGap
+	step := scaled(DropZoneDashLen) + scaled(DropZoneDashGap)
 	// Top + bottom edges: horizontal dashes.
 	for x := r.X; x < r.X+r.W; x += step {
-		w := DropZoneDashLen
+		w := scaled(DropZoneDashLen)
 		if x+w > r.X+r.W {
 			w = r.X + r.W - x
 		}
-		fillRect(p, x, r.Y, w, DropZoneBorderW, border)
-		fillRect(p, x, r.Y+r.H-DropZoneBorderW, w, DropZoneBorderW, border)
+		fillRect(p, x, r.Y, w, scaled(DropZoneBorderW), border)
+		fillRect(p, x, r.Y+r.H-scaled(DropZoneBorderW), w, scaled(DropZoneBorderW), border)
 	}
 	// Left + right edges: vertical dashes.
 	for y := r.Y; y < r.Y+r.H; y += step {
-		h := DropZoneDashLen
+		h := scaled(DropZoneDashLen)
 		if y+h > r.Y+r.H {
 			h = r.Y + r.H - y
 		}
-		fillRect(p, r.X, y, DropZoneBorderW, h, border)
-		fillRect(p, r.X+r.W-DropZoneBorderW, y, DropZoneBorderW, h, border)
+		fillRect(p, r.X, y, scaled(DropZoneBorderW), h, border)
+		fillRect(p, r.X+r.W-scaled(DropZoneBorderW), y, scaled(DropZoneBorderW), h, border)
 	}
 	tw := d.textWidth(d.Prompt)
 	tx := r.X + (r.W-tw)/2
