@@ -47,6 +47,13 @@ type Backdrop struct {
 	// widget rather than a hand-drawn FillRoundRect. A grid (Step > 0) is drawn as
 	// before, unaffected by the rounding.
 	Radius int
+	// Stroke, when its alpha is non-zero, outlines the (optionally rounded) fill in
+	// that colour — the border of a pill / chip. The zero value (A==0) draws no
+	// border, byte-identical to before this field existed.
+	Stroke RGBA
+	// StrokeWidth is the border thickness in units; it applies only when Stroke is
+	// set, and a value < 1 is treated as 1.
+	StrokeWidth int
 	// Interactive makes the Backdrop catch pointer events. The zero value
 	// (false) is event-transparent: HitTest returns false so clicks pass
 	// through to whatever is composited over the backdrop — the least-
@@ -76,7 +83,7 @@ func (b *Backdrop) HitTest(px, py int) bool {
 
 // Draw fills the bounds and overlays the grid. An empty rectangle paints
 // nothing; a non-positive Step paints only the fill. A positive Radius fills a
-// rounded rectangle instead of a plain one.
+// rounded rectangle instead of a plain one; a non-zero Stroke outlines it.
 func (b *Backdrop) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	if r.W <= 0 || r.H <= 0 {
@@ -90,6 +97,13 @@ func (b *Backdrop) Draw(p painter.Painter, theme *Theme) {
 		fillRoundRect(p, r.X, r.Y, r.W, r.H, b.Radius, fill)
 	} else {
 		p.FillRect(r, fill)
+	}
+	if b.Stroke.A != 0 {
+		w := b.StrokeWidth
+		if w < 1 {
+			w = 1
+		}
+		p.StrokeRoundRect(painter.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}, b.Radius, b.Stroke, w)
 	}
 	if b.Step <= 0 {
 		return

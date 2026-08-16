@@ -197,3 +197,26 @@ func TestBackdropRadius(t *testing.T) {
 		t.Fatal("rounded backdrop should NOT fill the sharp corner")
 	}
 }
+
+func TestBackdropStroke(t *testing.T) {
+	fill := painter.RGB(0x30, 0x60, 0x90)
+	border := painter.RGB(0xC0, 0x20, 0x20)
+	th := DefaultLight()
+	const w, h = 24, 24
+
+	// No stroke (A==0): the border colour never appears.
+	plain := bdRender(&Backdrop{Fill: fill}, w, h, th)
+	if hasColor(plain, w, border) {
+		t.Fatal("a Backdrop with no Stroke must not paint a border")
+	}
+
+	// Stroke set (Width < 1 -> treated as 1): the border colour appears on the edge.
+	bordered := bdRender(&Backdrop{Fill: fill, Radius: 6, Stroke: border, StrokeWidth: 0}, w, h, th)
+	if !hasColor(bordered, w, border) {
+		t.Fatal("a Backdrop with Stroke should paint its border")
+	}
+	// The centre stays the fill (the border is only an outline).
+	if bdPx(bordered, w, w/2, h/2) != fill {
+		t.Fatalf("bordered backdrop centre = %v, want fill %v", bdPx(bordered, w, w/2, h/2), fill)
+	}
+}
