@@ -254,6 +254,8 @@ func TestMetricScaleAudit(t *testing.T) {
 		{"Tooltip", 120, 28, func() Widget { return &Tooltip{} }},
 		{"ViewSwitcher", 200, 32, func() Widget { return &ViewSwitcher{} }},
 		{"WindowDecoration", 300, 40, func() Widget { return &WindowDecoration{} }},
+		{"Badge", 60, 24, func() Widget { return &Badge{Text: "9"} }},
+		{"Menu", 200, 120, func() Widget { return NewMenu([]MenuItem{{Label: "one"}, {Label: "two"}, {Label: "three"}}) }},
 		{"Accordion", 240, 200, func() Widget { return &Accordion{} }},
 		{"AgendaSidebar", 200, 300, func() Widget { return &AgendaSidebar{} }},
 		{"AreaChart", 240, 160, func() Widget { return &AreaChart{} }},
