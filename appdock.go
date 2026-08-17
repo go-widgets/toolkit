@@ -83,9 +83,21 @@ type AppDock struct {
 	Radius   float64
 	// OnActivate fires with the clicked item's index.
 	OnActivate func(i int)
+	// Style paints the ground + item faces + running/active indicators. Nil uses
+	// ModernDockStyle (the macOS look); set BevelDockStyle{} for Fluxbox,
+	// WindowsDockStyle{} for a taskbar, or a custom DockStyle.
+	Style DockStyle
 
 	cursorX      int  // absolute x of the pointer while it hovers
 	cursorInside bool // whether the pointer is over the dock
+}
+
+// style is the configured DockStyle, defaulting to the macOS ModernDockStyle.
+func (d *AppDock) style() DockStyle {
+	if d.Style != nil {
+		return d.Style
+	}
+	return ModernDockStyle{}
 }
 
 // NewAppDock builds a dock over items with magnification on at the default feel.
@@ -237,28 +249,21 @@ func (d *AppDock) Draw(p painter.Painter, theme *Theme) {
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
-	ground := &Backdrop{Fill: theme.SurfaceAlt}
-	ground.SetBounds(r)
-	ground.Draw(p, theme)
+	style := d.style()
+	style.DrawGround(p, theme, r)
 	sl := d.slots()
 	for i := range d.Items {
-		d.drawItem(p, theme, d.Items[i], sl[i])
+		d.drawItem(p, theme, style, d.Items[i], sl[i])
 	}
 }
 
-// drawItem paints one item: a rounded face (accent when Active), the swelling
-// glyph, the clipped label, the running dot and the attention badge.
-func (d *AppDock) drawItem(p painter.Painter, theme *Theme, it AppDockItem, sl appDockSlot) {
+// drawItem paints one item: the style draws its face + running/active indicators
+// and returns the ink; the widget draws the swelling glyph, the clipped label
+// and the attention badge in that ink.
+func (d *AppDock) drawItem(p painter.Painter, theme *Theme, style DockStyle, it AppDockItem, sl appDockSlot) {
 	r := sl.rect
-	face, ink := theme.Surface, theme.OnSurface
-	if it.Active {
-		face, ink = theme.Accent, accentInk(theme)
-	}
-	fc := &Backdrop{Fill: face, Radius: scaled(appDockRadius)}
-	fc.SetBounds(r)
-	fc.Draw(p, theme)
 
-	// Glyph, swelling with the item but clamped inside the face.
+	// Glyph box, swelling with the item but clamped inside the face.
 	gsz := scaled(AppDockGlyphPx)
 	if sl.scale > 1 {
 		gsz = int(float64(gsz)*sl.scale + 0.5)
@@ -266,26 +271,21 @@ func (d *AppDock) drawItem(p painter.Painter, theme *Theme, it AppDockItem, sl a
 	if lim := r.H - 2*scaled(2); gsz > lim {
 		gsz = lim
 	}
-	gx := r.X + scaled(AppDockPadX)
+	glyph := Rect{X: r.X + scaled(AppDockPadX), Y: r.Y + (r.H-gsz)/2, W: gsz, H: gsz}
+
+	ink := style.DrawFace(p, theme, r, DockItemState{Active: it.Active, Running: it.Running, GlyphBox: glyph})
+
 	if it.Icon != nil {
-		it.Icon(p, Rect{X: gx, Y: r.Y + (r.H-gsz)/2, W: gsz, H: gsz}, ink)
+		it.Icon(p, glyph, ink)
 	}
 
 	// Label to the right of the glyph, clipped to the item's remaining width.
 	if it.Label != "" {
-		tx := gx + gsz + scaled(AppDockLabelGap)
+		tx := glyph.X + glyph.W + scaled(AppDockLabelGap)
 		maxW := r.X + r.W - tx - scaled(2)
 		if label := d.clip(it.Label, maxW); label != "" {
 			d.drawText(p, tx, r.Y+(r.H-d.glyphHeight())/2, label, ink)
 		}
-	}
-
-	// Running dot centred under the glyph.
-	if it.Running {
-		dot := scaled(appDockRunDot)
-		rd := &Backdrop{Fill: ink, Radius: dot / 2}
-		rd.SetBounds(Rect{X: gx + (gsz-dot)/2, Y: r.Y + r.H - dot - scaled(1), W: dot, H: dot})
-		rd.Draw(p, theme)
 	}
 
 	// Attention badge at the top-right.
