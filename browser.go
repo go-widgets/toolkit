@@ -46,6 +46,15 @@ type Browser struct {
 	// is safe.
 	OnOpenExternal func(url string)
 
+	// HideScrollbar suppresses the Browser's OWN content scrollbars (both axes),
+	// for a host that overlays its own — e.g. a reader that draws one shared
+	// Scrollbar style down every panel and wants the preview's web view to match
+	// the feed and sidebar exactly rather than show the embedded house style.
+	// Only the paint is suppressed; wheel scrolling still works. The host reads
+	// ScrollExtent to size and place its replacement bar, exactly as it does with
+	// TreeView.HideScrollbar + TreeView.ScrollExtent.
+	HideScrollbar bool
+
 	// BackIcon / ForwardIcon / ReloadIcon / ZoomOutIcon / ZoomInIcon are the
 	// host-supplied vector-icon painters for the toolbar buttons — the same seam
 	// as SearchEntry.Icon. Each is invoked with its button's rect and the button
@@ -942,6 +951,25 @@ func (b *Browser) clampScroll(t *browserTab) {
 	}
 }
 
+// ScrollExtent reports the active page's VERTICAL scroll position in content
+// pixels — the offset, the viewport height and the total (zoomed) page height —
+// and whether the page overflows. A host that sets HideScrollbar and paints its
+// own bar reads this to size and place a matching one, exactly as
+// TreeView.ScrollExtent serves the same purpose for a windowed tree. It reports
+// not-shown when there is no active tab, no render yet, or the page fits.
+func (b *Browser) ScrollExtent() (offset, viewport, total int, shown bool) {
+	t := b.activeTab()
+	if t == nil {
+		return 0, 0, 0, false
+	}
+	cr := b.contentRect()
+	_, dispH := b.pageDisplaySize(t, cr)
+	if cr.H <= 0 || dispH <= cr.H {
+		return 0, cr.H, dispH, false
+	}
+	return t.scroll, cr.H, dispH, true
+}
+
 // vscrollGeom returns the vertical content scrollbar's geometry (in coordinates
 // RELATIVE to the content rect's top-left) and whether it is live (the page
 // overflows vertically). It is the single definition shared by drawScrollbars
@@ -1240,6 +1268,9 @@ func (b *Browser) drawPage(p painter.Painter, cr Rect, t *browserTab) {
 // geometry. When both show, each track is shortened by scrollbarWidth so the
 // bottom-right corner stays clear.
 func (b *Browser) drawScrollbars(p painter.Painter, theme *Theme, cr Rect, t *browserTab) {
+	if b.HideScrollbar {
+		return // the host overlays its own bar (see HideScrollbar / ScrollExtent)
+	}
 	if g, ok := b.vscrollGeom(t, cr); ok {
 		fillRect(p, cr.X+g.cross0, cr.Y+g.trackStart, scrollbarWidth, g.trackLen, theme.SurfaceAlt)
 		fillRect(p, cr.X+g.cross0, cr.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
