@@ -38,6 +38,24 @@ func TestRangeSliderDrawBand(t *testing.T) {
 	}
 }
 
+// TestRangeSliderDisabledMuted checks a disabled range slider mutes its band (and
+// so its whole chrome) instead of drawing the live Accent, matching Scale.
+func TestRangeSliderDisabledMuted(t *testing.T) {
+	theme := DefaultLight()
+	s := newTestRangeSlider()
+	s.Disabled = true
+	surf := makeSurface(200, scaleThumbSize)
+	s.Draw(newP(surf, 200), theme)
+
+	got := pixelAt(surf, 200, 100, scaleThumbSize/2)
+	if got == theme.Accent {
+		t.Fatal("disabled range slider band still painted live Accent")
+	}
+	if got != mutedInk(theme) {
+		t.Errorf("disabled band midpoint = %+v, want muted %+v", got, mutedInk(theme))
+	}
+}
+
 func TestRangeSliderDrawZeroBand(t *testing.T) {
 	// Low == High → bandW == 0 → the fill branch is skipped (no panic).
 	s := NewRangeSlider(0, 100, 50, 50)

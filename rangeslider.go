@@ -117,36 +117,40 @@ func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 	trackR := trackThick / 2
 	lowP := s.thumbPos(s.Low)
 	highP := s.thumbPos(s.High)
+	// Track / band / thumb / border colours. A disabled slider mutes them all so
+	// it reads as inert, exactly as Scale does; the enabled draw is unchanged.
+	trackC, bandC, thumbC, borderC := theme.SurfaceAlt, theme.Accent, theme.Surface, theme.Border
+	if s.Disabled {
+		trackC, bandC, thumbC, borderC = mutedFace(theme), mutedInk(theme), mutedFace(theme), mutedInk(theme)
+	}
 	if s.Orientation == Vertical {
 		trackX := r.X + (r.W-trackThick)/2
-		fillRoundRect(p, trackX, r.Y, trackThick, r.H, trackR, theme.SurfaceAlt)
+		fillRoundRect(p, trackX, r.Y, trackThick, r.H, trackR, trackC)
 		// High sits at the top (smaller Y), Low at the bottom; the band runs
 		// between their centres.
 		bandY := highP + scaled(scaleThumbSize)/2
 		bandH := lowP - highP
 		if bandH > 0 {
-			fillRoundRect(p, trackX, bandY, trackThick, bandH, trackR, theme.Accent)
+			fillRoundRect(p, trackX, bandY, trackThick, bandH, trackR, bandC)
 		}
 		tx := r.X + (r.W-scaled(scaleThumbSize))/2
 		for _, ty := range []int{lowP, highP} {
-			fillRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, theme.Surface)
-			strokeRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, theme.Border)
+			paintSliderThumb(p, tx, ty, thumbC, borderC)
 		}
 		s.drawFocusRing(p, theme, r)
 		return
 	}
 	trackY := r.Y + (r.H-trackThick)/2
-	fillRoundRect(p, r.X, trackY, r.W, trackThick, trackR, theme.SurfaceAlt)
+	fillRoundRect(p, r.X, trackY, r.W, trackThick, trackR, trackC)
 	// Accent band spans from the low thumb centre to the high thumb centre.
 	bandX := lowP + scaled(scaleThumbSize)/2
 	bandW := highP - lowP
 	if bandW > 0 {
-		fillRoundRect(p, bandX, trackY, bandW, trackThick, trackR, theme.Accent)
+		fillRoundRect(p, bandX, trackY, bandW, trackThick, trackR, bandC)
 	}
 	ty := r.Y + (r.H-scaled(scaleThumbSize))/2
 	for _, tx := range []int{lowP, highP} {
-		fillRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, theme.Surface)
-		strokeRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, theme.Border)
+		paintSliderThumb(p, tx, ty, thumbC, borderC)
 	}
 	s.drawFocusRing(p, theme, r)
 }

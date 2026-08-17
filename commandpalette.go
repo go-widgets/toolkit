@@ -274,7 +274,7 @@ func (c *CommandPalette) Draw(p painter.Painter, theme *Theme) {
 		ink := theme.OnSurface
 		if abs == c.selected {
 			fillRect(p, pb.X+1, ry, pb.W-2, PaletteRowH, theme.Accent)
-			ink = theme.Background
+			ink = accentInk(theme)
 		}
 		c.drawText(p, pb.X+PalettePadX, ry+textOff, c.Commands[i].Label, ink)
 	}

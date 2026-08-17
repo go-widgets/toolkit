@@ -208,7 +208,7 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 		}
 		if hi {
 			bg = theme.Accent
-			ink = theme.Background
+			ink = accentInk(theme)
 		}
 		fillRect(p, cr.X, y, cr.W, l.RowHeight, bg)
 		if l.ItemRenderer != nil {
