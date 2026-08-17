@@ -61,11 +61,14 @@ func TestBrowserVerticalScrollbarDrawTracksScroll(t *testing.T) {
 	}
 
 	// scroll=0: thumb hugs the track top; the track's far end is bare SurfaceAlt.
+	// The thumb is the shared muted grey; sample interior points (the rounded caps
+	// taper at the very ends).
+	muted := scrollbarThumbColor(theme)
 	buf := draw()
-	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g.thumbStart+1); got != theme.Accent {
-		t.Errorf("scroll=0: thumb-top pixel = %+v, want Accent %+v", got, theme.Accent)
+	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g.thumbStart+2); got != muted {
+		t.Errorf("scroll=0: thumb-top pixel = %+v, want muted thumb %+v", got, muted)
 	}
-	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g.trackLen-1); got != theme.SurfaceAlt {
+	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g.trackLen-scrollbarWidth); got != theme.SurfaceAlt {
 		t.Errorf("scroll=0: track-bottom pixel = %+v, want SurfaceAlt %+v", got, theme.SurfaceAlt)
 	}
 
@@ -76,16 +79,16 @@ func TestBrowserVerticalScrollbarDrawTracksScroll(t *testing.T) {
 		t.Errorf("scroll=max: thumb end %d != trackLen %d (thumb not pinned to bottom)", g2.thumbStart+g2.thumbLen, g2.trackLen)
 	}
 	buf = draw()
-	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g2.trackStart+1); got != theme.SurfaceAlt {
+	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g2.trackStart+2); got != theme.SurfaceAlt {
 		t.Errorf("scroll=max: track-top pixel = %+v, want SurfaceAlt %+v", got, theme.SurfaceAlt)
 	}
-	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g2.thumbStart+g2.thumbLen-1); got != theme.Accent {
-		t.Errorf("scroll=max: thumb-bottom pixel = %+v, want Accent %+v", got, theme.Accent)
+	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g2.thumbStart+2); got != muted {
+		t.Errorf("scroll=max: thumb-bottom pixel = %+v, want muted thumb %+v", got, muted)
 	}
 }
 
 // TestBrowserHideScrollbarSuppressesPaint checks HideScrollbar stops the Browser
-// painting its own bar, so a host can overlay its own matching one: the Accent
+// painting its own bar, so a host can overlay its own matching one: the muted
 // thumb a visible bar draws is gone once the flag is set.
 func TestBrowserHideScrollbarSuppressesPaint(t *testing.T) {
 	theme := DefaultLight()
@@ -98,21 +101,22 @@ func TestBrowserHideScrollbarSuppressesPaint(t *testing.T) {
 		t.Fatal("vertical scrollbar should be live for a 3×-tall page")
 	}
 	colX := cr.X + g.cross0 + scrollbarWidth/2
-	thumbY := cr.Y + g.thumbStart + 1
+	thumbY := cr.Y + g.thumbStart + 2
+	muted := scrollbarThumbColor(theme)
 	draw := func() []byte {
 		buf := make([]byte, browserBounds.W*browserBounds.H*4)
 		b.Draw(newP(buf, browserBounds.W), theme)
 		return buf
 	}
 
-	// Visible: the thumb paints in Accent.
-	if got := pixelAt(draw(), browserBounds.W, colX, thumbY); got != theme.Accent {
-		t.Fatalf("visible bar: thumb pixel = %+v, want Accent %+v", got, theme.Accent)
+	// Visible: the thumb paints in the shared muted grey.
+	if got := pixelAt(draw(), browserBounds.W, colX, thumbY); got != muted {
+		t.Fatalf("visible bar: thumb pixel = %+v, want muted thumb %+v", got, muted)
 	}
-	// Hidden: the same pixel is now the page, never the Accent chrome.
+	// Hidden: the same pixel is now the page, never the thumb chrome.
 	b.HideScrollbar = true
-	if got := pixelAt(draw(), browserBounds.W, colX, thumbY); got == theme.Accent {
-		t.Fatalf("hidden bar: thumb pixel still Accent %+v (bar not suppressed)", got)
+	if got := pixelAt(draw(), browserBounds.W, colX, thumbY); got == muted {
+		t.Fatalf("hidden bar: thumb pixel still painted %+v (bar not suppressed)", got)
 	}
 }
 
@@ -238,8 +242,8 @@ func TestBrowserHorizontalScrollbarUnderZoom(t *testing.T) {
 	buf := make([]byte, browserBounds.W*browserBounds.H*4)
 	b.Draw(newP(buf, browserBounds.W), theme)
 	rowY := cr.Y + g.cross0 + scrollbarWidth/2
-	if got := pixelAt(buf, browserBounds.W, cr.X+g.thumbStart+1, rowY); got != theme.Accent {
-		t.Errorf("hbar thumb pixel = %+v, want Accent %+v", got, theme.Accent)
+	if got := pixelAt(buf, browserBounds.W, cr.X+g.thumbStart+2, rowY); got != scrollbarThumbColor(theme) {
+		t.Errorf("hbar thumb pixel = %+v, want muted thumb %+v", got, scrollbarThumbColor(theme))
 	}
 
 	// Drag the horizontal thumb → scrollX advances.

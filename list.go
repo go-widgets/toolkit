@@ -354,13 +354,13 @@ func (l *ListBox) scrollToSelected() {
 func (l *ListBox) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	track := scrollbarTrack()
 	trackX := r.X + r.W - track
-	fillRect(p, trackX, r.Y, track, r.H, theme.SurfaceAlt)
+	paintScrollTrack(p, theme, trackX, r.Y, track, r.H)
 
 	g, ok := l.scrollbarGeom()
 	if !ok {
 		return
 	}
-	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen, theme.Accent)
+	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen)
 }
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and

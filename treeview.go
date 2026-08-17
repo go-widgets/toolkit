@@ -568,8 +568,8 @@ func (t *TreeView) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	// scrollbarGeom reports live, so the ok flag is always true here.
 	g, _ := t.scrollbarGeom()
 	track := scrollbarTrack()
-	fillRect(p, r.X+g.cross0, r.Y+g.trackStart, track, g.trackLen, theme.SurfaceAlt)
-	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen, theme.Accent)
+	paintScrollTrack(p, theme, r.X+g.cross0, r.Y+g.trackStart, track, g.trackLen)
+	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen)
 }
 
 // RowContentWidth returns the pixel width RowRenderer's contentRect gets for a

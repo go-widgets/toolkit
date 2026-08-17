@@ -1272,12 +1272,12 @@ func (b *Browser) drawScrollbars(p painter.Painter, theme *Theme, cr Rect, t *br
 		return // the host overlays its own bar (see HideScrollbar / ScrollExtent)
 	}
 	if g, ok := b.vscrollGeom(t, cr); ok {
-		fillRect(p, cr.X+g.cross0, cr.Y+g.trackStart, scrollbarWidth, g.trackLen, theme.SurfaceAlt)
-		fillRect(p, cr.X+g.cross0, cr.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
+		paintScrollTrack(p, theme, cr.X+g.cross0, cr.Y+g.trackStart, scrollbarWidth, g.trackLen)
+		paintScrollThumb(p, theme, cr.X+g.cross0, cr.Y+g.thumbStart, scrollbarWidth, g.thumbLen)
 	}
 	if g, ok := b.hscrollGeom(t, cr); ok {
-		fillRect(p, cr.X+g.trackStart, cr.Y+g.cross0, g.trackLen, scrollbarWidth, theme.SurfaceAlt)
-		fillRect(p, cr.X+g.thumbStart, cr.Y+g.cross0, g.thumbLen, scrollbarWidth, theme.Accent)
+		paintScrollTrack(p, theme, cr.X+g.trackStart, cr.Y+g.cross0, g.trackLen, scrollbarWidth)
+		paintScrollThumb(p, theme, cr.X+g.thumbStart, cr.Y+g.cross0, g.thumbLen, scrollbarWidth)
 	}
 }
 
