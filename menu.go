@@ -264,7 +264,7 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 			case it.Action == nil && it.Submenu == nil:
 				ink = theme.SurfaceAlt // disabled = greyed out (no action, no submenu)
 			case i == m.Hover:
-				ink = theme.Background // hovered row: invert ink
+				ink = accentInk(theme) // hovered row: invert ink over the Accent fill
 			}
 			if it.Icon != nil {
 				side := m.sc(16)
@@ -292,7 +292,7 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 				sx := r.X + r.W - inset - sw
 				shortcutInk := theme.SurfaceAlt
 				if i == m.Hover && it.Action != nil {
-					shortcutInk = theme.Background
+					shortcutInk = accentInk(theme)
 				}
 				m.drawText(p, sx, textY, it.Shortcut, shortcutInk)
 			}
@@ -702,7 +702,7 @@ func (b *MenuBar) Draw(p painter.Painter, theme *Theme) {
 		switch {
 		case i == b.Active:
 			fillRect(p, ix, r.Y, iw, scaled(MenuBarH), theme.Accent)
-			ink = theme.Background
+			ink = accentInk(theme)
 		case b.hoverName == i+1:
 			// A hovered (but not open) name raises to Surface — a subtle
 			// lighter cell against the SurfaceAlt bar. Skipped for the active

@@ -30,6 +30,17 @@ type Scale struct {
 // scaleThumbSize is the pixel side length of the thumb.
 const scaleThumbSize = 16
 
+// paintSliderThumb draws a slider/scale knob: a circular fill with a matching
+// border — the Switch-knob shape shared by Scale and RangeSlider so every knob in
+// the toolkit is one look. tx,ty is the knob's top-left; its side is the shared
+// scaleThumbSize (scaled). The caller passes the fill/border already resolved for
+// the enabled/disabled state.
+func paintSliderThumb(p painter.Painter, tx, ty int, fill, border RGBA) {
+	sz := scaled(scaleThumbSize)
+	fillRoundRect(p, tx, ty, sz, sz, sz/2, fill)
+	strokeRoundRect(p, tx, ty, sz, sz, sz/2, border)
+}
+
 // scaleTrackThickness is the groove's thickness in logical pixels. It is a
 // metric like the thumb: a track that stayed four device pixels under a thumb
 // that doubled would read as a thread.
@@ -81,8 +92,7 @@ func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 		centreY := ty + scaled(scaleThumbSize)/2
 		fillRoundRect(p, trackX, centreY, trackW, r.Y+r.H-centreY, trackR, fillC)
 		tx := r.X + (r.W-scaled(scaleThumbSize))/2
-		fillRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, thumbC)
-		strokeRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, borderC)
+		paintSliderThumb(p, tx, ty, thumbC, borderC)
 		s.drawFocusRing(p, theme, r)
 		return
 	}
@@ -96,8 +106,7 @@ func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 	fillRoundRect(p, r.X, trackY, tx+scaled(scaleThumbSize)/2-r.X, trackH, trackR, fillC)
 	// Circular white thumb + border (same shape as the Switch knob).
 	ty := r.Y + (r.H-scaled(scaleThumbSize))/2
-	fillRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, thumbC)
-	strokeRoundRect(p, tx, ty, scaled(scaleThumbSize), scaled(scaleThumbSize), scaled(scaleThumbSize)/2, borderC)
+	paintSliderThumb(p, tx, ty, thumbC, borderC)
 	s.drawFocusRing(p, theme, r)
 }
 

@@ -468,7 +468,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 		}
 		if isSel {
 			bg = theme.Accent
-			ink = theme.Background
+			ink = accentInk(theme)
 		}
 		fillRect(p, r.X, y, rowW, rh, bg)
 		indent := r.X + row.depth*scaled(TreeIndentW)

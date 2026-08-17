@@ -72,7 +72,7 @@ func (fc *FontChooser) Draw(p painter.Painter, theme *Theme) {
 		ink := theme.OnSurface
 		if i == fc.Selected {
 			fillRect(p, r.X+1, y, r.W-2, rh, theme.Accent)
-			ink = theme.Background
+			ink = accentInk(theme)
 		}
 		// Render the name in the option's OWN font so the row previews it.
 		opt.Font.Draw(p, r.X+FontChooserPad, y+FontChooserRowPad, opt.Name, ink)
