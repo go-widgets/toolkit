@@ -220,3 +220,47 @@ func TestBackdropStroke(t *testing.T) {
 		t.Fatalf("bordered backdrop centre = %v, want fill %v", bdPx(bordered, w, w/2, h/2), fill)
 	}
 }
+
+// An outline-only Backdrop is the focus-ring / drop-target case: the outline is
+// painted and the content underneath survives. The test paints the ground first
+// and then checks that exact ground is still there afterwards -- an assertion a
+// backdrop that filled with theme.Background (what a zero Fill means) fails.
+func TestBackdropNoFillLeavesTheContentShowing(t *testing.T) {
+	ground := painter.RGB(0x20, 0x80, 0x40)
+	ring := painter.RGB(0xC0, 0x20, 0x20)
+	th := DefaultLight()
+	const w, h = 24, 24
+
+	buf := make([]byte, 4*w*h)
+	p := painter.NewPixelPainter(buf, w, h)
+	p.FillRect(Rect{X: 0, Y: 0, W: w, H: h}, ground) // content already on screen
+
+	b := &Backdrop{NoFill: true, Radius: 6, Stroke: ring, StrokeWidth: 2}
+	b.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	b.Draw(p, th)
+
+	if !hasColor(buf, w, ring) {
+		t.Fatal("NoFill dropped the outline as well as the fill")
+	}
+	if got := bdPx(buf, w, w/2, h/2); got != ground {
+		t.Errorf("centre = %v, want the untouched ground %v -- NoFill painted a fill", got, ground)
+	}
+	if got := bdPx(buf, w, w/2, 4); got != ground {
+		t.Errorf("inside the ring = %v, want the untouched ground %v", got, ground)
+	}
+
+	// NoFill still honours the grid: it is an overlay decoration too. On its own
+	// ground, so the ring above cannot be mistaken for a grid line.
+	gbuf := make([]byte, 4*w*h)
+	gp := painter.NewPixelPainter(gbuf, w, h)
+	gp.FillRect(Rect{X: 0, Y: 0, W: w, H: h}, ground)
+	gridded := &Backdrop{NoFill: true, Grid: ring, Step: 8}
+	gridded.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	gridded.Draw(gp, th)
+	if got := bdPx(gbuf, w, 1, 1); got != ground {
+		t.Errorf("off-grid pixel = %v, want the untouched ground %v", got, ground)
+	}
+	if got := bdPx(gbuf, w, 8, 1); got != ring {
+		t.Errorf("grid line = %v, want %v", got, ring)
+	}
+}
