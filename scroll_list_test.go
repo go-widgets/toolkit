@@ -99,7 +99,7 @@ func TestScrollViewClampsToMax(t *testing.T) {
 
 func TestScrollViewHorizontalScrollbar(t *testing.T) {
 	const w, h = 100, 60
-	acc := DefaultLight().Accent
+	acc := scrollbarThumbColor(DefaultLight())
 	sv := NewScrollView(NewLabel("x"))
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 40})
 	sv.SetContentSize(200, 20) // wide (overflows) but short (no vertical overflow)
@@ -131,7 +131,7 @@ func TestScrollViewTinyHorizontalThumbClamps(t *testing.T) {
 	sv.SetContentSize(100000, 20)
 	buf := makeSurface(64, 64)
 	sv.Draw(newP(buf, 64), DefaultLight()) // must not panic; thumb floored to 8
-	acc := DefaultLight().Accent
+	acc := scrollbarThumbColor(DefaultLight())
 	trackY := 40 - scrollbarWidth
 	found := false
 	for x := 0; x < 32; x++ {
@@ -187,10 +187,10 @@ func TestScrollViewDrawThumbPositionFollowsOffset(t *testing.T) {
 	sv.Scroll(0, 100)
 	buf := makeSurface(w, h)
 	sv.Draw(newP(buf, w), theme)
-	// Somewhere in the middle of the track should be Accent (thumb).
+	// Somewhere in the middle of the track should be the muted thumb.
 	found := false
 	for y := 0; y < 40; y++ {
-		if pixelAt(buf, w, 20, y) == theme.Accent {
+		if pixelAt(buf, w, 20, y) == scrollbarThumbColor(theme) {
 			found = true
 			break
 		}
@@ -650,7 +650,7 @@ func TestListBoxScrollbarThumbRendersOnOverflow(t *testing.T) {
 	}
 	foundThumb := false
 	for y := 0; y < 20; y++ {
-		if pixelAt(buf, w, trackX+3, y) == theme.Accent {
+		if pixelAt(buf, w, trackX+scrollbarWidth/2, y) == scrollbarThumbColor(theme) {
 			foundThumb = true
 		}
 	}
@@ -673,7 +673,7 @@ func TestListBoxScrollbarTinyThumbClamps(t *testing.T) {
 	trackX := 50 - scrollbarWidth
 	found := false
 	for y := 0; y < 8; y++ {
-		if pixelAt(buf, w, trackX+3, y) == theme.Accent {
+		if pixelAt(buf, w, trackX+scrollbarWidth/2, y) == scrollbarThumbColor(theme) {
 			found = true
 		}
 	}

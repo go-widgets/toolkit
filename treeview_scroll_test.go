@@ -337,7 +337,7 @@ func TestTreeViewScrollbarPaintedOnOverflow(t *testing.T) {
 				switch pixelAt(buf, 200, x, y) {
 				case theme.SurfaceAlt:
 					foundAlt = true
-				case theme.Accent:
+				case scrollbarThumbColor(theme):
 					foundAccent = true
 				}
 			}
@@ -358,7 +358,9 @@ func TestTreeViewScrollbarPaintedOnOverflow(t *testing.T) {
 	tv.ScrollTo(16) // max
 	buf := makeSurface(200, 90)
 	tv.Draw(newP(buf, 200), theme)
-	if pixelAt(buf, 200, trackX, 89) != theme.Accent {
+	// Sample the track's centre column: the rounded thumb's cap tapers at the
+	// track edge, so the leftmost column can be bare even where the thumb sits.
+	if pixelAt(buf, 200, trackX+scrollbarWidth/2, 87) != scrollbarThumbColor(theme) {
 		t.Fatal("thumb did not move to the bottom of the track at max ScrollRow")
 	}
 }
@@ -375,7 +377,9 @@ func TestTreeViewScrollbarThumbMinimumSize(t *testing.T) {
 	trackX := 200 - scrollbarWidth
 	thumbRows := 0
 	for y := 0; y < 90; y++ {
-		if pixelAt(buf, 200, trackX, y) == theme.Accent {
+		// Centre column: the rounded thumb is full-length there, so the count
+		// reflects the true (floor-clamped) thumb height.
+		if pixelAt(buf, 200, trackX+scrollbarWidth/2, y) == scrollbarThumbColor(theme) {
 			thumbRows++
 		}
 	}

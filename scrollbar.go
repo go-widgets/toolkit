@@ -120,16 +120,9 @@ func (s *Scrollbar) Draw(p painter.Painter, theme *Theme) {
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
-	radius := r.W / 2
-	if r.H < r.W {
-		radius = r.H / 2
-	}
-	fillRoundRect(p, r.X, r.Y, r.W, r.H, radius, theme.SurfaceAlt)
+	paintScrollTrack(p, theme, r.X, r.Y, r.W, r.H)
 	t := s.ThumbRect()
-	// The thumb is a muted grey (OnSurface blended toward the track) rather than
-	// the faint Border, so it stays clearly visible even when the surrounding
-	// surface is itself SurfaceAlt (e.g. a sidebar) where a Border thumb vanishes.
-	fillRoundRect(p, t.X, t.Y, t.W, t.H, radius, blendRGBA(theme.OnSurface, theme.SurfaceAlt, scrollbarThumbMix))
+	paintScrollThumb(p, theme, t.X, t.Y, t.W, t.H)
 }
 
 // OnEvent makes the thumb grabbable: an EventClick on the thumb starts a drag
@@ -188,6 +181,37 @@ func (s *Scrollbar) setOffset(off int) {
 // foreground: 0 = track colour, 1 = full OnSurface. ~0.45 reads as a clear
 // medium grey on both light and dark themes.
 const scrollbarThumbMix = 0.45
+
+// scrollbarThumbColor is the muted grey every scrollbar thumb uses: OnSurface
+// blended toward the SurfaceAlt track. It stays clearly visible even when the
+// surrounding surface is itself SurfaceAlt (e.g. a sidebar), where the faint
+// Border would vanish.
+func scrollbarThumbColor(theme *Theme) RGBA {
+	return blendRGBA(theme.OnSurface, theme.SurfaceAlt, scrollbarThumbMix)
+}
+
+// scrollbarRadius rounds a scrollbar track/thumb by half its short side, so its
+// ends are fully rounded like a capsule regardless of orientation.
+func scrollbarRadius(w, h int) int {
+	if h < w {
+		return h / 2
+	}
+	return w / 2
+}
+
+// paintScrollTrack and paintScrollThumb are the ONE house style for a scrollbar:
+// a rounded SurfaceAlt track under a rounded muted-grey thumb. Every embedded
+// scrollbar — ScrollView, List, TreeView, Table, Browser — and the standalone
+// Scrollbar draw through these, so a scrollbar looks identical wherever it
+// appears. Each caller keeps its own geometry (track thickness, position, the
+// viewport/content proportion that sizes the thumb); only the fill is shared.
+func paintScrollTrack(p painter.Painter, theme *Theme, x, y, w, h int) {
+	fillRoundRect(p, x, y, w, h, scrollbarRadius(w, h), theme.SurfaceAlt)
+}
+
+func paintScrollThumb(p painter.Painter, theme *Theme, x, y, w, h int) {
+	fillRoundRect(p, x, y, w, h, scrollbarRadius(w, h), scrollbarThumbColor(theme))
+}
 
 // blendRGBA mixes a over b at t in [0,1] (t=1 yields a, t=0 yields b), producing
 // an opaque colour.

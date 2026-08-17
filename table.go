@@ -961,8 +961,8 @@ func (t *Table) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	// The caller only invokes this while the body overflows, which is exactly
 	// when scrollbarGeom reports live, so the ok flag is always true here.
 	g, _ := t.scrollbarGeom()
-	fillRect(p, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen, theme.SurfaceAlt)
-	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
+	paintScrollTrack(p, theme, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen)
+	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen)
 }
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and
@@ -1011,14 +1011,14 @@ func (t *Table) drawHScrollbar(p painter.Painter, theme *Theme, r Rect, widths [
 	trackX := r.X + fw
 	trackY := r.Y + r.H - scrollbarWidth
 	trackW := t.contentWidth() - fw
-	fillRect(p, trackX, trackY, trackW, scrollbarWidth, theme.SurfaceAlt)
+	paintScrollTrack(p, theme, trackX, trackY, trackW, scrollbarWidth)
 	contentW := t.naturalWidth() - fw
 	thumbW := trackW * trackW / contentW
 	if thumbW < tableScrollbarThumbMin {
 		thumbW = tableScrollbarThumbMin
 	}
 	thumbX := trackX + t.clampScrollX()*(trackW-thumbW)/(contentW-trackW)
-	fillRect(p, thumbX, trackY, thumbW, scrollbarWidth, theme.Accent)
+	paintScrollThumb(p, theme, thumbX, trackY, thumbW, scrollbarWidth)
 }
 
 // columnWidths distributes the total pixel budget across every column.

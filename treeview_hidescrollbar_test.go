@@ -33,18 +33,18 @@ func TestTreeViewScrollExtentAndHideScrollbar(t *testing.T) {
 		t.Fatal("a zero-height tree must report shown=false")
 	}
 
-	// The built-in Accent thumb paints when shown, and HideScrollbar suppresses it.
+	// The built-in muted-grey thumb paints when shown, and HideScrollbar suppresses it.
 	tv.ScrollTo(0)
 	tv.HideScrollbar = false
 	buf := makeSurface(120, 90)
 	tv.Draw(newP(buf, 120), theme)
-	if !hasColor(buf, 120, theme.Accent) {
-		t.Fatal("the built-in scrollbar thumb (Accent) should paint when shown")
+	if !hasColor(buf, 120, scrollbarThumbColor(theme)) {
+		t.Fatal("the built-in scrollbar thumb should paint when shown")
 	}
 	tv.HideScrollbar = true
 	buf2 := makeSurface(120, 90)
 	tv.Draw(newP(buf2, 120), theme)
-	if hasColor(buf2, 120, theme.Accent) {
+	if hasColor(buf2, 120, scrollbarThumbColor(theme)) {
 		t.Fatal("HideScrollbar must suppress the scrollbar thumb")
 	}
 }

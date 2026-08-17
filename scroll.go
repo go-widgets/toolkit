@@ -264,17 +264,17 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 	// comes from vscrollGeom so Draw + OnEvent share one definition of it.
 	track := scrollbarTrack()
 	trackX := r.X + r.W - track
-	fillRect(p, trackX, r.Y, track, vp.H, theme.SurfaceAlt)
+	paintScrollTrack(p, theme, trackX, r.Y, track, vp.H)
 	if g, ok := s.vscrollGeom(); ok {
-		fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen, theme.Accent)
+		paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, track, g.thumbLen)
 	}
 	// Horizontal scrollbar (bottom edge), only when the content overflows
 	// horizontally (which is exactly when the viewport reserved the bottom row).
 	if s.contentW > vp.W {
 		trackY := r.Y + r.H - track
-		fillRect(p, r.X, trackY, vp.W, track, theme.SurfaceAlt)
+		paintScrollTrack(p, theme, r.X, trackY, vp.W, track)
 		if g, ok := s.hscrollGeom(); ok {
-			fillRect(p, r.X+g.thumbStart, trackY, g.thumbLen, track, theme.Accent)
+			paintScrollThumb(p, theme, r.X+g.thumbStart, trackY, g.thumbLen, track)
 		}
 	}
 }

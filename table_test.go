@@ -1303,12 +1303,12 @@ func TestTableScrollWindowsLargeTable(t *testing.T) {
 		t.Fatalf("off-window row 19 was painted at %+v, want untouched sentinel", got)
 	}
 
-	// Scrollbar thumb: an Accent-coloured pixel exists in the track
-	// column while the body overflows (no row is selected, so Accent
+	// Scrollbar thumb: a muted-grey thumb pixel exists in the track column
+	// while the body overflows (no row is selected, so the muted thumb colour
 	// can only be the thumb here).
 	foundThumb := false
 	for y := TableHeaderHeight; y < 134 && !foundThumb; y++ {
-		if pixelAt(buf, 120, 115, y) == theme.Accent {
+		if pixelAt(buf, 120, 115, y) == scrollbarThumbColor(theme) {
 			foundThumb = true
 		}
 	}
@@ -1440,7 +1440,7 @@ func TestTableScrollScrollbarThumbFloorClamp(t *testing.T) {
 	// tableScrollbarThumbMin px tall) at the top of the track.
 	found := false
 	for y := TableHeaderHeight; y < 134 && !found; y++ {
-		if pixelAt(buf, 120, 115, y) == theme.Accent {
+		if pixelAt(buf, 120, 115, y) == scrollbarThumbColor(theme) {
 			found = true
 		}
 	}
