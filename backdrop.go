@@ -54,6 +54,14 @@ type Backdrop struct {
 	// StrokeWidth is the border thickness in units; it applies only when Stroke is
 	// set, and a value < 1 is treated as 1.
 	StrokeWidth int
+	// NoFill suppresses the ground fill, leaving only the Stroke (and the grid, if
+	// any): an outline-only decoration drawn OVER content that has to stay
+	// visible — a focus ring around a pane, a drop-target highlight, a selection
+	// marquee. Without it such an outline is a hand-drawn StrokeRoundRect in the
+	// host, because a zero-value Fill means "the theme's Background" rather than
+	// "no background", and there is no transparent colour that says otherwise.
+	// The zero value (false) fills as before, byte-identical.
+	NoFill bool
 	// Interactive makes the Backdrop catch pointer events. The zero value
 	// (false) is event-transparent: HitTest returns false so clicks pass
 	// through to whatever is composited over the backdrop — the least-
@@ -83,20 +91,24 @@ func (b *Backdrop) HitTest(px, py int) bool {
 
 // Draw fills the bounds and overlays the grid. An empty rectangle paints
 // nothing; a non-positive Step paints only the fill. A positive Radius fills a
-// rounded rectangle instead of a plain one; a non-zero Stroke outlines it.
+// rounded rectangle instead of a plain one; a non-zero Stroke outlines it. With
+// NoFill set the fill is skipped entirely and only the outline (and grid) is
+// painted, leaving whatever is already there showing through.
 func (b *Backdrop) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
-	fill := b.Fill
-	if fill == (painter.RGBA{}) {
-		fill = theme.Background
-	}
-	if b.Radius > 0 {
-		fillRoundRect(p, r.X, r.Y, r.W, r.H, b.Radius, fill)
-	} else {
-		p.FillRect(r, fill)
+	if !b.NoFill {
+		fill := b.Fill
+		if fill == (painter.RGBA{}) {
+			fill = theme.Background
+		}
+		if b.Radius > 0 {
+			fillRoundRect(p, r.X, r.Y, r.W, r.H, b.Radius, fill)
+		} else {
+			p.FillRect(r, fill)
+		}
 	}
 	if b.Stroke.A != 0 {
 		w := b.StrokeWidth
