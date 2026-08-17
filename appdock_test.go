@@ -44,6 +44,48 @@ func TestAppDockRestingLayout(t *testing.T) {
 	}
 }
 
+// TestAppDockVariableWidth checks that a per-item Width is honoured by the
+// resting layout, hit-testing and magnification (a host with window task buttons
+// sized to their title needs this), while an unset Width keeps the default.
+func TestAppDockVariableWidth(t *testing.T) {
+	d := NewAppDock(
+		AppDockItem{Id: "def"}, // default width
+		AppDockItem{Id: "wide", Width: 200},
+		AppDockItem{Id: "narrow", Width: 80},
+	)
+	d.SetBounds(Rect{X: 0, Y: 0, W: 800, H: 40})
+	g := scaled(AppDockGap)
+	def := scaled(AppDockItemW)
+
+	rs := d.ItemRects() // resting (no cursor)
+	if rs[0].W != def || rs[1].W != 200 || rs[2].W != 80 {
+		t.Fatalf("resting widths = %d/%d/%d, want %d/200/80", rs[0].W, rs[1].W, rs[2].W, def)
+	}
+	// Items follow one another by their own width + the gap.
+	if rs[1].X != rs[0].X+def+g || rs[2].X != rs[1].X+200+g {
+		t.Errorf("variable-width items not laid out sequentially: %+v", rs)
+	}
+	// Hit-testing honours the per-item width.
+	if d.HitTest(rs[1].X+150, rs[1].Y+2) != 1 {
+		t.Error("HitTest deep inside the wide item should return 1")
+	}
+	if d.HitTest(rs[2].X+120, rs[2].Y+2) == 2 {
+		t.Error("HitTest past the narrow item's width should not match it")
+	}
+
+	// Magnification swells each item from its own resting width.
+	d.SetCursor(rs[1].X+100, true) // over the wide item
+	mg := d.ItemRects()
+	if mg[1].W <= 200 {
+		t.Errorf("magnified wide item W = %d, want > 200", mg[1].W)
+	}
+	for i := 1; i < len(mg); i++ {
+		if mg[i].X < mg[i-1].X+mg[i-1].W {
+			t.Errorf("variable-width magnified items overlap at %d", i)
+		}
+	}
+}
+
 // TestAppDockMagnifyActiveGuards checks every condition that disables the swell
 // leaves the layout flat, and that the fully-enabled case swells.
 func TestAppDockMagnifyActiveGuards(t *testing.T) {
