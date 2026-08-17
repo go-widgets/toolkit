@@ -67,3 +67,37 @@ jobs:
           GOOS=js     GOARCH=wasm  go build ./...
           GOOS=darwin GOARCH=arm64 go build ./...
           GOOS=windows GOARCH=amd64 go build ./...
+
+      # The rougelex sub-module (the rouge-backed CodeEditor highlighter) is a
+      # SEPARATE Go module so importing the core toolkit never pulls a lexing
+      # engine in. Its own 100% gate + cross-build run here, because the root
+      # module's ./... deliberately does not descend into a nested module.
+      - name: rougelex module — vet + test + 100% coverage
+        working-directory: rougelex
+        run: |
+          go vet ./...
+          go test -coverprofile=coverage.out ./...
+          go tool cover -func=coverage.out
+          below=$(go tool cover -func=coverage.out | awk '$NF != "100.0%"')
+          if [ -n "$below" ]; then
+            echo "::error::rougelex coverage below 100% on:"
+            echo "$below"
+            exit 1
+          fi
+
+      - name: rougelex module — race detector
+        working-directory: rougelex
+        env:
+          CGO_ENABLED: "1"
+        run: go test -race ./...
+
+      - name: rougelex module — cross-compile smoke
+        working-directory: rougelex
+        run: |
+          for arch in amd64 arm64 riscv64 loong64 ppc64le s390x; do
+            echo "== linux/$arch =="
+            GOOS=linux GOARCH=$arch go build ./...
+          done
+          GOOS=js      GOARCH=wasm  go build ./...
+          GOOS=darwin  GOARCH=arm64 go build ./...
+          GOOS=windows GOARCH=amd64 go build ./...

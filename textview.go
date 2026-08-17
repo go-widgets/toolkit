@@ -88,6 +88,18 @@ type TextView struct {
 	// back to a muted tone (dimInk) that reads on any theme.
 	GutterColor RGBA
 
+	// RowBackground, when non-nil, is consulted once per visible buffer
+	// line to paint a full-width background band behind that line — over
+	// the Surface fill, under the gutter number, the ink and the caret.
+	// It returns (colour, true) to paint the band in colour, or
+	// (_, false) to leave the row on the plain Surface. This is the seam
+	// a CodeEditor uses for its current-line highlight, a search UI for
+	// match rows, or a diff view for added / removed rows, without
+	// TextView growing any of those concerns. When nil (the zero value)
+	// no band is painted and rendering is byte-identical to before this
+	// field existed.
+	RowBackground func(lineIndex int) (RGBA, bool)
+
 	// undo/redo hold point-in-time snapshots taken before each
 	// mutating edit (see pushUndo). Ports the go-widgets/tui
 	// TextEditor's undo model: one snapshot per mutation (no
@@ -234,6 +246,15 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 				break // fully below the viewport
 			}
 			line := t.Lines[i]
+			// Full-width row band (current-line highlight, search match, diff
+			// row): painted first so the gutter number, ink and caret land on
+			// top. The band brackets the glyph box (2 px above) and spans one
+			// full line pitch, so consecutive bands tile without a seam.
+			if t.RowBackground != nil {
+				if bg, ok := t.RowBackground(i); ok {
+					fillRect(p, r.X+1, y-2, r.W-2, lineH, bg)
+				}
+			}
 			if t.ShowLineNumbers {
 				num := strconv.Itoa(i + 1)
 				// Right-align the number against the text's left margin.
