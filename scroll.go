@@ -25,7 +25,45 @@ type ScrollView struct {
 	// sbV and sbH track an in-progress drag of the vertical / horizontal
 	// scrollbar thumb respectively.
 	sbV, sbH scrollDrag
+
+	// pan tracks an in-progress drag of the CONTENT itself.
+	pan contentPan
 }
+
+// contentPan is a drag of the scrolled content — the gesture that scrolls a
+// view by pulling what is in it, rather than by moving a scrollbar thumb.
+//
+// It is what makes a scrollable widget usable at all without a mouse or a
+// keyboard. A touch screen has no wheel to turn and no arrow keys to press, and
+// a scrollbar thumb is a target a few pixels wide: on a phone, dragging the
+// content IS the way to scroll, and before this a ScrollView on a touch device
+// could not be scrolled by any means.
+//
+// The content follows the finger: dragging down moves the content down, which
+// is a DECREASING scroll offset. Reversing that is the "natural scrolling"
+// question, and the answer for a direct-touch surface is not a preference —
+// the content is under the finger and has to go where the finger goes.
+type contentPan struct {
+	active bool
+	x, y   int // the last pointer position, in surface coordinates
+}
+
+// start begins a pan at the pointer's position.
+func (p *contentPan) start(ev Event) {
+	p.active, p.x, p.y = true, ev.X, ev.Y
+}
+
+// delta reports how far to scroll for this pointer sample and remembers the
+// position for the next one. The result is the movement of the CONTENT
+// inverted, i.e. what to add to the scroll offset.
+func (p *contentPan) delta(ev Event) (dx, dy int) {
+	dx, dy = p.x-ev.X, p.y-ev.Y
+	p.x, p.y = ev.X, ev.Y
+	return dx, dy
+}
+
+// release ends the pan.
+func (p *contentPan) release() { p.active = false }
 
 // scrollbarWidth is the LOGICAL pixel thickness of a scrollbar track — wide
 // enough that the thumb is comfortably grabbable with the mouse. Routed through
@@ -187,14 +225,27 @@ func (s *ScrollView) OnEvent(ev Event) {
 		if g, ok := s.hscrollGeom(); s.sbH.press(g, ok, ev, s.viewport().W, func(d int) { s.Scroll(d, 0) }) {
 			return
 		}
+		// Neither scrollbar wanted the press, so it landed on the content:
+		// begin a pan. The content area is otherwise passive for clicks, so
+		// this takes nothing away from anything else.
+		if s.viewport().Contains(ev.X, ev.Y) {
+			s.pan.start(ev)
+		}
 	case EventMouseDrag:
 		gv, okv := s.vscrollGeom()
 		s.sbV.drag(gv, okv, ev, func(target int) { s.Scroll(0, target-s.OffsetY) })
 		gh, okh := s.hscrollGeom()
 		s.sbH.drag(gh, okh, ev, func(target int) { s.Scroll(target-s.OffsetX, 0) })
+		// A grabbed thumb owns the drag; the content only pans when neither
+		// scrollbar is being dragged, so one gesture never moves the view
+		// twice.
+		if s.pan.active && !s.sbV.active && !s.sbH.active {
+			s.Scroll(s.pan.delta(ev))
+		}
 	case EventMouseUp:
 		s.sbV.release()
 		s.sbH.release()
+		s.pan.release()
 	case EventKeyDown:
 		switch ev.Code {
 		case "ArrowUp":
