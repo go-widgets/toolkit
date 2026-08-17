@@ -84,6 +84,67 @@ func TestBrowserVerticalScrollbarDrawTracksScroll(t *testing.T) {
 	}
 }
 
+// TestBrowserHideScrollbarSuppressesPaint checks HideScrollbar stops the Browser
+// painting its own bar, so a host can overlay its own matching one: the Accent
+// thumb a visible bar draws is gone once the flag is set.
+func TestBrowserHideScrollbarSuppressesPaint(t *testing.T) {
+	theme := DefaultLight()
+	b, _, _, _ := newTestBrowser()
+	cr := b.contentRect()
+	deliverPage(b, cr.W, cr.H*3, nil) // vertical overflow
+	tab := b.activeTab()
+	g, ok := b.vscrollGeom(tab, cr)
+	if !ok {
+		t.Fatal("vertical scrollbar should be live for a 3×-tall page")
+	}
+	colX := cr.X + g.cross0 + scrollbarWidth/2
+	thumbY := cr.Y + g.thumbStart + 1
+	draw := func() []byte {
+		buf := make([]byte, browserBounds.W*browserBounds.H*4)
+		b.Draw(newP(buf, browserBounds.W), theme)
+		return buf
+	}
+
+	// Visible: the thumb paints in Accent.
+	if got := pixelAt(draw(), browserBounds.W, colX, thumbY); got != theme.Accent {
+		t.Fatalf("visible bar: thumb pixel = %+v, want Accent %+v", got, theme.Accent)
+	}
+	// Hidden: the same pixel is now the page, never the Accent chrome.
+	b.HideScrollbar = true
+	if got := pixelAt(draw(), browserBounds.W, colX, thumbY); got == theme.Accent {
+		t.Fatalf("hidden bar: thumb pixel still Accent %+v (bar not suppressed)", got)
+	}
+}
+
+// TestBrowserScrollExtent checks the vertical extent a HideScrollbar host reads
+// to size its own bar: not-shown with no tab and when the page fits, and the live
+// offset/viewport/total once the page overflows.
+func TestBrowserScrollExtent(t *testing.T) {
+	// No tab yet: nothing to report.
+	nb, _, _, _ := newTestBrowser()
+	if off, vp, tot, shown := nb.ScrollExtent(); shown || off != 0 || vp != 0 || tot != 0 {
+		t.Fatalf("no-tab ScrollExtent = (%d,%d,%d,%v), want (0,0,0,false)", off, vp, tot, shown)
+	}
+
+	// A page that fits reports its viewport/total but is not shown.
+	fb, _, _, _ := newTestBrowser()
+	crf := fb.contentRect()
+	deliverPage(fb, crf.W, crf.H/2, nil)
+	if off, vp, tot, shown := fb.ScrollExtent(); shown || vp != crf.H || tot != crf.H/2 {
+		t.Fatalf("fitting ScrollExtent = (%d,%d,%d,%v), want (_,%d,%d,false)", off, vp, tot, shown, crf.H, crf.H/2)
+	}
+
+	// A 3×-tall page overflows; the offset tracks the tab's scroll.
+	ob, _, _, _ := newTestBrowser()
+	cro := ob.contentRect()
+	deliverPage(ob, cro.W, cro.H*3, nil)
+	ob.activeTab().scroll = 40
+	off, vp, tot, shown := ob.ScrollExtent()
+	if !shown || off != 40 || vp != cro.H || tot != cro.H*3 {
+		t.Fatalf("overflow ScrollExtent = (%d,%d,%d,%v), want (40,%d,%d,true)", off, vp, tot, shown, cro.H, cro.H*3)
+	}
+}
+
 // TestBrowserVerticalThumbDrag grabs the thumb and drags it, asserting the tab
 // scroll follows to the inverse-mapped offset, and that a drag after release is
 // ignored.
