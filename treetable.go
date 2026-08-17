@@ -484,8 +484,8 @@ func (t *TreeTable) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	// The caller only invokes this while windowed, which is exactly when
 	// scrollbarGeom reports live, so the ok flag is always true here.
 	g, _ := t.scrollbarGeom()
-	fillRect(p, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen, theme.SurfaceAlt)
-	fillRect(p, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen, theme.Accent)
+	paintScrollTrack(p, theme, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen)
+	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen)
 }
 
 // OnEvent: a click on the first column's disclosure glyph toggles that
