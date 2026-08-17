@@ -56,6 +56,11 @@ type AppDockItem struct {
 	Active bool
 	// Badge, when > 0, overlays an attention count as a Badge at the top-right.
 	Badge int
+	// Width overrides the item's resting width in device pixels; 0 uses the
+	// scaled default (AppDockItemW). A host with variable-width entries — window
+	// task buttons sized to their title, say — sets it per item; layout,
+	// magnification and hit-testing all honour it.
+	Width int
 }
 
 // AppDock is a horizontal launcher bar (a macOS-style application dock) with
@@ -109,9 +114,17 @@ func NewAppDock(items ...AppDockItem) *AppDock {
 // same way the other data-driven item widgets (ListBox) expose themselves.
 func (d *AppDock) A11y() A11yInfo { return A11yInfo{Role: RoleToolbar} }
 
-func (d *AppDock) itemW() int { return scaled(AppDockItemW) }
 func (d *AppDock) itemH() int { return scaled(AppDockItemH) }
 func (d *AppDock) gap() int   { return scaled(AppDockGap) }
+
+// itemWidthOf is item i's resting width: its explicit Width (device pixels) when
+// set, else the scaled default.
+func (d *AppDock) itemWidthOf(i int) int {
+	if i >= 0 && i < len(d.Items) && d.Items[i].Width > 0 {
+		return d.Items[i].Width
+	}
+	return scaled(AppDockItemW)
+}
 
 // appDockSlot is one laid-out item: its on-screen rectangle and magnification
 // scale (1 at rest).
@@ -124,13 +137,14 @@ type appDockSlot struct {
 // centred in the dock's bounds.
 func (d *AppDock) restingSlots() []appDockSlot {
 	r := d.Bounds()
-	iw, ih, g := d.itemW(), d.itemH(), d.gap()
+	ih, g := d.itemH(), d.gap()
 	y := r.Y + (r.H-ih)/2
 	out := make([]appDockSlot, len(d.Items))
 	x := r.X + g
 	for i := range d.Items {
-		out[i] = appDockSlot{rect: Rect{X: x, Y: y, W: iw, H: ih}, scale: 1}
-		x += iw + g
+		w := d.itemWidthOf(i)
+		out[i] = appDockSlot{rect: Rect{X: x, Y: y, W: w, H: ih}, scale: 1}
+		x += w + g
 	}
 	return out
 }
@@ -154,19 +168,22 @@ func (d *AppDock) slots() []appDockSlot {
 		return base
 	}
 	top := d.Bounds().Y
-	iw := d.itemW()
-	radiusPx := d.Radius * float64(iw)
+	// The falloff reach is measured in default-item widths so the swell feels the
+	// same regardless of any one item's width.
+	radiusPx := d.Radius * float64(scaled(AppDockItemW))
 	n := len(base)
 	origX := make([]int, n)
+	origW := make([]int, n)
 	for i := range base {
 		origX[i] = base[i].rect.X
-		center := float64(base[i].rect.X) + float64(iw)/2
+		origW[i] = base[i].rect.W
+		center := float64(origX[i]) + float64(origW[i])/2
 		u := math.Abs(float64(d.cursorX)-center) / radiusPx
 		base[i].scale = 1 + (d.MaxScale-1)*appDockBump(u)
 	}
 	cur := origX[0]
 	for i := range base {
-		nw := int(math.Round(float64(iw) * base[i].scale))
+		nw := int(math.Round(float64(origW[i]) * base[i].scale))
 		origH := base[i].rect.H
 		bottom := base[i].rect.Y + origH
 		nh := int(math.Round(float64(origH) * base[i].scale))
@@ -180,14 +197,14 @@ func (d *AppDock) slots() []appDockSlot {
 		base[i].rect.Y = ny
 		base[i].rect.H = nh
 		if i < n-1 {
-			g := origX[i+1] - (origX[i] + iw)
+			g := origX[i+1] - (origX[i] + origW[i])
 			cur = cur + nw + g
 		}
 	}
 	// Cursor-anchor the reflowed row so the hovered point stays put.
 	for i := range base {
-		if d.cursorX >= origX[i] && d.cursorX < origX[i]+iw {
-			frac := (float64(d.cursorX) - float64(origX[i])) / float64(iw)
+		if d.cursorX >= origX[i] && d.cursorX < origX[i]+origW[i] {
+			frac := (float64(d.cursorX) - float64(origX[i])) / float64(origW[i])
 			newPointX := float64(base[i].rect.X) + frac*float64(base[i].rect.W)
 			if shift := int(math.Round(float64(d.cursorX) - newPointX)); shift != 0 {
 				for j := range base {
