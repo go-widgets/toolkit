@@ -273,7 +273,7 @@ func TestA11yChromeWidgets(t *testing.T) {
 	popoverWithTitle.Title = "Filters"
 
 	expandedExpander := NewExpander("Details", nil)
-	expandedExpander.Expanded = true
+	expandedExpander.Expanded().Set(true)
 	collapsedExpander := NewExpander("Details", nil)
 
 	modalOverlay := NewOverlay(nil)

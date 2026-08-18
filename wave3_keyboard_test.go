@@ -871,21 +871,21 @@ func TestAccordionDrawsFocusRingWhenFocused(t *testing.T) {
 func TestExpanderKeyToggles(t *testing.T) {
 	expands := 0
 	e := NewExpander("S", nil)
-	e.OnExpand = func(bool) { expands++ }
+	e.Expanded().Subscribe(func(bool) { expands++ })
 	e.OnEvent(kd("Enter"))
-	if !e.Expanded || expands != 1 {
-		t.Fatalf("Enter: Expanded=%v expands=%d", e.Expanded, expands)
+	if !e.Expanded().Get() || expands != 1 {
+		t.Fatalf("Enter: Expanded=%v expands=%d", e.Expanded().Get(), expands)
 	}
 	e.OnEvent(kd(" "))
-	if e.Expanded || expands != 2 {
-		t.Fatalf("Space: Expanded=%v expands=%d", e.Expanded, expands)
+	if e.Expanded().Get() || expands != 2 {
+		t.Fatalf("Space: Expanded=%v expands=%d", e.Expanded().Get(), expands)
 	}
 	e.Disabled = true
 	e.OnEvent(kd("Enter"))
-	if e.Expanded || expands != 2 {
-		t.Fatalf("disabled expander toggled (Expanded=%v)", e.Expanded)
+	if e.Expanded().Get() || expands != 2 {
+		t.Fatalf("disabled expander toggled (Expanded=%v)", e.Expanded().Get())
 	}
-	NewExpander("nil", nil).OnEvent(kd("Enter")) // nil OnExpand safe
+	NewExpander("nil", nil).OnEvent(kd("Enter")) // unbound observable safe
 	// A non-click, non-keydown event is ignored.
 	NewExpander("S", nil).OnEvent(Event{Kind: EventChar, Code: "a"})
 }

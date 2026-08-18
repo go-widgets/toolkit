@@ -69,7 +69,7 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 			return f
 		}},
 		{"card", func() Widget { return NewCard("Title", "Body one.\nBody two.", "footer") }},
-		{"expander", func() Widget { e := NewExpander("Details", NewLabel("body")); e.Expanded = true; return e }},
+		{"expander", func() Widget { e := NewExpander("Details", NewLabel("body")); e.Expanded().Set(true); return e }},
 		{"paned", func() Widget { return NewHPaned(NewLabel("L"), NewLabel("R")) }},
 		{"calendar", func() Widget { c := NewCalendar(2026, 7, 2); c.SetToday(2026, 7, 2); return c }},
 		{"agenda-month", func() Widget {
