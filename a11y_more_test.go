@@ -144,7 +144,8 @@ func TestA11yViewSwitcher(t *testing.T) {
 	if got := vs.A11y(); got != (A11yInfo{Role: RoleTablist, Name: "Grid"}) {
 		t.Errorf("ViewSwitcher in-range A11y() = %+v", got)
 	}
-	oor := &ViewSwitcher{Views: []string{"List", "Grid"}, Current: 9}
+	oor := &ViewSwitcher{Views: []string{"List", "Grid"}}
+	oor.Current().Set(9)
 	if got := oor.A11y(); got != (A11yInfo{Role: RoleTablist, Name: ""}) {
 		t.Errorf("ViewSwitcher out-of-range A11y() = %+v", got)
 	}

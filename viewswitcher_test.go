@@ -16,20 +16,38 @@ func TestViewSwitcherConstants(t *testing.T) {
 
 func TestNewViewSwitcherClamps(t *testing.T) {
 	// Empty views: current forced to 0.
-	if v := NewViewSwitcher(nil, 7); v.Current != 0 {
-		t.Fatalf("empty views current = %d, want 0", v.Current)
+	if v := NewViewSwitcher(nil, 7); v.Current().Get() != 0 {
+		t.Fatalf("empty views current = %d, want 0", v.Current().Get())
 	}
 	// Negative current clamped to 0.
-	if v := NewViewSwitcher([]string{"A", "B"}, -5); v.Current != 0 {
-		t.Fatalf("negative current = %d, want 0", v.Current)
+	if v := NewViewSwitcher([]string{"A", "B"}, -5); v.Current().Get() != 0 {
+		t.Fatalf("negative current = %d, want 0", v.Current().Get())
 	}
 	// Overshoot clamped to len-1.
-	if v := NewViewSwitcher([]string{"A", "B", "C"}, 99); v.Current != 2 {
-		t.Fatalf("overshoot current = %d, want 2", v.Current)
+	if v := NewViewSwitcher([]string{"A", "B", "C"}, 99); v.Current().Get() != 2 {
+		t.Fatalf("overshoot current = %d, want 2", v.Current().Get())
 	}
 	// In-range preserved.
-	if v := NewViewSwitcher([]string{"A", "B", "C"}, 1); v.Current != 1 {
-		t.Fatalf("in-range current = %d, want 1", v.Current)
+	if v := NewViewSwitcher([]string{"A", "B", "C"}, 1); v.Current().Get() != 1 {
+		t.Fatalf("in-range current = %d, want 1", v.Current().Get())
+	}
+}
+
+// TestViewSwitcherCurrentAccessorLazyInit covers the accessor on a bare
+// zero-value widget: Current() must lazy-init the Observable to 0 (no nil panic),
+// and a host that binds it via Subscribe must observe a keyboard-driven move.
+func TestViewSwitcherCurrentAccessorLazyInit(t *testing.T) {
+	v := &ViewSwitcher{Views: []string{"A", "B"}}
+	// Accessor initialises the Observable to 0 on first read.
+	if got := v.Current().Get(); got != 0 {
+		t.Fatalf("bare accessor Get() = %d, want 0", got)
+	}
+	// Host binds Current(): a move notifies the subscriber.
+	seen := -1
+	v.Current().Subscribe(func(i int) { seen = i })
+	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"}) // 0 -> 1
+	if v.Current().Get() != 1 || seen != 1 {
+		t.Fatalf("host bind: Current=%d seen=%d, want 1/1", v.Current().Get(), seen)
 	}
 }
 
@@ -192,33 +210,33 @@ func TestViewSwitcherDrawZeroWidthNoPanic(t *testing.T) {
 	v.Draw(newP(makeSurface(1, ViewSwitcherH), 1), theme)
 }
 
-// --- OnEvent: selects segment + fires OnChange --------------------------
+// --- OnEvent: selects segment + notifies Current subscribers ------------
 
 func TestViewSwitcherClickSelectsSegment(t *testing.T) {
 	got := -1
 	v := NewViewSwitcher([]string{"A", "B", "C"}, 0)
-	v.OnChange = func(i int) { got = i }
+	v.Current().Subscribe(func(i int) { got = i })
 	v.SetBounds(Rect{X: 0, Y: 0, W: 240, H: ViewSwitcherH})
 	// segW = 80; click at x=100 -> segment 1.
 	v.OnEvent(Event{Kind: EventClick, X: 100, Y: 5})
-	if v.Current != 1 || got != 1 {
-		t.Fatalf("after click: Current=%d got=%d", v.Current, got)
+	if v.Current().Get() != 1 || got != 1 {
+		t.Fatalf("after click: Current=%d got=%d", v.Current().Get(), got)
 	}
 	// Click on segment 2.
 	v.OnEvent(Event{Kind: EventClick, X: 200, Y: 5})
-	if v.Current != 2 || got != 2 {
-		t.Fatalf("after 2nd click: Current=%d got=%d", v.Current, got)
+	if v.Current().Get() != 2 || got != 2 {
+		t.Fatalf("after 2nd click: Current=%d got=%d", v.Current().Get(), got)
 	}
 }
 
-// --- OnEvent: nil OnChange handler --------------------------------------
+// --- OnEvent: no subscriber bound ---------------------------------------
 
-func TestViewSwitcherClickNilOnChangeNoPanic(t *testing.T) {
+func TestViewSwitcherClickNoSubscriberNoPanic(t *testing.T) {
 	v := NewViewSwitcher([]string{"A", "B"}, 0)
 	v.SetBounds(Rect{X: 0, Y: 0, W: 200, H: ViewSwitcherH})
 	v.OnEvent(Event{Kind: EventClick, X: 150, Y: 5})
-	if v.Current != 1 {
-		t.Fatalf("Current = %d, want 1", v.Current)
+	if v.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want 1", v.Current().Get())
 	}
 }
 
@@ -236,7 +254,7 @@ func TestViewSwitcherClickZeroWidthNoOp(t *testing.T) {
 	v := NewViewSwitcher([]string{"A", "B"}, 0)
 	v.SetBounds(Rect{X: 0, Y: 0, W: 0, H: ViewSwitcherH})
 	v.OnEvent(Event{Kind: EventClick, X: 0, Y: 5})
-	if v.Current != 0 {
+	if v.Current().Get() != 0 {
 		t.Fatal("zero-width click should not mutate Current")
 	}
 }
@@ -248,7 +266,7 @@ func TestViewSwitcherClickBelowZero(t *testing.T) {
 	v.SetBounds(Rect{X: 0, Y: 0, W: 240, H: ViewSwitcherH})
 	// segW = 80; ev.X = -100 -> idx = -100/80 = -1 -> return without mutating.
 	v.OnEvent(Event{Kind: EventClick, X: -100, Y: 5})
-	if v.Current != 2 {
+	if v.Current().Get() != 2 {
 		t.Fatal("negative-X click should not mutate Current")
 	}
 }
@@ -258,7 +276,7 @@ func TestViewSwitcherClickBeyondEnd(t *testing.T) {
 	v.SetBounds(Rect{X: 0, Y: 0, W: 240, H: ViewSwitcherH})
 	// segW = 80; ev.X = 400 -> idx = 5 -> return without mutating.
 	v.OnEvent(Event{Kind: EventClick, X: 400, Y: 5})
-	if v.Current != 0 {
+	if v.Current().Get() != 0 {
 		t.Fatal("beyond-end click should not mutate Current")
 	}
 }
@@ -269,7 +287,7 @@ func TestViewSwitcherIgnoresNonClick(t *testing.T) {
 	v := NewViewSwitcher([]string{"A", "B"}, 0)
 	v.SetBounds(Rect{X: 0, Y: 0, W: 200, H: ViewSwitcherH})
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if v.Current != 0 {
+	if v.Current().Get() != 0 {
 		t.Fatal("KeyDown should not mutate Current")
 	}
 }

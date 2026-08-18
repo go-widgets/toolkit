@@ -214,8 +214,8 @@ func (t *TreeView) A11y() A11yInfo {
 // A11y reports the ViewSwitcher as a tablist named by its current view.
 func (v *ViewSwitcher) A11y() A11yInfo {
 	name := ""
-	if v.Current >= 0 && v.Current < len(v.Views) {
-		name = v.Views[v.Current]
+	if cur := v.Current().Get(); cur >= 0 && cur < len(v.Views) {
+		name = v.Views[cur]
 	}
 	return A11yInfo{Role: RoleTablist, Name: name}
 }
