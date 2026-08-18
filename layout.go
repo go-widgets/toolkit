@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // DefaultBoxSpacing is the inter-child gap (in pixels) the box constructors
 // NewHBox/NewVBox/NewBoxLayout seed into their Spacing field. Picked to match the
@@ -653,16 +656,25 @@ type Frame struct {
 	// The zero value "" keeps the original border-only box.
 	Title string
 	// Collapsible shows a ▼/▶ disclosure chevron in the title bar; a click
-	// on the bar toggles Collapsed (and fires OnCollapse). It forces a title
-	// bar even when Title is "".
+	// on the bar toggles the collapsed state. It forces a title bar even when
+	// Title is "".
 	Collapsible bool
-	// Collapsed hides the child, drawing only the title bar (Ext panel
-	// collapse). Meaningful only when a title bar is present.
-	Collapsed bool
-	// OnCollapse fires when a title-bar click toggles Collapsed; the new
-	// state is passed. Nil is safe.
-	OnCollapse func(collapsed bool)
-	child      Widget
+
+	// collapsed holds the reactive collapse state, MVVM-only, exposed via
+	// [Frame.Collapsed]. Meaningful only when a title bar is present.
+	collapsed *mvvm.Observable[bool]
+	child     Widget
+}
+
+// Collapsed is the frame's collapse state as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Collapsed field. A
+// title-bar click (when Collapsible) flips it, hiding the child and drawing only
+// the title bar; subscribers are notified on change.
+func (f *Frame) Collapsed() *mvvm.Observable[bool] {
+	if f.collapsed == nil {
+		f.collapsed = mvvm.NewObservable(false)
+	}
+	return f.collapsed
 }
 
 // FrameTitleH is the pixel height of a Frame's optional title bar.
@@ -689,7 +701,7 @@ func (f *Frame) SetBounds(r Rect) {
 		return
 	}
 	hh := f.headerH()
-	if f.Collapsed && hh > 0 {
+	if f.Collapsed().Get() && hh > 0 {
 		f.child.SetBounds(Rect{}) // hidden while collapsed
 		return
 	}
@@ -718,7 +730,7 @@ func (f *Frame) drawTitleBar(p painter.Painter, theme *Theme, r Rect, hh int) {
 	fillRect(p, r.X+1, r.Y+1, r.W-2, hh, theme.SurfaceAlt)
 	tx := r.X + 6
 	if f.Collapsible {
-		drawDisclosureChevron(p, r.X+6, r.Y+1+hh/2, !f.Collapsed, theme.OnSurface)
+		drawDisclosureChevron(p, r.X+6, r.Y+1+hh/2, !f.Collapsed().Get(), theme.OnSurface)
 		tx = r.X + 16
 	}
 	ty := r.Y + 1 + (hh-f.glyphHeight())/2
@@ -730,7 +742,7 @@ func (f *Frame) drawTitleBar(p painter.Painter, theme *Theme, r Rect, hh int) {
 func (f *Frame) Draw(p painter.Painter, theme *Theme) {
 	r := f.Bounds()
 	hh := f.headerH()
-	if f.Collapsed && hh > 0 {
+	if f.Collapsed().Get() && hh > 0 {
 		strokeRect(p, r.X, r.Y, r.W, hh+2, theme.Border)
 		f.drawTitleBar(p, theme, r, hh)
 		return
@@ -768,13 +780,10 @@ func (f *Frame) OnEvent(ev Event) {
 	// click on the border above the bar, or the first content row below it,
 	// does not toggle.
 	if f.Collapsible && ev.Kind == EventClick && ev.Y >= 1 && ev.Y < 1+hh {
-		f.Collapsed = !f.Collapsed
-		if f.OnCollapse != nil {
-			f.OnCollapse(f.Collapsed)
-		}
+		f.Collapsed().Set(!f.Collapsed().Get())
 		return
 	}
-	if f.child == nil || (f.Collapsed && hh > 0) {
+	if f.child == nil || (f.Collapsed().Get() && hh > 0) {
 		return
 	}
 	pr := f.Bounds()

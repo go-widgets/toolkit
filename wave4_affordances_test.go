@@ -400,24 +400,24 @@ func TestFrameCollapseBandBoundary(t *testing.T) {
 
 	// Y == 0 is the top border, above the band → no toggle.
 	f.OnEvent(Event{Kind: EventClick, X: 10, Y: 0})
-	if f.Collapsed {
+	if f.Collapsed().Get() {
 		t.Fatal("click on the top border (Y=0) toggled")
 	}
 	// Y == 1 is the band's first row → toggle.
 	f.OnEvent(Event{Kind: EventClick, X: 10, Y: 1})
-	if !f.Collapsed {
+	if !f.Collapsed().Get() {
 		t.Fatal("click at band start (Y=1) did not toggle")
 	}
-	f.Collapsed = false
+	f.Collapsed().Set(false)
 	// Y == hh is the band's last row (hh < 1+hh) → toggle.
 	f.OnEvent(Event{Kind: EventClick, X: 10, Y: hh})
-	if !f.Collapsed {
+	if !f.Collapsed().Get() {
 		t.Fatalf("click at band end (Y=%d) did not toggle", hh)
 	}
-	f.Collapsed = false
+	f.Collapsed().Set(false)
 	// Y == 1+hh is the first content row, just past the band → no toggle.
 	f.OnEvent(Event{Kind: EventClick, X: 10, Y: 1 + hh})
-	if f.Collapsed {
+	if f.Collapsed().Get() {
 		t.Fatalf("click below the band (Y=%d) toggled", 1+hh)
 	}
 }
