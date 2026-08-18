@@ -34,11 +34,11 @@ func TestPropertyGridAddValueSetValue(t *testing.T) {
 func TestPropertyGridClear(t *testing.T) {
 	pg := NewPropertyGrid()
 	pg.Add("A", "1")
-	pg.table.Selected = 0
+	pg.table.Selected().Set(0)
 	pg.Clear()
-	if len(pg.names) != 0 || len(pg.table.Rows) != 0 || pg.table.Selected != -1 {
+	if len(pg.names) != 0 || len(pg.table.Rows) != 0 || pg.table.Selected().Get() != -1 {
 		t.Fatalf("after Clear: names=%d rows=%d sel=%d, want 0/0/-1",
-			len(pg.names), len(pg.table.Rows), pg.table.Selected)
+			len(pg.names), len(pg.table.Rows), pg.table.Selected().Get())
 	}
 }
 

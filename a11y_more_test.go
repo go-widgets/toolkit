@@ -96,7 +96,7 @@ func TestA11yTable(t *testing.T) {
 	rows := [][]string{{"Ann", "30"}, {"Bo", "25"}}
 
 	tb := NewTable(cols, rows)
-	tb.Selected = 0
+	tb.Selected().Set(0)
 	if got := tb.A11y(); got != (A11yInfo{Role: RoleGrid, Value: "row 1 selected"}) {
 		t.Errorf("Table single-select A11y() = %+v", got)
 	}
@@ -109,7 +109,7 @@ func TestA11yTable(t *testing.T) {
 	}
 
 	empty := NewTable(cols, nil)
-	empty.Selected = -1
+	empty.Selected().Set(-1)
 	if got := empty.A11y(); got != (A11yInfo{Role: RoleGrid, Value: ""}) {
 		t.Errorf("Table empty A11y() = %+v", got)
 	}

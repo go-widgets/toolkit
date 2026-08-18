@@ -73,7 +73,7 @@ func (t *TimePicker) A11y() A11yInfo {
 func (pg *PropertyGrid) A11y() A11yInfo {
 	v := ""
 	if pg.table != nil {
-		if s := pg.table.Selected; s >= 0 && s < len(pg.names) {
+		if s := pg.table.Selected().Get(); s >= 0 && s < len(pg.names) {
 			v = pg.names[s]
 		}
 	}

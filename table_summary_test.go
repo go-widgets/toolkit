@@ -305,7 +305,7 @@ func TestTableSummaryClickInert(t *testing.T) {
 	tb := summaryTable()
 	tb.MultiSelect = true
 	tb.OnEvent(Event{Kind: EventClick, X: 30, Y: TableHeaderHeight + 3*TableRowHeight + 2})
-	if len(tb.SelectedRows()) != 0 || tb.Selected != -1 {
-		t.Fatalf("footer click changed selection: rows=%v sel=%d", tb.SelectedRows(), tb.Selected)
+	if len(tb.SelectedRows()) != 0 || tb.Selected().Get() != -1 {
+		t.Fatalf("footer click changed selection: rows=%v sel=%d", tb.SelectedRows(), tb.Selected().Get())
 	}
 }

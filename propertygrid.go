@@ -60,7 +60,7 @@ func (pg *PropertyGrid) Add(name, value string) {
 func (pg *PropertyGrid) Clear() {
 	pg.names = nil
 	pg.table.Rows = nil
-	pg.table.Selected = -1
+	pg.table.Selected().Set(-1)
 }
 
 // RemoveAt removes the property at row index i, keeping the name index and the
@@ -73,7 +73,7 @@ func (pg *PropertyGrid) RemoveAt(i int) {
 	}
 	pg.names = append(pg.names[:i], pg.names[i+1:]...)
 	pg.table.Rows = append(pg.table.Rows[:i], pg.table.Rows[i+1:]...)
-	pg.table.Selected = -1
+	pg.table.Selected().Set(-1)
 }
 
 // Value returns the current value of the named property, or "" if there is no

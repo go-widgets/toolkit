@@ -168,7 +168,7 @@ func TestA11yPropertyGrid(t *testing.T) {
 		t.Errorf("PropertyGrid no-selection A11y() = %+v", got)
 	}
 
-	pg.Table().Selected = 1
+	pg.Table().Selected().Set(1)
 	if got := pg.A11y(); got != (A11yInfo{Role: RoleGrid, Value: "Size"}) {
 		t.Errorf("PropertyGrid selected A11y() = %+v", got)
 	}

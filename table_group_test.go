@@ -110,12 +110,12 @@ func TestTableGroupSelectDataRow(t *testing.T) {
 	tb := groupedTable()
 	tb.MultiSelect = true
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: yOfLine(4)}) // row 2
-	if tb.Selected != 2 {
-		t.Fatalf("Selected=%d, want 2", tb.Selected)
+	if tb.Selected().Get() != 2 {
+		t.Fatalf("Selected=%d, want 2", tb.Selected().Get())
 	}
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: yOfLine(3)}) // g2 header
-	if tb.Selected != 2 {
-		t.Fatalf("Selected changed to %d on a header click, want still 2", tb.Selected)
+	if tb.Selected().Get() != 2 {
+		t.Fatalf("Selected changed to %d on a header click, want still 2", tb.Selected().Get())
 	}
 }
 

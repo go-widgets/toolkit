@@ -220,12 +220,12 @@ func TestTableHitTouch(t *testing.T) {
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 300})
 	// Header is scaled(24)=36 tall; body row 0 spans [36,80), row 1 [80,124).
 	tb.OnEvent(Event{Kind: EventClick, X: 5, Y: 50})
-	if tb.Selected != 0 {
-		t.Fatalf("touch click at y=50 selected %d, want row 0", tb.Selected)
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("touch click at y=50 selected %d, want row 0", tb.Selected().Get())
 	}
 	tb.OnEvent(Event{Kind: EventClick, X: 5, Y: 90}) // 36 + 44 -> row 1
-	if tb.Selected != 1 {
-		t.Fatalf("touch click at y=90 selected %d, want row 1 (44px rows)", tb.Selected)
+	if tb.Selected().Get() != 1 {
+		t.Fatalf("touch click at y=90 selected %d, want row 1 (44px rows)", tb.Selected().Get())
 	}
 }
 

@@ -43,8 +43,8 @@ func TestTableEditOnDoubleClick(t *testing.T) {
 	if _, _, editing := tb.Editing(); editing {
 		t.Fatal("single click in double-click mode must not open an editor")
 	}
-	if tb.Selected != 0 {
-		t.Fatalf("single click Selected=%d, want row 0 selected", tb.Selected)
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("single click Selected=%d, want row 0 selected", tb.Selected().Get())
 	}
 
 	// A double-click on row 1's editable cell opens the editor there.
@@ -79,8 +79,7 @@ func TestTableEditManual(t *testing.T) {
 func TestTableEnterBeginsEditInDoubleClickMode(t *testing.T) {
 	tb := editableTable()
 	tb.EditActivation = EditOnDoubleClick
-	tb.Selected = 1
-
+	tb.Selected().Set(1)
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if row, col, editing := tb.Editing(); !editing || row != 1 || col != 1 {
 		t.Fatalf("Enter Editing()=(%d,%d,%v), want (1,1,true)", row, col, editing)
@@ -88,7 +87,7 @@ func TestTableEnterBeginsEditInDoubleClickMode(t *testing.T) {
 
 	// EditOnSingleClick (default): Enter does NOT edit even with an editable col.
 	tb2 := editableTable()
-	tb2.Selected = 0
+	tb2.Selected().Set(0)
 	tb2.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if _, _, editing := tb2.Editing(); editing {
 		t.Fatal("Enter must not edit outside EditOnDoubleClick mode")
@@ -101,7 +100,7 @@ func TestTableEnterEditGuards(t *testing.T) {
 	// Out-of-range cursor.
 	tb := editableTable()
 	tb.EditActivation = EditOnDoubleClick
-	tb.Selected = -1
+	tb.Selected().Set(-1)
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if _, _, editing := tb.Editing(); editing {
 		t.Fatal("Enter with no cursor must not open an editor")
@@ -111,7 +110,7 @@ func TestTableEnterEditGuards(t *testing.T) {
 	ro := NewTable([]TableColumn{{Title: "A"}, {Title: "B"}}, [][]string{{"x", "y"}})
 	ro.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	ro.EditActivation = EditOnDoubleClick
-	ro.Selected = 0
+	ro.Selected().Set(0)
 	ro.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if _, _, editing := ro.Editing(); editing {
 		t.Fatal("Enter with no editable column must not open an editor")
@@ -313,14 +312,14 @@ func TestTableSortByColumnNumeric(t *testing.T) {
 	if got := colValues(tb, 0); !strSliceEq(got, []string{"z", "y", "x"}) {
 		t.Fatalf("asc numeric order=%v, want [z y x]", got)
 	}
-	if tb.SortColumn != 1 || !tb.SortAsc {
-		t.Fatalf("SortColumn=%d SortAsc=%v, want 1,true", tb.SortColumn, tb.SortAsc)
+	if tb.SortColumn().Get() != 1 || !tb.SortAsc().Get() {
+		t.Fatalf("SortColumn=%d SortAsc=%v, want 1,true", tb.SortColumn().Get(), tb.SortAsc().Get())
 	}
 	tb.SortByColumn(1, false)
 	if got := colValues(tb, 0); !strSliceEq(got, []string{"x", "y", "z"}) {
 		t.Fatalf("desc numeric order=%v, want [x y z]", got)
 	}
-	if tb.SortAsc {
+	if tb.SortAsc().Get() {
 		t.Fatal("SortAsc must be false after descending sort")
 	}
 }
@@ -344,8 +343,8 @@ func TestTableSortByColumnOutOfRange(t *testing.T) {
 	if got := colValues(tb, 0); !strSliceEq(got, []string{"2", "1"}) {
 		t.Fatalf("out-of-range sort changed rows to %v", got)
 	}
-	if tb.SortColumn != -1 {
-		t.Fatalf("SortColumn=%d after no-op sort, want -1", tb.SortColumn)
+	if tb.SortColumn().Get() != -1 {
+		t.Fatalf("SortColumn=%d after no-op sort, want -1", tb.SortColumn().Get())
 	}
 }
 
@@ -358,7 +357,7 @@ func TestTableSortRemapsState(t *testing.T) {
 	})
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	tb.RowDetail = func(int) string { return "detail" }
-	tb.Selected = 0 // row "c"
+	tb.Selected().Set(0) // row "c"
 	tb.selectedRows = map[int]bool{0: true, 1: true}
 	tb.expanded = map[int]bool{1: true} // row "a"
 
@@ -367,8 +366,8 @@ func TestTableSortRemapsState(t *testing.T) {
 		t.Fatalf("ragged sort order=%v, want ['' a c]", got)
 	}
 	// Old row 0 ("c") is now at index 2; old row 1 ("a") at index 1.
-	if tb.Selected != 2 {
-		t.Fatalf("Selected=%d after sort, want 2 (followed row 'c')", tb.Selected)
+	if tb.Selected().Get() != 2 {
+		t.Fatalf("Selected=%d after sort, want 2 (followed row 'c')", tb.Selected().Get())
 	}
 	if !tb.selectedRows[2] || !tb.selectedRows[1] || len(tb.selectedRows) != 2 {
 		t.Fatalf("selectedRows=%v, want {1,2}", tb.selectedRows)
@@ -421,8 +420,8 @@ func TestTableSelfSortHeaderClick(t *testing.T) {
 	if got := colValues(off, 0); !strSliceEq(got, []string{"3", "1", "2"}) {
 		t.Fatalf("non-SelfSort reordered rows to %v", got)
 	}
-	if off.SortColumn != 0 || !off.SortAsc || fired != 1 {
-		t.Fatalf("non-SelfSort SortColumn=%d SortAsc=%v fired=%d, want 0,true,1", off.SortColumn, off.SortAsc, fired)
+	if off.SortColumn().Get() != 0 || !off.SortAsc().Get() || fired != 1 {
+		t.Fatalf("non-SelfSort SortColumn=%d SortAsc=%v fired=%d, want 0,true,1", off.SortColumn().Get(), off.SortAsc().Get(), fired)
 	}
 }
 

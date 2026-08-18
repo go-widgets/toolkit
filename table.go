@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -53,13 +54,6 @@ type Table struct {
 	// cells they carry (missing trailing cells are drawn as blank
 	// space, the row background still paints edge-to-edge).
 	Rows [][]string
-	// Selected is the 0-indexed row highlighted with Theme.Accent;
-	// -1 (or any out-of-range value) means "no selection" and the
-	// zebra stripe pattern paints unmodified. While MultiSelect is
-	// true, Selected doubles as the anchor a Shift-click ranges from;
-	// it is still the ONLY row painted while MultiSelect is false.
-	Selected int
-
 	// RowIcon, when non-nil, supplies an optional leading icon for each
 	// body row -- the missing piece for file-list-style views (a
 	// per-row file-type glyph before the name) that previously forced a
@@ -111,19 +105,6 @@ type Table struct {
 	// MultiSelect on.
 	selectedRows map[int]bool
 
-	// ScrollRow is the 0-indexed body row currently painted at the top
-	// of the body (the header itself never scrolls). Draw + rowAt both
-	// read it through clampScrollRow, so an out-of-range value set
-	// directly (or left stale after Rows shrinks) never windows past
-	// [0, maxScrollRow()] -- the same defensive-collapse idiom Selected
-	// and SortColumn already use. The zero value (0) is the original,
-	// pre-feature behaviour: the body starts at row 0, and if every row
-	// fits within Bounds().H, Draw renders byte-identically to before
-	// this field existed (no scrollbar, no windowing). Use ScrollTo /
-	// ScrollBy / scrollToSelected to move it -- they keep the field
-	// itself clamped, unlike a raw assignment.
-	ScrollRow int
-
 	// FrozenColumns is the number of leading columns pinned in place while
 	// the rest scroll horizontally (see ScrollX). Clamped into
 	// [0, len(Columns)]. Meaningful only when the columns are all
@@ -133,24 +114,6 @@ type Table struct {
 	// byte-identical to before this field existed.
 	FrozenColumns int
 
-	// ScrollX is the horizontal pixel offset of the SCROLLABLE (non-frozen)
-	// columns. Read through clampScrollX, so an out-of-range value never
-	// scrolls past the content. The zero value (0) shows the columns from
-	// their left edge. Inert unless hScrollable (fixed columns wider than
-	// the viewport); use ScrollXTo / ScrollXBy to move it clamped.
-	ScrollX int
-
-	// SortColumn is the 0-indexed column currently sorted, or -1 (or
-	// any out-of-range value) for "no sort" -- Draw skips the ▲/▼
-	// indicator and OnEvent treats every header click as a fresh sort.
-	// The Table never reorders Rows itself; SortColumn/SortAsc only
-	// drive the indicator glyph, matching how Selected only drives the
-	// accent highlight.
-	SortColumn int
-	// SortAsc is the direction of SortColumn: true draws ▲ (ascending),
-	// false draws ▼ (descending). Meaningless while SortColumn is out
-	// of range.
-	SortAsc bool
 	// OnSort fires when a Sortable header cell is clicked. col is the
 	// clicked column; ascending is the NEW direction after the click
 	// (clicking the already-active column toggles it, clicking a new
@@ -168,17 +131,6 @@ type Table struct {
 	// Table has already written the new value into Rows[row][col]. Nil is
 	// safe. Only cells in a column with Editable set can be edited.
 	OnCellEdit func(row, col int, value string)
-
-	// OnSelect fires whenever the highlighted row (Selected, which doubles
-	// as the keyboard cursor) changes through a user interaction: a
-	// MultiSelect body-row click that moves the anchor, or a keyboard cursor
-	// move (Arrow / Page / Home / End). row is the new Selected index. The
-	// Table has already updated Selected before firing, and the callback runs
-	// only when the value actually changes, so a re-select of the same row is
-	// silent. Nil is safe -- a host that does not track selection leaves it
-	// unset. This single-argument slot is what makes Selected observable (e.g.
-	// via mvvmtk.BindTableSelection).
-	OnSelect func(row int)
 
 	// editRow/editCol point at the cell whose inline editor is open (both
 	// -1 = none; NewTable seeds them). editor is the live editing control
@@ -302,6 +254,84 @@ type Table struct {
 	// index). Lazily created on the first toggle; a nil map reads as "nothing
 	// expanded". Only meaningful while RowDetail is non-nil.
 	expanded map[int]bool
+
+	// selected, scrollRow, scrollX, sortColumn and sortAsc are the Table's
+	// reactive state, MVVM-only: each lives in an unexported Observable exposed
+	// through the accessor of the same name ([Table.Selected], [Table.ScrollRow],
+	// [Table.ScrollX], [Table.SortColumn], [Table.SortAsc]). There is no settable
+	// state field; a host binds/Subscribes the accessor and every interaction
+	// (selection, scroll, sort) mutates through .Set(). NewTable seeds selected
+	// and sortColumn to -1 ("no selection" / "no sort"); a directly-constructed
+	// Table{} lazily inits each to its zero value (0 / false) on first access.
+	selected   *mvvm.Observable[int]
+	scrollRow  *mvvm.Observable[int]
+	scrollX    *mvvm.Observable[int]
+	sortColumn *mvvm.Observable[int]
+	sortAsc    *mvvm.Observable[bool]
+}
+
+// Selected is the 0-indexed highlighted row as a shared [mvvm.Observable]: a
+// host binds it (Set / Subscribe / two-way) -- there is no settable Selected
+// field. -1 (or any out-of-range value) means "no selection" and the zebra
+// stripe paints unmodified. While MultiSelect is true, Selected doubles as the
+// anchor a Shift-click ranges from; it is still the ONLY row painted while
+// MultiSelect is false. A keyboard cursor move or a MultiSelect anchor-moving
+// click Sets it (subscribers notified on change). NewTable seeds it to -1; a
+// bare Table{} lazily inits it to 0.
+func (t *Table) Selected() *mvvm.Observable[int] {
+	if t.selected == nil {
+		t.selected = mvvm.NewObservable(0)
+	}
+	return t.selected
+}
+
+// ScrollRow is the 0-indexed body row painted at the top of the body (the
+// header never scrolls) as a shared [mvvm.Observable] -- there is no settable
+// ScrollRow field. Draw + rowAt read it through clampScrollRow, so an
+// out-of-range value never windows past [0, maxScrollRow()]. ScrollTo /
+// ScrollBy / scrollToSelected Set it (clamped). The zero value (0) starts the
+// body at row 0.
+func (t *Table) ScrollRow() *mvvm.Observable[int] {
+	if t.scrollRow == nil {
+		t.scrollRow = mvvm.NewObservable(0)
+	}
+	return t.scrollRow
+}
+
+// ScrollX is the horizontal pixel offset of the SCROLLABLE (non-frozen) columns
+// as a shared [mvvm.Observable] -- there is no settable ScrollX field. Read
+// through clampScrollX, so an out-of-range value never scrolls past the content.
+// Inert unless hScrollable; ScrollXTo / ScrollXBy Set it (clamped). The zero
+// value (0) shows the columns from their left edge.
+func (t *Table) ScrollX() *mvvm.Observable[int] {
+	if t.scrollX == nil {
+		t.scrollX = mvvm.NewObservable(0)
+	}
+	return t.scrollX
+}
+
+// SortColumn is the 0-indexed sorted column, or -1 (or any out-of-range value)
+// for "no sort", as a shared [mvvm.Observable] -- there is no settable
+// SortColumn field. Draw skips the ▲/▼ indicator while it is out of range; a
+// Sortable header click Sets it (together with SortAsc). The Table never
+// reorders Rows itself unless SelfSort is on. NewTable seeds it to -1; a bare
+// Table{} lazily inits it to 0.
+func (t *Table) SortColumn() *mvvm.Observable[int] {
+	if t.sortColumn == nil {
+		t.sortColumn = mvvm.NewObservable(0)
+	}
+	return t.sortColumn
+}
+
+// SortAsc is the direction of SortColumn as a shared [mvvm.Observable] -- there
+// is no settable SortAsc field. true draws ▲ (ascending), false draws ▼
+// (descending); meaningless while SortColumn is out of range. A header click
+// Sets it. The zero value (false) is descending.
+func (t *Table) SortAsc() *mvvm.Observable[bool] {
+	if t.sortAsc == nil {
+		t.sortAsc = mvvm.NewObservable(false)
+	}
+	return t.sortAsc
 }
 
 // TableColumn is one column definition: a header title + an optional
@@ -518,13 +548,19 @@ func NewTable(cols []TableColumn, rows [][]string) *Table {
 	return &Table{
 		Columns:       cols,
 		Rows:          rows,
-		Selected:      -1,
-		SortColumn:    -1,
 		dragRow:       -1,
 		dropIndicator: -1,
 		editRow:       -1,
 		editCol:       -1,
 		GroupBy:       -1,
+		// Reactive state is MVVM-only: seed selected + sortColumn to -1 ("no
+		// selection" / "no sort"), the scroll offsets to 0 and the sort direction
+		// to false, matching the pre-migration field defaults.
+		selected:   mvvm.NewObservable(-1),
+		scrollRow:  mvvm.NewObservable(0),
+		scrollX:    mvvm.NewObservable(0),
+		sortColumn: mvvm.NewObservable(-1),
+		sortAsc:    mvvm.NewObservable(false),
 	}
 }
 
@@ -608,8 +644,8 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// unconstructed or stale Table never crashes drawing an indicator
 	// on a column that no longer exists.
 	sortCol := -1
-	if t.SortColumn >= 0 && t.SortColumn < len(t.Columns) {
-		sortCol = t.SortColumn
+	if sc := t.SortColumn().Get(); sc >= 0 && sc < len(t.Columns) {
+		sortCol = sc
 	}
 	hty := r.Y + (scaled(TableHeaderHeight)-t.glyphHeight())/2
 	hmid := r.Y + scaled(TableHeaderHeight)/2
@@ -651,8 +687,8 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// collapses to -1 so the loop below never enters the accent branch
 	// for a bogus index.
 	selRow := -1
-	if t.Selected >= 0 && t.Selected < len(t.Rows) {
-		selRow = t.Selected
+	if sel := t.Selected().Get(); sel >= 0 && sel < len(t.Rows) {
+		selRow = sel
 	}
 	onAccent := accentInk(theme)
 	// scroll is the top visible row, defensively re-collapsed from
@@ -876,7 +912,7 @@ func (t *Table) paintHeaderCell(p painter.Painter, theme *Theme, widths []int, x
 	col := t.Columns[i]
 	t.drawText(p, cellTextX(&t.Base, x, widths[i], col.Title, col.Align), hty, col.Title, theme.OnBackground)
 	if i == sortCol {
-		drawSortIndicator(p, x+widths[i]-8, hmid, t.SortAsc, theme.OnBackground)
+		drawSortIndicator(p, x+widths[i]-8, hmid, t.SortAsc().Get(), theme.OnBackground)
 	}
 }
 
@@ -1594,7 +1630,7 @@ func (t *Table) toggleGroup(val string) {
 		t.collapsed = map[string]bool{}
 	}
 	t.collapsed[val] = !t.collapsed[val]
-	t.ScrollRow = t.clampScrollRow()
+	t.ScrollRow().Set(t.clampScrollRow())
 }
 
 // toggleExpand flips row's expansion, lazily creating the expanded map on first
@@ -1614,7 +1650,7 @@ func (t *Table) toggleExpand(row int) {
 	} else {
 		t.expanded[row] = true
 	}
-	t.ScrollRow = t.clampScrollRow()
+	t.ScrollRow().Set(t.clampScrollRow())
 }
 
 // onDisclosure reports whether a Table-local x lands on column 0's disclosure
@@ -1627,15 +1663,14 @@ func (t *Table) onDisclosure(localX int) bool {
 	return localX >= left && localX < left+t.disclosureGutter()
 }
 
-// clampScrollRow returns ScrollRow collapsed into [0, maxScrollRow()]
-// -- the same "an out-of-range field never crashes Draw" idiom
-// Selected + SortColumn already use, applied read-only here so a
-// stale or directly-assigned ScrollRow (e.g. left over after Rows
-// shrinks) never windows past the valid row range. It does NOT mutate
-// t.ScrollRow; ScrollTo/ScrollBy/scrollToSelected are the API that
-// keeps the field itself clamped going forward.
+// clampScrollRow returns the ScrollRow Observable's value collapsed into
+// [0, maxScrollRow()] -- the same "an out-of-range value never crashes Draw"
+// idiom Selected + SortColumn already use, applied read-only here so a stale
+// value (e.g. left over after Rows shrinks) never windows past the valid row
+// range. It does NOT mutate the Observable; ScrollTo/ScrollBy/scrollToSelected
+// are the API that keeps it clamped going forward.
 func (t *Table) clampScrollRow() int {
-	s := t.ScrollRow
+	s := t.ScrollRow().Get()
 	if s < 0 {
 		s = 0
 	}
@@ -1736,7 +1771,7 @@ func (t *Table) clampScrollX() int {
 	if !t.hScrollable() {
 		return 0
 	}
-	s := t.ScrollX
+	s := t.ScrollX().Get()
 	if s < 0 {
 		s = 0
 	}
@@ -1749,14 +1784,14 @@ func (t *Table) clampScrollX() int {
 // ScrollXTo sets ScrollX to px, clamped into [0, maxScrollX()] -- the direct
 // entry point a horizontal scrollbar drag or a wheel handler drives.
 func (t *Table) ScrollXTo(px int) {
-	t.ScrollX = px
-	t.ScrollX = t.clampScrollX()
+	t.ScrollX().Set(px)
+	t.ScrollX().Set(t.clampScrollX())
 }
 
 // ScrollXBy adjusts ScrollX by delta pixels (positive scrolls right), clamped
 // the same way as ScrollXTo.
 func (t *Table) ScrollXBy(delta int) {
-	t.ScrollXTo(t.ScrollX + delta)
+	t.ScrollXTo(t.ScrollX().Get() + delta)
 }
 
 // columnScreenX returns column j's on-surface left edge given the resolved
@@ -1780,15 +1815,15 @@ func (t *Table) columnScreenX(rx int, widths []int, j int) int {
 // PageUp/PageDown key handler drives, mirroring how SetColumnWidth is
 // the direct entry point a separator drag drives.
 func (t *Table) ScrollTo(row int) {
-	t.ScrollRow = row
-	t.ScrollRow = t.clampScrollRow()
+	t.ScrollRow().Set(row)
+	t.ScrollRow().Set(t.clampScrollRow())
 }
 
 // ScrollBy adjusts ScrollRow by delta rows (positive scrolls down,
 // negative scrolls up), clamped the same way as ScrollTo. A mouse
 // wheel or arrow-key handler calls this directly.
 func (t *Table) ScrollBy(delta int) {
-	t.ScrollTo(t.ScrollRow + delta)
+	t.ScrollTo(t.ScrollRow().Get() + delta)
 }
 
 // scrollToSelected nudges ScrollRow just far enough to bring Selected
@@ -1799,18 +1834,20 @@ func (t *Table) ScrollBy(delta int) {
 // bogus target from a -1 row index, the same off-by-one that panicked
 // the tui Table's equivalent helper with "index out of range [-1]".
 func (t *Table) scrollToSelected() {
-	if t.Selected < 0 {
+	sel := t.Selected().Get()
+	if sel < 0 {
 		return
 	}
 	vis := t.bodyVisibleRows()
 	if vis <= 0 {
 		return
 	}
+	scroll := t.ScrollRow().Get()
 	switch {
-	case t.Selected < t.ScrollRow:
-		t.ScrollTo(t.Selected)
-	case t.Selected >= t.ScrollRow+vis:
-		t.ScrollTo(t.Selected - vis + 1)
+	case sel < scroll:
+		t.ScrollTo(sel)
+	case sel >= scroll+vis:
+		t.ScrollTo(sel - vis + 1)
 	}
 }
 
@@ -1839,7 +1876,7 @@ func (t *Table) handleKey(ev Event) {
 		t.extendRowSelection(ev.Code)
 		return
 	}
-	if idx, ok := rovingIndex(t.Selected, len(t.Rows), t.bodyVisibleRows(), ev.Code); ok {
+	if idx, ok := rovingIndex(t.Selected().Get(), len(t.Rows), t.bodyVisibleRows(), ev.Code); ok {
 		t.setSelected(idx)
 		// A plain move mirrors a plain click: in MultiSelect mode the cursor
 		// row becomes the sole selection (and the anchor).
@@ -1850,18 +1887,13 @@ func (t *Table) handleKey(ev Event) {
 	}
 }
 
-// setSelected moves the highlighted-row cursor to row and fires OnSelect
-// (nil-safe) when the value actually changes -- the shared mutate+notify path
-// a keyboard cursor move and a MultiSelect anchor-moving click both take.
-// Re-selecting the current row is silent, keeping a two-way binding loop-free.
+// setSelected moves the highlighted-row cursor to row by Setting the Selected
+// Observable -- the shared mutate+notify path a keyboard cursor move and a
+// MultiSelect anchor-moving click both take. mvvm.Observable.Set is itself a
+// no-op (no subscriber fires) when the value is unchanged, so re-selecting the
+// current row stays silent and a two-way binding loop-free.
 func (t *Table) setSelected(row int) {
-	if t.Selected == row {
-		return
-	}
-	t.Selected = row
-	if t.OnSelect != nil {
-		t.OnSelect(row)
-	}
+	t.Selected().Set(row)
 }
 
 // activateCursor applies to the cursor row exactly what a plain click on it
@@ -1870,11 +1902,12 @@ func (t *Table) setSelected(row int) {
 // keeps the cursor row as Selected (it already is). An out-of-range cursor is
 // a no-op.
 func (t *Table) activateCursor() {
-	if t.Selected < 0 || t.Selected >= len(t.Rows) {
+	sel := t.Selected().Get()
+	if sel < 0 || sel >= len(t.Rows) {
 		return
 	}
 	if t.MultiSelect {
-		t.SetRowSelection(t.Selected)
+		t.SetRowSelection(sel)
 	}
 }
 
@@ -1902,12 +1935,13 @@ func (t *Table) beginEditCursor() bool {
 	if t.EditActivation != EditOnDoubleClick {
 		return false
 	}
-	if t.Selected < 0 || t.Selected >= len(t.Rows) {
+	sel := t.Selected().Get()
+	if sel < 0 || sel >= len(t.Rows) {
 		return false
 	}
 	for c := range t.Columns {
 		if t.Columns[c].Editable {
-			t.beginEdit(t.Selected, c)
+			t.beginEdit(sel, c)
 			return t.editor != nil
 		}
 	}
@@ -1921,7 +1955,7 @@ func (t *Table) beginEditCursor() bool {
 // lost; a move already at the top/bottom edge simply re-selects the same row.
 // Only reached while MultiSelect is on and Rows is non-empty.
 func (t *Table) extendRowSelection(code string) {
-	prev := t.Selected
+	prev := t.Selected().Get()
 	if prev < 0 {
 		prev = 0
 	}
@@ -2273,8 +2307,8 @@ func (t *Table) reorderRow(from, to int) {
 	copy(t.Rows[final+1:], t.Rows[final:])
 	t.Rows[final] = row
 
-	if t.Selected >= 0 {
-		t.Selected = remapRowIndex(t.Selected, from, final)
+	if sel := t.Selected().Get(); sel >= 0 {
+		t.Selected().Set(remapRowIndex(sel, from, final))
 	}
 	if len(t.selectedRows) > 0 {
 		remapped := make(map[int]bool, len(t.selectedRows))
@@ -2296,14 +2330,15 @@ func (t *Table) reorderRow(from, to int) {
 // and hands the Table its updated data.
 func (t *Table) toggleSort(col int) {
 	asc := true
-	if t.SortColumn == col {
-		asc = !t.SortAsc
+	if t.SortColumn().Get() == col {
+		asc = !t.SortAsc().Get()
 	}
 	if t.SelfSort {
-		// SortByColumn reorders Rows and sets SortColumn/SortAsc itself.
+		// SortByColumn reorders Rows and Sets SortColumn/SortAsc itself.
 		t.SortByColumn(col, asc)
 	} else {
-		t.SortColumn, t.SortAsc = col, asc
+		t.SortColumn().Set(col)
+		t.SortAsc().Set(asc)
 	}
 	if t.OnSort != nil {
 		t.OnSort(col, asc)
@@ -2368,7 +2403,8 @@ func (t *Table) SortByColumn(col int, ascending bool) {
 		return c < 0
 	})
 	t.applyRowOrder(order)
-	t.SortColumn, t.SortAsc = col, ascending
+	t.SortColumn().Set(col)
+	t.SortAsc().Set(ascending)
 }
 
 // ArrangeGroups reorders Rows so the GroupBy column's groups become contiguous
@@ -2413,8 +2449,8 @@ func (t *Table) applyRowOrder(order []int) {
 		inv[oldI] = newI
 	}
 	t.Rows = newRows
-	if t.Selected >= 0 && t.Selected < len(inv) {
-		t.Selected = inv[t.Selected]
+	if sel := t.Selected().Get(); sel >= 0 && sel < len(inv) {
+		t.Selected().Set(inv[sel])
 	}
 	if len(t.selectedRows) > 0 {
 		remap := make(map[int]bool, len(t.selectedRows))
@@ -2434,7 +2470,7 @@ func (t *Table) applyRowOrder(order []int) {
 		}
 		t.expanded = remap
 	}
-	t.ScrollRow = t.clampScrollRow()
+	t.ScrollRow().Set(t.clampScrollRow())
 }
 
 // OnEvent implements header-click sorting, separator drag-resize, and
@@ -2555,7 +2591,7 @@ func (t *Table) OnEvent(ev Event) {
 		}
 		switch {
 		case ev.Shift:
-			t.SelectRowRange(t.Selected, row)
+			t.SelectRowRange(t.Selected().Get(), row)
 		case ev.Ctrl:
 			t.ToggleRowSelect(row)
 		default:

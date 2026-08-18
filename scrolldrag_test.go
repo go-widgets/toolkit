@@ -285,12 +285,12 @@ func TestTableScrollbarDragAndSelect(t *testing.T) {
 		t.Fatal("pressing the thumb should begin a drag")
 	}
 	tbl.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 3, Y: 50})
-	if tbl.ScrollRow != 7 { // (24*374 + 627)/1254 = 7.65 -> 7
-		t.Fatalf("mid drag ScrollRow = %d, want 7", tbl.ScrollRow)
+	if tbl.ScrollRow().Get() != 7 { // (24*374 + 627)/1254 = 7.65 -> 7
+		t.Fatalf("mid drag ScrollRow = %d, want 7", tbl.ScrollRow().Get())
 	}
 	tbl.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 3, Y: 90})
-	if tbl.ScrollRow != 17 {
-		t.Fatalf("drag past the end ScrollRow = %d, want 17 (clamped)", tbl.ScrollRow)
+	if tbl.ScrollRow().Get() != 17 {
+		t.Fatalf("drag past the end ScrollRow = %d, want 17 (clamped)", tbl.ScrollRow().Get())
 	}
 	tbl.OnEvent(Event{Kind: EventMouseUp})
 	if tbl.sbDrag.active {
@@ -300,20 +300,20 @@ func TestTableScrollbarDragAndSelect(t *testing.T) {
 	// Track press below the thumb pages down.
 	tbl.ScrollTo(0)
 	tbl.OnEvent(Event{Kind: EventClick, X: trackX + 3, Y: 60})
-	if tbl.ScrollRow != 3 {
-		t.Fatalf("page-down ScrollRow = %d, want 3", tbl.ScrollRow)
+	if tbl.ScrollRow().Get() != 3 {
+		t.Fatalf("page-down ScrollRow = %d, want 3", tbl.ScrollRow().Get())
 	}
 
 	// A body press left of the scrollbar still selects and never scrolls.
 	tbl.MultiSelect = true // Table only tracks Selected in multi-select mode
 	tbl.ScrollTo(5)
-	tbl.Selected = -1
+	tbl.Selected().Set(-1)
 	tbl.OnEvent(Event{Kind: EventClick, X: 100, Y: TableHeaderHeight + 2})
-	if tbl.Selected < 0 {
+	if tbl.Selected().Get() < 0 {
 		t.Fatal("a content press must select a row")
 	}
-	if tbl.ScrollRow != 5 {
-		t.Fatalf("selecting must not scroll: ScrollRow = %d, want 5", tbl.ScrollRow)
+	if tbl.ScrollRow().Get() != 5 {
+		t.Fatalf("selecting must not scroll: ScrollRow = %d, want 5", tbl.ScrollRow().Get())
 	}
 }
 

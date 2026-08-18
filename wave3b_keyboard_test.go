@@ -181,37 +181,37 @@ func newCursorTable() *Table {
 func tbVisible(t *testing.T, tb *Table) {
 	t.Helper()
 	vr := tb.bodyVisibleRows()
-	if tb.Selected < tb.ScrollRow || tb.Selected >= tb.ScrollRow+vr {
-		t.Fatalf("cursor %d outside window [%d,%d)", tb.Selected, tb.ScrollRow, tb.ScrollRow+vr)
+	if tb.Selected().Get() < tb.ScrollRow().Get() || tb.Selected().Get() >= tb.ScrollRow().Get()+vr {
+		t.Fatalf("cursor %d outside window [%d,%d)", tb.Selected().Get(), tb.ScrollRow().Get(), tb.ScrollRow().Get()+vr)
 	}
 }
 
 func TestTableKeyCursor(t *testing.T) {
 	tb := newCursorTable()
 	tb.OnEvent(kd3b("ArrowDown")) // -1 -> 0
-	if tb.Selected != 0 {
-		t.Fatalf("ArrowDown: Selected=%d", tb.Selected)
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("ArrowDown: Selected=%d", tb.Selected().Get())
 	}
 	tbVisible(t, tb)
 	tb.OnEvent(kd3b("End")) // -> 19, scrolls
-	if tb.Selected != 19 || tb.ScrollRow != 17 {
-		t.Fatalf("End: Selected=%d ScrollRow=%d, want 19/17", tb.Selected, tb.ScrollRow)
+	if tb.Selected().Get() != 19 || tb.ScrollRow().Get() != 17 {
+		t.Fatalf("End: Selected=%d ScrollRow=%d, want 19/17", tb.Selected().Get(), tb.ScrollRow().Get())
 	}
 	tbVisible(t, tb)
 	tb.OnEvent(kd3b("PageUp")) // 19 -> 16
-	if tb.Selected != 16 {
-		t.Fatalf("PageUp: Selected=%d, want 16", tb.Selected)
+	if tb.Selected().Get() != 16 {
+		t.Fatalf("PageUp: Selected=%d, want 16", tb.Selected().Get())
 	}
 	tbVisible(t, tb)
 	tb.OnEvent(kd3b("Home"))
-	if tb.Selected != 0 || tb.ScrollRow != 0 {
-		t.Fatalf("Home: Selected=%d ScrollRow=%d", tb.Selected, tb.ScrollRow)
+	if tb.Selected().Get() != 0 || tb.ScrollRow().Get() != 0 {
+		t.Fatalf("Home: Selected=%d ScrollRow=%d", tb.Selected().Get(), tb.ScrollRow().Get())
 	}
 	tbVisible(t, tb)
 	// Single-select activation is a no-op (Table has no click callback).
 	tb.OnEvent(kd3b("Enter"))
-	if tb.Selected != 0 {
-		t.Fatalf("Enter single-select changed Selected=%d", tb.Selected)
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("Enter single-select changed Selected=%d", tb.Selected().Get())
 	}
 }
 
@@ -235,79 +235,79 @@ func TestTableKeyShiftExtendsSelection(t *testing.T) {
 	tb.MultiSelect = true
 	// Seed Selected directly (selectedRows still nil -> exercises the seed
 	// branch of extendRowSelection).
-	tb.Selected = 5
+	tb.Selected().Set(5)
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true}) // 5 -> 6, {5,6}
-	if tb.Selected != 6 || !tb.IsRowSelected(5) || !tb.IsRowSelected(6) {
-		t.Fatalf("shift-down: Selected=%d sel5=%v sel6=%v", tb.Selected, tb.IsRowSelected(5), tb.IsRowSelected(6))
+	if tb.Selected().Get() != 6 || !tb.IsRowSelected(5) || !tb.IsRowSelected(6) {
+		t.Fatalf("shift-down: Selected=%d sel5=%v sel6=%v", tb.Selected().Get(), tb.IsRowSelected(5), tb.IsRowSelected(6))
 	}
 	tbVisible(t, tb)
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true}) // 6 -> 7, {5,6,7}
-	if tb.Selected != 7 || !tb.IsRowSelected(7) {
-		t.Fatalf("shift-down 2: Selected=%d sel7=%v", tb.Selected, tb.IsRowSelected(7))
+	if tb.Selected().Get() != 7 || !tb.IsRowSelected(7) {
+		t.Fatalf("shift-down 2: Selected=%d sel7=%v", tb.Selected().Get(), tb.IsRowSelected(7))
 	}
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp", Shift: true}) // 7 -> 6
-	if tb.Selected != 6 {
-		t.Fatalf("shift-up: Selected=%d, want 6", tb.Selected)
+	if tb.Selected().Get() != 6 {
+		t.Fatalf("shift-up: Selected=%d, want 6", tb.Selected().Get())
 	}
 
 	// Clamp at the edges: Shift+ArrowUp at row 0 stays at 0.
-	tb.Selected = 0
+	tb.Selected().Set(0)
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp", Shift: true})
-	if tb.Selected != 0 || !tb.IsRowSelected(0) {
-		t.Fatalf("shift-up clamp: Selected=%d", tb.Selected)
+	if tb.Selected().Get() != 0 || !tb.IsRowSelected(0) {
+		t.Fatalf("shift-up clamp: Selected=%d", tb.Selected().Get())
 	}
 	// Shift+ArrowDown at the last row stays.
-	tb.Selected = 19
+	tb.Selected().Set(19)
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true})
-	if tb.Selected != 19 {
-		t.Fatalf("shift-down clamp: Selected=%d", tb.Selected)
+	if tb.Selected().Get() != 19 {
+		t.Fatalf("shift-down clamp: Selected=%d", tb.Selected().Get())
 	}
 	// Shift extend from no selection (Selected == -1 -> prev 0).
 	fresh := newCursorTable()
 	fresh.MultiSelect = true
 	fresh.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true})
-	if fresh.Selected != 1 || !fresh.IsRowSelected(0) || !fresh.IsRowSelected(1) {
-		t.Fatalf("shift from none: Selected=%d sel0=%v sel1=%v", fresh.Selected, fresh.IsRowSelected(0), fresh.IsRowSelected(1))
+	if fresh.Selected().Get() != 1 || !fresh.IsRowSelected(0) || !fresh.IsRowSelected(1) {
+		t.Fatalf("shift from none: Selected=%d sel0=%v sel1=%v", fresh.Selected().Get(), fresh.IsRowSelected(0), fresh.IsRowSelected(1))
 	}
 	// Shift+Arrow without MultiSelect falls through to a plain cursor move.
 	single := newCursorTable()
-	single.Selected = 3
+	single.Selected().Set(3)
 	single.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true})
-	if single.Selected != 4 {
-		t.Fatalf("shift w/o multiselect: Selected=%d, want 4", single.Selected)
+	if single.Selected().Get() != 4 {
+		t.Fatalf("shift w/o multiselect: Selected=%d, want 4", single.Selected().Get())
 	}
 }
 
 func TestTableKeyDisabledEmptyAndNoCursorActivate(t *testing.T) {
 	tb := newCursorTable()
-	tb.Selected = 4
+	tb.Selected().Set(4)
 	tb.Disabled = true
 	tb.OnEvent(kd3b("ArrowDown"))
 	tb.OnEvent(kd3b("Enter"))
-	if tb.Selected != 4 {
-		t.Fatalf("disabled table moved (Selected=%d)", tb.Selected)
+	if tb.Selected().Get() != 4 {
+		t.Fatalf("disabled table moved (Selected=%d)", tb.Selected().Get())
 	}
 	// Empty table: keys are a no-op.
 	empty := NewTable([]TableColumn{{Title: "A"}}, nil)
 	empty.SetBounds(Rect{X: 0, Y: 0, W: 120, H: TableHeaderHeight + 3*TableRowHeight})
 	empty.OnEvent(kd3b("ArrowDown"))
 	empty.OnEvent(kd3b("Enter"))
-	if empty.Selected != -1 {
-		t.Fatalf("empty table moved (Selected=%d)", empty.Selected)
+	if empty.Selected().Get() != -1 {
+		t.Fatalf("empty table moved (Selected=%d)", empty.Selected().Get())
 	}
 	// Rows present but no cursor: Enter (activateCursor out of range) is a no-op.
 	nc := newCursorTable()
 	nc.MultiSelect = true
 	nc.OnEvent(kd3b("Enter"))
-	if nc.Selected != -1 || len(nc.SelectedRows()) != 0 {
-		t.Fatalf("Enter with no cursor selected something: Selected=%d rows=%v", nc.Selected, nc.SelectedRows())
+	if nc.Selected().Get() != -1 || len(nc.SelectedRows()) != 0 {
+		t.Fatalf("Enter with no cursor selected something: Selected=%d rows=%v", nc.Selected().Get(), nc.SelectedRows())
 	}
 	// A non-navigation key is ignored.
 	nav := newCursorTable()
-	nav.Selected = 2
+	nav.Selected().Set(2)
 	nav.OnEvent(kd3b("Tab"))
-	if nav.Selected != 2 {
-		t.Fatalf("Tab moved cursor (Selected=%d)", nav.Selected)
+	if nav.Selected().Get() != 2 {
+		t.Fatalf("Tab moved cursor (Selected=%d)", nav.Selected().Get())
 	}
 }
 

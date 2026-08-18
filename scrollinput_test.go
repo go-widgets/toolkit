@@ -75,16 +75,16 @@ func TestTableWheelAndKeyScroll(t *testing.T) {
 	}
 
 	tb.OnEvent(Event{Kind: EventScroll, Delta: 2})
-	if tb.ScrollRow != 2 {
-		t.Fatalf("wheel: %d, want 2", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 2 {
+		t.Fatalf("wheel: %d, want 2", tb.ScrollRow().Get())
 	}
 	tb.OnEvent(Event{Kind: EventScroll, Delta: 1000})
-	if tb.ScrollRow != max {
-		t.Fatalf("wheel clamp bottom: %d, want %d", tb.ScrollRow, max)
+	if tb.ScrollRow().Get() != max {
+		t.Fatalf("wheel clamp bottom: %d, want %d", tb.ScrollRow().Get(), max)
 	}
 	tb.OnEvent(Event{Kind: EventScroll, Delta: -1000})
-	if tb.ScrollRow != 0 {
-		t.Fatalf("wheel clamp top: %d, want 0", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 0 {
+		t.Fatalf("wheel clamp top: %d, want 0", tb.ScrollRow().Get())
 	}
 }
 

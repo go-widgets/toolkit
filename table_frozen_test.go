@@ -69,19 +69,19 @@ func TestTableFrozenCountClamp(t *testing.T) {
 func TestTableScrollXClampAndSetters(t *testing.T) {
 	tb := frozenTable()
 	tb.ScrollXTo(1000)
-	if tb.ScrollX != 90 || tb.clampScrollX() != 90 {
-		t.Fatalf("ScrollXTo(1000) → %d (clamp %d), want 90", tb.ScrollX, tb.clampScrollX())
+	if tb.ScrollX().Get() != 90 || tb.clampScrollX() != 90 {
+		t.Fatalf("ScrollXTo(1000) → %d (clamp %d), want 90", tb.ScrollX().Get(), tb.clampScrollX())
 	}
 	tb.ScrollXBy(-30)
-	if tb.ScrollX != 60 {
-		t.Fatalf("ScrollXBy(-30) → %d, want 60", tb.ScrollX)
+	if tb.ScrollX().Get() != 60 {
+		t.Fatalf("ScrollXBy(-30) → %d, want 60", tb.ScrollX().Get())
 	}
 	tb.ScrollXTo(-5)
-	if tb.ScrollX != 0 {
-		t.Fatalf("ScrollXTo(-5) → %d, want 0", tb.ScrollX)
+	if tb.ScrollX().Get() != 0 {
+		t.Fatalf("ScrollXTo(-5) → %d, want 0", tb.ScrollX().Get())
 	}
 	// The raw clamp of an over-max value without going through the setter.
-	tb.ScrollX = 500
+	tb.ScrollX().Set(500)
 	if tb.clampScrollX() != 90 {
 		t.Fatalf("clampScrollX(raw 500)=%d, want 90", tb.clampScrollX())
 	}
