@@ -69,7 +69,7 @@ func isoDate(y, m, d int) string { return fmt.Sprintf("%04d-%02d-%02d", y, m, d)
 
 // A11y reports the ToggleButton as a button carrying its pressed state.
 func (t *ToggleButton) A11y() A11yInfo {
-	return A11yInfo{Role: RoleButton, Name: t.Label, Value: stateValue(t.Pressed, "pressed")}
+	return A11yInfo{Role: RoleButton, Name: t.Label, Value: stateValue(t.Pressed().Get(), "pressed")}
 }
 
 // A11y reports the IconButton as a button named by its icon identifier (it

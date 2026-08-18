@@ -4,32 +4,55 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
-// ToggleButton is a Button with a sticky on/off state. Click flips
-// Pressed + fires OnToggle. Pressed = Theme.Accent face, unpressed =
-// Theme.Surface; the label is rendered centered in the button.
+// ToggleButton is a Button with a sticky on/off state. A click flips
+// Pressed, notifying the Pressed Observable's subscribers. Pressed =
+// Theme.Accent face, unpressed = Theme.Surface; the label is rendered
+// centered in the button.
+//
+// The reactive pressed state is MVVM-only: it lives in an unexported
+// Observable exposed via [ToggleButton.Pressed]. There is no settable
+// Pressed field and no OnToggle callback — a host binds Pressed()
+// (Set / Subscribe / two-way).
 type ToggleButton struct {
 	Base
 	focusState
-	Label    string
-	Pressed  bool
-	OnToggle func(pressed bool)
+	// Label is the button caption (config).
+	Label string
+
+	pressed *mvvm.Observable[bool]
 
 	hovered bool
+}
+
+// Pressed is the sticky on/off state as a shared [mvvm.Observable]: a host binds
+// it (Set / Subscribe / two-way) — there is no settable Pressed field. A click
+// or a Space/Enter key press flips it; subscribers are notified. A bare
+// ToggleButton (no NewToggleButton) lazily initialises to false on first access.
+func (t *ToggleButton) Pressed() *mvvm.Observable[bool] {
+	if t.pressed == nil {
+		t.pressed = mvvm.NewObservable(false)
+	}
+	return t.pressed
 }
 
 // NewToggleButton constructs a ToggleButton with the given label +
 // initial state.
 func NewToggleButton(label string, pressed bool) *ToggleButton {
-	return &ToggleButton{Label: label, Pressed: pressed}
+	t := &ToggleButton{Label: label}
+	t.pressed = mvvm.NewObservable(pressed)
+	return t
 }
 
 // Draw paints the face + border + centred label.
 func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	face := theme.Surface
-	if t.Pressed {
+	if t.Pressed().Get() {
 		face = theme.Accent
 	} else if t.hovered {
 		// Hover raises the unpressed face to SurfaceAlt (matching Button); the
@@ -49,8 +72,8 @@ func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 	t.drawFocusRing(p, theme, r)
 }
 
-// OnEvent: click flips Pressed + fires OnToggle; a move tracks the hover face.
-// A Disabled toggle ignores every kind.
+// OnEvent: a click flips Pressed; a move tracks the hover face. A Disabled
+// toggle ignores every kind.
 func (t *ToggleButton) OnEvent(ev Event) {
 	if t.Disabled {
 		return
@@ -60,7 +83,7 @@ func (t *ToggleButton) OnEvent(ev Event) {
 		t.toggle()
 	case EventKeyDown:
 		// Space or Enter flips the sticky state while focused, reusing the click
-		// path (OnToggle).
+		// path.
 		switch ev.Code {
 		case " ", "Space", "Enter":
 			t.toggle()
@@ -70,13 +93,10 @@ func (t *ToggleButton) OnEvent(ev Event) {
 	}
 }
 
-// toggle flips Pressed and fires OnToggle (nil-safe) -- the shared mutate path
-// for a click and a Space/Enter key press.
+// toggle flips the Pressed Observable -- the shared mutate path for a click and
+// a Space/Enter key press. Subscribers are notified on change.
 func (t *ToggleButton) toggle() {
-	t.Pressed = !t.Pressed
-	if t.OnToggle != nil {
-		t.OnToggle(t.Pressed)
-	}
+	t.Pressed().Set(!t.Pressed().Get())
 }
 
 // HitRect is the toggle button's interactive rectangle: its drawn Bounds clamped
