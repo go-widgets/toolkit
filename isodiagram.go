@@ -968,22 +968,33 @@ func (d *IsoDiagram) restore(s isoSnapshot) {
 	for _, l := range d.doc.Layers() {
 		d.doc.RemoveLayer(l.ID)
 	}
+	putSnapshot(d.doc, s)
+	d.pruneSelection()
+}
+
+// putSnapshot inserts every entity of s into doc, in
+// node/connector/zone/text/layer order. It is the shared "load a whole-document
+// value copy into a store" step behind both undo/redo ([IsoDiagram.restore],
+// which clears the store first) and native JSON import ([UnmarshalIsoDocument]
+// and [IsoDiagram.ImportJSON], which load into a store the caller already
+// cleared or freshly made) — one code path, so a snapshot round-trips
+// identically whether it came from the undo stack or a file.
+func putSnapshot(doc IsoDocument, s isoSnapshot) {
 	for _, n := range s.nodes {
-		d.doc.PutNode(n)
+		doc.PutNode(n)
 	}
 	for _, c := range s.conns {
-		d.doc.PutConnector(c)
+		doc.PutConnector(c)
 	}
 	for _, z := range s.zones {
-		d.doc.PutZone(z)
+		doc.PutZone(z)
 	}
 	for _, t := range s.texts {
-		d.doc.PutText(t)
+		doc.PutText(t)
 	}
 	for _, l := range s.layers {
-		d.doc.PutLayer(l)
+		doc.PutLayer(l)
 	}
-	d.pruneSelection()
 }
 
 // beginEdit records the pre-edit state for undo and drops the redo stack. Every
