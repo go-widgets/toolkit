@@ -10,7 +10,7 @@ func TestA11yInfoPerWidget(t *testing.T) {
 	check := NewCheckButton("Enable", true)
 	radio := NewRadioButton("Option")
 	radio.Checked = false
-	sw := &Switch{On: true}
+	sw := NewSwitch(true)
 	scale := NewScale(0, 100, 42)
 
 	cases := []struct {
@@ -35,7 +35,7 @@ func TestA11yInfoPerWidget(t *testing.T) {
 
 func TestSwitchA11yOff(t *testing.T) {
 	// Covers the "off" arm of Switch.A11y.
-	sw := &Switch{On: false}
+	sw := NewSwitch(false)
 	if got := sw.A11y().Value; got != "off" {
 		t.Errorf("Switch off value = %q, want off", got)
 	}

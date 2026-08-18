@@ -111,21 +111,21 @@ func TestCheckButtonKeyToggles(t *testing.T) {
 func TestSwitchKeyToggles(t *testing.T) {
 	toggles := 0
 	s := NewSwitch(false)
-	s.OnToggle = func(on bool) { toggles++ }
+	s.On().Subscribe(func(on bool) { toggles++ })
 	s.OnEvent(kd("Enter"))
-	if !s.On || toggles != 1 {
-		t.Fatalf("enter: On=%v toggles=%d", s.On, toggles)
+	if !s.On().Get() || toggles != 1 {
+		t.Fatalf("enter: On=%v toggles=%d", s.On().Get(), toggles)
 	}
 	s.OnEvent(kd(" "))
-	if s.On || toggles != 2 {
-		t.Fatalf("space: On=%v toggles=%d", s.On, toggles)
+	if s.On().Get() || toggles != 2 {
+		t.Fatalf("space: On=%v toggles=%d", s.On().Get(), toggles)
 	}
 	s.Disabled = true
 	s.OnEvent(kd("Enter"))
-	if s.On || toggles != 2 {
-		t.Fatalf("disabled switch toggled (On=%v)", s.On)
+	if s.On().Get() || toggles != 2 {
+		t.Fatalf("disabled switch toggled (On=%v)", s.On().Get())
 	}
-	NewSwitch(false).OnEvent(kd(" ")) // nil OnToggle safe
+	NewSwitch(false).OnEvent(kd(" ")) // no subscriber is safe
 }
 
 func TestToggleButtonKeyToggles(t *testing.T) {

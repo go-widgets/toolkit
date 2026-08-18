@@ -195,7 +195,7 @@ func TestMetricScaleAudit(t *testing.T) {
 		{"Button", 120, 32, func() Widget { return &Button{} }},
 		{"Button/flat", 120, 32, func() Widget { return &Button{Flat: true} }},
 		{"CheckButton", 120, 24, func() Widget { c := &CheckButton{}; c.Checked().Set(true); return c }},
-		{"Switch", 60, 24, func() Widget { return &Switch{On: true} }},
+		{"Switch", 60, 24, func() Widget { return NewSwitch(true) }},
 		{"Card", 160, 120, func() Widget { return &Card{} }},
 		{"ProgressBar", 120, 16, func() Widget { return &ProgressBar{Fraction: 0.5} }},
 		{"Chip", 80, 24, func() Widget { return &Chip{} }},

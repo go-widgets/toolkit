@@ -138,7 +138,7 @@ func (r *RadioButton) A11y() A11yInfo {
 // A11y reports the Switch as a switch with an on/off value.
 func (s *Switch) A11y() A11yInfo {
 	v := "off"
-	if s.On {
+	if s.On().Get() {
 		v = "on"
 	}
 	return A11yInfo{Role: RoleSwitch, Value: v}

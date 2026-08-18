@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Switch is a compact iOS-style toggle: a wide horizontal track with a
 // small square knob that sits on the left when Off and on the right
@@ -18,12 +21,22 @@ import "github.com/go-widgets/painter"
 // on-state stands out at a glance; the knob is drawn in Surface with a
 // Border stroke so it stays visible against either track colour.
 //
-// Click flips On + fires OnToggle. Non-click events are ignored.
+// A click flips the On Observable. Non-click events are ignored.
 type Switch struct {
 	Base
 	focusState
-	On       bool
-	OnToggle func(on bool)
+
+	on *mvvm.Observable[bool]
+}
+
+// On is the current toggle state as a shared [mvvm.Observable]: a host binds it
+// (Set / Subscribe / two-way) — there is no settable On field. A click or a
+// Space/Enter key press flips it, notifying subscribers.
+func (s *Switch) On() *mvvm.Observable[bool] {
+	if s.on == nil {
+		s.on = mvvm.NewObservable(false)
+	}
+	return s.on
 }
 
 // switchPad is the inset from the track edge to the knob's edge, in LOGICAL
@@ -31,10 +44,12 @@ type Switch struct {
 // touches the track border.
 const switchPad = 2
 
-// NewSwitch constructs a Switch with the given initial state. The
-// OnToggle callback is nil by default; assign it after construction if
-// the caller wants a click hook.
-func NewSwitch(on bool) *Switch { return &Switch{On: on} }
+// NewSwitch constructs a Switch with the given initial state.
+func NewSwitch(on bool) *Switch {
+	s := &Switch{}
+	s.on = mvvm.NewObservable(on)
+	return s
+}
 
 // Draw paints the track + knob. Track colour is picked by On; the knob
 // slides between left + right edges by rewriting knobX in the On
@@ -43,7 +58,7 @@ func NewSwitch(on bool) *Switch { return &Switch{On: on} }
 func (s *Switch) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	track := theme.SurfaceAlt
-	if s.On {
+	if s.On().Get() {
 		track = theme.Accent
 	}
 	// A disabled switch mutes its track, knob and borders so it reads as inert.
@@ -59,7 +74,7 @@ func (s *Switch) Draw(p painter.Painter, theme *Theme) {
 	knobH := r.H - 2*pad
 	knobW := knobH
 	knobX := r.X + pad
-	if s.On {
+	if s.On().Get() {
 		knobX = r.X + r.W - knobW - pad
 	}
 	fillRoundRect(p, knobX, r.Y+pad, knobW, knobH, knobH/2, knob)
@@ -67,7 +82,7 @@ func (s *Switch) Draw(p painter.Painter, theme *Theme) {
 	s.drawFocusRing(p, theme, r)
 }
 
-// OnEvent flips On + fires OnToggle on click. All other event kinds
+// OnEvent flips the On Observable on click. All other event kinds
 // pass through without effect (matches ToggleButton / CheckButton).
 func (s *Switch) OnEvent(ev Event) {
 	if s.Disabled {
@@ -92,11 +107,6 @@ func (s *Switch) OnEvent(ev Event) {
 // unchanged pixels.
 func (s *Switch) HitTest(px, py int) bool { return s.HitRect().Contains(px, py) }
 
-// toggle flips On and fires OnToggle (nil-safe) -- the shared mutate path for a
-// click and a Space/Enter key press.
-func (s *Switch) toggle() {
-	s.On = !s.On
-	if s.OnToggle != nil {
-		s.OnToggle(s.On)
-	}
-}
+// toggle flips the On Observable -- the shared mutate path for a click and a
+// Space/Enter key press. Subscribers are notified on change.
+func (s *Switch) toggle() { s.On().Set(!s.On().Get()) }
