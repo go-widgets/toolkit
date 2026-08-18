@@ -180,13 +180,20 @@ type Event struct {
 	// Alt is the Option (⌥) / Alt modifier; Meta is the Command (⌘) / Super
 	// (Windows/logo) modifier. Both default false. See the type doc above.
 	Alt, Meta bool
-	// Delta is the scroll amount, in ROWS, for an EventScroll: positive
-	// scrolls down / forward (toward the end of the content), negative
-	// scrolls up / back. It is zero and ignored on every other event kind.
-	// Scrollable widgets pass it straight to ScrollBy, which clamps at
+	// Delta is the VERTICAL scroll amount, in ROWS, for an EventScroll:
+	// positive scrolls down / forward (toward the end of the content),
+	// negative scrolls up / back. It is zero and ignored on every other event
+	// kind. Scrollable widgets pass it straight to ScrollBy, which clamps at
 	// both ends, so an over-large Delta simply pins to the last (or first)
 	// row instead of running off.
 	Delta int
+	// DeltaX is the HORIZONTAL scroll amount, in ROWS, for an EventScroll:
+	// positive scrolls right (toward the end of the content), negative
+	// scrolls left. It is zero and ignored on every other event kind, and is
+	// zero for a purely vertical wheel/notch — a two-finger horizontal swipe
+	// (the browser's wheel deltaX) is what fills it, so a ScrollView moves its
+	// horizontal scrollbar in response instead of ignoring the gesture.
+	DeltaX int
 }
 
 // Widget is the toolkit's single core abstraction. Every widget --
