@@ -76,11 +76,15 @@ func (h *HeaderBar) SetBounds(r Rect) {
 // drift apart.
 func (h *HeaderBar) layout() (titleX0, titleW int) {
 	r := h.Bounds()
-	innerY := r.Y + HeaderBarPad/2
-	innerH := r.H - HeaderBarPad
+	// The bar padding routes through scaled so the inner inset grows with HiDPI
+	// and touch density; scaled(HeaderBarPad) == HeaderBarPad at compact/1x, so the
+	// child placement is byte-identical there.
+	pad := scaled(HeaderBarPad)
+	innerY := r.Y + pad/2
+	innerH := r.H - pad
 
 	// Start row: left-to-right from the bar's left edge.
-	startX := r.X + HeaderBarPad
+	startX := r.X + pad
 	for _, w := range h.Start {
 		wb := w.Bounds()
 		w.SetBounds(Rect{X: startX, Y: innerY, W: wb.W, H: innerH})
@@ -88,7 +92,7 @@ func (h *HeaderBar) layout() (titleX0, titleW int) {
 	}
 
 	// End row: right-to-left from the bar's right edge.
-	endX := r.X + r.W - HeaderBarPad
+	endX := r.X + r.W - pad
 	for _, w := range h.End {
 		wb := w.Bounds()
 		endX -= wb.W
@@ -129,7 +133,10 @@ func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
 	// Two-line layout: title above subtitle, both centred as a
 	// single block. Subtitle uses theme.Border for the "lighter"
 	// muted-ink convention (matches GTK's dim-label styling).
-	blockH := 2*h.glyphHeight() + HeaderBarSubtitleGap
+	// The title/subtitle gap routes through scaled; == HeaderBarSubtitleGap at
+	// compact/1x, so the two-line block is byte-identical there.
+	gap := scaled(HeaderBarSubtitleGap)
+	blockH := 2*h.glyphHeight() + gap
 	ty := r.Y + (r.H-blockH)/2
 	if h.Title != "" {
 		tw := h.textWidth(h.Title)
@@ -138,7 +145,7 @@ func (h *HeaderBar) Draw(p painter.Painter, theme *Theme) {
 	}
 	sw := h.textWidth(h.Subtitle)
 	sx := titleX0 + (titleW-sw)/2
-	sy := ty + h.glyphHeight() + HeaderBarSubtitleGap
+	sy := ty + h.glyphHeight() + gap
 	h.drawText(p, sx, sy, h.Subtitle, dimInk(theme))
 }
 
@@ -161,14 +168,18 @@ func (h *HeaderBar) OnEvent(ev Event) {
 		return
 	}
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
+	// Dispatch consults each child's HitTest, not its raw Bounds, so a child that
+	// clamps its hit area up to the density finger floor (Button, IconButton,
+	// Switch, ...) is reachable inside the bar under DensityTouch. At compact every
+	// child's HitTest is its Bounds().Contains, so dispatch is byte-identical.
 	for _, w := range h.Start {
-		if w.Bounds().Contains(sx, sy) {
+		if w.HitTest(sx, sy) {
 			w.OnEvent(translateEvent(ev, pr, w.Bounds()))
 			return
 		}
 	}
 	for _, w := range h.End {
-		if w.Bounds().Contains(sx, sy) {
+		if w.HitTest(sx, sy) {
 			w.OnEvent(translateEvent(ev, pr, w.Bounds()))
 			return
 		}

@@ -31,9 +31,13 @@ const (
 	StatusbarPadX        = 6
 )
 
-// NewStatusbar builds a Statusbar with the given segments.
+// NewStatusbar builds a Statusbar with the given segments. SegmentMinW is left
+// at zero — "use the default" — so the default minimum resolves through scaled at
+// draw time and grows with HiDPI and touch density; a caller that wants a fixed
+// minimum sets SegmentMinW explicitly (honoured verbatim). At compact/1x the
+// resolved default is StatusbarSegmentMinW, byte-identical to before.
 func NewStatusbar(segs []string) *Statusbar {
-	return &Statusbar{Segments: segs, SegmentMinW: StatusbarSegmentMinW}
+	return &Statusbar{Segments: segs}
 }
 
 // SetSegment replaces the i-th segment in place. Indexes out of range
@@ -54,10 +58,14 @@ func (s *Statusbar) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	// The default min-width resolves through scaled (an explicit SegmentMinW is
+	// honoured verbatim); the horizontal pad routes through scaled too. Both equal
+	// their logical constants at compact/1x, keeping the strip byte-identical.
 	min := s.SegmentMinW
 	if min <= 0 {
-		min = StatusbarSegmentMinW
+		min = scaled(StatusbarSegmentMinW)
 	}
+	padX := scaled(StatusbarPadX)
 	x := r.X
 	n := len(s.Segments)
 	for i, seg := range s.Segments {
@@ -65,13 +73,13 @@ func (s *Statusbar) Draw(p painter.Painter, theme *Theme) {
 		if i == n-1 {
 			w = r.X + r.W - x
 		} else {
-			w = s.textWidth(seg) + 2*StatusbarPadX
+			w = s.textWidth(seg) + 2*padX
 			if w < min {
 				w = min
 			}
 		}
 		ty := r.Y + (r.H-s.glyphHeight())/2
-		s.drawText(p, x+StatusbarPadX, ty, seg, theme.OnSurface)
+		s.drawText(p, x+padX, ty, seg, theme.OnSurface)
 		if i < n-1 {
 			fillRect(p, x+w-1, r.Y+2, 1, r.H-4, theme.Border)
 		}

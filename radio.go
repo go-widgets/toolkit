@@ -24,6 +24,16 @@ type RadioButton struct {
 // radioBoxSize is the pixel diameter of the round mark.
 const radioBoxSize = 12
 
+// radioDotInset is the inset (logical pixels) from the mark's edge to the filled
+// dot on each side; radioLabelGap is the logical gap between the mark and the
+// label. Both route through scaled so the mark's interior and the label spacing
+// grow with HiDPI and touch density; at compact/1x they equal their constants,
+// keeping the drawn radio byte-identical.
+const (
+	radioDotInset = 3
+	radioLabelGap = 4
+)
+
 // NewRadioButton constructs a standalone RadioButton with the given
 // label. Add it to a RadioGroup with group.Add(r) for mutual-exclusion
 // behaviour.
@@ -47,10 +57,11 @@ func (r *RadioButton) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, b.X, boxY, scaled(radioBoxSize), scaled(radioBoxSize), face)
 	strokeRect(p, b.X, boxY, scaled(radioBoxSize), scaled(radioBoxSize), border)
 	if r.Checked {
-		fillRect(p, b.X+3, boxY+3, scaled(radioBoxSize)-6, scaled(radioBoxSize)-6, dot)
+		inset := scaled(radioDotInset)
+		fillRect(p, b.X+inset, boxY+inset, scaled(radioBoxSize)-2*inset, scaled(radioBoxSize)-2*inset, dot)
 	}
 	textY := b.Y + (b.H-r.glyphHeight())/2
-	r.drawText(p, b.X+scaled(radioBoxSize)+4, textY, r.Label, labelInk)
+	r.drawText(p, b.X+scaled(radioBoxSize)+scaled(radioLabelGap), textY, r.Label, labelInk)
 	r.drawFocusRing(p, theme, b)
 }
 
@@ -97,6 +108,17 @@ func (r *RadioButton) toggleStandalone() {
 		r.OnToggle(r.Checked)
 	}
 }
+
+// HitRect is the radio button's interactive rectangle: its drawn Bounds clamped
+// up to the density hit-target and centred over them (see [touchHitRect]). Like
+// the checkbox, its short row grows to the >=44px finger floor under
+// DensityTouch while the drawn 12px mark is untouched; byte-identical to Bounds
+// under DensityCompact.
+func (r *RadioButton) HitRect() Rect { return touchHitRect(r.Bounds()) }
+
+// HitTest reports whether a surface point falls on the radio button's
+// (touch-clamped) hit rect.
+func (r *RadioButton) HitTest(px, py int) bool { return r.HitRect().Contains(px, py) }
 
 // RadioGroup makes a set of RadioButtons mutually exclusive. Active
 // is the index of the currently-checked member, or -1 when none has

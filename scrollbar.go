@@ -75,9 +75,19 @@ func (s *Scrollbar) geom() (sbGeom, bool) {
 	if s.Horizontal {
 		length = r.W
 	}
+	// The grabbable minimum thumb routes through scaled so it grows with HiDPI and
+	// touch density, and is additionally floored at the density hit-target so a
+	// dragged thumb is never smaller than a fingertip under DensityTouch. At
+	// compact/1x scaled(scrollbarMinThumb) == scrollbarMinThumb and MinHitTarget is
+	// 0, so the floor is byte-identical to the historical 24px minimum. A track
+	// shorter than the minimum still clamps the thumb back down to the track.
+	minThumb := scaled(scrollbarMinThumb)
+	if m := MinHitTarget(); m > minThumb {
+		minThumb = m
+	}
 	thumb := length * view / total
-	if thumb < scrollbarMinThumb {
-		thumb = scrollbarMinThumb
+	if thumb < minThumb {
+		thumb = minThumb
 	}
 	if thumb > length {
 		thumb = length

@@ -85,6 +85,13 @@ func (s *Switch) OnEvent(ev Event) {
 	}
 }
 
+// HitTest reports whether a surface point falls on the switch's (touch-clamped)
+// hit rect — the worked [Switch.HitRect] area. Under DensityCompact the clamp is
+// a pass-through so this equals the default Bounds().Contains; under DensityTouch
+// the small switch's reachable area grows to the finger floor around its
+// unchanged pixels.
+func (s *Switch) HitTest(px, py int) bool { return s.HitRect().Contains(px, py) }
+
 // toggle flips On and fires OnToggle (nil-safe) -- the shared mutate path for a
 // click and a Space/Enter key press.
 func (s *Switch) toggle() {

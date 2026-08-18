@@ -24,6 +24,11 @@ type SpinButton struct {
 // spinButtonW is the pixel width of each up/down button on the right.
 const spinButtonW = 16
 
+// spinTextPad is the logical left inset of the value text inside the body. It
+// routes through scaled so the text keeps its inset proportional under HiDPI and
+// touch density; scaled(spinTextPad) == spinTextPad at compact/1x (byte-identical).
+const spinTextPad = 4
+
 // NewSpinButton builds a SpinButton spanning [min, max] with the
 // given initial + step. Step <= 0 is clamped to 1 so clicks never
 // no-op silently.
@@ -63,7 +68,7 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	// Value text in the left portion.
 	text := strconv.Itoa(s.Value)
 	textY := r.Y + (r.H-s.glyphHeight())/2
-	s.drawText(p, r.X+4, textY, text, textC)
+	s.drawText(p, r.X+scaled(spinTextPad), textY, text, textC)
 	// Two buttons on the right, vertically stacked.
 	btnX := r.X + r.W - scaled(spinButtonW)
 	half := r.H / 2
@@ -114,7 +119,12 @@ func (s *SpinButton) OnEvent(ev Event) {
 		return
 	}
 	r := s.Bounds()
-	if ev.X < r.W-scaled(spinButtonW) {
+	// The stepper column is drawn scaled(spinButtonW) wide, but its click zone
+	// clamps UP to the density finger floor via TouchTarget, so under DensityTouch
+	// a press lands the +/- buttons from further left (the inert body yields the
+	// space) without the drawn buttons moving. At compact TouchTarget is a
+	// pass-through so the boundary is byte-identical to the drawn column edge.
+	if ev.X < r.W-TouchTarget(scaled(spinButtonW)) {
 		return // body click: no action in v0.2 (would open keypad)
 	}
 	if ev.Y < r.H/2 {

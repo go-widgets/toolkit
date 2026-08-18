@@ -53,9 +53,12 @@ func NewIconButton(icon string, onClick func()) *IconButton {
 func (i *IconButton) Draw(p painter.Painter, theme *Theme) {
 	r := i.Bounds()
 	if r.W == 0 {
-		r.W = IconButtonSize
+		// The auto-size default routes through scaled so a zero-sized button grows
+		// with HiDPI and touch density; at compact/1x scaled(IconButtonSize) ==
+		// IconButtonSize, so the auto-sized bounds are byte-identical to before.
+		r.W = scaled(IconButtonSize)
 		if r.H == 0 {
-			r.H = IconButtonSize
+			r.H = scaled(IconButtonSize)
 		}
 		i.SetBounds(r)
 	}
@@ -115,3 +118,14 @@ func (i *IconButton) activate() {
 		i.OnClick()
 	}
 }
+
+// HitRect is the icon button's interactive rectangle: its drawn Bounds clamped
+// up to the density hit-target and centred over them (see [touchHitRect]).
+// Byte-identical to Bounds under DensityCompact; a compact 28px toolbar button
+// exposes a >=44px finger target under DensityTouch without changing its glyph.
+func (i *IconButton) HitRect() Rect { return touchHitRect(i.Bounds()) }
+
+// HitTest reports whether a surface point falls on the icon button's
+// (touch-clamped) hit rect — the default Bounds().Contains at compact, the
+// finger-sized area at touch.
+func (i *IconButton) HitTest(px, py int) bool { return i.HitRect().Contains(px, py) }

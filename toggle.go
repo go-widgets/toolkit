@@ -78,3 +78,13 @@ func (t *ToggleButton) toggle() {
 		t.OnToggle(t.Pressed)
 	}
 }
+
+// HitRect is the toggle button's interactive rectangle: its drawn Bounds clamped
+// up to the density hit-target and centred over them (see [touchHitRect]).
+// Byte-identical to Bounds under DensityCompact; a finger-sized target under
+// DensityTouch.
+func (t *ToggleButton) HitRect() Rect { return touchHitRect(t.Bounds()) }
+
+// HitTest reports whether a surface point falls on the toggle button's
+// (touch-clamped) hit rect.
+func (t *ToggleButton) HitTest(px, py int) bool { return t.HitRect().Contains(px, py) }

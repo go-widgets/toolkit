@@ -63,18 +63,23 @@ func NewRating(value, max int) *Rating {
 func (r *Rating) Draw(p painter.Painter, theme *Theme) {
 	b := r.Bounds()
 	ink := accentInk(theme)
+	// Cell edge and gap route through scaled so the strip grows with HiDPI and
+	// touch density; each equals its constant at compact/1x (byte-identical). Draw
+	// and OnEvent both derive the cell pitch from these, so the drawn cells and the
+	// click-to-index mapping can never drift.
+	starW, pitch := scaled(RatingStarW), scaled(RatingStarW)+scaled(RatingStarGap)
 	for i := 0; i < r.Max; i++ {
-		x := b.X + i*(RatingStarW+RatingStarGap)
+		x := b.X + i*pitch
 		fill := theme.SurfaceAlt
 		glyphInk := theme.OnSurface
 		if i < r.Value {
 			fill = theme.Accent
 			glyphInk = ink
 		}
-		fillRect(p, x, b.Y, RatingStarW, RatingStarW, fill)
+		fillRect(p, x, b.Y, starW, starW, fill)
 		tw := r.textWidth("*")
-		tx := x + (RatingStarW-tw)/2
-		ty := b.Y + (RatingStarW-r.glyphHeight())/2
+		tx := x + (starW-tw)/2
+		ty := b.Y + (starW-r.glyphHeight())/2
 		r.drawText(p, tx, ty, "*", glyphInk)
 	}
 	r.drawFocusRing(p, theme, b)
@@ -107,12 +112,25 @@ func (r *Rating) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
 	}
-	idx := ev.X / (RatingStarW + RatingStarGap)
+	idx := ev.X / (scaled(RatingStarW) + scaled(RatingStarGap))
 	if idx < 0 || idx >= r.Max {
 		return
 	}
 	r.setValue(idx + 1)
 }
+
+// HitRect is the rating strip's interactive rectangle: its drawn Bounds clamped
+// up to the density hit-target and centred over them (see [touchHitRect]). A
+// star row is only ~14 logical pixels tall, so under DensityTouch its hit height
+// grows to the >=44px finger floor for a comfortable vertical reach while the
+// drawn stars are untouched; byte-identical to Bounds under DensityCompact. The
+// per-cell index still derives from the drawn cell pitch, so which star a press
+// selects is unaffected by the clamp.
+func (r *Rating) HitRect() Rect { return touchHitRect(r.Bounds()) }
+
+// HitTest reports whether a surface point falls on the rating strip's
+// (touch-clamped) hit rect.
+func (r *Rating) HitTest(px, py int) bool { return r.HitRect().Contains(px, py) }
 
 // setValue clamps v to [0, Max], assigns it, and fires OnChange (nil-safe) --
 // the shared mutate+callback path for a click and every key adjustment.
