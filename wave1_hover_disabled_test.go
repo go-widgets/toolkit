@@ -310,7 +310,7 @@ func TestSwitchDisabled(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 20})
 	s.Disabled = true
 	s.OnEvent(Event{Kind: EventClick})
-	if s.On {
+	if s.On().Get() {
 		t.Fatal("disabled switch should not flip")
 	}
 	buf := makeSurface(40, 20)

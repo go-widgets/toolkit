@@ -7,20 +7,20 @@ package toolkit
 import "testing"
 
 // TestSwitchClickToggles covers the happy-path click flow: two clicks
-// flip On on and back off, and the OnToggle callback receives the same
-// value each time. Mirrors ToggleButton's double-click test so the
+// flip On on and back off, and a subscriber on the On Observable receives
+// the same value each time. Mirrors ToggleButton's double-click test so the
 // coverage story is symmetric between the two toggle widgets.
 func TestSwitchClickToggles(t *testing.T) {
 	got := false
 	s := NewSwitch(false)
-	s.OnToggle = func(on bool) { got = on }
+	s.On().Subscribe(func(on bool) { got = on })
 	s.OnEvent(Event{Kind: EventClick})
-	if !s.On || !got {
-		t.Fatalf("after click: On=%v got=%v", s.On, got)
+	if !s.On().Get() || !got {
+		t.Fatalf("after click: On=%v got=%v", s.On().Get(), got)
 	}
 	s.OnEvent(Event{Kind: EventClick})
-	if s.On || got {
-		t.Fatalf("after second click: On=%v got=%v", s.On, got)
+	if s.On().Get() || got {
+		t.Fatalf("after second click: On=%v got=%v", s.On().Get(), got)
 	}
 }
 
@@ -30,18 +30,35 @@ func TestSwitchIgnoresNonClick(t *testing.T) {
 	s := NewSwitch(false)
 	// Space/Enter toggle as of Wave 3; an unrelated key (Tab) must not.
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if s.On {
+	if s.On().Get() {
 		t.Fatal("KeyDown should not toggle Switch")
 	}
 }
 
-// TestSwitchNilCallbackNoPanic covers the "OnToggle == nil" branch of
-// OnEvent — the click still flips On, but the callback is skipped.
-func TestSwitchNilCallbackNoPanic(t *testing.T) {
+// TestSwitchNoSubscriberNoPanic covers the "no subscriber" path of
+// OnEvent — the click still flips the On Observable with nobody listening.
+func TestSwitchNoSubscriberNoPanic(t *testing.T) {
 	s := NewSwitch(false)
 	s.OnEvent(Event{Kind: EventClick})
-	if !s.On {
-		t.Fatal("click must flip On even without OnToggle callback")
+	if !s.On().Get() {
+		t.Fatal("click must flip On even without a subscriber")
+	}
+}
+
+// TestSwitchOnObservable covers the zero-value lazy-init of the On accessor
+// and the host binding path: a Switch built as a bare struct (no NewSwitch)
+// still yields a usable Observable defaulting to false, and Setting it from
+// outside is reflected by the widget (there is no imperative On field).
+func TestSwitchOnObservable(t *testing.T) {
+	s := &Switch{} // no NewSwitch → on Observable is nil until accessed
+	if s.On().Get() {
+		t.Fatalf("zero-value Switch On = %v, want false", s.On().Get())
+	}
+	seen := false
+	s.On().Subscribe(func(v bool) { seen = v })
+	s.On().Set(true) // a host drives the switch through the Observable
+	if !s.On().Get() || !seen {
+		t.Fatalf("host Set: On=%v subscriber=%v, want true/true", s.On().Get(), seen)
 	}
 }
 
@@ -69,7 +86,7 @@ func TestSwitchDrawOnAndOff(t *testing.T) {
 	}
 
 	// Off: track = SurfaceAlt, knob at left (4..16).
-	s.On = false
+	s.On().Set(false)
 	off := makeSurface(w, h)
 	s.Draw(newP(off, w), theme)
 	if pixelAt(off, w, 27, 10) != theme.SurfaceAlt {
