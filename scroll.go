@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"math"
+
+	"github.com/go-widgets/painter"
+)
 
 // ScrollView is a viewport over a child widget whose content may be
 // larger than the visible area. The child's own Bounds is logical
@@ -28,6 +32,12 @@ type ScrollView struct {
 
 	// pan tracks an in-progress drag of the CONTENT itself.
 	pan contentPan
+
+	// velX and velY are the pointer speed in pixels per second, measured by
+	// Tick while a drag is in progress and decayed by it during a fling.
+	velX, velY float64
+	// flinging reports whether the view is coasting after a release.
+	flinging bool
 }
 
 // contentPan is a drag of the scrolled content — the gesture that scrolls a
@@ -46,11 +56,16 @@ type ScrollView struct {
 type contentPan struct {
 	active bool
 	x, y   int // the last pointer position, in surface coordinates
+	// accumX and accumY are the pixels moved since the last tick, which is
+	// how a velocity is measured at all: a toolkit.Event carries no
+	// timestamp, so the only clock available is the tick.
+	accumX, accumY int
 }
 
 // start begins a pan at the pointer's position.
 func (p *contentPan) start(ev Event) {
 	p.active, p.x, p.y = true, ev.X, ev.Y
+	p.accumX, p.accumY = 0, 0
 }
 
 // delta reports how far to scroll for this pointer sample and remembers the
@@ -59,6 +74,8 @@ func (p *contentPan) start(ev Event) {
 func (p *contentPan) delta(ev Event) (dx, dy int) {
 	dx, dy = p.x-ev.X, p.y-ev.Y
 	p.x, p.y = ev.X, ev.Y
+	p.accumX += dx
+	p.accumY += dy
 	return dx, dy
 }
 
@@ -229,6 +246,9 @@ func (s *ScrollView) OnEvent(ev Event) {
 		// begin a pan. The content area is otherwise passive for clicks, so
 		// this takes nothing away from anything else.
 		if s.viewport().Contains(ev.X, ev.Y) {
+			// Catching a coasting view stops it dead, the way putting a
+			// finger on a spinning record does.
+			s.stopFling()
 			s.pan.start(ev)
 		}
 	case EventMouseDrag:
@@ -245,7 +265,11 @@ func (s *ScrollView) OnEvent(ev Event) {
 	case EventMouseUp:
 		s.sbV.release()
 		s.sbH.release()
-		s.pan.release()
+		if s.pan.active {
+			// Let go while still moving and the view carries on.
+			s.pan.release()
+			s.startFling()
+		}
 	case EventKeyDown:
 		switch ev.Code {
 		case "ArrowUp":
@@ -332,3 +356,100 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 
 // HitTest covers the full bounds (the scrollbar is interactive too).
 func (s *ScrollView) HitTest(px, py int) bool { return s.Bounds().Contains(px, py) }
+
+// Fling tuning. The numbers are the physical feel of the gesture, so they are
+// named constants rather than literals buried in the maths.
+const (
+	// flingFriction is the exponential decay of the fling velocity, per
+	// second: after one second the view retains e^-flingFriction of its speed.
+	// It is the difference between a flick that glides and one that stops as
+	// if the content were made of sand.
+	flingFriction = 4.0
+	// flingMinVelocity is the speed, in pixels per second, below which a fling
+	// is over. Left to decay forever an exponential never reaches zero, and a
+	// view creeping by a pixel every few frames would keep the host repainting
+	// for nothing.
+	flingMinVelocity = 24.0
+	// flingStartVelocity is the release speed, in pixels per second, a drag
+	// must reach to become a fling at all. Below it the gesture was a
+	// deliberate placement, and carrying it on would fight the user.
+	flingStartVelocity = 120.0
+)
+
+// Tick advances an in-flight fling by dt seconds, and turns the movement the
+// last frame's drag accumulated into a velocity.
+//
+// It makes ScrollView an [Animator], so a host already calling [TickTree] drives
+// the fling with no extra wiring, and [TreeAnimating] lets it stop scheduling
+// frames the moment the view comes to rest.
+//
+// Velocity is measured HERE rather than in the drag handler because a
+// toolkit.Event carries no timestamp: the only clock in the toolkit is the dt a
+// host hands to a tick. So a drag accumulates pixels, and each tick converts
+// the pixels since the previous one into pixels per second.
+func (s *ScrollView) Tick(dt float64) {
+	if dt <= 0 {
+		return
+	}
+	if s.pan.active {
+		// Still under the finger: measure, do not move. The drag itself is
+		// what scrolls while the contact lasts.
+		s.velX = float64(s.pan.accumX) / dt
+		s.velY = float64(s.pan.accumY) / dt
+		s.pan.accumX, s.pan.accumY = 0, 0
+		return
+	}
+	if !s.flinging {
+		return
+	}
+	s.Scroll(int(s.velX*dt), int(s.velY*dt))
+	decay := math.Exp(-flingFriction * dt)
+	s.velX *= decay
+	s.velY *= decay
+	if math.Abs(s.velX) < flingMinVelocity && math.Abs(s.velY) < flingMinVelocity {
+		s.stopFling()
+	}
+	// Hitting an end stops the fling on that axis: the content cannot move, so
+	// there is nothing left to carry.
+	if s.OffsetX <= 0 || s.OffsetX >= s.maxOffsetX() {
+		s.velX = 0
+	}
+	if s.OffsetY <= 0 || s.OffsetY >= s.maxOffsetY() {
+		s.velY = 0
+	}
+	if s.velX == 0 && s.velY == 0 {
+		s.stopFling()
+	}
+}
+
+// Animating reports whether the view still needs frames: true exactly while a
+// fling is running, or while a finger is down and its speed is being measured.
+func (s *ScrollView) Animating() bool { return s.flinging || s.pan.active }
+
+// stopFling brings the view to rest.
+func (s *ScrollView) stopFling() {
+	s.flinging = false
+	s.velX, s.velY = 0, 0
+}
+
+// startFling launches a fling if the release was fast enough to be one.
+func (s *ScrollView) startFling() {
+	if math.Abs(s.velX) < flingStartVelocity && math.Abs(s.velY) < flingStartVelocity {
+		s.stopFling()
+		return
+	}
+	s.flinging = true
+}
+
+// maxOffsetX and maxOffsetY are the largest legal scroll offsets, i.e. how far
+// the content can move before its far edge meets the viewport's.
+func (s *ScrollView) maxOffsetX() int { return maxInt(0, s.contentW-s.viewport().W) }
+func (s *ScrollView) maxOffsetY() int { return maxInt(0, s.contentH-s.viewport().H) }
+
+// maxInt returns the larger of two ints.
+func maxInt(a, b int) int {
+	if a > b {
+		return a
+	}
+	return b
+}
