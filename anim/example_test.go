@@ -19,7 +19,7 @@ import (
 // now comes from an eased anim.Animation over the toolkit's Easing curves.
 func ExampleDriver_spinner() {
 	sp := toolkit.NewSpinner()
-	sp.Active = true
+	sp.Active().Set(true)
 
 	d := anim.NewDriver()
 	// One full 0..1 phase sweep over 1s, linear so the spin is steady.

@@ -91,21 +91,21 @@ func TestCheckButtonKeyToggles(t *testing.T) {
 	toggles := 0
 	last := false
 	c := NewCheckButton("OK", false)
-	c.OnToggle = func(checked bool) { toggles++; last = checked }
+	c.Checked().Subscribe(func(v bool) { toggles++; last = v })
 	c.OnEvent(kd(" "))
-	if !c.Checked || toggles != 1 || !last {
-		t.Fatalf("space: Checked=%v toggles=%d last=%v", c.Checked, toggles, last)
+	if !c.Checked().Get() || toggles != 1 || !last {
+		t.Fatalf("space: Checked=%v toggles=%d last=%v", c.Checked().Get(), toggles, last)
 	}
 	c.OnEvent(kd("Enter"))
-	if c.Checked || toggles != 2 || last {
-		t.Fatalf("enter: Checked=%v toggles=%d last=%v", c.Checked, toggles, last)
+	if c.Checked().Get() || toggles != 2 || last {
+		t.Fatalf("enter: Checked=%v toggles=%d last=%v", c.Checked().Get(), toggles, last)
 	}
 	c.Disabled = true
 	c.OnEvent(kd(" "))
-	if c.Checked || toggles != 2 {
-		t.Fatalf("disabled check toggled (Checked=%v toggles=%d)", c.Checked, toggles)
+	if c.Checked().Get() || toggles != 2 {
+		t.Fatalf("disabled check toggled (Checked=%v toggles=%d)", c.Checked().Get(), toggles)
 	}
-	NewCheckButton("nil", false).OnEvent(kd(" ")) // nil OnToggle safe
+	NewCheckButton("nil", false).OnEvent(kd(" ")) // no subscriber: toggle is safe
 }
 
 func TestSwitchKeyToggles(t *testing.T) {
@@ -131,21 +131,21 @@ func TestSwitchKeyToggles(t *testing.T) {
 func TestToggleButtonKeyToggles(t *testing.T) {
 	toggles := 0
 	tb := NewToggleButton("X", false)
-	tb.OnToggle = func(p bool) { toggles++ }
+	tb.Pressed().Subscribe(func(p bool) { toggles++ })
 	tb.OnEvent(kd(" "))
-	if !tb.Pressed || toggles != 1 {
-		t.Fatalf("space: Pressed=%v toggles=%d", tb.Pressed, toggles)
+	if !tb.Pressed().Get() || toggles != 1 {
+		t.Fatalf("space: Pressed=%v toggles=%d", tb.Pressed().Get(), toggles)
 	}
 	tb.OnEvent(kd("Enter"))
-	if tb.Pressed || toggles != 2 {
-		t.Fatalf("enter: Pressed=%v toggles=%d", tb.Pressed, toggles)
+	if tb.Pressed().Get() || toggles != 2 {
+		t.Fatalf("enter: Pressed=%v toggles=%d", tb.Pressed().Get(), toggles)
 	}
 	tb.Disabled = true
 	tb.OnEvent(kd(" "))
-	if tb.Pressed || toggles != 2 {
-		t.Fatalf("disabled toggle activated (Pressed=%v)", tb.Pressed)
+	if tb.Pressed().Get() || toggles != 2 {
+		t.Fatalf("disabled toggle activated (Pressed=%v)", tb.Pressed().Get())
 	}
-	NewToggleButton("nil", false).OnEvent(kd("Enter")) // nil OnToggle safe
+	NewToggleButton("nil", false).OnEvent(kd("Enter")) // no subscriber safe
 }
 
 // --- RadioButton / RadioGroup --------------------------------------------
@@ -248,55 +248,55 @@ func TestCycleButtonKeySteps(t *testing.T) {
 func TestScaleKeyMovesValue(t *testing.T) {
 	var got float64
 	s := NewScale(0, 100, 50)
-	s.OnChange = func(v float64) { got = v }
+	s.Value().Subscribe(func(v float64) { got = v })
 	s.OnEvent(kd("ArrowRight")) // +1% of range = +1
-	if s.Value != 51 || got != 51 {
-		t.Fatalf("ArrowRight: Value=%v cb=%v", s.Value, got)
+	if s.Value().Get() != 51 || got != 51 {
+		t.Fatalf("ArrowRight: Value=%v cb=%v", s.Value().Get(), got)
 	}
 	s.OnEvent(kd("ArrowLeft")) // -1
-	if s.Value != 50 {
-		t.Fatalf("ArrowLeft: Value=%v", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("ArrowLeft: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("PageUp")) // +10% = +10
-	if s.Value != 60 {
-		t.Fatalf("PageUp: Value=%v", s.Value)
+	if s.Value().Get() != 60 {
+		t.Fatalf("PageUp: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("PageDown")) // -10
-	if s.Value != 50 {
-		t.Fatalf("PageDown: Value=%v", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("PageDown: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("End"))
-	if s.Value != 100 {
-		t.Fatalf("End: Value=%v", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("End: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("ArrowRight")) // clamp at Max
-	if s.Value != 100 {
-		t.Fatalf("clamp at Max: Value=%v", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("clamp at Max: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("Home"))
-	if s.Value != 0 {
-		t.Fatalf("Home: Value=%v", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("Home: Value=%v", s.Value().Get())
 	}
 	// Explicit Step overrides the 1% default.
 	st := NewScale(0, 100, 50)
 	st.Step = 5
 	st.OnEvent(kd("ArrowRight"))
-	if st.Value != 55 {
-		t.Fatalf("Step=5 ArrowRight: Value=%v", st.Value)
+	if st.Value().Get() != 55 {
+		t.Fatalf("Step=5 ArrowRight: Value=%v", st.Value().Get())
 	}
 	// Degenerate range: keys are a no-op.
 	deg := NewScale(5, 5, 5)
 	deg.OnEvent(kd("ArrowRight"))
-	if deg.Value != 5 {
-		t.Fatalf("degenerate range moved (Value=%v)", deg.Value)
+	if deg.Value().Get() != 5 {
+		t.Fatalf("degenerate range moved (Value=%v)", deg.Value().Get())
 	}
 	// Disabled ignores keys.
 	s.Disabled = true
 	s.OnEvent(kd("End"))
-	if s.Value != 0 {
-		t.Fatalf("disabled scale moved (Value=%v)", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("disabled scale moved (Value=%v)", s.Value().Get())
 	}
-	// Nil OnChange is safe.
+	// No subscriber is safe.
 	NewScale(0, 10, 5).OnEvent(kd("Home"))
 	// A non-click, non-keydown event is ignored.
 	NewScale(0, 10, 5).OnEvent(Event{Kind: EventChar, Code: "a"})
@@ -359,41 +359,41 @@ func TestRangeSliderKeyMovesHandles(t *testing.T) {
 func TestSpinButtonKeySteps(t *testing.T) {
 	var got int
 	s := NewSpinButton(0, 100, 50, 2)
-	s.OnChange = func(v int) { got = v }
+	s.Value().Subscribe(func(v int) { got = v })
 	s.OnEvent(kd("ArrowUp"))
-	if s.Value != 52 || got != 52 {
-		t.Fatalf("ArrowUp: Value=%d cb=%d", s.Value, got)
+	if s.Value().Get() != 52 || got != 52 {
+		t.Fatalf("ArrowUp: Value=%d cb=%d", s.Value().Get(), got)
 	}
 	s.OnEvent(kd("ArrowDown"))
-	if s.Value != 50 {
-		t.Fatalf("ArrowDown: Value=%d", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("ArrowDown: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("PageUp")) // +10*Step = +20
-	if s.Value != 70 {
-		t.Fatalf("PageUp: Value=%d", s.Value)
+	if s.Value().Get() != 70 {
+		t.Fatalf("PageUp: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("PageDown")) // -20
-	if s.Value != 50 {
-		t.Fatalf("PageDown: Value=%d", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("PageDown: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("End"))
-	if s.Value != 100 {
-		t.Fatalf("End: Value=%d", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("End: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("ArrowUp")) // clamp at Max
-	if s.Value != 100 {
-		t.Fatalf("clamp at Max: Value=%d", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("clamp at Max: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("Home"))
-	if s.Value != 0 {
-		t.Fatalf("Home: Value=%d", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("Home: Value=%d", s.Value().Get())
 	}
 	s.Disabled = true
 	s.OnEvent(kd("End"))
-	if s.Value != 0 {
-		t.Fatalf("disabled spinbutton moved (Value=%d)", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("disabled spinbutton moved (Value=%d)", s.Value().Get())
 	}
-	NewSpinButton(0, 10, 5, 1).OnEvent(kd("ArrowUp")) // nil OnChange safe
+	NewSpinButton(0, 10, 5, 1).OnEvent(kd("ArrowUp")) // no subscriber: safe
 	// A non-click, non-keydown event is ignored.
 	NewSpinButton(0, 10, 5, 1).OnEvent(Event{Kind: EventChar, Code: "a"})
 }
@@ -871,21 +871,21 @@ func TestAccordionDrawsFocusRingWhenFocused(t *testing.T) {
 func TestExpanderKeyToggles(t *testing.T) {
 	expands := 0
 	e := NewExpander("S", nil)
-	e.OnExpand = func(bool) { expands++ }
+	e.Expanded().Subscribe(func(bool) { expands++ })
 	e.OnEvent(kd("Enter"))
-	if !e.Expanded || expands != 1 {
-		t.Fatalf("Enter: Expanded=%v expands=%d", e.Expanded, expands)
+	if !e.Expanded().Get() || expands != 1 {
+		t.Fatalf("Enter: Expanded=%v expands=%d", e.Expanded().Get(), expands)
 	}
 	e.OnEvent(kd(" "))
-	if e.Expanded || expands != 2 {
-		t.Fatalf("Space: Expanded=%v expands=%d", e.Expanded, expands)
+	if e.Expanded().Get() || expands != 2 {
+		t.Fatalf("Space: Expanded=%v expands=%d", e.Expanded().Get(), expands)
 	}
 	e.Disabled = true
 	e.OnEvent(kd("Enter"))
-	if e.Expanded || expands != 2 {
-		t.Fatalf("disabled expander toggled (Expanded=%v)", e.Expanded)
+	if e.Expanded().Get() || expands != 2 {
+		t.Fatalf("disabled expander toggled (Expanded=%v)", e.Expanded().Get())
 	}
-	NewExpander("nil", nil).OnEvent(kd("Enter")) // nil OnExpand safe
+	NewExpander("nil", nil).OnEvent(kd("Enter")) // unbound observable safe
 	// A non-click, non-keydown event is ignored.
 	NewExpander("S", nil).OnEvent(Event{Kind: EventChar, Code: "a"})
 }

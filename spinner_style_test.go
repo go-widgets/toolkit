@@ -6,6 +6,30 @@ package toolkit
 
 import "testing"
 
+// TestSpinnerActiveObservable covers the zero-value lazy-init of the Active
+// accessor and the host binding path: a Spinner built as a bare struct (no
+// NewSpinner) still yields a usable Observable defaulting to false, and Setting
+// it from outside toggles what the widget reports and draws (there is no
+// imperative Active field).
+func TestSpinnerActiveObservable(t *testing.T) {
+	s := &Spinner{} // no NewSpinner → active Observable is nil until accessed
+	if s.Active().Get() {
+		t.Fatalf("bare Spinner Active = true, want false")
+	}
+	if s.Animating() {
+		t.Fatalf("bare Spinner Animating = true, want false")
+	}
+	seen := false
+	s.Active().Subscribe(func(v bool) { seen = v })
+	s.Active().Set(true) // a host drives the spinner through the Observable
+	if !s.Active().Get() || !seen {
+		t.Fatalf("host Set: active=%v subscriber=%v, want true/true", s.Active().Get(), seen)
+	}
+	if !s.Animating() {
+		t.Fatalf("Animating after Set(true) = false, want true")
+	}
+}
+
 // accentPixelsInBounds renders an active spinner of the given style and returns
 // how many Accent pixels it painted, failing if any painted (non-sentinel) pixel
 // falls outside the widget's bounds.
@@ -16,7 +40,8 @@ func accentPixelsInBounds(t *testing.T, style SpinnerStyle, phase float64) int {
 	sentinel := RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}
 	b := Rect{X: 4, Y: 4, W: 40, H: 40}
 	s := NewSpinner()
-	s.Active, s.Style, s.Phase = true, style, phase
+	s.Active().Set(true)
+	s.Style, s.Phase = style, phase
 	s.SetBounds(b)
 	buf := makeSurface(stride, stride)
 	s.Draw(newP(buf, stride), theme)
@@ -63,7 +88,8 @@ func TestSpinnerBarsPaintAccent(t *testing.T) {
 func TestSpinnerStylesTinyBounds(t *testing.T) {
 	for _, style := range []SpinnerStyle{SpinnerDots, SpinnerRing, SpinnerBars} {
 		s := NewSpinner()
-		s.Active, s.Style = true, style
+		s.Active().Set(true)
+		s.Style = style
 		s.SetBounds(Rect{X: 0, Y: 0, W: 6, H: 6})
 		s.Draw(newP(makeSurface(8, 8), 8), DefaultLight())
 	}

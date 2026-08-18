@@ -479,14 +479,14 @@ func TestPanedNilSecondVerticalNoCrash(t *testing.T) {
 func TestExpanderClickHeaderTogglesAndFires(t *testing.T) {
 	expanded := false
 	e := NewExpander("Settings", &recordingWidget{})
-	e.OnExpand = func(v bool) { expanded = v }
+	e.Expanded().Subscribe(func(v bool) { expanded = v })
 	e.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	e.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if !e.Expanded || !expanded {
-		t.Fatalf("after header click: Expanded=%v expanded=%v", e.Expanded, expanded)
+	if !e.Expanded().Get() || !expanded {
+		t.Fatalf("after header click: Expanded=%v expanded=%v", e.Expanded().Get(), expanded)
 	}
 	e.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if e.Expanded || expanded {
+	if e.Expanded().Get() || expanded {
 		t.Fatal("second click should collapse")
 	}
 }
@@ -494,7 +494,7 @@ func TestExpanderClickHeaderTogglesAndFires(t *testing.T) {
 func TestExpanderClickBodyRoutesWhenExpanded(t *testing.T) {
 	body := &recordingWidget{}
 	e := NewExpander("S", body)
-	e.Expanded = true
+	e.Expanded().Set(true)
 	e.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	e.OnEvent(Event{Kind: EventClick, X: 5, Y: 50})
 	if len(body.events) != 1 {
@@ -507,7 +507,7 @@ func TestExpanderBodyClickTranslatedAtNonZeroBounds(t *testing.T) {
 	// (shifted up by ExpanderHeaderH and by the Expander's own origin).
 	body := &recordingWidget{}
 	e := NewExpander("S", body)
-	e.Expanded = true
+	e.Expanded().Set(true)
 	e.SetBounds(Rect{X: 30, Y: 20, W: 200, H: 100})
 	e.OnEvent(Event{Kind: EventClick, X: 5, Y: 40}) // expander-local, in the body
 	if len(body.events) != 1 {
@@ -531,7 +531,7 @@ func TestExpanderClickBodyIgnoredWhenCollapsed(t *testing.T) {
 
 func TestExpanderNilContentNoPanic(t *testing.T) {
 	e := NewExpander("S", nil)
-	e.Expanded = true
+	e.Expanded().Set(true)
 	e.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	e.Draw(newP(make([]byte, 200*100*4), 200), DefaultLight())
 	e.OnEvent(Event{Kind: EventClick, X: 5, Y: 50})
@@ -543,15 +543,27 @@ func TestExpanderIgnoresNonClick(t *testing.T) {
 	// Enter/Space toggle the header as of Wave 3; an unrelated key (Tab) must
 	// neither toggle nor propagate to the body.
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if e.Expanded || len(body.events) != 0 {
+	if e.Expanded().Get() || len(body.events) != 0 {
 		t.Fatal("KeyDown must not toggle or propagate")
 	}
 }
 
-func TestExpanderNilOnExpandNoPanic(t *testing.T) {
-	e := NewExpander("S", nil)
+// TestExpanderBareAccessorInitsAndBinds proves a zero-value &Expander{} (built
+// without the constructor) lazily allocates its expanded Observable on the first
+// Expanded() call — defaulting collapsed — and that a header click drives the
+// same Observable a host binds via Subscribe.
+func TestExpanderBareAccessorInitsAndBinds(t *testing.T) {
+	e := &Expander{}
+	if e.Expanded().Get() {
+		t.Fatal("bare Expander should start collapsed")
+	}
+	seen := false
+	e.Expanded().Subscribe(func(v bool) { seen = v })
 	e.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	e.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
+	e.OnEvent(Event{Kind: EventClick, X: 5, Y: 5}) // header click toggles
+	if !e.Expanded().Get() || !seen {
+		t.Fatalf("host bind: Expanded=%v subscriber=%v, want true/true", e.Expanded().Get(), seen)
+	}
 }
 
 func TestExpanderDrawCollapsedAndExpanded(t *testing.T) {
@@ -564,7 +576,7 @@ func TestExpanderDrawCollapsedAndExpanded(t *testing.T) {
 	if body.draws != 0 {
 		t.Fatal("collapsed Draw must not render body")
 	}
-	e.Expanded = true
+	e.Expanded().Set(true)
 	e.Draw(newP(makeSurface(w, h), w), theme)
 	if body.draws != 1 {
 		t.Fatal("expanded Draw must render body")

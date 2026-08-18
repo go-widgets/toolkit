@@ -4,20 +4,36 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
-// CheckButton is a square checkbox + a label. Click toggles Checked
-// + fires OnToggle. Visual: 12 x 12 px box (left-aligned), Theme.Border
-// outline, Theme.Surface fill, Theme.Accent fill + two diagonal
-// "checkmark" strokes in Theme.Background when Checked. Label
+// CheckButton is a square checkbox + a label. A click toggles the reactive
+// Checked state, notifying its Observable's subscribers. Visual: 12 x 12 px box
+// (left-aligned), Theme.Border outline, Theme.Surface fill, Theme.Accent fill +
+// two diagonal "checkmark" strokes in Theme.Background when Checked. Label
 // rendered in Theme.OnBackground to the right of the box.
 type CheckButton struct {
 	Base
 	focusState
-	Label    string
-	Checked  bool
-	Size     int // box side length in px; 0 uses the 12px default
-	OnToggle func(checked bool)
+	// Label + Size are config. The reactive checked state is MVVM-only: it lives
+	// in an unexported Observable exposed via [CheckButton.Checked].
+	Label string
+	Size  int // box side length in px; 0 uses the 12px default
+
+	checked *mvvm.Observable[bool]
+}
+
+// Checked is the current checked state as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Checked field. A
+// click or a Space/Enter key press Sets it (flipping the value); subscribers are
+// notified on change.
+func (c *CheckButton) Checked() *mvvm.Observable[bool] {
+	if c.checked == nil {
+		c.checked = mvvm.NewObservable(false)
+	}
+	return c.checked
 }
 
 // checkBoxSize is the default LOGICAL side length of the box (used when
@@ -38,7 +54,7 @@ func (c *CheckButton) boxSize() int {
 // NewCheckButton constructs a CheckButton with the given label +
 // initial Checked state.
 func NewCheckButton(label string, checked bool) *CheckButton {
-	return &CheckButton{Label: label, Checked: checked}
+	return &CheckButton{Label: label, checked: mvvm.NewObservable(checked)}
 }
 
 // Draw paints the box + checkmark + label.
@@ -47,7 +63,7 @@ func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 	box := c.boxSize()
 	boxY := r.Y + (r.H-box)/2
 	fill := theme.Surface
-	if c.Checked {
+	if c.Checked().Get() {
 		fill = theme.Accent
 	}
 	// A disabled checkbox mutes the box, border, checkmark and label so it
@@ -58,7 +74,7 @@ func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRect(p, r.X, boxY, box, box, fill)
 	strokeRect(p, r.X, boxY, box, box, border)
-	if c.Checked {
+	if c.Checked().Get() {
 		if box != checkBoxSize {
 			// Any box that is not the classic 12 -- a caller-chosen Size, or the
 			// default one at a metric scale above 1 -- gets the proportional
@@ -97,7 +113,7 @@ func drawCheckmark(p painter.Painter, x, y, b int, ink RGBA) {
 	}
 }
 
-// OnEvent flips Checked + fires OnToggle on click. A Disabled checkbox ignores
+// OnEvent flips the Checked Observable on click. A Disabled checkbox ignores
 // every kind.
 func (c *CheckButton) OnEvent(ev Event) {
 	if c.Disabled {
@@ -115,13 +131,10 @@ func (c *CheckButton) OnEvent(ev Event) {
 	}
 }
 
-// toggle flips Checked and fires OnToggle (nil-safe) -- the shared mutate path
-// for a click and a Space/Enter key press.
+// toggle flips the Checked Observable, notifying its subscribers -- the shared
+// mutate path for a click and a Space/Enter key press.
 func (c *CheckButton) toggle() {
-	c.Checked = !c.Checked
-	if c.OnToggle != nil {
-		c.OnToggle(c.Checked)
-	}
+	c.Checked().Set(!c.Checked().Get())
 }
 
 // HitRect is the checkbox's interactive rectangle: its drawn Bounds clamped up

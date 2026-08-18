@@ -300,7 +300,7 @@ func TestPullToRefreshReleaseArmedRefreshes(t *testing.T) {
 	if fired != 1 {
 		t.Fatalf("OnRefresh fired %d times, want 1", fired)
 	}
-	if !w.spinner.Active {
+	if !w.spinner.Active().Get() {
 		t.Fatalf("spinner not active while refreshing")
 	}
 	settleSpring(t, w)
@@ -313,7 +313,7 @@ func TestPullToRefreshReleaseArmedRefreshes(t *testing.T) {
 	if w.State() != PullIdle {
 		t.Fatalf("after Done state = %v, want PullIdle", w.State())
 	}
-	if w.spinner.Active {
+	if w.spinner.Active().Get() {
 		t.Fatalf("spinner still active after Done")
 	}
 	settleSpring(t, w)

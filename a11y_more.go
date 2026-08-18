@@ -69,7 +69,7 @@ func isoDate(y, m, d int) string { return fmt.Sprintf("%04d-%02d-%02d", y, m, d)
 
 // A11y reports the ToggleButton as a button carrying its pressed state.
 func (t *ToggleButton) A11y() A11yInfo {
-	return A11yInfo{Role: RoleButton, Name: t.Label, Value: stateValue(t.Pressed, "pressed")}
+	return A11yInfo{Role: RoleButton, Name: t.Label, Value: stateValue(t.Pressed().Get(), "pressed")}
 }
 
 // A11y reports the IconButton as a button named by its icon identifier (it
@@ -90,11 +90,11 @@ func (t *TextView) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: t
 func (s *SpinButton) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleSpinbutton,
-		Value:    strconv.Itoa(s.Value),
+		Value:    strconv.Itoa(s.Value().Get()),
 		HasRange: true,
 		Min:      float64(s.Min),
 		Max:      float64(s.Max),
-		Now:      float64(s.Value),
+		Now:      float64(s.Value().Get()),
 	}
 }
 
@@ -327,7 +327,7 @@ func (p *ProgressCircle) A11y() A11yInfo {
 
 // A11y reports the Spinner as a status region carrying "busy" while active.
 func (s *Spinner) A11y() A11yInfo {
-	return A11yInfo{Role: RoleStatus, Value: stateValue(s.Active, "busy")}
+	return A11yInfo{Role: RoleStatus, Value: stateValue(s.Active().Get(), "busy")}
 }
 
 // A11y reports the Stat as a group named by its title, carrying its
@@ -408,7 +408,7 @@ func (t *Tooltip) A11y() A11yInfo { return A11yInfo{Role: RoleTooltip, Name: t.T
 // A11y reports the Expander as a group named by its label, carrying its
 // expanded/collapsed state.
 func (e *Expander) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: e.Label, Value: stateValue(e.Expanded, "expanded")}
+	return A11yInfo{Role: RoleGroup, Name: e.Label, Value: stateValue(e.Expanded().Get(), "expanded")}
 }
 
 // A11y reports the Accordion as a group carrying the titles of every

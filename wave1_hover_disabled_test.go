@@ -193,19 +193,20 @@ func TestToggleButtonHoverAndDisabled(t *testing.T) {
 	}
 	// Click toggles Pressed (Accent face wins over hover).
 	toggled := 0
-	tb.OnToggle = func(bool) { toggled++ }
+	tb.Pressed().Subscribe(func(bool) { toggled++ })
 	tb.OnEvent(Event{Kind: EventClick})
-	if !tb.Pressed || toggled != 1 {
-		t.Fatalf("toggle click: pressed=%v toggled=%d", tb.Pressed, toggled)
+	if !tb.Pressed().Get() || toggled != 1 {
+		t.Fatalf("toggle click: pressed=%v toggled=%d", tb.Pressed().Get(), toggled)
 	}
 	// Disabled: inert + muted.
 	tb.Disabled = true
-	tb.Pressed, tb.hovered = false, false
+	tb.Pressed().Set(false)
+	tb.hovered = false
 	toggled = 0
 	tb.OnEvent(Event{Kind: EventClick})
 	tb.OnEvent(Event{Kind: EventMouseMove, X: 20, Y: 10})
-	if tb.Pressed || toggled != 0 || tb.hovered {
-		t.Fatalf("disabled toggle reacted: pressed=%v toggled=%d hovered=%v", tb.Pressed, toggled, tb.hovered)
+	if tb.Pressed().Get() || toggled != 0 || tb.hovered {
+		t.Fatalf("disabled toggle reacted: pressed=%v toggled=%d hovered=%v", tb.Pressed().Get(), toggled, tb.hovered)
 	}
 	dis := makeSurface(40, 20)
 	tb.Draw(newP(dis, 40), th)
@@ -272,7 +273,7 @@ func TestCheckButtonDisabled(t *testing.T) {
 	c.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	c.Disabled = true
 	c.OnEvent(Event{Kind: EventClick})
-	if c.Checked {
+	if c.Checked().Get() {
 		t.Fatal("disabled checkbox should not toggle")
 	}
 	buf := makeSurface(60, 20)
@@ -281,7 +282,7 @@ func TestCheckButtonDisabled(t *testing.T) {
 		t.Fatalf("disabled check box = %+v, want mutedFace", px)
 	}
 	// Disabled + checked exercises the muted checkmark path (Sized + fixed).
-	c.Checked = true
+	c.Checked().Set(true)
 	c.Draw(newP(makeSurface(60, 20), 60), th)
 	c.Size = 16
 	c.Draw(newP(makeSurface(60, 20), 60), th)
@@ -326,8 +327,8 @@ func TestScaleDisabled(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
 	s.Disabled = true
 	s.OnEvent(Event{Kind: EventClick, X: 90, Y: 10})
-	if s.Value != 50 {
-		t.Fatalf("disabled scale moved to %v", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("disabled scale moved to %v", s.Value().Get())
 	}
 	buf := makeSurface(100, 20)
 	s.Draw(newP(buf, 100), th)
@@ -348,8 +349,8 @@ func TestSpinButtonDisabled(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	s.Disabled = true
 	s.OnEvent(Event{Kind: EventClick, X: 55, Y: 5}) // upper button
-	if s.Value != 5 {
-		t.Fatalf("disabled spin changed to %d", s.Value)
+	if s.Value().Get() != 5 {
+		t.Fatalf("disabled spin changed to %d", s.Value().Get())
 	}
 	buf := makeSurface(60, 20)
 	s.Draw(newP(buf, 60), th)
