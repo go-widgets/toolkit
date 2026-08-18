@@ -39,8 +39,8 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"scale", func() Widget { return NewScale(0, 100, 50) }},
 		{"progressbar", func() Widget { p := NewProgressBar(); p.Fraction = 0.6; return p }},
 		{"levelbar", func() Widget { l := NewLevelBar(10); l.Value = 7; return l }},
-		{"progresscircle", func() Widget { pc := NewProgressCircle(); pc.Fraction = 0.6; return pc }},
-		{"spinner", func() Widget { s := NewSpinner(); s.Active = true; return s }},
+		{"progresscircle", func() Widget { pc := NewProgressCircle(); pc.Fraction().Set(0.6); return pc }},
+		{"spinner", func() Widget { s := NewSpinner(); s.Active().Set(true); return s }},
 		{"listbox", func() Widget { return NewListBox([]string{"a", "b", "c", "d", "e", "f", "g", "h"}) }},
 		{"treeview", func() Widget {
 			return NewTreeView(&TreeNode{Label: "/", Expanded: true, Children: []*TreeNode{{Label: "src"}, {Label: "docs"}}})
@@ -69,7 +69,7 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 			return f
 		}},
 		{"card", func() Widget { return NewCard("Title", "Body one.\nBody two.", "footer") }},
-		{"expander", func() Widget { e := NewExpander("Details", NewLabel("body")); e.Expanded = true; return e }},
+		{"expander", func() Widget { e := NewExpander("Details", NewLabel("body")); e.Expanded().Set(true); return e }},
 		{"paned", func() Widget { return NewHPaned(NewLabel("L"), NewLabel("R")) }},
 		{"calendar", func() Widget { c := NewCalendar(2026, 7, 2); c.SetToday(2026, 7, 2); return c }},
 		{"agenda-month", func() Widget {

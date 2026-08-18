@@ -301,7 +301,8 @@ func (c *GroupCard) Draw(p painter.Painter, theme *Theme) {
 
 	// Header affordance: download checkbox + action pill.
 	if cr := c.CheckRect(); cr.W > 0 {
-		cb := &CheckButton{Checked: c.Checked, Size: cr.W}
+		cb := &CheckButton{Size: cr.W}
+		cb.Checked().Set(c.Checked)
 		cb.SetBounds(cr)
 		cb.Draw(p, theme)
 	}

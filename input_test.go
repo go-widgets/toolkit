@@ -386,14 +386,14 @@ func TestEntryCopyThenPasteAcrossEntriesRoundTrip(t *testing.T) {
 func TestCheckButtonClickToggles(t *testing.T) {
 	got := false
 	c := NewCheckButton("OK", false)
-	c.OnToggle = func(v bool) { got = v }
+	c.Checked().Subscribe(func(v bool) { got = v })
 	c.OnEvent(Event{Kind: EventClick})
-	if !c.Checked || !got {
-		t.Fatalf("after click: Checked=%v got=%v", c.Checked, got)
+	if !c.Checked().Get() || !got {
+		t.Fatalf("after click: Checked=%v got=%v", c.Checked().Get(), got)
 	}
 	c.OnEvent(Event{Kind: EventClick})
-	if c.Checked || got {
-		t.Fatalf("after second click: Checked=%v got=%v", c.Checked, got)
+	if c.Checked().Get() || got {
+		t.Fatalf("after second click: Checked=%v got=%v", c.Checked().Get(), got)
 	}
 }
 
@@ -401,14 +401,30 @@ func TestCheckButtonIgnoresOtherEvents(t *testing.T) {
 	c := NewCheckButton("OK", false)
 	// Space/Enter toggle as of Wave 3; an unrelated key (Tab) must not.
 	c.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if c.Checked {
+	if c.Checked().Get() {
 		t.Fatal("KeyDown should not toggle")
 	}
 }
 
-func TestCheckButtonNilCallbackNoPanic(t *testing.T) {
+func TestCheckButtonNoSubscriberNoPanic(t *testing.T) {
 	c := NewCheckButton("OK", false)
 	c.OnEvent(Event{Kind: EventClick})
+}
+
+// A bare &CheckButton{} has a nil observable; the Checked() accessor must
+// lazy-init it (to false) so a host can bind it and a toggle works, matching
+// the constructor path.
+func TestCheckButtonZeroValueAccessor(t *testing.T) {
+	c := &CheckButton{}
+	if c.Checked().Get() {
+		t.Fatal("zero-value CheckButton should be unchecked")
+	}
+	got := false
+	c.Checked().Subscribe(func(v bool) { got = v })
+	c.OnEvent(Event{Kind: EventClick})
+	if !c.Checked().Get() || !got {
+		t.Fatalf("after click on zero value: Checked=%v got=%v", c.Checked().Get(), got)
+	}
 }
 
 func TestCheckButtonDrawCheckedAndUnchecked(t *testing.T) {
@@ -423,7 +439,7 @@ func TestCheckButtonDrawCheckedAndUnchecked(t *testing.T) {
 	if pixelAt(buf, w, 5, 10) != theme.Accent {
 		t.Fatalf("checked box fill = %+v, want Accent", pixelAt(buf, w, 5, 10))
 	}
-	c.Checked = false
+	c.Checked().Set(false)
 	buf2 := makeSurface(w, h)
 	c.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 5, 10) != theme.Surface {
@@ -551,27 +567,40 @@ func TestRadioButtonDrawCheckedAndUnchecked(t *testing.T) {
 func TestToggleButtonClickFlips(t *testing.T) {
 	got := false
 	tb := NewToggleButton("X", false)
-	tb.OnToggle = func(v bool) { got = v }
+	tb.Pressed().Subscribe(func(v bool) { got = v })
 	tb.OnEvent(Event{Kind: EventClick})
-	if !tb.Pressed || !got {
-		t.Fatalf("after click: Pressed=%v got=%v", tb.Pressed, got)
+	if !tb.Pressed().Get() || !got {
+		t.Fatalf("after click: Pressed=%v got=%v", tb.Pressed().Get(), got)
 	}
 	tb.OnEvent(Event{Kind: EventClick})
-	if tb.Pressed || got {
-		t.Fatalf("after second click: Pressed=%v got=%v", tb.Pressed, got)
+	if tb.Pressed().Get() || got {
+		t.Fatalf("after second click: Pressed=%v got=%v", tb.Pressed().Get(), got)
 	}
 }
 
-func TestToggleButtonNilCallbackNoPanic(t *testing.T) {
-	tb := NewToggleButton("X", false)
-	tb.OnEvent(Event{Kind: EventClick})
+// TestToggleButtonPressedObservable covers the zero-value lazy-init of the
+// Pressed accessor and the host binding path: a ToggleButton built as a bare
+// struct (no NewToggleButton) still yields a usable Observable, and Setting it
+// from outside is reflected by the widget (there is no imperative Pressed field).
+func TestToggleButtonPressedObservable(t *testing.T) {
+	tb := &ToggleButton{} // no NewToggleButton → pressed Observable is nil until accessed
+	if tb.Pressed().Get() {
+		t.Fatalf("zero-value ToggleButton Pressed = true, want false")
+	}
+	seen := false
+	sawTrue := false
+	tb.Pressed().Subscribe(func(v bool) { seen = v; sawTrue = sawTrue || v })
+	tb.Pressed().Set(true) // a host drives the toggle through the Observable
+	if !tb.Pressed().Get() || !seen || !sawTrue {
+		t.Fatalf("host Set: value=%v subscriber=%v, want true/true", tb.Pressed().Get(), seen)
+	}
 }
 
 func TestToggleButtonIgnoresNonClick(t *testing.T) {
 	tb := NewToggleButton("X", false)
 	// Space/Enter toggle as of Wave 3; an unrelated key (Tab) must not.
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if tb.Pressed {
+	if tb.Pressed().Get() {
 		t.Fatal("KeyDown should not toggle")
 	}
 }
@@ -589,7 +618,7 @@ func TestToggleButtonDrawPressedAndUnpressed(t *testing.T) {
 	if pixelAt(buf, w, 5, 10) != theme.Accent {
 		t.Fatalf("pressed face = %+v, want Accent", pixelAt(buf, w, 5, 10))
 	}
-	tb.Pressed = false
+	tb.Pressed().Set(false)
 	buf2 := makeSurface(w, h)
 	tb.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 5, 10) != theme.Surface {

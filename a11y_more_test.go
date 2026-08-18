@@ -230,11 +230,11 @@ func TestA11yFeedbackWidgets(t *testing.T) {
 	pb := NewProgressBar()
 	pb.Fraction = 0.42
 	pc := NewProgressCircle()
-	pc.Fraction = 0.5
+	pc.Fraction().Set(0.5)
 	lvl := NewLevelBar(10)
 	lvl.Value = 4
 	activeSpinner := NewSpinner()
-	activeSpinner.Active = true
+	activeSpinner.Active().Set(true)
 	idleSpinner := NewSpinner()
 
 	checkA11yCases(t, []a11yCase{
@@ -273,7 +273,7 @@ func TestA11yChromeWidgets(t *testing.T) {
 	popoverWithTitle.Title = "Filters"
 
 	expandedExpander := NewExpander("Details", nil)
-	expandedExpander.Expanded = true
+	expandedExpander.Expanded().Set(true)
 	collapsedExpander := NewExpander("Details", nil)
 
 	modalOverlay := NewOverlay(nil)

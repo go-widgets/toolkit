@@ -180,8 +180,8 @@ func (c *CardList[T]) renderCard(p painter.Painter, th *toolkit.Theme, r toolkit
 // any active pull-to-fetch strip. The strip spinners' Active state is synced to
 // the Fetching flags here so an app toggling a flag needs no other wiring.
 func (c *CardList[T]) Draw(p painter.Painter, th *toolkit.Theme) {
-	c.topSpin.Active = c.FetchingTop
-	c.botSpin.Active = c.FetchingBottom
+	c.topSpin.Active().Set(c.FetchingTop)
+	c.botSpin.Active().Set(c.FetchingBottom)
 	c.VirtualList.Draw(p, th)
 	if c.FetchingTop {
 		c.drawStrip(p, th, true, c.topSpin, c.TopLabel)

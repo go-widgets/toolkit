@@ -285,7 +285,7 @@ func (w *PullToRefresh) TouchUp() {
 // release and by the programmatic Refresh.
 func (w *PullToRefresh) startRefresh() {
 	w.state = PullRefreshing
-	w.spinner.Active = true
+	w.spinner.Active().Set(true)
 	w.configure()
 	rest := float64(w.effRest())
 	w.spring.SetBounds(rest, rest)
@@ -298,7 +298,7 @@ func (w *PullToRefresh) startRefresh() {
 // springHome springs the pull back to zero and returns the widget to idle.
 func (w *PullToRefresh) springHome() {
 	w.state = PullIdle
-	w.spinner.Active = false
+	w.spinner.Active().Set(false)
 	w.configure()
 	w.spring.SetBounds(0, 0)
 	w.spring.EndDrag(0)
@@ -334,7 +334,7 @@ func (w *PullToRefresh) Tick(dt float64) {
 		return
 	}
 	w.spring.Tick(dt)
-	if w.spinner.Active {
+	if w.spinner.Active().Get() {
 		w.spinner.Tick(dt)
 	}
 }

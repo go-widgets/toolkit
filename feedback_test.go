@@ -176,11 +176,11 @@ func TestLevelBarStaysWithinBounds(t *testing.T) {
 func TestScaleSetValueClamps(t *testing.T) {
 	s := NewScale(0, 100, 50)
 	s.SetValue(-5)
-	if s.Value != 0 {
+	if s.Value().Get() != 0 {
 		t.Fatal("low clamp")
 	}
 	s.SetValue(200)
-	if s.Value != 100 {
+	if s.Value().Get() != 100 {
 		t.Fatal("high clamp")
 	}
 }
@@ -188,14 +188,14 @@ func TestScaleSetValueClamps(t *testing.T) {
 func TestScaleClickSetsValueAndFires(t *testing.T) {
 	got := 0.0
 	s := NewScale(0, 100, 0)
-	s.OnChange = func(v float64) { got = v }
+	s.Value().Subscribe(func(v float64) { got = v })
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
 	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 10})
-	if s.Value != 50 {
-		t.Fatalf("after click x=50: Value = %v", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("after click x=50: Value = %v", s.Value().Get())
 	}
 	if got != 50 {
-		t.Fatalf("OnChange got %v", got)
+		t.Fatalf("Value subscriber got %v", got)
 	}
 }
 
@@ -206,12 +206,12 @@ func TestScaleClickMapsAcrossThumbTravel(t *testing.T) {
 	s := NewScale(0, 100, 50)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
 	s.OnEvent(Event{Kind: EventClick, X: scaleThumbSize / 2, Y: 10})
-	if s.Value != 0 {
-		t.Fatalf("left-edge click = %v, want 0 (Min)", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("left-edge click = %v, want 0 (Min)", s.Value().Get())
 	}
 	s.OnEvent(Event{Kind: EventClick, X: 100 - scaleThumbSize/2, Y: 10})
-	if s.Value != 100 {
-		t.Fatalf("right-edge click = %v, want 100 (Max)", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("right-edge click = %v, want 100 (Max)", s.Value().Get())
 	}
 }
 
@@ -221,16 +221,16 @@ func TestScaleVertical(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 100})
 	// A click at the top thumb-centre reaches Max (up = more).
 	s.OnEvent(Event{Kind: EventClick, X: 10, Y: scaleThumbSize / 2})
-	if s.Value != 100 {
-		t.Fatalf("top click = %v, want 100 (Max)", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("top click = %v, want 100 (Max)", s.Value().Get())
 	}
 	// A click at the bottom thumb-centre reaches Min.
 	s.OnEvent(Event{Kind: EventClick, X: 10, Y: 100 - scaleThumbSize/2})
-	if s.Value != 0 {
-		t.Fatalf("bottom click = %v, want 0 (Min)", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("bottom click = %v, want 0 (Min)", s.Value().Get())
 	}
 	// Draw the vertical path: with Value=Max the Accent fill spans down the track.
-	s.Value = 100
+	s.Value().Set(100)
 	surf := makeSurface(20, 100)
 	s.Draw(newP(surf, 20), DefaultLight())
 	if pixelAt(surf, 20, 10, 60) != DefaultLight().Accent {
@@ -244,8 +244,8 @@ func TestScaleVerticalNarrowIgnored(t *testing.T) {
 	s.Orientation = Vertical
 	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: scaleThumbSize})
 	s.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if s.Value != 42 {
-		t.Fatalf("narrow vertical scale click changed value to %v", s.Value)
+	if s.Value().Get() != 42 {
+		t.Fatalf("narrow vertical scale click changed value to %v", s.Value().Get())
 	}
 }
 
@@ -254,8 +254,8 @@ func TestScaleClickNarrowIgnored(t *testing.T) {
 	s := NewScale(0, 100, 42)
 	s.SetBounds(Rect{X: 0, Y: 0, W: scaleThumbSize, H: 20})
 	s.OnEvent(Event{Kind: EventClick, X: 8, Y: 10})
-	if s.Value != 42 {
-		t.Fatalf("narrow scale (no travel) click changed value to %v", s.Value)
+	if s.Value().Get() != 42 {
+		t.Fatalf("narrow scale (no travel) click changed value to %v", s.Value().Get())
 	}
 }
 
@@ -263,12 +263,12 @@ func TestScaleClickClampsPosition(t *testing.T) {
 	s := NewScale(0, 100, 50)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
 	s.OnEvent(Event{Kind: EventClick, X: -10, Y: 10})
-	if s.Value != 0 {
-		t.Fatalf("negative click should clamp to Min, got %v", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("negative click should clamp to Min, got %v", s.Value().Get())
 	}
 	s.OnEvent(Event{Kind: EventClick, X: 200, Y: 10})
-	if s.Value != 100 {
-		t.Fatalf("over-W click should clamp to Max, got %v", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("over-W click should clamp to Max, got %v", s.Value().Get())
 	}
 }
 
@@ -278,7 +278,7 @@ func TestScaleIgnoresNonClick(t *testing.T) {
 	// Arrow / Home / End / Page keys move the value as of Wave 3; an unrelated
 	// key (Tab) must not.
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if s.Value != 50 {
+	if s.Value().Get() != 50 {
 		t.Fatal("KeyDown should not move the value")
 	}
 }
@@ -288,15 +288,32 @@ func TestScaleZeroWidthOrDegenerateRangeNoOp(t *testing.T) {
 	s := NewScale(0, 100, 50)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 20})
 	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 10})
-	if s.Value != 50 {
+	if s.Value().Get() != 50 {
 		t.Fatal("zero-width click should be no-op")
 	}
 	// Degenerate Min == Max.
 	s2 := NewScale(5, 5, 5)
 	s2.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
 	s2.OnEvent(Event{Kind: EventClick, X: 50, Y: 10})
-	if s2.Value != 5 {
+	if s2.Value().Get() != 5 {
 		t.Fatal("Min==Max click should be no-op")
+	}
+}
+
+// TestScaleValueObservable covers the zero-value lazy-init of the Value
+// accessor and the host binding path: a Scale built as a bare struct (no
+// NewScale) still yields a usable Observable, and Setting it from outside is
+// reflected by the widget (there is no imperative Value field).
+func TestScaleValueObservable(t *testing.T) {
+	s := &Scale{Min: 0, Max: 100} // no NewScale → value Observable is nil until accessed
+	if s.Value().Get() != 0 {
+		t.Fatalf("zero-value Scale Value = %v, want 0", s.Value().Get())
+	}
+	seen := -1.0
+	s.Value().Subscribe(func(v float64) { seen = v })
+	s.Value().Set(42) // a host drives the scale through the Observable
+	if s.Value().Get() != 42 || seen != 42 {
+		t.Fatalf("host Set: value=%v subscriber=%v, want 42/42", s.Value().Get(), seen)
 	}
 }
 
@@ -327,7 +344,9 @@ func TestScaleDrawNormal(t *testing.T) {
 	}
 }
 
-func TestScaleNilOnChangeNoPanic(t *testing.T) {
+// TestScaleClickNoSubscriber checks a click still updates the value with no
+// subscriber attached (no panic).
+func TestScaleClickNoSubscriber(t *testing.T) {
 	s := NewScale(0, 100, 50)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
 	s.OnEvent(Event{Kind: EventClick, X: 30, Y: 10})
@@ -345,11 +364,11 @@ func TestSpinButtonStepZeroClampsToOne(t *testing.T) {
 func TestSpinButtonSetValueClamps(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetValue(-5)
-	if s.Value != 0 {
+	if s.Value().Get() != 0 {
 		t.Fatal("low clamp")
 	}
 	s.SetValue(50)
-	if s.Value != 10 {
+	if s.Value().Get() != 10 {
 		t.Fatal("high clamp")
 	}
 }
@@ -357,12 +376,12 @@ func TestSpinButtonSetValueClamps(t *testing.T) {
 func TestSpinButtonClickPlusIncrements(t *testing.T) {
 	got := -1
 	s := NewSpinButton(0, 10, 5, 2)
-	s.OnChange = func(v int) { got = v }
+	s.Value().Subscribe(func(v int) { got = v })
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
 	// Click on the upper button: x in [60-16, 60), y < 12.
 	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 4})
-	if s.Value != 7 || got != 7 {
-		t.Fatalf("after +: Value=%d got=%d", s.Value, got)
+	if s.Value().Get() != 7 || got != 7 {
+		t.Fatalf("after +: Value=%d got=%d", s.Value().Get(), got)
 	}
 }
 
@@ -370,8 +389,8 @@ func TestSpinButtonClickMinusDecrements(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 2)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
 	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 20})
-	if s.Value != 3 {
-		t.Fatalf("after -: Value=%d", s.Value)
+	if s.Value().Get() != 3 {
+		t.Fatalf("after -: Value=%d", s.Value().Get())
 	}
 }
 
@@ -379,7 +398,7 @@ func TestSpinButtonBodyClickNoOp(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
 	s.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
-	if s.Value != 5 {
+	if s.Value().Get() != 5 {
 		t.Fatal("body click must not change value")
 	}
 }
@@ -388,15 +407,32 @@ func TestSpinButtonIgnoresNonClick(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Up"})
-	if s.Value != 5 {
+	if s.Value().Get() != 5 {
 		t.Fatal("KeyDown should not change value")
 	}
 }
 
-func TestSpinButtonNilCallbackNoPanic(t *testing.T) {
+func TestSpinButtonNoSubscriberNoPanic(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
-	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 4})
+	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 4}) // no Observable subscriber attached
+}
+
+// TestSpinButtonValueObservable covers the zero-value lazy-init of the Value
+// accessor and the host binding path: a SpinButton built as a bare struct (no
+// NewSpinButton) still yields a usable Observable, and Setting it from outside
+// is reflected by the widget (there is no imperative Value field).
+func TestSpinButtonValueObservable(t *testing.T) {
+	s := &SpinButton{Max: 10} // no NewSpinButton → value Observable is nil until accessed
+	if s.Value().Get() != 0 {
+		t.Fatalf("zero-value SpinButton Value = %d, want 0", s.Value().Get())
+	}
+	seen := -1
+	s.Value().Subscribe(func(v int) { seen = v })
+	s.Value().Set(7) // a host drives the spinbutton through the Observable
+	if s.Value().Get() != 7 || seen != 7 {
+		t.Fatalf("host Set: value=%d subscriber=%d, want 7/7", s.Value().Get(), seen)
+	}
 }
 
 func TestSpinButtonDraw(t *testing.T) {
@@ -500,7 +536,7 @@ func TestSpinnerInactiveDoesNotDraw(t *testing.T) {
 func TestSpinnerActivePaintsHand(t *testing.T) {
 	theme := DefaultLight()
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	s.Phase = 0 // 0 radians -> hand points to the right (+x).
 	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 20})
 	buf := makeSurface(32, 32)
@@ -520,7 +556,7 @@ func TestSpinnerActivePaintsHand(t *testing.T) {
 
 func TestSpinnerZeroBoundsNoCrash(t *testing.T) {
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 0})
 	s.Draw(newP(makeSurface(16, 16), 16), DefaultLight())
 }
@@ -528,7 +564,7 @@ func TestSpinnerZeroBoundsNoCrash(t *testing.T) {
 func TestSpinnerSmallerHeightRadius(t *testing.T) {
 	// Cover the `if r.H < r.W` branch picking H/2 as the radius.
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 10})
 	s.Draw(newP(makeSurface(64, 16), 64), DefaultLight())
 }
@@ -536,7 +572,7 @@ func TestSpinnerSmallerHeightRadius(t *testing.T) {
 func TestSpinnerSubPixelStepsClamp(t *testing.T) {
 	// radius < 1 forces steps to clamp to 1.
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 4, H: 4})
 	s.Draw(newP(makeSurface(8, 8), 8), DefaultLight())
 }

@@ -127,7 +127,7 @@ func (e *Entry) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: e.Te
 
 // A11y reports the CheckButton as a checkbox with its checked state.
 func (c *CheckButton) A11y() A11yInfo {
-	return A11yInfo{Role: RoleCheckbox, Name: c.Label, Value: checkedValue(c.Checked)}
+	return A11yInfo{Role: RoleCheckbox, Name: c.Label, Value: checkedValue(c.Checked().Get())}
 }
 
 // A11y reports the RadioButton as a radio with its checked state.
@@ -149,11 +149,11 @@ func (s *Switch) A11y() A11yInfo {
 func (s *Scale) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleSlider,
-		Value:    strconv.FormatFloat(s.Value, 'g', -1, 64),
+		Value:    strconv.FormatFloat(s.Value().Get(), 'g', -1, 64),
 		HasRange: true,
 		Min:      s.Min,
 		Max:      s.Max,
-		Now:      s.Value,
+		Now:      s.Value().Get(),
 	}
 }
 
