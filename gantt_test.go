@@ -17,8 +17,8 @@ func TestNewGanttNormalisesNilAndSelection(t *testing.T) {
 	if len(g.Tasks) != 0 {
 		t.Errorf("empty Gantt has %d tasks, want 0", len(g.Tasks))
 	}
-	if g.Selected != -1 {
-		t.Errorf("new Gantt Selected = %d, want -1", g.Selected)
+	if g.Selected().Get() != -1 {
+		t.Errorf("new Gantt Selected = %d, want -1", g.Selected().Get())
 	}
 	// A non-nil slice is retained verbatim.
 	tasks := []GanttTask{{Label: "A", Start: 0, End: 2}}
@@ -107,7 +107,7 @@ func TestGanttSelectionTint(t *testing.T) {
 		{Label: "B", Start: 1, End: 4},
 	})
 	g.Units = 4
-	g.Selected = 1
+	g.Selected().Set(1)
 	w, h := 160, GanttHeaderH+2*GanttRowH
 	g.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	surf := makeSurface(w, h)
@@ -150,43 +150,61 @@ func TestGanttOnEventSelectsRow(t *testing.T) {
 		{Label: "A", Start: 0, End: 2},
 		{Label: "B", Start: 1, End: 3},
 	})
-	g.OnSelect = func(i int) { fired = i }
+	// A host binds the selection through the Observable rather than a callback.
+	g.Selected().Subscribe(func(i int) { fired = i })
 
-	// Click on row 1 (second task) selects it and fires OnSelect.
+	// Click on row 1 (second task) selects it and notifies subscribers.
 	g.OnEvent(Event{Kind: EventClick, X: 120, Y: GanttHeaderH + GanttRowH + 3})
-	if g.Selected != 1 {
-		t.Errorf("after click Selected = %d, want 1", g.Selected)
+	if g.Selected().Get() != 1 {
+		t.Errorf("after click Selected = %d, want 1", g.Selected().Get())
 	}
 	if fired != 1 {
-		t.Errorf("OnSelect fired with %d, want 1", fired)
+		t.Errorf("Selected subscriber saw %d, want 1", fired)
 	}
 
 	// A non-click event is ignored.
-	g.Selected = 0
+	g.Selected().Set(0)
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if g.Selected != 0 {
-		t.Errorf("non-click event changed Selected to %d, want 0", g.Selected)
+	if g.Selected().Get() != 0 {
+		t.Errorf("non-click event changed Selected to %d, want 0", g.Selected().Get())
 	}
 
 	// A click in the header band (above the first row) is a no-op.
 	g.OnEvent(Event{Kind: EventClick, X: 10, Y: GanttHeaderH - 1})
-	if g.Selected != 0 {
-		t.Errorf("header click changed Selected to %d, want 0", g.Selected)
+	if g.Selected().Get() != 0 {
+		t.Errorf("header click changed Selected to %d, want 0", g.Selected().Get())
 	}
 
 	// A click past the last task is a no-op.
 	g.OnEvent(Event{Kind: EventClick, X: 10, Y: GanttHeaderH + 5*GanttRowH})
-	if g.Selected != 0 {
-		t.Errorf("out-of-range click changed Selected to %d, want 0", g.Selected)
+	if g.Selected().Get() != 0 {
+		t.Errorf("out-of-range click changed Selected to %d, want 0", g.Selected().Get())
 	}
 }
 
-func TestGanttOnEventNilSelectSafe(t *testing.T) {
-	// OnSelect is nil: a valid click still updates Selected without panicking.
+func TestGanttOnEventNoSubscriberSafe(t *testing.T) {
+	// No subscriber bound: a valid click still updates Selected without panicking.
 	g := NewGantt([]GanttTask{{Label: "A", Start: 0, End: 2}})
 	g.OnEvent(Event{Kind: EventClick, X: 10, Y: GanttHeaderH + 2})
-	if g.Selected != 0 {
-		t.Errorf("nil-OnSelect click Selected = %d, want 0", g.Selected)
+	if g.Selected().Get() != 0 {
+		t.Errorf("unsubscribed click Selected = %d, want 0", g.Selected().Get())
+	}
+}
+
+// TestGanttSelectedAccessorBareAndBind exercises the lazy accessor on a bare
+// Gantt (no constructor) and the host binding path: the zero-value accessor
+// initialises to 0 (the field's former zero value), and a host drives + observes
+// the selection purely through the Observable.
+func TestGanttSelectedAccessorBareAndBind(t *testing.T) {
+	var g Gantt // bare struct: selected Observable is nil until accessed
+	if g.Selected().Get() != 0 {
+		t.Fatalf("bare Gantt Selected = %d, want 0 (lazy init)", g.Selected().Get())
+	}
+	seen := -99
+	g.Selected().Subscribe(func(i int) { seen = i })
+	g.Selected().Set(2) // a host drives the selection through the Observable
+	if g.Selected().Get() != 2 || seen != 2 {
+		t.Fatalf("host Set: value=%d subscriber=%d, want 2/2", g.Selected().Get(), seen)
 	}
 }
 
@@ -202,7 +220,7 @@ func TestGanttRenderPNGDemo(t *testing.T) {
 		{Label: "Ship", Start: 10, End: 12, Fill: RGB(0xC0, 0x30, 0x30)},
 	})
 	g.Units = 12
-	g.Selected = 1
+	g.Selected().Set(1)
 	w, h := 520, GanttHeaderH+5*GanttRowH
 	png, err := RenderPNG(g, w, h, DefaultLight())
 	if err != nil {
@@ -313,8 +331,8 @@ func TestGanttClickOutsideBar(t *testing.T) {
 	if g.editing {
 		t.Fatalf("armed a drag in empty axis area")
 	}
-	if g.Selected != 0 {
-		t.Fatalf("Selected = %d, want 0", g.Selected)
+	if g.Selected().Get() != 0 {
+		t.Fatalf("Selected = %d, want 0", g.Selected().Get())
 	}
 }
 
@@ -324,8 +342,8 @@ func TestGanttEventGuards(t *testing.T) {
 	g := ganttEditFixture()
 	g.OnEvent(Event{Kind: EventClick, X: 10, Y: GanttHeaderH - 1})            // header
 	g.OnEvent(Event{Kind: EventClick, X: 10, Y: GanttHeaderH + 99*GanttRowH}) // past last
-	if g.editing || g.Selected >= 0 {
-		t.Fatalf("guarded clicks armed/selected: editing=%v sel=%d", g.editing, g.Selected)
+	if g.editing || g.Selected().Get() >= 0 {
+		t.Fatalf("guarded clicks armed/selected: editing=%v sel=%d", g.editing, g.Selected().Get())
 	}
 	g.OnEvent(Event{Kind: EventMouseDrag, X: 50, Y: GanttHeaderH + 2}) // not editing
 	g.OnEvent(Event{Kind: EventMouseUp, X: 50, Y: GanttHeaderH + 2})   // not editing

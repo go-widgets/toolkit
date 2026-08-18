@@ -247,8 +247,8 @@ func TestGanttDragScrolledRow(t *testing.T) {
 	rowY := GanttHeaderH + GanttRowH + 2 // second visible slot -> task 4
 	midX := (g.barXLocal(1) + g.barXLocal(4)) / 2
 	g.OnEvent(Event{Kind: EventClick, X: midX, Y: rowY})
-	if g.Selected != 4 {
-		t.Fatalf("scrolled click selected %d, want 4", g.Selected)
+	if g.Selected().Get() != 4 {
+		t.Fatalf("scrolled click selected %d, want 4", g.Selected().Get())
 	}
 	if !g.editing || g.editMode != ganttMove {
 		t.Fatalf("grab: editing=%v mode=%d, want move", g.editing, g.editMode)
