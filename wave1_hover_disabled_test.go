@@ -399,12 +399,12 @@ func TestMenuHoverOnMove(t *testing.T) {
 	m := NewMenu([]MenuItem{{Label: "A", Action: func() {}}, {Label: "B", Action: func() {}}})
 	m.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	m.OnEvent(Event{Kind: EventMouseMove, X: 10, Y: 10}) // row 0
-	if m.Hover != 0 {
-		t.Fatalf("menu hover = %d, want 0", m.Hover)
+	if got := m.Hover().Get(); got != 0 {
+		t.Fatalf("menu hover = %d, want 0", got)
 	}
 	m.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5}) // off the menu
-	if m.Hover != -1 {
-		t.Fatalf("menu hover after move-off = %d, want -1", m.Hover)
+	if got := m.Hover().Get(); got != -1 {
+		t.Fatalf("menu hover after move-off = %d, want -1", got)
 	}
 }
 
@@ -442,8 +442,8 @@ func TestContextMenuForwardsMove(t *testing.T) {
 	cm.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
 	cm.Popup(10, 10)
 	cm.OnEvent(Event{Kind: EventMouseMove, X: 15, Y: 15}) // inside the menu
-	if m.Hover != 0 {
-		t.Fatalf("contextmenu did not forward move: menu.Hover=%d", m.Hover)
+	if got := m.Hover().Get(); got != 0 {
+		t.Fatalf("contextmenu did not forward move: menu.Hover=%d", got)
 	}
 	// A non-click, non-move event is ignored (not dismissed).
 	cm.OnEvent(Event{Kind: EventKeyDown, Code: "x"})

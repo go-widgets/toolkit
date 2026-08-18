@@ -278,12 +278,34 @@ func TestMenuSetHover(t *testing.T) {
 	m := NewMenu([]MenuItem{{Label: "A"}, {Label: "B"}})
 	m.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	m.SetHover(28) // second row
-	if m.Hover != 1 {
-		t.Fatalf("Hover = %d, want 1", m.Hover)
+	if got := m.Hover().Get(); got != 1 {
+		t.Fatalf("Hover = %d, want 1", got)
 	}
 	m.SetHover(-1)
-	if m.Hover != -1 {
+	if m.Hover().Get() != -1 {
 		t.Fatal("SetHover(-1) should reset")
+	}
+}
+
+// TestMenuHoverAccessorNilInit checks the Hover accessor lazily initialises to
+// the -1 "no hover" default on a bare &Menu{} (constructed without NewMenu, so
+// the observable is nil until the accessor builds it), and that a host can bind
+// the returned Observable: a Set is reflected by Get and observed by a prior
+// Subscribe.
+func TestMenuHoverAccessorNilInit(t *testing.T) {
+	m := &Menu{} // no NewMenu: hover observable is nil until Hover() inits it
+	if got := m.Hover().Get(); got != -1 {
+		t.Fatalf("bare &Menu{} Hover().Get() = %d, want -1 (no-hover default)", got)
+	}
+	// Host binds the shared Observable: a subscriber sees the subsequent Set.
+	seen := -2
+	m.Hover().Subscribe(func(v int) { seen = v })
+	m.Hover().Set(2)
+	if got := m.Hover().Get(); got != 2 {
+		t.Fatalf("after Set(2): Hover().Get() = %d, want 2", got)
+	}
+	if seen != 2 {
+		t.Fatalf("host Subscribe saw %d, want 2", seen)
 	}
 }
 
@@ -311,7 +333,7 @@ func TestMenuDrawsHoveredSubmenuSeparator(t *testing.T) {
 		{Separator: true},
 		{Label: "Disabled"},
 	})
-	m.Hover = 0
+	m.Hover().Set(0)
 	m.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 70})
 	m.Draw(newP(makeSurface(w, h), w), theme)
 }
@@ -464,7 +486,7 @@ func TestMenuDrawChecksGutterAndGlyphs(t *testing.T) {
 	}
 	m.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	m.Draw(newP(makeSurface(w, h), w), theme) // unhovered pass
-	m.Hover = 0
+	m.Hover().Set(0)
 	m.Draw(newP(makeSurface(w, h), w), theme) // hovered + checked-row ink inversion
 }
 
@@ -997,7 +1019,7 @@ func TestMenuItemShortcutHintPainted(t *testing.T) {
 	})
 	m.SetBounds(Rect{X: 0, Y: 0, W: 160, H: MenuRowH + 4})
 	m.Draw(newP(makeSurface(160, 60), 160), DefaultLight())
-	m.Hover = 0
+	m.Hover().Set(0)
 	m.Draw(newP(makeSurface(160, 60), 160), DefaultLight())
 }
 

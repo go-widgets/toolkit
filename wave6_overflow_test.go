@@ -440,8 +440,8 @@ func TestMenuScrolls(t *testing.T) {
 	for i := 0; i < 20; i++ {
 		m.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
 	}
-	if m.Hover != 19 {
-		t.Fatalf("hover = %d, want 19", m.Hover)
+	if m.Hover().Get() != 19 {
+		t.Fatalf("hover = %d, want 19", m.Hover().Get())
 	}
 	top := m.rowTop(19)
 	if top-m.scroll < 0 || (top+MenuRowH)-m.scroll > m.Bounds().H {
@@ -459,11 +459,11 @@ func TestMenuScrolls(t *testing.T) {
 	for i := 0; i < 19; i++ {
 		m.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
 	}
-	if m.Hover != 0 || m.scroll > m.rowTop(0) {
-		t.Fatalf("back to top: Hover=%d scroll=%d, want Hover 0 with row 0 revealed", m.Hover, m.scroll)
+	if m.Hover().Get() != 0 || m.scroll > m.rowTop(0) {
+		t.Fatalf("back to top: Hover=%d scroll=%d, want Hover 0 with row 0 revealed", m.Hover().Get(), m.scroll)
 	}
 	// scrollHoverIntoView is a no-op with no hovered row.
-	m.Hover = -1
+	m.Hover().Set(-1)
 	m.scroll = 50
 	m.scrollHoverIntoView()
 	if m.scroll != 50 {

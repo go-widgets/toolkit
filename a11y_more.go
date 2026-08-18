@@ -255,8 +255,8 @@ func (s *Steps) A11y() A11yInfo {
 // A11y reports the Menu as a menu carrying the hovered row's label, if any.
 func (m *Menu) A11y() A11yInfo {
 	v := ""
-	if m.Hover >= 0 && m.Hover < len(m.Items) {
-		v = m.Items[m.Hover].Label
+	if hv := m.Hover().Get(); hv >= 0 && hv < len(m.Items) {
+		v = m.Items[hv].Label
 	}
 	return A11yInfo{Role: RoleMenu, Value: v}
 }
