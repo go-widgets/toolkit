@@ -44,8 +44,11 @@ func (c *CycleButton) Draw(p painter.Painter, theme *Theme) {
 	if c.Disabled {
 		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
-	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
-	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
+	// buttonRadius routes through scaled so the corner grows with HiDPI and touch
+	// density; scaled(buttonRadius) == buttonRadius at compact/1x (byte-identical).
+	rad := scaled(buttonRadius)
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, rad, face)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, rad, border)
 	if v := c.Value(); v != "" {
 		tx := r.X + (r.W-c.textWidth(v))/2
 		ty := r.Y + (r.H-c.glyphHeight())/2
@@ -91,3 +94,13 @@ func (c *CycleButton) step(delta int) {
 		c.OnChangeIndex(c.Index)
 	}
 }
+
+// HitRect is the cycle button's interactive rectangle: its drawn Bounds clamped
+// up to the density hit-target and centred over them (see [touchHitRect]).
+// Byte-identical to Bounds under DensityCompact; a finger-sized target under
+// DensityTouch.
+func (c *CycleButton) HitRect() Rect { return touchHitRect(c.Bounds()) }
+
+// HitTest reports whether a surface point falls on the cycle button's
+// (touch-clamped) hit rect.
+func (c *CycleButton) HitTest(px, py int) bool { return c.HitRect().Contains(px, py) }

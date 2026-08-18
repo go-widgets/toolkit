@@ -145,8 +145,12 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 		// shared border/rounding.
 		fillRect(p, r.X, r.Y, r.W, r.H, face)
 	} else {
-		fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
-		strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
+		// buttonRadius routes through scaled so the corner grows with HiDPI and
+		// touch density; at compact/1x scaled(buttonRadius) == buttonRadius, so the
+		// drawn corner is byte-identical to before.
+		rad := scaled(buttonRadius)
+		fillRoundRect(p, r.X, r.Y, r.W, r.H, rad, face)
+		strokeRoundRect(p, r.X, r.Y, r.W, r.H, rad, border)
 	}
 	// A host-supplied Icon replaces the text Label (like SearchEntry.Icon): it is
 	// handed the full button rect and the current ink so the glyph tracks the
@@ -204,3 +208,28 @@ func (b *Button) activate() {
 		b.OnClick()
 	}
 }
+
+// touchHitRect is the generic form of the [Switch.HitRect] worked example: it
+// clamps a widget's drawn Bounds UP to the current density hit-target on each
+// axis (via [TouchTarget]) and centres the (possibly larger) hit rect over the
+// unchanged bounds. Under the default [DensityCompact] the minimum is 0, so
+// TouchTarget is a pass-through and the returned rect equals r byte-for-byte;
+// under [DensityTouch] a small control grows a finger-sized hit area around its
+// unchanged pixels. Every interactive control in the CONTROLS family routes its
+// HitRect through this one seam so the clamp+centre rule can never drift between
+// widgets. Only the hit region grows — Draw is never involved.
+func touchHitRect(r Rect) Rect {
+	w, h := TouchTarget(r.W), TouchTarget(r.H)
+	return Rect{X: r.X - (w-r.W)/2, Y: r.Y - (h-r.H)/2, W: w, H: h}
+}
+
+// HitRect is the button's interactive rectangle: its drawn Bounds clamped up to
+// the density hit-target and centred over them. Byte-identical to Bounds under
+// DensityCompact; a small button exposes a >=44px finger target under
+// DensityTouch without changing what it draws.
+func (b *Button) HitRect() Rect { return touchHitRect(b.Bounds()) }
+
+// HitTest reports whether a surface point falls on the button's (touch-clamped)
+// hit rect. At compact the clamp is a pass-through so this equals the default
+// Bounds().Contains; at touch the reachable area grows to the finger floor.
+func (b *Button) HitTest(px, py int) bool { return b.HitRect().Contains(px, py) }

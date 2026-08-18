@@ -78,31 +78,37 @@ func NewClosableChip(text string, onClose func()) *Chip {
 func (c *Chip) Draw(p painter.Painter, theme *Theme) {
 	hasDot := c.Dot.A != 0
 	r := c.Bounds()
+	// Every pill metric routes through scaled so the chip grows with HiDPI and
+	// touch density; each scaled(...) equals its constant at compact/1x, keeping
+	// the auto-sized pill and its interior byte-identical there.
+	padX, padY := scaled(ChipPadX), scaled(ChipPadY)
+	closeW, closeGap := scaled(ChipCloseW), scaled(ChipCloseGap)
+	dotD, dotGap := scaled(ChipDotD), scaled(ChipDotGap)
 	if r.W == 0 {
-		r.W = c.textWidth(c.Text) + 2*ChipPadX
+		r.W = c.textWidth(c.Text) + 2*padX
 		if hasDot {
-			r.W += ChipDotD + ChipDotGap
+			r.W += dotD + dotGap
 		}
 		if c.Closable {
-			r.W += ChipCloseGap + ChipCloseW
+			r.W += closeGap + closeW
 		}
 		if r.H == 0 {
-			r.H = c.glyphHeight() + 2*ChipPadY
+			r.H = c.glyphHeight() + 2*padY
 		}
 		c.SetBounds(r)
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	tx := r.X + ChipPadX
+	tx := r.X + padX
 	if hasDot {
-		dotY := r.Y + (r.H-ChipDotD)/2
-		fillRoundRect(p, r.X+ChipPadX, dotY, ChipDotD, ChipDotD, ChipDotD/2, c.Dot)
-		tx += ChipDotD + ChipDotGap
+		dotY := r.Y + (r.H-dotD)/2
+		fillRoundRect(p, r.X+padX, dotY, dotD, dotD, dotD/2, c.Dot)
+		tx += dotD + dotGap
 	}
 	ty := r.Y + (r.H-c.glyphHeight())/2
 	c.drawText(p, tx, ty, c.Text, theme.OnSurface)
 	if c.Closable {
-		cx := r.X + r.W - ChipPadX - ChipCloseW + (ChipCloseW-c.textWidth("x"))/2
+		cx := r.X + r.W - padX - closeW + (closeW-c.textWidth("x"))/2
 		c.drawText(p, cx, ty, "x", theme.Border)
 	}
 }
@@ -124,8 +130,13 @@ func (c *Chip) OnEvent(ev Event) {
 		return
 	}
 	r := c.Bounds()
-	left := r.W - ChipPadX - ChipCloseW
-	right := r.W - ChipPadX
+	// The close slot's right edge sits one scaled pad in from the pill edge (as
+	// drawn). Its hit WIDTH is the scaled glyph slot clamped UP to the density
+	// finger floor via TouchTarget, so under DensityTouch the tap zone extends
+	// left of the drawn "x" without moving a pixel; at compact TouchTarget is a
+	// pass-through and the slot equals the drawn one byte-for-byte.
+	right := r.W - scaled(ChipPadX)
+	left := right - TouchTarget(scaled(ChipCloseW))
 	if ev.X < left || ev.X >= right {
 		return
 	}

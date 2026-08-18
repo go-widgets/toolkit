@@ -58,9 +58,14 @@ func NewSplitButton(label string, onClick func()) *SplitButton {
 // theme.Extra["OnAccent"] override.
 func (s *SplitButton) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
+	// The arrow slot routes through scaled so it grows with HiDPI and touch
+	// density; scaled(SplitButtonArrowW) == SplitButtonArrowW at compact/1x, so the
+	// two-slot split is byte-identical there. Draw and OnEvent read the same scaled
+	// width so the drawn boundary and the click boundary can never drift.
+	arrowW := scaled(SplitButtonArrowW)
 	mainW := r.W
 	if s.Arrow {
-		mainW = r.W - SplitButtonArrowW
+		mainW = r.W - arrowW
 	}
 	ink := accentInk(theme)
 	// Both slots share one face: Accent at rest, brightened on hover, muted
@@ -78,10 +83,10 @@ func (s *SplitButton) Draw(p painter.Painter, theme *Theme) {
 	if s.Arrow {
 		// Arrow slot fill (same face) then a 1-px Border separator at the
 		// boundary + the "v" arrow glyph centred in the arrow slot.
-		fillRect(p, r.X+mainW, r.Y, SplitButtonArrowW, r.H, face)
+		fillRect(p, r.X+mainW, r.Y, arrowW, r.H, face)
 		fillRect(p, r.X+mainW, r.Y, 1, r.H, theme.Border)
 		aw := s.textWidth("v")
-		ax := r.X + mainW + (SplitButtonArrowW-aw)/2
+		ax := r.X + mainW + (arrowW-aw)/2
 		ay := r.Y + (r.H-s.glyphHeight())/2
 		s.drawText(p, ax, ay, "v", ink)
 	}
@@ -125,12 +130,23 @@ func (s *SplitButton) OnEvent(ev Event) {
 		return
 	}
 	r := s.Bounds()
-	if s.Arrow && ev.X >= r.W-SplitButtonArrowW {
+	if s.Arrow && ev.X >= r.W-scaled(SplitButtonArrowW) {
 		s.fireArrow()
 		return
 	}
 	s.fireClick()
 }
+
+// HitRect is the split button's interactive rectangle: its drawn Bounds clamped
+// up to the density hit-target and centred over them (see [touchHitRect]).
+// Byte-identical to Bounds under DensityCompact; a finger-sized target under
+// DensityTouch. The internal main/arrow split stays measured against the scaled
+// arrow width, so which callback a press fires is unaffected by the clamp.
+func (s *SplitButton) HitRect() Rect { return touchHitRect(s.Bounds()) }
+
+// HitTest reports whether a surface point falls on the split button's
+// (touch-clamped) hit rect.
+func (s *SplitButton) HitTest(px, py int) bool { return s.HitRect().Contains(px, py) }
 
 // fireClick / fireArrow are the nil-safe primary / secondary action paths
 // shared by pointer clicks and keyboard activation.

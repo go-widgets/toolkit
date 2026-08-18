@@ -47,22 +47,39 @@ const (
 	ToolbarSepW    = 8
 )
 
-// NewToolbar builds a Toolbar with the given items.
+// NewToolbar builds a Toolbar with the given items. ButtonW/ButtonH are left at
+// zero — "use the default" — so the default square size resolves through scaled
+// at draw time and grows with HiDPI and touch density; a caller that wants a
+// fixed cell sets ButtonW/ButtonH explicitly (honoured verbatim, like
+// CheckButton.Size). At compact/1x the resolved default is ToolbarButtonW ×
+// ToolbarButtonH, byte-identical to before.
 func NewToolbar(items []ToolbarItem) *Toolbar {
-	return &Toolbar{Items: items, ButtonW: ToolbarButtonW, ButtonH: ToolbarButtonH, pressIdx: -1}
+	return &Toolbar{Items: items, pressIdx: -1}
 }
+
+// buttonW / buttonH resolve the effective cell size: an explicit ButtonW/ButtonH
+// verbatim, else the scaled default. sepW is the scaled separator step. All three
+// equal their logical constants at compact/1x, keeping layout byte-identical.
+func (t *Toolbar) buttonW() int {
+	if t.ButtonW > 0 {
+		return t.ButtonW
+	}
+	return scaled(ToolbarButtonW)
+}
+
+func (t *Toolbar) buttonH() int {
+	if t.ButtonH > 0 {
+		return t.ButtonH
+	}
+	return scaled(ToolbarButtonH)
+}
+
+func (t *Toolbar) sepW() int { return scaled(ToolbarSepW) }
 
 // Draw paints the toolbar strip.
 func (t *Toolbar) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
-	bw := t.ButtonW
-	if bw <= 0 {
-		bw = ToolbarButtonW
-	}
-	bh := t.ButtonH
-	if bh <= 0 {
-		bh = ToolbarButtonH
-	}
+	bw, bh, sepW := t.buttonW(), t.buttonH(), t.sepW()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	vertical := t.Orientation == Vertical
 	// pos advances along the layout axis; the cross-axis origin is fixed.
@@ -78,11 +95,11 @@ func (t *Toolbar) Draw(p painter.Painter, theme *Theme) {
 		if it.Separator {
 			if vertical {
 				// Horizontal divider spanning the button width.
-				fillRect(p, bx+3, by+ToolbarSepW/2, bw-6, 1, theme.Border)
+				fillRect(p, bx+3, by+sepW/2, bw-6, 1, theme.Border)
 			} else {
-				fillRect(p, bx+ToolbarSepW/2, by+3, 1, bh-6, theme.Border)
+				fillRect(p, bx+sepW/2, by+3, 1, bh-6, theme.Border)
 			}
-			pos += ToolbarSepW
+			pos += sepW
 			continue
 		}
 		bg := theme.Surface
@@ -140,14 +157,7 @@ func (t *Toolbar) OnEvent(ev Event) {
 }
 
 func (t *Toolbar) hitTest(x, y int) int {
-	bw := t.ButtonW
-	if bw <= 0 {
-		bw = ToolbarButtonW
-	}
-	bh := t.ButtonH
-	if bh <= 0 {
-		bh = ToolbarButtonH
-	}
+	bw, bh, sepW := t.buttonW(), t.buttonH(), t.sepW()
 	// along is the coordinate on the layout axis, cross on the other one.
 	along, cross, crossExtent := x, y, bh
 	if t.Orientation == Vertical {
@@ -163,7 +173,7 @@ func (t *Toolbar) hitTest(x, y int) int {
 			step = bh
 		}
 		if it.Separator {
-			step = ToolbarSepW
+			step = sepW
 		}
 		if along >= c && along < c+step {
 			if it.Separator {

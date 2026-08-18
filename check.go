@@ -123,3 +123,14 @@ func (c *CheckButton) toggle() {
 		c.OnToggle(c.Checked)
 	}
 }
+
+// HitRect is the checkbox's interactive rectangle: its drawn Bounds clamped up
+// to the density hit-target and centred over them (see [touchHitRect]). A
+// checkbox row is only a dozen logical pixels tall, so under DensityTouch its
+// hit height grows to the >=44px finger floor while the drawn 12px box is
+// untouched; byte-identical to Bounds under DensityCompact.
+func (c *CheckButton) HitRect() Rect { return touchHitRect(c.Bounds()) }
+
+// HitTest reports whether a surface point falls on the checkbox's (touch-clamped)
+// hit rect.
+func (c *CheckButton) HitTest(px, py int) bool { return c.HitRect().Contains(px, py) }
