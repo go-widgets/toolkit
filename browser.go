@@ -127,12 +127,12 @@ type Browser struct {
 	active int
 	mode   TabMode
 
-	addrFocused bool
-	addrBuf     string
-	// addrCopied marks that the address was just copied (CopyAddress), so the
-	// field paints a select-all highlight as visual feedback of what went to the
-	// clipboard. Cleared on any edit, navigation or focus change.
-	addrCopied bool
+	// addr is the composed editable address field ([AddressBar]). The host-facing
+	// address configuration (LeadingIcon / BookmarkIcon / Bookmarked /
+	// OnBookmarkToggle, plus the current URL as its Text and the chrome metrics)
+	// is mirrored into it each frame by syncAddr; its focus / edit-buffer / copy
+	// state lives entirely in the widget.
+	addr AddressBar
 
 	// pressActive + pressKind give a toolbar button its click feedback: a click
 	// (EventClick) arms pressActive on the hit button's kind so the next Draw
@@ -328,7 +328,16 @@ func (b *Browser) btnEnabled(k browserBtnKind) bool {
 }
 
 // NewBrowser builds an empty Browser in the default MultiTab mode at 1.0 zoom.
-func NewBrowser() *Browser { return &Browser{zoom: 1.0} }
+func NewBrowser() *Browser {
+	b := &Browser{zoom: 1.0}
+	// Stable callbacks wired once: Enter commits by normalising + navigating, and
+	// every observable change flows through the Browser's own changed(). The
+	// per-frame configuration (URL text, icons, bookmark state, metrics, bounds)
+	// is pushed by syncAddr.
+	b.addr.OnCommit = func(s string) { b.Navigate(normalizeURL(s)) }
+	b.addr.OnChange = b.changed
+	return b
+}
 
 // scale is the effective chrome scale factor: Scale when positive, else the
 // toolkit's own [MetricScale]. See Menu.scale on why it defers rather than
@@ -1103,7 +1112,24 @@ func (b *Browser) drawToolbar(p painter.Painter, theme *Theme) {
 	nav, zoom, addr := b.toolbarGroups()
 	nav.Draw(p, theme)
 	zoom.Draw(p, theme)
-	b.drawAddress(p, theme, addr)
+	b.syncAddr(addr)
+	b.addr.Draw(p, theme)
+}
+
+// syncAddr mirrors the host-facing address configuration (the current URL as the
+// field's Text, the icon hooks, the bookmark state) and the current chrome
+// metrics (corner radius, text inset, font, bounds) into the composed address
+// field before it is drawn or handed an event.
+func (b *Browser) syncAddr(r Rect) {
+	b.addr.SetBounds(r)
+	b.addr.Text = b.CurrentURL()
+	b.addr.LeadingIcon = b.LeadingIcon
+	b.addr.BookmarkIcon = b.BookmarkIcon
+	b.addr.Bookmarked = b.Bookmarked
+	b.addr.OnBookmarkToggle = b.OnBookmarkToggle
+	b.addr.Radius = b.sc(4)
+	b.addr.TextPad = b.btnPad()
+	b.addr.SetFont(b.EffectiveFont())
 }
 
 // unionRect is the smallest rect covering a and b, both on the same toolbar row.
@@ -1111,85 +1137,16 @@ func unionRect(a, b Rect) Rect {
 	return Rect{X: a.X, Y: a.Y, W: b.X + b.W - a.X, H: a.H}
 }
 
-// drawAddress paints the editable address field: the edit buffer when focused
-// (with a caret + Accent focus ring) or the current URL otherwise, head-clipped
-// so a long URL keeps its tail (the path) visible.
-// addrZones splits the address-field rect into an optional leading status-icon
-// square (when LeadingIcon is set), an optional trailing bookmark square (when
-// BookmarkIcon is set), and the text zone between them.
-func (b *Browser) addrZones(r Rect) (lead, text, star Rect) {
-	textX, textR := r.X, r.X+r.W
-	if b.LeadingIcon != nil {
-		lead = Rect{X: r.X, Y: r.Y, W: r.H, H: r.H}
-		textX = r.X + r.H
-	}
-	if b.BookmarkIcon != nil {
-		star = Rect{X: r.X + r.W - r.H, Y: r.Y, W: r.H, H: r.H}
-		textR = r.X + r.W - r.H
-	}
-	if textR < textX {
-		textR = textX
-	}
-	text = Rect{X: textX, Y: r.Y, W: textR - textX, H: r.H}
-	return
-}
-
-func (b *Browser) drawAddress(p painter.Painter, theme *Theme, r Rect) {
-	ring := theme.Border
-	if b.addrFocused {
-		ring = theme.Accent
-	}
-	// The field's ground is a composed rounded Backdrop (fill + border), not a
-	// hand-drawn fillRoundRect/strokeRoundRect pair — the same canonical ground the
-	// rest of the toolkit's pills and fields use. Byte-identical: Backdrop fills the
-	// rounded rect then strokes it at the same radius and one-pixel width.
-	ground := Backdrop{Fill: theme.Surface, Radius: b.sc(4), Stroke: ring, StrokeWidth: strokeWidth()}
-	ground.SetBounds(r)
-	ground.Draw(p, theme)
-	lead, tz, star := b.addrZones(r)
-	if b.LeadingIcon != nil {
-		b.LeadingIcon(p, lead, theme.OnSurface)
-	}
-	if b.BookmarkIcon != nil {
-		b.BookmarkIcon(p, star, theme.OnSurface, b.Bookmarked)
-	}
-	text := b.CurrentURL()
-	if b.addrFocused {
-		text = b.addrBuf
-	}
-	innerX := tz.X + b.btnPad()
-	avail := tz.W - 2*b.btnPad()
-	shown := text
-	if b.textWidth(shown) > avail {
-		shown = clipHeadToWidth(b.EffectiveFont(), shown, avail)
-	}
-	ty := r.Y + (r.H-b.glyphHeight())/2
-	// After a copy, paint a select-all highlight behind the text so the user sees
-	// exactly what went to the clipboard.
-	if b.addrCopied && shown != "" {
-		hl := blendRGBA(theme.Accent, theme.Surface, 0.62)
-		fillRect(p, innerX, ty, b.textWidth(shown), b.glyphHeight(), hl)
-	}
-	b.drawText(p, innerX, ty, shown, theme.OnSurface)
-	if b.addrFocused {
-		caretW := b.glyphHeight() / 12
-		if caretW < 1 {
-			caretW = 1
-		}
-		fillRect(p, innerX+b.textWidth(shown), ty, caretW, b.glyphHeight(), theme.OnSurface)
-	}
-}
-
 // AddressFocused reports whether the address field currently holds keyboard
 // focus (a prior click landed in it), so a host can route a copy chord to
 // [Browser.CopyAddress] instead of its own copy action.
-func (b *Browser) AddressFocused() bool { return b.addrFocused }
+func (b *Browser) AddressFocused() bool { return b.addr.Focused() }
 
 // AddressText returns the text the address field shows: the editable buffer
 // while focused, else the current page URL.
 func (b *Browser) AddressText() string {
-	if b.addrFocused {
-		return b.addrBuf
+	if b.addr.Focused() {
+		return b.addr.Value()
 	}
 	return b.CurrentURL()
 }
@@ -1200,29 +1157,7 @@ func (b *Browser) AddressText() string {
 // when the field is not focused or is empty — so a host can try it first and
 // fall back to another copy action. Mirrors [Entry]'s "no selection → copy the
 // whole value" model.
-func (b *Browser) CopyAddress() (string, bool) {
-	if !b.addrFocused {
-		return "", false
-	}
-	txt := b.AddressText()
-	if txt == "" {
-		return "", false
-	}
-	SetClipboardText(txt)
-	b.addrCopied = true
-	b.changed()
-	return txt, true
-}
-
-// toggleBookmark flips the bookmark state + fires OnBookmarkToggle. Called when
-// the bookmark slot in the address field is clicked.
-func (b *Browser) toggleBookmark() {
-	b.Bookmarked = !b.Bookmarked
-	if b.OnBookmarkToggle != nil {
-		b.OnBookmarkToggle(b.Bookmarked)
-	}
-	b.changed()
-}
+func (b *Browser) CopyAddress() (string, bool) { return b.addr.CopySelectAll() }
 
 // drawContent paints the content background, the page render and the loading
 // bar.
@@ -1361,29 +1296,12 @@ func (b *Browser) OnEvent(ev Event) {
 		b.sbV.drag(gv, okv, lev, func(target int) { t.scroll = target; b.clampScroll(t); b.changed() })
 		gh, okh := b.hscrollGeom(t, cr)
 		b.sbH.drag(gh, okh, lev, func(target int) { t.scrollX = target; b.clampScroll(t); b.changed() })
-	case EventChar:
-		if !b.addrFocused || ev.Code == "" {
-			return
-		}
-		b.addrCopied = false // an edit dismisses the copied-highlight
-		b.addrBuf += ev.Code
-		b.changed()
-	case EventKeyDown:
-		if !b.addrFocused {
-			return
-		}
-		switch ev.Code {
-		case "Backspace":
-			runes := []rune(b.addrBuf)
-			if len(runes) == 0 {
-				return
-			}
-			b.addrCopied = false // an edit dismisses the copied-highlight
-			b.addrBuf = string(runes[:len(runes)-1])
-			b.changed()
-		case "Enter":
-			b.commitAddress()
-		}
+	case EventChar, EventKeyDown:
+		// The composed address field owns the edit buffer + focus; it ignores the
+		// event when unfocused, appends a rune, deletes on Backspace and commits
+		// (OnCommit → normalise + navigate) on Enter, firing changed() through its
+		// OnChange hook.
+		b.addr.OnEvent(ev)
 	case EventScroll:
 		t := b.activeTab()
 		if t == nil {
@@ -1402,23 +1320,10 @@ func (b *Browser) OnEvent(ev Event) {
 	}
 }
 
-// commitAddress normalises + navigates to the address buffer on Enter, then
-// defocuses the field. An empty buffer is a no-op (it just defocuses).
-func (b *Browser) commitAddress() {
-	raw := strings.TrimSpace(b.addrBuf)
-	b.addrFocused = false
-	b.addrCopied = false
-	if raw == "" {
-		b.changed()
-		return
-	}
-	b.Navigate(normalizeURL(raw))
-}
-
 // handleClick routes an absolute-coordinate click to the tab strip, a toolbar
 // button, the address field or a page link.
 func (b *Browser) handleClick(ax, ay int) {
-	b.addrCopied = false // any click dismisses the copied-highlight
+	b.addr.dismissCopied() // any click dismisses the copied-highlight
 	// With the chrome hidden there are no tab-strip / toolbar / address hit
 	// targets: a click falls straight through to the content area.
 	if !b.HideChrome {
@@ -1429,7 +1334,7 @@ func (b *Browser) handleClick(ax, ay int) {
 						b.CloseTab(i)
 					} else {
 						b.active = i
-						b.addrFocused = false
+						b.addr.Blur()
 						b.changed()
 					}
 					return
@@ -1440,7 +1345,7 @@ func (b *Browser) handleClick(ax, ay int) {
 		nav, zoom, addr := b.toolbarGroups()
 		for _, g := range []*ButtonGroup{nav, zoom} {
 			if gb := g.Bounds(); gb.Contains(ax, ay) {
-				b.addrFocused = false
+				b.addr.Blur()
 				// Arm the pressed face on the hit button (when enabled) so the
 				// ensuing redraw shows the click; EventMouseUp clears it.
 				if k, ok := b.toolbarBtnAt(ax, ay); ok && b.btnEnabled(k) {
@@ -1451,21 +1356,18 @@ func (b *Browser) handleClick(ax, ay int) {
 			}
 		}
 		if addr.Contains(ax, ay) {
-			// A click on the trailing bookmark slot toggles it rather than focusing.
-			if _, _, star := b.addrZones(addr); b.BookmarkIcon != nil && star.Contains(ax, ay) {
-				b.addrFocused = false
-				b.toggleBookmark()
-				return
-			}
-			b.addrFocused = true
-			b.addrBuf = b.CurrentURL()
-			b.changed()
+			// The composed field decides: a click on the bookmark slot toggles it
+			// (read the flip back into Bookmarked), any other click focuses + seeds
+			// the edit buffer from the current URL (its synced Text).
+			b.syncAddr(addr)
+			b.addr.OnEvent(Event{Kind: EventClick, X: ax - addr.X, Y: ay - addr.Y})
+			b.Bookmarked = b.addr.Bookmarked
 			return
 		}
 	}
 	cr := b.contentRect()
 	if cr.Contains(ax, ay) {
-		b.addrFocused = false
+		b.addr.Blur()
 		t := b.activeTab()
 		if t == nil {
 			return
@@ -1484,7 +1386,7 @@ func (b *Browser) handleClick(ax, ay int) {
 		}
 		return
 	}
-	b.addrFocused = false
+	b.addr.Blur()
 }
 
 // linkAt maps an absolute content-area click back into render-pixel space and

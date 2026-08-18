@@ -526,11 +526,15 @@ func TestBrowserCopyAddress(t *testing.T) {
 	if !b.AddressFocused() {
 		t.Fatal("click should focus the address field")
 	}
+	// Focused, AddressText reports the edit buffer (seeded from the URL on focus).
+	if got := b.AddressText(); got != "http://example.com/page" {
+		t.Fatalf("focused AddressText = %q", got)
+	}
 	txt, ok := b.CopyAddress()
 	if !ok || txt != "http://example.com/page" || ClipboardText() != txt {
 		t.Fatalf("CopyAddress = %q,%v clip=%q", txt, ok, ClipboardText())
 	}
-	if !b.addrCopied {
+	if !b.addr.copied {
 		t.Fatal("CopyAddress should arm the select-all highlight")
 	}
 	// Draw paints the highlight behind the URL.
@@ -542,25 +546,25 @@ func TestBrowserCopyAddress(t *testing.T) {
 	}
 	// Typing dismisses the highlight.
 	b.OnEvent(Event{Kind: EventChar, Code: "x"})
-	if b.addrCopied {
+	if b.addr.copied {
 		t.Fatal("an edit should dismiss the copied-highlight")
 	}
 	// A Backspace edit also dismisses it.
 	b.CopyAddress()
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if b.addrCopied {
+	if b.addr.copied {
 		t.Fatal("a backspace should dismiss the copied-highlight")
 	}
 	// Re-copy then a click dismisses it.
 	b.CopyAddress()
 	b.OnEvent(Event{Kind: EventClick, X: cx, Y: cy})
-	if b.addrCopied {
+	if b.addr.copied {
 		t.Fatal("a click should dismiss the copied-highlight")
 	}
 	// Re-copy then Enter (commit) dismisses it.
 	b.CopyAddress()
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if b.addrCopied {
+	if b.addr.copied {
 		t.Fatal("commit should dismiss the copied-highlight")
 	}
 
@@ -635,8 +639,8 @@ func TestBrowserDrawAddressFocusAndCaret(t *testing.T) {
 	}
 
 	// Focus + type: an Accent ring appears and a caret (OnSurface) is painted.
-	b.addrFocused = true
-	b.addrBuf = "hi"
+	b.addr.focused = true
+	b.addr.buf = "hi"
 	buf2 := makeSurface(browserBounds.W, browserBounds.H)
 	b.Draw(newP(buf2, browserBounds.W), theme)
 	if !scanFor(buf2, browserBounds.W, addr, theme.Accent) {
@@ -797,8 +801,8 @@ func TestBrowserClickToolbarButtons(t *testing.T) {
 	// Address focus.
 	axc, ayc := center(addr)
 	b.OnEvent(Event{Kind: EventClick, X: axc, Y: ayc})
-	if !b.addrFocused || b.addrBuf != "http://c" {
-		t.Fatalf("address click: focused=%v buf=%q", b.addrFocused, b.addrBuf)
+	if !b.addr.focused || b.addr.buf != "http://c" {
+		t.Fatalf("address click: focused=%v buf=%q", b.addr.focused, b.addr.buf)
 	}
 }
 
@@ -884,10 +888,10 @@ func TestBrowserClickContentLink(t *testing.T) {
 
 func TestBrowserClickContentNoTab(t *testing.T) {
 	b, _, _, _ := newTestBrowser()
-	b.addrFocused = true
+	b.addr.focused = true
 	cr := b.contentRect()
 	b.OnEvent(Event{Kind: EventClick, X: cr.X + 1, Y: cr.Y + 1}) // no tab: link hit skipped
-	if b.addrFocused {
+	if b.addr.focused {
 		t.Fatal("content click should defocus the address field")
 	}
 }
@@ -921,12 +925,12 @@ func TestBrowserLinkAtDispHZeroGuard(t *testing.T) {
 func TestBrowserClickOutsideEverythingDefocuses(t *testing.T) {
 	b, _, _, _ := newTestBrowser()
 	b.Open("http://a", "")
-	b.addrFocused = true
+	b.addr.focused = true
 	tr := b.toolbarRect()
 	// The right pad of the toolbar row: not a button, not the address field, not
 	// the content area → the final defocus fallthrough.
 	b.OnEvent(Event{Kind: EventClick, X: tr.X + tr.W - 1, Y: tr.Y + tr.H/2})
-	if b.addrFocused {
+	if b.addr.focused {
 		t.Fatal("click outside all regions should defocus the address field")
 	}
 }
@@ -938,28 +942,28 @@ func TestBrowserAddressTyping(t *testing.T) {
 	// Char while unfocused is ignored.
 	before := *changes
 	b.OnEvent(Event{Kind: EventChar, Code: "z"})
-	if b.addrBuf != "" || *changes != before {
-		t.Fatalf("unfocused char leaked: buf=%q", b.addrBuf)
+	if b.addr.buf != "" || *changes != before {
+		t.Fatalf("unfocused char leaked: buf=%q", b.addr.buf)
 	}
 	// Focus and type.
-	b.addrFocused = true
-	b.addrBuf = ""
+	b.addr.focused = true
+	b.addr.buf = ""
 	b.OnEvent(Event{Kind: EventChar, Code: ""}) // empty code ignored
 	b.OnEvent(Event{Kind: EventChar, Code: "e"})
 	b.OnEvent(Event{Kind: EventChar, Code: "g"})
-	if b.addrBuf != "eg" {
-		t.Fatalf("addrBuf = %q, want eg", b.addrBuf)
+	if b.addr.buf != "eg" {
+		t.Fatalf("addrBuf = %q, want eg", b.addr.buf)
 	}
 	// KeyDown while unfocused ignored.
-	b.addrFocused = false
+	b.addr.focused = false
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	b.addrFocused = true
+	b.addr.focused = true
 	// Backspace on non-empty then empty.
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if b.addrBuf != "e" {
-		t.Fatalf("after Backspace buf=%q, want e", b.addrBuf)
+	if b.addr.buf != "e" {
+		t.Fatalf("after Backspace buf=%q, want e", b.addr.buf)
 	}
-	b.addrBuf = ""
+	b.addr.buf = ""
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"}) // empty: no-op
 	// An unrelated key while focused is a no-op.
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
@@ -970,22 +974,22 @@ func TestBrowserAddressCommit(t *testing.T) {
 	b, navT, _, _ := newTestBrowser()
 	b.Open("http://a", "")
 	n := len(*navT)
-	b.addrFocused = true
-	b.addrBuf = "   "
+	b.addr.focused = true
+	b.addr.buf = "   "
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if b.addrFocused || len(*navT) != n {
-		t.Fatalf("empty commit: focused=%v navs=%d", b.addrFocused, len(*navT)-n)
+	if b.addr.focused || len(*navT) != n {
+		t.Fatalf("empty commit: focused=%v navs=%d", b.addr.focused, len(*navT)-n)
 	}
 	// Enter with a scheme: navigated verbatim.
-	b.addrFocused = true
-	b.addrBuf = "http://typed"
+	b.addr.focused = true
+	b.addr.buf = "http://typed"
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if b.CurrentURL() != "http://typed" {
 		t.Fatalf("scheme commit URL = %q", b.CurrentURL())
 	}
 	// Enter with a bare host: https:// is added.
-	b.addrFocused = true
-	b.addrBuf = "bare.example"
+	b.addr.focused = true
+	b.addr.buf = "bare.example"
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if b.CurrentURL() != "https://bare.example" {
 		t.Fatalf("bare commit URL = %q, want https:// prefixed", b.CurrentURL())
@@ -1357,10 +1361,10 @@ func TestBrowserClickZoomButtons(t *testing.T) {
 		t.Fatalf("disabled zoom-out click changed zoom to %v", b.Zoom())
 	}
 
-	b.addrFocused = true
+	b.addr.focused = true
 	zx, zy = center(zi)
 	b.OnEvent(Event{Kind: EventClick, X: zx, Y: zy})
-	if b.addrFocused {
+	if b.addr.focused {
 		t.Fatal("a zoom-button click should defocus the address field")
 	}
 }
@@ -1450,12 +1454,12 @@ func TestBrowserClickFitButton(t *testing.T) {
 	b.SetZoom(BrowserMaxZoom)
 	_, _, _, _, _, fit, _ = b.toolbarLayout()
 	fx, fy = center(fit)
-	b.addrFocused = true
+	b.addr.focused = true
 	b.OnEvent(Event{Kind: EventClick, X: fx, Y: fy})
 	if !(b.Zoom() < 1.0) {
 		t.Fatalf("fit-button click zoom = %v, want < 1.0", b.Zoom())
 	}
-	if b.addrFocused {
+	if b.addr.focused {
 		t.Fatal("a fit-button click should defocus the address field")
 	}
 }
@@ -1549,7 +1553,7 @@ func TestBrowserAddressLeadingAndBookmark(t *testing.T) {
 	}
 
 	_, _, _, _, _, _, addr := b.toolbarLayout()
-	lead, tz, star := b.addrZones(addr)
+	lead, tz, star := b.addr.zones(addr)
 	if lead.W != addr.H || star.X != addr.X+addr.W-addr.H {
 		t.Fatalf("zones: lead=%+v star=%+v", lead, star)
 	}
@@ -1558,12 +1562,12 @@ func TestBrowserAddressLeadingAndBookmark(t *testing.T) {
 
 	// Clicking the star toggles the bookmark on (+ fires the callback), not focus.
 	click(star.X+star.W/2, star.Y+star.H/2)
-	if !b.Bookmarked || len(toggled) != 1 || !toggled[0] || b.addrFocused {
-		t.Fatalf("star click: bookmarked=%v toggled=%v focused=%v", b.Bookmarked, toggled, b.addrFocused)
+	if !b.Bookmarked || len(toggled) != 1 || !toggled[0] || b.addr.focused {
+		t.Fatalf("star click: bookmarked=%v toggled=%v focused=%v", b.Bookmarked, toggled, b.addr.focused)
 	}
 	// Clicking the text zone focuses the field (not the bookmark).
 	click(tz.X+3, tz.Y+tz.H/2)
-	if !b.addrFocused {
+	if !b.addr.focused {
 		t.Fatal("text-zone click should focus the address field")
 	}
 	// A second star click toggles off.
@@ -1574,21 +1578,9 @@ func TestBrowserAddressLeadingAndBookmark(t *testing.T) {
 	// Draw again with Bookmarked=false already covered; flip on + redraw covers the on-state path.
 	b.Bookmarked = true
 	b.Draw(newP(makeSurface(browserBounds.W, browserBounds.H), browserBounds.W), theme)
-
-	// toggleBookmark with no OnBookmarkToggle set is a safe no-op-callback path.
-	b.OnBookmarkToggle = nil
-	b.toggleBookmark()
-
-	// addrZones clamps the text zone to non-negative when leading+star overlap a
-	// too-narrow field.
-	if _, txt, _ := b.addrZones(Rect{X: 0, Y: 0, W: 10, H: 30}); txt.W != 0 {
-		t.Fatalf("narrow field text zone W = %d, want clamped to 0", txt.W)
-	}
-	// With neither hook set, the whole field is the text zone (no slots).
-	b.LeadingIcon, b.BookmarkIcon = nil, nil
-	if l, txt, s := b.addrZones(addr); l != (Rect{}) || s != (Rect{}) || txt != addr {
-		t.Fatalf("no-hooks zones: lead=%+v star=%+v text=%+v (want empty/empty/full)", l, s, txt)
-	}
+	// The AddressBar's zones split (narrow-field clamp, no-hooks full text zone) and
+	// its no-callback bookmark toggle are covered directly in addressbar_test.go —
+	// the field is now a composed widget with its own unit tests.
 }
 
 // --- Scale (HiDPI chrome) ------------------------------------------------
@@ -1741,7 +1733,7 @@ func TestBrowserHideChromeClicksInert(t *testing.T) {
 	}
 	axc, ayc := center(addr)
 	b.OnEvent(Event{Kind: EventClick, X: axc, Y: ayc}) // over a would-be address field
-	if b.addrFocused {
+	if b.addr.focused {
 		t.Fatal("address field must not focus when chrome hidden")
 	}
 	// Programmatic navigation still drives the chromeless page view.
