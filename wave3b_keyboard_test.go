@@ -38,8 +38,8 @@ func newCursorListBox() *ListBox {
 func lbVisible(t *testing.T, lb *ListBox) {
 	t.Helper()
 	vr := lb.visibleRows()
-	if lb.Selected < lb.ScrollRow || lb.Selected >= lb.ScrollRow+vr {
-		t.Fatalf("cursor %d outside window [%d,%d)", lb.Selected, lb.ScrollRow, lb.ScrollRow+vr)
+	if lb.Selected().Get() < lb.ScrollRow || lb.Selected().Get() >= lb.ScrollRow+vr {
+		t.Fatalf("cursor %d outside window [%d,%d)", lb.Selected().Get(), lb.ScrollRow, lb.ScrollRow+vr)
 	}
 }
 
@@ -50,54 +50,54 @@ func TestListBoxKeyCursorAndActivate(t *testing.T) {
 
 	// First ArrowDown with no selection lands on row 0 (stays visible).
 	lb.OnEvent(kd3b("ArrowDown"))
-	if lb.Selected != 0 || lb.ScrollRow != 0 {
-		t.Fatalf("ArrowDown from none: Selected=%d ScrollRow=%d", lb.Selected, lb.ScrollRow)
+	if lb.Selected().Get() != 0 || lb.ScrollRow != 0 {
+		t.Fatalf("ArrowDown from none: Selected=%d ScrollRow=%d", lb.Selected().Get(), lb.ScrollRow)
 	}
 	lbVisible(t, lb)
 
 	// End jumps to the last row and auto-scrolls so it is visible.
 	lb.OnEvent(kd3b("End"))
-	if lb.Selected != 19 || lb.ScrollRow != 17 {
-		t.Fatalf("End: Selected=%d ScrollRow=%d, want 19/17", lb.Selected, lb.ScrollRow)
+	if lb.Selected().Get() != 19 || lb.ScrollRow != 17 {
+		t.Fatalf("End: Selected=%d ScrollRow=%d, want 19/17", lb.Selected().Get(), lb.ScrollRow)
 	}
 	lbVisible(t, lb)
 
 	// ArrowDown at the last row clamps (no wrap).
 	lb.OnEvent(kd3b("ArrowDown"))
-	if lb.Selected != 19 {
-		t.Fatalf("ArrowDown clamp: Selected=%d", lb.Selected)
+	if lb.Selected().Get() != 19 {
+		t.Fatalf("ArrowDown clamp: Selected=%d", lb.Selected().Get())
 	}
 
 	// Home jumps back to the first row and scrolls up to it.
 	lb.OnEvent(kd3b("Home"))
-	if lb.Selected != 0 || lb.ScrollRow != 0 {
-		t.Fatalf("Home: Selected=%d ScrollRow=%d", lb.Selected, lb.ScrollRow)
+	if lb.Selected().Get() != 0 || lb.ScrollRow != 0 {
+		t.Fatalf("Home: Selected=%d ScrollRow=%d", lb.Selected().Get(), lb.ScrollRow)
 	}
 	lbVisible(t, lb)
 
 	// PageDown moves one page and keeps the cursor visible.
 	lb.OnEvent(kd3b("PageDown")) // 0 -> 3
-	if lb.Selected != 3 || lb.ScrollRow != 1 {
-		t.Fatalf("PageDown: Selected=%d ScrollRow=%d, want 3/1", lb.Selected, lb.ScrollRow)
+	if lb.Selected().Get() != 3 || lb.ScrollRow != 1 {
+		t.Fatalf("PageDown: Selected=%d ScrollRow=%d, want 3/1", lb.Selected().Get(), lb.ScrollRow)
 	}
 	lbVisible(t, lb)
 
 	// PageUp moves one page back.
 	lb.OnEvent(kd3b("PageUp")) // 3 -> 0
-	if lb.Selected != 0 {
-		t.Fatalf("PageUp: Selected=%d", lb.Selected)
+	if lb.Selected().Get() != 0 {
+		t.Fatalf("PageUp: Selected=%d", lb.Selected().Get())
 	}
 	lbVisible(t, lb)
 
 	// ArrowUp at the top clamps.
 	lb.OnEvent(kd3b("ArrowUp"))
-	if lb.Selected != 0 {
-		t.Fatalf("ArrowUp clamp: Selected=%d", lb.Selected)
+	if lb.Selected().Get() != 0 {
+		t.Fatalf("ArrowUp clamp: Selected=%d", lb.Selected().Get())
 	}
 	// A non-navigation key (ArrowLeft) is ignored (rovingIndex default).
 	lb.OnEvent(kd3b("ArrowLeft"))
-	if lb.Selected != 0 {
-		t.Fatalf("ArrowLeft moved cursor: Selected=%d", lb.Selected)
+	if lb.Selected().Get() != 0 {
+		t.Fatalf("ArrowLeft moved cursor: Selected=%d", lb.Selected().Get())
 	}
 
 	// Enter / Space / " " each activate the cursor row like a click.
@@ -117,8 +117,8 @@ func TestListBoxKeyArrowUpFromNoSelection(t *testing.T) {
 	lb := newCursorListBox()
 	// First key is ArrowUp with Selected == -1: lands on row 0.
 	lb.OnEvent(kd3b("ArrowUp"))
-	if lb.Selected != 0 {
-		t.Fatalf("ArrowUp from none: Selected=%d, want 0", lb.Selected)
+	if lb.Selected().Get() != 0 {
+		t.Fatalf("ArrowUp from none: Selected=%d, want 0", lb.Selected().Get())
 	}
 }
 
@@ -143,26 +143,26 @@ func TestListBoxKeyMultiSelectAndActivate(t *testing.T) {
 func TestListBoxKeyDisabledAndEmptyAndNil(t *testing.T) {
 	// Disabled ignores keys.
 	lb := newCursorListBox()
-	lb.Selected = 5
+	lb.Selected().Set(5)
 	lb.Disabled = true
 	lb.OnEvent(kd3b("ArrowDown"))
 	lb.OnEvent(kd3b("Enter"))
-	if lb.Selected != 5 {
-		t.Fatalf("disabled list moved (Selected=%d)", lb.Selected)
+	if lb.Selected().Get() != 5 {
+		t.Fatalf("disabled list moved (Selected=%d)", lb.Selected().Get())
 	}
 	// Empty list: navigation is a no-op (rovingIndex n<=0), Enter is safe.
 	empty := NewListBox(nil)
 	empty.OnEvent(kd3b("ArrowDown"))
 	empty.OnEvent(kd3b("Enter"))
-	if empty.Selected != -1 {
-		t.Fatalf("empty list moved (Selected=%d)", empty.Selected)
+	if empty.Selected().Get() != -1 {
+		t.Fatalf("empty list moved (Selected=%d)", empty.Selected().Get())
 	}
 	// Non-empty list with no selection: Enter (activateCursor out of range) is
 	// a no-op, and a nil OnActivate is safe.
 	nl := newCursorListBox()
 	nl.OnEvent(kd3b("Enter"))
-	if nl.Selected != -1 {
-		t.Fatalf("Enter with no cursor changed Selected=%d", nl.Selected)
+	if nl.Selected().Get() != -1 {
+		t.Fatalf("Enter with no cursor changed Selected=%d", nl.Selected().Get())
 	}
 }
 

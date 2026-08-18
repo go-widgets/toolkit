@@ -51,7 +51,7 @@ func TestScrollGutterNormalized(t *testing.T) {
 	theme := DefaultLight()
 	l := NewListBox(manyItems(50))
 	l.RowHeight = 20
-	l.Selected = 0
+	l.Selected().Set(0)
 	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100}) // 5 of 50 visible -> overflow
 	if g, ok := l.scrollbarGeom(); !ok || g.cross0 != 100-scrollbarTrack() {
 		t.Fatalf("ListBox track cross0 = %d (ok=%v), want %d", g.cross0, ok, 100-scrollbarTrack())

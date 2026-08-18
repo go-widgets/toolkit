@@ -241,8 +241,8 @@ func TestListBoxClickSelectsAndFires(t *testing.T) {
 	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	// Row height 18 default; row 1 spans y in [18,36).
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 20})
-	if l.Selected != 1 {
-		t.Fatalf("Selected = %d, want 1", l.Selected)
+	if l.Selected().Get() != 1 {
+		t.Fatalf("Selected = %d, want 1", l.Selected().Get())
 	}
 	if got != 1 {
 		t.Fatalf("OnActivate fired with %d, want 1", got)
@@ -253,7 +253,7 @@ func TestListBoxClickOutOfRangeIsNoOp(t *testing.T) {
 	l := NewListBox([]string{"a", "b"})
 	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 500})
-	if l.Selected != -1 {
+	if l.Selected().Get() != -1 {
 		t.Fatal("out-of-range click must not change Selected")
 	}
 }
@@ -261,7 +261,7 @@ func TestListBoxClickOutOfRangeIsNoOp(t *testing.T) {
 func TestListBoxIgnoresNonClickEvents(t *testing.T) {
 	l := NewListBox([]string{"a"})
 	l.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if l.Selected != -1 {
+	if l.Selected().Get() != -1 {
 		t.Fatal("KeyDown must not select")
 	}
 }
@@ -277,7 +277,7 @@ func TestListBoxZeroRowHeightIsNoOp(t *testing.T) {
 	l := NewListBox([]string{"a"})
 	l.RowHeight = 0
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
-	if l.Selected != -1 {
+	if l.Selected().Get() != -1 {
 		t.Fatal("zero RowHeight click must not select")
 	}
 }
@@ -285,7 +285,7 @@ func TestListBoxZeroRowHeightIsNoOp(t *testing.T) {
 func TestListBoxNegativeIndexNoSelect(t *testing.T) {
 	l := NewListBox([]string{"a"})
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: -10})
-	if l.Selected != -1 {
+	if l.Selected().Get() != -1 {
 		t.Fatal("negative Y must not select")
 	}
 }
@@ -294,7 +294,7 @@ func TestListBoxDrawSelectedAndUnselected(t *testing.T) {
 	const w, h = 64, 64
 	theme := DefaultLight()
 	l := NewListBox([]string{"a", "b"})
-	l.Selected = 1
+	l.Selected().Set(1)
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 40})
 	buf := makeSurface(w, h)
 	l.Draw(newP(buf, w), theme)
@@ -320,21 +320,21 @@ func TestListBoxMultiSelectDefaultOffPreservesSingleSelect(t *testing.T) {
 	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 20}) // row 1, no modifiers
-	if l.Selected != 1 || got != 1 {
-		t.Fatalf("Selected=%d got=%d, want 1,1", l.Selected, got)
+	if l.Selected().Get() != 1 || got != 1 {
+		t.Fatalf("Selected=%d got=%d, want 1,1", l.Selected().Get(), got)
 	}
 
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 40, Ctrl: true}) // row 2, Ctrl
-	if l.Selected != 2 {
-		t.Fatalf("Ctrl-click without MultiSelect should still move Selected; got %d", l.Selected)
+	if l.Selected().Get() != 2 {
+		t.Fatalf("Ctrl-click without MultiSelect should still move Selected; got %d", l.Selected().Get())
 	}
 	if len(l.SelectedIndices()) != 0 {
 		t.Fatalf("selection set must stay empty when MultiSelect is off; got %v", l.SelectedIndices())
 	}
 
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 0, Shift: true}) // row 0, Shift
-	if l.Selected != 0 {
-		t.Fatalf("Shift-click without MultiSelect should still move Selected; got %d", l.Selected)
+	if l.Selected().Get() != 0 {
+		t.Fatalf("Shift-click without MultiSelect should still move Selected; got %d", l.Selected().Get())
 	}
 	if len(l.SelectedIndices()) != 0 {
 		t.Fatalf("selection set must stay empty when MultiSelect is off; got %v", l.SelectedIndices())
@@ -351,8 +351,8 @@ func TestListBoxMultiSelectPlainClickCollapses(t *testing.T) {
 	if got := l.SelectedIndices(); len(got) != 1 || got[0] != 3 {
 		t.Fatalf("plain click must collapse selection to clicked row; got %v", got)
 	}
-	if l.Selected != 3 {
-		t.Fatalf("Selected (anchor) = %d, want 3", l.Selected)
+	if l.Selected().Get() != 3 {
+		t.Fatalf("Selected (anchor) = %d, want 3", l.Selected().Get())
 	}
 	if !l.IsSelected(3) || l.IsSelected(0) || l.IsSelected(1) || l.IsSelected(2) {
 		t.Fatal("IsSelected disagrees with SelectedIndices after plain click")
@@ -371,8 +371,8 @@ func TestListBoxMultiSelectCtrlToggle(t *testing.T) {
 	if len(got) != 2 || got[0] != 0 || got[1] != 2 {
 		t.Fatalf("Ctrl-click should add to selection; got %v", got)
 	}
-	if l.Selected != 2 {
-		t.Fatalf("Ctrl-click should move the anchor; Selected=%d, want 2", l.Selected)
+	if l.Selected().Get() != 2 {
+		t.Fatalf("Ctrl-click should move the anchor; Selected=%d, want 2", l.Selected().Get())
 	}
 
 	// Ctrl-click an already-selected row toggles it OFF.
@@ -401,8 +401,8 @@ func TestListBoxMultiSelectShiftRangeForward(t *testing.T) {
 			t.Fatalf("SelectedIndices = %v, want %v", got, want)
 		}
 	}
-	if l.Selected != 1 {
-		t.Fatalf("Shift-click must not move the anchor; Selected=%d, want 1", l.Selected)
+	if l.Selected().Get() != 1 {
+		t.Fatalf("Shift-click must not move the anchor; Selected=%d, want 1", l.Selected().Get())
 	}
 }
 
@@ -424,8 +424,8 @@ func TestListBoxMultiSelectShiftRangeBackward(t *testing.T) {
 			t.Fatalf("SelectedIndices = %v, want %v", got, want)
 		}
 	}
-	if l.Selected != 3 {
-		t.Fatalf("Shift-click must not move the anchor; Selected=%d, want 3", l.Selected)
+	if l.Selected().Get() != 3 {
+		t.Fatalf("Shift-click must not move the anchor; Selected=%d, want 3", l.Selected().Get())
 	}
 }
 
@@ -471,13 +471,13 @@ func TestListBoxSelectionSetAPI(t *testing.T) {
 	}
 
 	// ClearSelection empties the set without touching Selected.
-	l.Selected = 2
+	l.Selected().Set(2)
 	l.ClearSelection()
 	if got := l.SelectedIndices(); len(got) != 0 {
 		t.Fatalf("ClearSelection should leave an empty set; got %v", got)
 	}
-	if l.Selected != 2 {
-		t.Fatalf("ClearSelection must not touch Selected; got %d", l.Selected)
+	if l.Selected().Get() != 2 {
+		t.Fatalf("ClearSelection must not touch Selected; got %d", l.Selected().Get())
 	}
 }
 
@@ -585,7 +585,7 @@ func TestListBoxWindowedDrawOnlyPaintsVisibleRows(t *testing.T) {
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // exactly 5 rows visible
 	l.ScrollRow = 3                              // window = rows [3,8)
-	l.Selected = 5                               // in-window
+	l.Selected().Set(5)                          // in-window
 	buf := makeSurface(w, h)
 	l.Draw(newP(buf, w), theme)
 
@@ -704,8 +704,8 @@ func TestListBoxClickWithScrollRowSelectsCorrectRow(t *testing.T) {
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
 	l.ScrollRow = 3
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 25}) // local slot 1 -> abs row 4
-	if l.Selected != 4 {
-		t.Fatalf("Selected = %d, want 4", l.Selected)
+	if l.Selected().Get() != 4 {
+		t.Fatalf("Selected = %d, want 4", l.Selected().Get())
 	}
 	if got != 4 {
 		t.Fatalf("OnActivate fired with %d, want 4", got)
@@ -753,7 +753,7 @@ func TestListBoxScrollToSelectedScrollsUp(t *testing.T) {
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // 5 visible
 	l.ScrollRow = 10
-	l.Selected = 2 // above the window
+	l.Selected().Set(2) // above the window
 	l.scrollToSelected()
 	if l.ScrollRow != 2 {
 		t.Fatalf("ScrollRow = %d, want 2 (scrolled up to Selected)", l.ScrollRow)
@@ -764,7 +764,7 @@ func TestListBoxScrollToSelectedScrollsDown(t *testing.T) {
 	l := NewListBox(make([]string, 20))
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // 5 visible, window starts [0,5)
-	l.Selected = 9                               // below the window
+	l.Selected().Set(9)                          // below the window
 	l.scrollToSelected()
 	if l.ScrollRow != 5 { // Selected - vr + 1 = 9-5+1
 		t.Fatalf("ScrollRow = %d, want 5", l.ScrollRow)
@@ -774,7 +774,7 @@ func TestListBoxScrollToSelectedScrollsDown(t *testing.T) {
 func TestListBoxScrollToSelectedZeroVisibleRowsIsNoOp(t *testing.T) {
 	l := NewListBox(make([]string, 5))
 	l.RowHeight = 0 // -> visibleRows() == 0
-	l.Selected = 2
+	l.Selected().Set(2)
 	l.ScrollRow = 0
 	l.scrollToSelected()
 	if l.ScrollRow != 0 {
@@ -789,7 +789,7 @@ func TestListBoxMultiSelectDrawIgnoresSelectedWhenSetEmpty(t *testing.T) {
 	theme := DefaultLight()
 	l := NewListBox([]string{"a", "b"})
 	l.MultiSelect = true
-	l.Selected = 1 // anchor points at row 1, but nothing is in the set
+	l.Selected().Set(1) // anchor points at row 1, but nothing is in the set
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 40})
 	buf := makeSurface(w, h)
 	l.Draw(newP(buf, w), theme)

@@ -9,6 +9,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -55,9 +56,12 @@ import (
 type ListBox struct {
 	Base
 	focusState
-	Items       []string
-	Selected    int // -1 = no selection; anchor/cursor row
-	RowHeight   int // pixels per row; default 18 via NewListBox
+	Items     []string
+	RowHeight int // pixels per row; default 18 via NewListBox
+	// selectedRow is the anchor/cursor row (-1 = no selection). The reactive
+	// selection is MVVM-only: it lives in an unexported Observable exposed via
+	// [ListBox.Selected]; there is no settable Selected field.
+	selectedRow *mvvm.Observable[int]
 	OnActivate  func(idx int)
 	MultiSelect bool // enable Ctrl/Shift multi-row selection
 
@@ -121,11 +125,22 @@ type ListBox struct {
 func NewListBox(items []string) *ListBox {
 	return &ListBox{
 		Items:         items,
-		Selected:      -1,
+		selectedRow:   mvvm.NewObservable(-1),
 		RowHeight:     scaled(18),
 		pressedRow:    -1,
 		dropIndicator: -1,
 	}
+}
+
+// Selected is the anchor/cursor row as a shared [mvvm.Observable]: a host binds
+// it (Set / Subscribe / two-way) — there is no settable Selected field. A click
+// or an arrow-key move Sets it; subscribers are notified. A bare &ListBox{}
+// lazy-inits the observable to 0; NewListBox seeds it to -1 (no selection).
+func (l *ListBox) Selected() *mvvm.Observable[int] {
+	if l.selectedRow == nil {
+		l.selectedRow = mvvm.NewObservable(0)
+	}
+	return l.selectedRow
 }
 
 // rowHeight is the effective per-row pixel height used for every layout and
@@ -218,7 +233,7 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 		y := r.Y + (i-start)*rh
 		bg := theme.Surface
 		ink := theme.OnSurface
-		hi := i == l.Selected
+		hi := i == l.Selected().Get()
 		if l.MultiSelect {
 			hi = l.IsSelected(i)
 		}
@@ -346,19 +361,20 @@ func (l *ListBox) ScrollBy(delta int) {
 // selection on screen; it is also exposed for a host that drives Selected
 // externally and wants the list to keep it in view.
 func (l *ListBox) scrollToSelected() {
-	if l.Selected < 0 {
+	sel := l.Selected().Get()
+	if sel < 0 {
 		return
 	}
-	if l.Selected < l.ScrollRow {
-		l.ScrollTo(l.Selected)
+	if sel < l.ScrollRow {
+		l.ScrollTo(sel)
 		return
 	}
 	vr := l.visibleRows()
 	if vr <= 0 {
 		return
 	}
-	if l.Selected >= l.ScrollRow+vr {
-		l.ScrollTo(l.Selected - vr + 1)
+	if sel >= l.ScrollRow+vr {
+		l.ScrollTo(sel - vr + 1)
 	}
 }
 
@@ -468,8 +484,8 @@ func (l *ListBox) handleKey(ev Event) {
 		l.activateCursor()
 		return
 	}
-	if idx, ok := rovingIndex(l.Selected, len(l.Items), l.visibleRows(), ev.Code); ok {
-		l.Selected = idx
+	if idx, ok := rovingIndex(l.Selected().Get(), len(l.Items), l.visibleRows(), ev.Code); ok {
+		l.Selected().Set(idx)
 		// A plain move mirrors a plain click: in MultiSelect mode the cursor
 		// row becomes the sole selection (and the anchor).
 		if l.MultiSelect {
@@ -484,14 +500,15 @@ func (l *ListBox) handleKey(ev Event) {
 // cursor row, then OnActivate(Selected) runs. A cursor that is out of range
 // (nothing selected yet) is a no-op, and a nil OnActivate is safe.
 func (l *ListBox) activateCursor() {
-	if l.Selected < 0 || l.Selected >= len(l.Items) {
+	sel := l.Selected().Get()
+	if sel < 0 || sel >= len(l.Items) {
 		return
 	}
 	if l.MultiSelect {
-		l.SetSelection(l.Selected)
+		l.SetSelection(sel)
 	}
 	if l.OnActivate != nil {
-		l.OnActivate(l.Selected)
+		l.OnActivate(sel)
 	}
 }
 
@@ -549,16 +566,16 @@ func (l *ListBox) onClick(ev Event) {
 	if l.MultiSelect {
 		switch {
 		case ev.Shift:
-			l.SelectRange(l.Selected, idx)
+			l.SelectRange(l.Selected().Get(), idx)
 		case ev.Ctrl:
 			l.ToggleSelect(idx)
-			l.Selected = idx
+			l.Selected().Set(idx)
 		default:
 			l.SetSelection(idx)
-			l.Selected = idx
+			l.Selected().Set(idx)
 		}
 	} else {
-		l.Selected = idx
+		l.Selected().Set(idx)
 	}
 
 	if l.OnActivate != nil {
@@ -640,7 +657,7 @@ func (l *ListBox) onDrop(ev Event) {
 	to := l.rowInsertionIndex(ev.Y)
 	newIdx := l.moveItem(from, to)
 
-	l.Selected = remapReorderedIndex(l.Selected, from, to)
+	l.Selected().Set(remapReorderedIndex(l.Selected().Get(), from, to))
 	if l.selected != nil {
 		remapped := make(map[int]bool, len(l.selected))
 		for i := range l.selected {

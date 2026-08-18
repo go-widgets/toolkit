@@ -177,8 +177,8 @@ func (l *ListBox) A11y() A11yInfo {
 		if n := len(l.SelectedIndices()); n > 0 {
 			v = strconv.Itoa(n) + " selected"
 		}
-	} else if l.Selected >= 0 && l.Selected < len(l.Items) {
-		v = l.Items[l.Selected]
+	} else if sel := l.Selected().Get(); sel >= 0 && sel < len(l.Items) {
+		v = l.Items[sel]
 	}
 	return A11yInfo{Role: RoleListbox, Value: v}
 }
