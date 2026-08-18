@@ -507,11 +507,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	sl := NewSparkline([]float64{3, 7, 2, 8})
 	sl.SetBounds(bounds)
 	sl.OnEvent(inside)
-	if !sl.Hover {
+	if !sl.Hover().Get() {
 		t.Fatal("sparkline move should set Hover")
 	}
 	sl.OnEvent(Event{Kind: EventMouseMove, X: 60, Y: -5})
-	if sl.Hover {
+	if sl.Hover().Get() {
 		t.Fatal("sparkline move off should clear Hover")
 	}
 	emptyBounded(NewSparkline(nil))

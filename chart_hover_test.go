@@ -46,13 +46,15 @@ func TestSparklineValueAtAndHover(t *testing.T) {
 		t.Fatal("narrow Sparkline.ValueAt should resolve")
 	}
 	// Line crosshair.
-	sl.Hover, sl.HoverIndex = true, 2
+	sl.Hover().Set(true)
+	sl.HoverIndex().Set(2)
 	drawInBounds(t, "sparkline-line", sl)
 	// Bar highlight.
 	sb := NewSparkline([]float64{3, 7, 2, 8, 5})
 	sb.Kind = SparkBar
 	sb.SetBounds(Rect{X: 10, Y: 10, W: 130, H: 40})
-	sb.Hover, sb.HoverIndex = true, 3
+	sb.Hover().Set(true)
+	sb.HoverIndex().Set(3)
 	drawInBounds(t, "sparkline-bar", sb)
 	// A bar spark with more values than pixels exercises the slot<1 clamp in
 	// the hover highlight. (drawBars itself overflows a sub-pixel plot — a
@@ -60,7 +62,8 @@ func TestSparklineValueAtAndHover(t *testing.T) {
 	nb := NewSparkline(make([]float64, 300))
 	nb.Kind = SparkBar
 	nb.SetBounds(Rect{X: 0, Y: 0, W: 2*SparkPad + 10, H: 20})
-	nb.Hover, nb.HoverIndex = true, 5
+	nb.Hover().Set(true)
+	nb.HoverIndex().Set(5)
 	nb.Draw(newP(makeSurface(chW, chH), chW), DefaultLight())
 }
 
