@@ -13,6 +13,7 @@ import (
 	"github.com/go-gfx/gfx/geometry"
 	"github.com/go-gfx/gfx/iso"
 	"github.com/go-gfx/gfx/raster"
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -85,6 +86,10 @@ type IsoDiagram struct {
 	// OnSelect fires when the selected node changes; id is "" when the selection
 	// is cleared.
 	OnSelect func(id string)
+	// OnSelectConnector fires when the selected connector changes; id is "" when
+	// the connector selection is cleared. It mirrors OnSelect for the connector
+	// half of the selection, so a host can drive a "connector properties" panel.
+	OnSelectConnector func(id string)
 	// OnInvalidate, when set, is called whenever the widget's appearance changed
 	// and it should be redrawn. A document edit (including one from another
 	// collaborator, via the store's Subscribe) also triggers it.
@@ -95,7 +100,12 @@ type IsoDiagram struct {
 	menu *ContextMenu
 
 	selected string
-	seq      int // monotonic id source for placed nodes/connectors
+	// selConn is the selected connector's id, held in an mvvm.Observable so the
+	// selection crosses the widget/host boundary the MVVM way: a host binds
+	// [IsoDiagram.SelectedConnectorObservable] into a view model instead of the
+	// widget copying the id out every frame. "" means no connector selected.
+	selConn *mvvm.Observable[string]
+	seq     int // monotonic id source for placed nodes/connectors
 
 	// interaction state
 	gesture     isoGesture
@@ -133,12 +143,21 @@ func NewIsoDiagram(doc IsoDocument) *IsoDiagram {
 		doc = NewIsoDoc()
 	}
 	d := &IsoDiagram{
-		Cols: 10,
-		Rows: 10,
-		doc:  doc,
-		proj: iso.NewDefault(geometry.Pt(0, 0)),
-		menu: NewContextMenu(NewMenu(nil)),
+		Cols:    10,
+		Rows:    10,
+		doc:     doc,
+		proj:    iso.NewDefault(geometry.Pt(0, 0)),
+		menu:    NewContextMenu(NewMenu(nil)),
+		selConn: mvvm.NewObservable(""),
 	}
+	// A connector-selection change repaints (highlight) and notifies the host,
+	// exactly as a node selection does.
+	d.selConn.Subscribe(func(id string) {
+		if d.OnSelectConnector != nil {
+			d.OnSelectConnector(id)
+		}
+		d.invalidate()
+	})
 	d.unsub = doc.Subscribe(func() { d.invalidate() })
 	return d
 }
@@ -156,6 +175,26 @@ func (d *IsoDiagram) ContextMenu() *ContextMenu { return d.menu }
 
 // Selected returns the selected node's ID, or "" when nothing is selected.
 func (d *IsoDiagram) Selected() string { return d.selected }
+
+// SelectedConnector returns the selected connector's ID, or "" when no connector
+// is selected.
+func (d *IsoDiagram) SelectedConnector() string { return d.selConn.Get() }
+
+// SelectedConnectorObservable exposes the connector-selection property so a host
+// can bind it into an MVVM view model (e.g. a connector-style inspector) that
+// stays in sync with clicks in the diagram, rather than polling
+// [IsoDiagram.SelectedConnector] every frame.
+func (d *IsoDiagram) SelectedConnectorObservable() *mvvm.Observable[string] { return d.selConn }
+
+// SelectConnector selects the connector with the given id (or clears the
+// connector selection when id is ""). Selecting a connector clears any node
+// selection so the two never highlight at once.
+func (d *IsoDiagram) SelectConnector(id string) {
+	if id != "" {
+		d.setSelected("")
+	}
+	d.selConn.Set(id)
+}
 
 // Close unsubscribes the widget from its document. It is optional: a diagram
 // that outlives its use leaks only one closure, but a host churning through
@@ -332,6 +371,223 @@ func (d *IsoDiagram) cellAtLocal(x, y int) (gx, gy int) {
 	return int(math.Floor(w.X)), int(math.Floor(w.Y))
 }
 
+// --- connector geometry -------------------------------------------------
+
+// isoConnectorWidth is the default connector stroke width in logical pixels —
+// the historical literal, so an unset connector at metric scale 1 strokes
+// exactly 2 device pixels, unchanged from before styles existed.
+const isoConnectorWidth = 2
+
+// isoConnectorHit is how near (logical pixels) a click must fall to a connector's
+// projected path to pick it.
+const isoConnectorHit = 6
+
+// resolveConnColor is a connector's stroke colour as the iso primitives take it,
+// defaulting to the theme link colour (OnSurface) when the connector left its
+// colour unset (A==0) — the exact colour and defaulting rule the bare connector
+// always used.
+func (d *IsoDiagram) resolveConnColor(c IsoConnector, theme *Theme) stdcolor.RGBA {
+	return stdColor(d.connInk(c, theme))
+}
+
+// connInk is a connector's stroke colour as a toolkit RGBA (for the painter-space
+// decorations: arrow heads, label, highlight), defaulting to the theme link
+// colour when unset.
+func (d *IsoDiagram) connInk(c IsoConnector, theme *Theme) RGBA {
+	if c.Color.A == 0 {
+		return theme.OnSurface
+	}
+	return c.Color
+}
+
+// connWidth is a connector's stroke width in device pixels: its own Width (or the
+// default) routed through the toolkit HiDPI/density scale. At the default scale
+// and default width this is 2, matching the legacy literal exactly.
+func (d *IsoDiagram) connWidth(c IsoConnector) float64 {
+	w := c.Width
+	if w <= 0 {
+		w = isoConnectorWidth
+	}
+	return float64(scaled(w))
+}
+
+// faceAnchor returns the world point on node n's ground footprint edge nearest
+// the direction (dx, dy) (the vector from n toward its neighbour, in grid cells):
+// the midpoint of n's +X, -X, +Y or -Y ground edge at z=0. It is the grid-space
+// attachment point a routed connector leaves n from — "the side of the node
+// nearest the neighbour direction".
+func (d *IsoDiagram) faceAnchor(n IsoNode, dx, dy float64) iso.Vec3 {
+	x0, y0 := float64(n.X), float64(n.Y)
+	if math.Abs(dx) >= math.Abs(dy) {
+		if dx >= 0 {
+			return iso.V(x0+1, y0+0.5, 0) // +X edge
+		}
+		return iso.V(x0, y0+0.5, 0) // -X edge
+	}
+	if dy >= 0 {
+		return iso.V(x0+0.5, y0+1, 0) // +Y edge
+	}
+	return iso.V(x0+0.5, y0, 0) // -Y edge
+}
+
+// dedupPath drops consecutive duplicate points so a returned polyline has no
+// zero-length segment (an already-aligned route collapses its elbow).
+func dedupPath(pts []iso.Vec3) []iso.Vec3 {
+	out := make([]iso.Vec3, 0, len(pts))
+	for _, p := range pts {
+		if len(out) == 0 || p != out[len(out)-1] {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// routeTiles computes a routed connector's grid-orthogonal path in world space
+// (z=0): from a's face anchor to b's face anchor with one elbow, each face chosen
+// by the direction to the other node. The connector leaves each ±X face
+// horizontally and each ±Y face vertically, so the elbow lies on the grid axes.
+func (d *IsoDiagram) routeTiles(a, b IsoNode) []iso.Vec3 {
+	acx, acy := float64(a.X)+0.5, float64(a.Y)+0.5
+	bcx, bcy := float64(b.X)+0.5, float64(b.Y)+0.5
+	pa := d.faceAnchor(a, bcx-acx, bcy-acy)
+	pb := d.faceAnchor(b, acx-bcx, acy-bcy)
+	var corner iso.Vec3
+	if pa.X != acx { // a left on a ±X face → move along X first
+		corner = iso.V(pb.X, pa.Y, 0)
+	} else { // a left on a ±Y face → move along Y first
+		corner = iso.V(pa.X, pb.Y, 0)
+	}
+	return dedupPath([]iso.Vec3{pa, corner, pb})
+}
+
+// connectorPath returns the world-space polyline a connector draws along and
+// whether both its endpoints exist. An unrouted connector is the single straight
+// segment between the two node top anchors (the legacy path); a routed one is the
+// grid-orthogonal ground route.
+func (d *IsoDiagram) connectorPath(c IsoConnector) ([]iso.Vec3, bool) {
+	a, ok1 := d.doc.Node(c.From)
+	b, ok2 := d.doc.Node(c.To)
+	if !ok1 || !ok2 {
+		return nil, false
+	}
+	if c.Routed {
+		return d.routeTiles(a, b), true
+	}
+	return []iso.Vec3{d.nodeAnchor(a), d.nodeAnchor(b)}, true
+}
+
+// projPath projects a world polyline to widget-buffer-local screen points.
+func (d *IsoDiagram) projPath(pts []iso.Vec3) []geometry.Point {
+	out := make([]geometry.Point, len(pts))
+	for i, p := range pts {
+		out[i] = d.proj.Project(p)
+	}
+	return out
+}
+
+// lerp3 linearly interpolates between two world points.
+func lerp3(a, b iso.Vec3, t float64) iso.Vec3 {
+	return iso.V(a.X+(b.X-a.X)*t, a.Y+(b.Y-a.Y)*t, a.Z+(b.Z-a.Z)*t)
+}
+
+// dashSpec is the on/off screen-pixel pattern for a stroke style: dash length and
+// gap length, and whether the style is dashed at all. A solid style is never
+// subdivided.
+func dashSpec(style IsoConnectorStyle) (dash, gap float64, dashed bool) {
+	switch style {
+	case IsoDashed:
+		return float64(scaled(9)), float64(scaled(6)), true
+	case IsoDotted:
+		return float64(scaled(2)), float64(scaled(5)), true
+	default:
+		return 0, 0, false
+	}
+}
+
+// addConnectorSegment adds the iso.Line(s) drawing one world segment a->b of a
+// connector in colour col at width w and the given style: a single line for
+// solid, or a run of dash lines spaced along the segment's SCREEN length for
+// dashed/dotted (so the dash cadence is uniform on screen whatever the segment's
+// world direction).
+func (d *IsoDiagram) addConnectorSegment(sc *iso.Scene, a, b iso.Vec3, col stdcolor.RGBA, w float64, style IsoConnectorStyle) {
+	dash, gap, dashed := dashSpec(style)
+	if !dashed {
+		sc.Add(iso.Line{From: a, To: b, Color: col, Width: w})
+		return
+	}
+	pa, pb := d.proj.Project(a), d.proj.Project(b)
+	length := math.Hypot(pb.X-pa.X, pb.Y-pa.Y)
+	if length == 0 {
+		return
+	}
+	period := dash + gap
+	for s := 0.0; s < length; s += period {
+		e := s + dash
+		if e > length {
+			e = length
+		}
+		sc.Add(iso.Line{From: lerp3(a, b, s/length), To: lerp3(a, b, e/length), Color: col, Width: w})
+	}
+}
+
+// distToSegment returns the SQUARED distance from point (px,py) to the segment
+// a-b in screen space, clamping the projection to the segment's ends.
+func distToSegment(px, py float64, a, b geometry.Point) float64 {
+	vx, vy := b.X-a.X, b.Y-a.Y
+	wx, wy := px-a.X, py-a.Y
+	t := 0.0
+	if denom := vx*vx + vy*vy; denom > 0 {
+		t = (wx*vx + wy*vy) / denom
+		if t < 0 {
+			t = 0
+		} else if t > 1 {
+			t = 1
+		}
+	}
+	dx, dy := px-(a.X+t*vx), py-(a.Y+t*vy)
+	return dx*dx + dy*dy
+}
+
+// polylineMidpoint returns the "middle" of a projected path: for an even number
+// of points the midpoint of the two central vertices, for an odd number the
+// central vertex itself (the elbow of an L-route). It is a cheap stand-in for the
+// arc-length centre that lands on or beside the short (2- or 3-point) routes this
+// widget produces.
+func polylineMidpoint(pts []geometry.Point) geometry.Point {
+	m := len(pts) / 2
+	if len(pts)%2 == 1 {
+		return pts[m]
+	}
+	a, b := pts[m-1], pts[m]
+	return geometry.Pt((a.X+b.X)/2, (a.Y+b.Y)/2)
+}
+
+// arrowBarbs returns the two barb endpoints of an arrow head whose tip is at
+// (tx,ty) and whose incoming segment comes from (fx,fy): the barbs splay back
+// from the tip by isoArrowSpread on each side of the segment. A zero-length
+// segment (tip==from) has no direction and returns the tip for both barbs, so the
+// caller draws nothing visible.
+func arrowBarbs(tx, ty, fx, fy int) (lx, ly, rx, ry int) {
+	dx, dy := float64(tx-fx), float64(ty-fy)
+	n := math.Hypot(dx, dy)
+	if n == 0 {
+		return tx, ty, tx, ty
+	}
+	dx, dy = dx/n, dy/n
+	l := float64(scaled(isoArrowLen))
+	cs, sn := math.Cos(isoArrowSpread), math.Sin(isoArrowSpread)
+	// back = (-dx,-dy), rotated +spread (left) and -spread (right).
+	lvx, lvy := -dx*cs+dy*sn, -dx*sn-dy*cs
+	rvx, rvy := -dx*cs-dy*sn, dx*sn-dy*cs
+	return tx + iround(l*lvx), ty + iround(l*lvy), tx + iround(l*rvx), ty + iround(l*rvy)
+}
+
+// isoArrowLen / isoArrowSpread size the arrow heads: barb length in logical
+// pixels and the half-angle each barb opens from the segment.
+const isoArrowLen = 10
+
+var isoArrowSpread = 30.0 * math.Pi / 180
+
 // --- rendering ----------------------------------------------------------
 
 // scene assembles the depth-sorted isometric scene: ground grid first, then a
@@ -359,12 +615,15 @@ func (d *IsoDiagram) scene(theme *Theme) *iso.Scene {
 		icon, _ := d.iconRegistry().Resolve(n.Icon)
 		sc.Add(icon.Render(n.X, n.Y, base).Shapes...)
 	}
-	link := stdColor(theme.OnSurface)
 	for _, c := range d.doc.Connectors() {
-		a, ok1 := d.doc.Node(c.From)
-		b, ok2 := d.doc.Node(c.To)
-		if ok1 && ok2 {
-			sc.Add(iso.Line{From: d.nodeAnchor(a), To: d.nodeAnchor(b), Color: link, Width: 2})
+		pts, ok := d.connectorPath(c)
+		if !ok {
+			continue
+		}
+		col := d.resolveConnColor(c, theme)
+		w := d.connWidth(c)
+		for i := 1; i < len(pts); i++ {
+			d.addConnectorSegment(sc, pts[i-1], pts[i], col, w, c.Style)
 		}
 	}
 	return sc
@@ -436,6 +695,11 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 		d.drawText(p, lx, ly, n.Label, theme.OnSurface)
 	}
 
+	// connector decorations (arrow heads, path-following labels and the
+	// connector-selection highlight) in painter space over the blitted scene —
+	// the same overlay layer node labels and the node outline use.
+	d.drawConnectors(p, b, theme)
+
 	// selection outline (top face of the selected node)
 	if n, ok := d.doc.Node(d.selected); ok {
 		poly := d.topFacePoly(n)
@@ -449,6 +713,64 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 		d.menu.SetBounds(b)
 		d.menu.Draw(p, theme)
 	}
+}
+
+// drawConnectors paints, over the blitted scene, each connector's arrow heads,
+// path-following label and (for the selected connector) its highlight, in
+// painter space. The stroked path itself is part of the depth-sorted scene; only
+// these overlays live here, alongside the node labels and node outline.
+func (d *IsoDiagram) drawConnectors(p painter.Painter, b Rect, theme *Theme) {
+	sel := d.selConn.Get()
+	for _, c := range d.doc.Connectors() {
+		pts, ok := d.connectorPath(c)
+		if !ok {
+			continue
+		}
+		scr := d.projPath(pts)
+		ink := d.connInk(c, theme)
+		if c.ID == sel {
+			d.strokePath(p, b, scr, theme.Accent)
+		}
+		d.drawArrowHeads(p, b, scr, c.Arrow, ink)
+		if c.Label != "" {
+			mid := polylineMidpoint(scr)
+			lx := b.X + iround(mid.X) - d.textWidth(c.Label)/2
+			ly := b.Y + iround(mid.Y) - d.glyphHeight()
+			d.drawText(p, lx, ly, c.Label, ink)
+		}
+	}
+}
+
+// strokePath draws a projected polyline as connected line segments in colour ink
+// (the connector-selection highlight).
+func (d *IsoDiagram) strokePath(p painter.Painter, b Rect, scr []geometry.Point, ink RGBA) {
+	for i := 1; i < len(scr); i++ {
+		drawLine(p, b.X+iround(scr[i-1].X), b.Y+iround(scr[i-1].Y),
+			b.X+iround(scr[i].X), b.Y+iround(scr[i].Y), ink)
+	}
+}
+
+// drawArrowHeads draws the connector's end heads: one at the target (To) end,
+// and — for [IsoArrowDouble] — one at the source (From) end too. A headless
+// connector or a path too short to have a direction draws nothing.
+func (d *IsoDiagram) drawArrowHeads(p painter.Painter, b Rect, scr []geometry.Point, arrow IsoArrow, ink RGBA) {
+	if arrow == IsoArrowNone || len(scr) < 2 {
+		return
+	}
+	d.drawArrowHead(p, b, scr[len(scr)-1], scr[len(scr)-2], ink)
+	if arrow == IsoArrowDouble {
+		d.drawArrowHead(p, b, scr[0], scr[1], ink)
+	}
+}
+
+// drawArrowHead draws a single arrow head with its tip at buffer-local point tip
+// and its incoming segment coming from point from, oriented along that segment.
+func (d *IsoDiagram) drawArrowHead(p painter.Painter, b Rect, tip, from geometry.Point, ink RGBA) {
+	tx, ty := b.X+iround(tip.X), b.Y+iround(tip.Y)
+	fx, fy := b.X+iround(from.X), b.Y+iround(from.Y)
+	lx, ly, rx, ry := arrowBarbs(tx, ty, fx, fy)
+	drawLine(p, tx, ty, lx, ly, ink)
+	drawLine(p, tx, ty, rx, ry, ink)
 }
 
 // iround rounds a float to the nearest int (half away from zero).
@@ -480,6 +802,9 @@ func (d *IsoDiagram) restore(s isoSnapshot) {
 	}
 	if _, ok := d.doc.Node(d.selected); !ok {
 		d.setSelected("")
+	}
+	if _, ok := d.connectorByID(d.selConn.Get()); !ok {
+		d.selConn.Set("")
 	}
 }
 
@@ -522,8 +847,13 @@ func (d *IsoDiagram) Redo() {
 	d.invalidate()
 }
 
-// setSelected updates the selection and fires OnSelect when it changed.
+// setSelected updates the node selection and fires OnSelect when it changed.
+// Selecting a node clears any connector selection so only one of the two is
+// ever highlighted.
 func (d *IsoDiagram) setSelected(id string) {
+	if id != "" {
+		d.selConn.Set("")
+	}
 	if d.selected == id {
 		return
 	}
@@ -582,6 +912,134 @@ func (d *IsoDiagram) commitConnect(from, to string) {
 	d.beginEdit()
 	d.doc.PutConnector(IsoConnector{ID: d.nextID("c"), From: from, To: to})
 	d.invalidate()
+}
+
+// connectorByID returns the connector with the given id and whether it exists.
+// The [IsoDocument] interface exposes connectors only as a snapshot, so this
+// scans it — the connector set a diagram carries is small.
+func (d *IsoDiagram) connectorByID(id string) (IsoConnector, bool) {
+	for _, c := range d.doc.Connectors() {
+		if c.ID == id {
+			return c, true
+		}
+	}
+	return IsoConnector{}, false
+}
+
+// editConnector applies mutate to the connector with id as one undoable edit,
+// unless the connector is missing or mutate reports no change (so a redundant set
+// neither snapshots nor repaints). It returns whether it changed anything.
+func (d *IsoDiagram) editConnector(id string, mutate func(*IsoConnector) bool) bool {
+	c, ok := d.connectorByID(id)
+	if !ok {
+		return false
+	}
+	if !mutate(&c) {
+		return false
+	}
+	d.beginEdit()
+	d.doc.PutConnector(c)
+	d.invalidate()
+	return true
+}
+
+// SetConnectorStyle sets the stroke style of connector id (undoable). It returns
+// false when the connector is absent or already has that style.
+func (d *IsoDiagram) SetConnectorStyle(id string, s IsoConnectorStyle) bool {
+	return d.editConnector(id, func(c *IsoConnector) bool {
+		if c.Style == s {
+			return false
+		}
+		c.Style = s
+		return true
+	})
+}
+
+// SetConnectorArrow sets the end heads of connector id (undoable). It returns
+// false when the connector is absent or already has that arrow.
+func (d *IsoDiagram) SetConnectorArrow(id string, a IsoArrow) bool {
+	return d.editConnector(id, func(c *IsoConnector) bool {
+		if c.Arrow == a {
+			return false
+		}
+		c.Arrow = a
+		return true
+	})
+}
+
+// SetConnectorColor sets the stroke colour of connector id (undoable); pass a
+// zero colour (A==0) to fall back to the theme link colour. It returns false when
+// the connector is absent or already has that colour.
+func (d *IsoDiagram) SetConnectorColor(id string, col RGBA) bool {
+	return d.editConnector(id, func(c *IsoConnector) bool {
+		if c.Color == col {
+			return false
+		}
+		c.Color = col
+		return true
+	})
+}
+
+// SetConnectorRouted toggles grid-aware routing on connector id (undoable). It
+// returns false when the connector is absent or already in that mode.
+func (d *IsoDiagram) SetConnectorRouted(id string, routed bool) bool {
+	return d.editConnector(id, func(c *IsoConnector) bool {
+		if c.Routed == routed {
+			return false
+		}
+		c.Routed = routed
+		return true
+	})
+}
+
+// SetSelectedConnectorStyle applies [IsoDiagram.SetConnectorStyle] to the
+// currently selected connector (a no-op returning false when none is selected).
+func (d *IsoDiagram) SetSelectedConnectorStyle(s IsoConnectorStyle) bool {
+	return d.SetConnectorStyle(d.selConn.Get(), s)
+}
+
+// SetSelectedConnectorArrow applies [IsoDiagram.SetConnectorArrow] to the
+// currently selected connector.
+func (d *IsoDiagram) SetSelectedConnectorArrow(a IsoArrow) bool {
+	return d.SetConnectorArrow(d.selConn.Get(), a)
+}
+
+// SetSelectedConnectorColor applies [IsoDiagram.SetConnectorColor] to the
+// currently selected connector.
+func (d *IsoDiagram) SetSelectedConnectorColor(col RGBA) bool {
+	return d.SetConnectorColor(d.selConn.Get(), col)
+}
+
+// SetSelectedConnectorRouted applies [IsoDiagram.SetConnectorRouted] to the
+// currently selected connector.
+func (d *IsoDiagram) SetSelectedConnectorRouted(routed bool) bool {
+	return d.SetConnectorRouted(d.selConn.Get(), routed)
+}
+
+// connectorAtLocal returns the id of the connector whose projected path passes
+// within isoConnectorHit pixels of widget-local (x, y), nearest first, and
+// whether one was hit. Only drawable connectors (both endpoints present) can be
+// picked.
+func (d *IsoDiagram) connectorAtLocal(x, y int) (string, bool) {
+	px, py := float64(x), float64(y)
+	best, bestID := math.MaxFloat64, ""
+	for _, c := range d.doc.Connectors() {
+		pts, ok := d.connectorPath(c)
+		if !ok {
+			continue
+		}
+		scr := d.projPath(pts)
+		for i := 1; i < len(scr); i++ {
+			if dsq := distToSegment(px, py, scr[i-1], scr[i]); dsq < best {
+				best, bestID = dsq, c.ID
+			}
+		}
+	}
+	thr := float64(scaled(isoConnectorHit))
+	if bestID != "" && best <= thr*thr {
+		return bestID, true
+	}
+	return "", false
 }
 
 // moveDragTo moves the node being dragged to the cell under widget-local
@@ -716,9 +1174,18 @@ func (d *IsoDiagram) onPress(ev Event) {
 		d.invalidate()
 		return
 	}
+	// no node under the pointer: a connector there selects it, without starting a
+	// drag or a pan.
+	if id, ok := d.connectorAtLocal(ev.X, ev.Y); ok {
+		d.gesture = isoGestureNone
+		d.SelectConnector(id)
+		d.invalidate()
+		return
+	}
 	// empty ground: could become a pan (drag) or a place (tap on release)
 	d.gesture = isoGesturePan
 	d.setSelected("")
+	d.selConn.Set("")
 	d.invalidate()
 }
 
