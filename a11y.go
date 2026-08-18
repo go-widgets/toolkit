@@ -149,11 +149,11 @@ func (s *Switch) A11y() A11yInfo {
 func (s *Scale) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleSlider,
-		Value:    strconv.FormatFloat(s.Value, 'g', -1, 64),
+		Value:    strconv.FormatFloat(s.Value().Get(), 'g', -1, 64),
 		HasRange: true,
 		Min:      s.Min,
 		Max:      s.Max,
-		Now:      s.Value,
+		Now:      s.Value().Get(),
 	}
 }
 

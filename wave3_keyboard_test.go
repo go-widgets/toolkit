@@ -248,55 +248,55 @@ func TestCycleButtonKeySteps(t *testing.T) {
 func TestScaleKeyMovesValue(t *testing.T) {
 	var got float64
 	s := NewScale(0, 100, 50)
-	s.OnChange = func(v float64) { got = v }
+	s.Value().Subscribe(func(v float64) { got = v })
 	s.OnEvent(kd("ArrowRight")) // +1% of range = +1
-	if s.Value != 51 || got != 51 {
-		t.Fatalf("ArrowRight: Value=%v cb=%v", s.Value, got)
+	if s.Value().Get() != 51 || got != 51 {
+		t.Fatalf("ArrowRight: Value=%v cb=%v", s.Value().Get(), got)
 	}
 	s.OnEvent(kd("ArrowLeft")) // -1
-	if s.Value != 50 {
-		t.Fatalf("ArrowLeft: Value=%v", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("ArrowLeft: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("PageUp")) // +10% = +10
-	if s.Value != 60 {
-		t.Fatalf("PageUp: Value=%v", s.Value)
+	if s.Value().Get() != 60 {
+		t.Fatalf("PageUp: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("PageDown")) // -10
-	if s.Value != 50 {
-		t.Fatalf("PageDown: Value=%v", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("PageDown: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("End"))
-	if s.Value != 100 {
-		t.Fatalf("End: Value=%v", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("End: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("ArrowRight")) // clamp at Max
-	if s.Value != 100 {
-		t.Fatalf("clamp at Max: Value=%v", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("clamp at Max: Value=%v", s.Value().Get())
 	}
 	s.OnEvent(kd("Home"))
-	if s.Value != 0 {
-		t.Fatalf("Home: Value=%v", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("Home: Value=%v", s.Value().Get())
 	}
 	// Explicit Step overrides the 1% default.
 	st := NewScale(0, 100, 50)
 	st.Step = 5
 	st.OnEvent(kd("ArrowRight"))
-	if st.Value != 55 {
-		t.Fatalf("Step=5 ArrowRight: Value=%v", st.Value)
+	if st.Value().Get() != 55 {
+		t.Fatalf("Step=5 ArrowRight: Value=%v", st.Value().Get())
 	}
 	// Degenerate range: keys are a no-op.
 	deg := NewScale(5, 5, 5)
 	deg.OnEvent(kd("ArrowRight"))
-	if deg.Value != 5 {
-		t.Fatalf("degenerate range moved (Value=%v)", deg.Value)
+	if deg.Value().Get() != 5 {
+		t.Fatalf("degenerate range moved (Value=%v)", deg.Value().Get())
 	}
 	// Disabled ignores keys.
 	s.Disabled = true
 	s.OnEvent(kd("End"))
-	if s.Value != 0 {
-		t.Fatalf("disabled scale moved (Value=%v)", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("disabled scale moved (Value=%v)", s.Value().Get())
 	}
-	// Nil OnChange is safe.
+	// No subscriber is safe.
 	NewScale(0, 10, 5).OnEvent(kd("Home"))
 	// A non-click, non-keydown event is ignored.
 	NewScale(0, 10, 5).OnEvent(Event{Kind: EventChar, Code: "a"})

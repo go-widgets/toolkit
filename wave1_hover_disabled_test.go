@@ -326,8 +326,8 @@ func TestScaleDisabled(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
 	s.Disabled = true
 	s.OnEvent(Event{Kind: EventClick, X: 90, Y: 10})
-	if s.Value != 50 {
-		t.Fatalf("disabled scale moved to %v", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("disabled scale moved to %v", s.Value().Get())
 	}
 	buf := makeSurface(100, 20)
 	s.Draw(newP(buf, 100), th)
