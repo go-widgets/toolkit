@@ -30,16 +30,16 @@ func TestRatingNewKeepsPositiveMax(t *testing.T) {
 // TestRatingNewClampsValueNegative covers value < 0 -> 0.
 func TestRatingNewClampsValueNegative(t *testing.T) {
 	r := NewRating(-4, 5)
-	if r.Value != 0 {
-		t.Fatalf("negative Value clamped to %d, want 0", r.Value)
+	if r.Value().Get() != 0 {
+		t.Fatalf("negative Value clamped to %d, want 0", r.Value().Get())
 	}
 }
 
 // TestRatingNewClampsValueAboveMax covers value > max -> max.
 func TestRatingNewClampsValueAboveMax(t *testing.T) {
 	r := NewRating(99, 5)
-	if r.Value != 5 {
-		t.Fatalf("Value clamped to %d, want 5", r.Value)
+	if r.Value().Get() != 5 {
+		t.Fatalf("Value clamped to %d, want 5", r.Value().Get())
 	}
 }
 
@@ -47,8 +47,8 @@ func TestRatingNewClampsValueAboveMax(t *testing.T) {
 // clamp branches skipped).
 func TestRatingNewKeepsInRangeValue(t *testing.T) {
 	r := NewRating(3, 5)
-	if r.Value != 3 {
-		t.Fatalf("Value = %d, want 3 (unchanged)", r.Value)
+	if r.Value().Get() != 3 {
+		t.Fatalf("Value = %d, want 3 (unchanged)", r.Value().Get())
 	}
 }
 
@@ -152,20 +152,37 @@ func TestRatingDrawValueZero(t *testing.T) {
 	}
 }
 
+// TestRatingValueObservable covers the zero-value lazy-init of the Value
+// accessor and the host binding path: a Rating built as a bare struct (no
+// NewRating) still yields a usable Observable, and Setting it from outside is
+// reflected by the widget (there is no imperative Value field).
+func TestRatingValueObservable(t *testing.T) {
+	r := &Rating{Max: 5} // no NewRating → value Observable is nil until accessed
+	if r.Value().Get() != 0 {
+		t.Fatalf("zero-value Rating Value = %d, want 0", r.Value().Get())
+	}
+	seen := -1
+	r.Value().Subscribe(func(v int) { seen = v })
+	r.Value().Set(4) // a host drives the rating through the Observable
+	if r.Value().Get() != 4 || seen != 4 {
+		t.Fatalf("host Set: value=%d subscriber=%d, want 4/4", r.Value().Get(), seen)
+	}
+}
+
 // TestRatingClickFillsToIndex verifies OnEvent turns a click at cell k
-// into Value = k+1 and fires OnChange.
+// into Value = k+1 and notifies the Value Observable.
 func TestRatingClickFillsToIndex(t *testing.T) {
 	got := -1
 	r := NewRating(0, 5)
-	r.OnChange = func(v int) { got = v }
+	r.Value().Subscribe(func(v int) { got = v })
 	r.SetBounds(Rect{X: 0, Y: 0, W: 5 * (RatingStarW + RatingStarGap), H: RatingStarW})
 	// Click at x = 2*(RatingStarW+RatingStarGap) + 3 -> cell index 2.
 	r.OnEvent(Event{Kind: EventClick, X: 2*(RatingStarW+RatingStarGap) + 3, Y: RatingStarW / 2})
-	if r.Value != 3 {
-		t.Fatalf("after click on cell 2, Value = %d, want 3", r.Value)
+	if r.Value().Get() != 3 {
+		t.Fatalf("after click on cell 2, Value = %d, want 3", r.Value().Get())
 	}
 	if got != 3 {
-		t.Fatalf("OnChange fired with %d, want 3", got)
+		t.Fatalf("Value subscriber got %d, want 3", got)
 	}
 }
 
@@ -173,8 +190,8 @@ func TestRatingClickFillsToIndex(t *testing.T) {
 func TestRatingClickFirstCell(t *testing.T) {
 	r := NewRating(4, 5)
 	r.OnEvent(Event{Kind: EventClick, X: 3, Y: RatingStarW / 2})
-	if r.Value != 1 {
-		t.Fatalf("after click on cell 0, Value = %d, want 1", r.Value)
+	if r.Value().Get() != 1 {
+		t.Fatalf("after click on cell 0, Value = %d, want 1", r.Value().Get())
 	}
 }
 
@@ -182,8 +199,8 @@ func TestRatingClickFirstCell(t *testing.T) {
 func TestRatingClickLastCell(t *testing.T) {
 	r := NewRating(0, 5)
 	r.OnEvent(Event{Kind: EventClick, X: 4*(RatingStarW+RatingStarGap) + 3, Y: RatingStarW / 2})
-	if r.Value != 5 {
-		t.Fatalf("after click on cell 4, Value = %d, want 5", r.Value)
+	if r.Value().Get() != 5 {
+		t.Fatalf("after click on cell 4, Value = %d, want 5", r.Value().Get())
 	}
 }
 
@@ -192,8 +209,8 @@ func TestRatingClickLastCell(t *testing.T) {
 func TestRatingClickOutsideStripIgnored(t *testing.T) {
 	r := NewRating(2, 5)
 	r.OnEvent(Event{Kind: EventClick, X: 6 * (RatingStarW + RatingStarGap), Y: 0})
-	if r.Value != 2 {
-		t.Fatalf("click past strip should be ignored: Value = %d, want 2", r.Value)
+	if r.Value().Get() != 2 {
+		t.Fatalf("click past strip should be ignored: Value = %d, want 2", r.Value().Get())
 	}
 }
 
@@ -207,8 +224,8 @@ func TestRatingClickOutsideStripIgnored(t *testing.T) {
 func TestRatingClickNegativeXIgnored(t *testing.T) {
 	r := NewRating(2, 5)
 	r.OnEvent(Event{Kind: EventClick, X: -(RatingStarW + RatingStarGap + 1), Y: 0})
-	if r.Value != 2 {
-		t.Fatalf("negative-X click should be ignored: Value = %d, want 2", r.Value)
+	if r.Value().Get() != 2 {
+		t.Fatalf("negative-X click should be ignored: Value = %d, want 2", r.Value().Get())
 	}
 }
 
@@ -217,17 +234,17 @@ func TestRatingClickNegativeXIgnored(t *testing.T) {
 func TestRatingIgnoresNonClick(t *testing.T) {
 	r := NewRating(2, 5)
 	r.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if r.Value != 2 {
-		t.Fatalf("KeyDown should not change Value: got %d, want 2", r.Value)
+	if r.Value().Get() != 2 {
+		t.Fatalf("KeyDown should not change Value: got %d, want 2", r.Value().Get())
 	}
 }
 
-// TestRatingNilCallbackNoPanic covers the "OnChange == nil" branch of
-// OnEvent -- the click still updates Value.
-func TestRatingNilCallbackNoPanic(t *testing.T) {
+// TestRatingClickNoSubscriber checks a click still updates Value with no
+// subscriber attached (no panic).
+func TestRatingClickNoSubscriber(t *testing.T) {
 	r := NewRating(0, 5)
 	r.OnEvent(Event{Kind: EventClick, X: 3, Y: 0})
-	if r.Value != 1 {
+	if r.Value().Get() != 1 {
 		t.Fatal("click must update Value even without OnChange callback")
 	}
 }

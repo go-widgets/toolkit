@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Rating is a horizontal star-rating strip: Max square cells drawn
 // left-to-right, each carrying an ASCII asterisk overlay. Cells with
@@ -14,8 +17,8 @@ import "github.com/go-widgets/painter"
 // toolkit's 5x7 bitmap font only covers ASCII — a Unicode "★" would
 // render blank via DrawText's font5x7 lookup fall-through.
 //
-// A click on cell index i sets Value = i+1 (so the leftmost cell
-// yields 1, the rightmost Max) and fires OnChange when non-nil.
+// A click on cell index i sets Value to i+1 (so the leftmost cell
+// yields 1, the rightmost Max), notifying the Value Observable's subscribers.
 // Clicks outside the strip (Y outside the cell row, X to the right of
 // the last cell) are ignored — the parent container already routes only
 // hits inside Bounds() but a stray x >= Max*(RatingStarW+RatingStarGap)
@@ -23,9 +26,21 @@ import "github.com/go-widgets/painter"
 type Rating struct {
 	Base
 	focusState
-	Value    int
-	Max      int
-	OnChange func(v int)
+	// Max is the number of cells (config). The reactive rating is MVVM-only: the
+	// current value lives in an unexported Observable exposed via [Rating.Value].
+	Max int
+
+	value *mvvm.Observable[int]
+}
+
+// Value is the current rating as a shared [mvvm.Observable]: a host binds it
+// (Set / Subscribe / two-way) — there is no settable Value field. A click or a
+// key adjustment Sets it (clamped to [0, Max]); subscribers are notified.
+func (r *Rating) Value() *mvvm.Observable[int] {
+	if r.value == nil {
+		r.value = mvvm.NewObservable(0)
+	}
+	return r.value
 }
 
 // Rating sizing constants. Cells are square so the strip reads as a
@@ -53,7 +68,9 @@ func NewRating(value, max int) *Rating {
 	if value > max {
 		value = max
 	}
-	return &Rating{Value: value, Max: max}
+	r := &Rating{Max: max}
+	r.value = mvvm.NewObservable(value)
+	return r
 }
 
 // Draw paints Max cells left-to-right. Filled cells use Theme.Accent +
@@ -72,7 +89,7 @@ func (r *Rating) Draw(p painter.Painter, theme *Theme) {
 		x := b.X + i*pitch
 		fill := theme.SurfaceAlt
 		glyphInk := theme.OnSurface
-		if i < r.Value {
+		if i < r.Value().Get() {
 			fill = theme.Accent
 			glyphInk = ink
 		}
@@ -96,12 +113,12 @@ func (r *Rating) OnEvent(ev Event) {
 			return
 		}
 		// Left/Right adjust the rating by one star; Home clears it (0), End fills
-		// it (Max). Each reuses the same clamp+OnChange path as a click.
+		// it (Max). Each reuses the same clamp path as a click.
 		switch ev.Code {
 		case "ArrowRight", "ArrowUp":
-			r.setValue(r.Value + 1)
+			r.setValue(r.Value().Get() + 1)
 		case "ArrowLeft", "ArrowDown":
-			r.setValue(r.Value - 1)
+			r.setValue(r.Value().Get() - 1)
 		case "Home":
 			r.setValue(0)
 		case "End":
@@ -132,8 +149,9 @@ func (r *Rating) HitRect() Rect { return touchHitRect(r.Bounds()) }
 // (touch-clamped) hit rect.
 func (r *Rating) HitTest(px, py int) bool { return r.HitRect().Contains(px, py) }
 
-// setValue clamps v to [0, Max], assigns it, and fires OnChange (nil-safe) --
-// the shared mutate+callback path for a click and every key adjustment.
+// setValue clamps v to [0, Max] and Sets the Value Observable — the shared
+// mutate path for a click and every key adjustment. Subscribers are notified on
+// change (an unchanged value is a no-op, per mvvm.Observable).
 func (r *Rating) setValue(v int) {
 	if v < 0 {
 		v = 0
@@ -141,8 +159,5 @@ func (r *Rating) setValue(v int) {
 	if v > r.Max {
 		v = r.Max
 	}
-	r.Value = v
-	if r.OnChange != nil {
-		r.OnChange(r.Value)
-	}
+	r.Value().Set(v)
 }

@@ -403,35 +403,35 @@ func TestSpinButtonKeySteps(t *testing.T) {
 func TestRatingKeyAdjusts(t *testing.T) {
 	var got int
 	r := NewRating(2, 5)
-	r.OnChange = func(v int) { got = v }
+	r.Value().Subscribe(func(v int) { got = v })
 	r.OnEvent(kd("ArrowRight"))
-	if r.Value != 3 || got != 3 {
-		t.Fatalf("ArrowRight: Value=%d cb=%d", r.Value, got)
+	if r.Value().Get() != 3 || got != 3 {
+		t.Fatalf("ArrowRight: Value=%d cb=%d", r.Value().Get(), got)
 	}
 	r.OnEvent(kd("ArrowLeft"))
-	if r.Value != 2 {
-		t.Fatalf("ArrowLeft: Value=%d", r.Value)
+	if r.Value().Get() != 2 {
+		t.Fatalf("ArrowLeft: Value=%d", r.Value().Get())
 	}
 	r.OnEvent(kd("End"))
-	if r.Value != 5 {
-		t.Fatalf("End: Value=%d", r.Value)
+	if r.Value().Get() != 5 {
+		t.Fatalf("End: Value=%d", r.Value().Get())
 	}
 	r.OnEvent(kd("ArrowRight")) // clamp at Max
-	if r.Value != 5 {
-		t.Fatalf("clamp at Max: Value=%d", r.Value)
+	if r.Value().Get() != 5 {
+		t.Fatalf("clamp at Max: Value=%d", r.Value().Get())
 	}
 	r.OnEvent(kd("Home"))
-	if r.Value != 0 {
-		t.Fatalf("Home: Value=%d", r.Value)
+	if r.Value().Get() != 0 {
+		t.Fatalf("Home: Value=%d", r.Value().Get())
 	}
 	r.OnEvent(kd("ArrowLeft")) // clamp at 0
-	if r.Value != 0 {
-		t.Fatalf("clamp at 0: Value=%d", r.Value)
+	if r.Value().Get() != 0 {
+		t.Fatalf("clamp at 0: Value=%d", r.Value().Get())
 	}
 	r.Disabled = true
 	r.OnEvent(kd("End"))
-	if r.Value != 0 {
-		t.Fatalf("disabled rating moved (Value=%d)", r.Value)
+	if r.Value().Get() != 0 {
+		t.Fatalf("disabled rating moved (Value=%d)", r.Value().Get())
 	}
 	NewRating(1, 5).OnEvent(kd("ArrowRight")) // nil OnChange safe
 	// A non-click, non-keydown event is ignored.

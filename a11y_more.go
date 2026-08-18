@@ -124,11 +124,11 @@ func (d *DropDown) A11y() A11yInfo { return A11yInfo{Role: RoleCombobox, Name: d
 func (r *Rating) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleSlider,
-		Value:    strconv.Itoa(r.Value) + "/" + strconv.Itoa(r.Max),
+		Value:    strconv.Itoa(r.Value().Get()) + "/" + strconv.Itoa(r.Max),
 		HasRange: true,
 		Min:      0,
 		Max:      float64(r.Max),
-		Now:      float64(r.Value),
+		Now:      float64(r.Value().Get()),
 	}
 }
 

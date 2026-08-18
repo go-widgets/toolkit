@@ -37,6 +37,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// of its reactive state (URL / Editing / Focused / Bookmarked / Copied) is
 	// unexported behind Observable accessors.
 	"AddressBar": {"Radius": true, "TextPad": true},
+	"Rating":     {"Max": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
