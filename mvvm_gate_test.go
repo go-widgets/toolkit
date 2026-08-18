@@ -70,12 +70,9 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"RadioButton":   {"Label": true},
 	"RadioGroup":    {"Members": true},
 	"ComboBox":      {"Options": true, "Placeholder": true},
-	// ListBox: Selected is migrated (PR #285) but ScrollRow (scroll-position state)
-	// is not yet, so ListBox is intentionally NOT gated yet — a follow-up migrates
-	// ScrollRow, then it joins the map. Same for Table/TreeView (ScrollRow/ScrollX).
-	"Gantt":       {"Tasks": true, "Units": true},
-	"RangeSlider": {"Orientation": true, "Step": true, "Min": true, "Max": true},
-	"Kanban":      {"Columns": true},
+	"Gantt":         {"Tasks": true, "Units": true},
+	"RangeSlider":   {"Orientation": true, "Step": true, "Min": true, "Max": true},
+	"Kanban":        {"Columns": true},
 	// PagedView: all reactive state (mode / current page / zoom) is unexported
 	// behind Observable accessors, the owned sub-widgets + pages are unexported,
 	// so there is no exported state field to allow — the empty set enforces that.
@@ -91,6 +88,18 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Agenda":       {"Events": true, "DayNames": true, "StartHour": true, "EndHour": true, "Calendars": true, "Year": true, "Month": true},
 	"SearchEntry":  {},
 	"Menu":         {"Items": true, "Scale": true},
+	// Batch 6 (data/scroll + display): selection/scroll/sort/visibility/metric
+	// state is unexported behind accessors; the values below are config (data
+	// slices, layout flags, static captions; func hooks auto-allowed). ListBox is
+	// now fully migrated (its ScrollRow joined Selected) so it finally joins here.
+	"Table":     {"Columns": true, "Rows": true, "MultiSelect": true, "FrozenColumns": true, "EditActivation": true, "GroupBy": true, "Reorderable": true, "SelfSort": true, "ShowSummary": true},
+	"TreeView":  {"Root": true, "RowHeight": true, "MultiSelect": true, "HideRoot": true, "HideScrollbar": true},
+	"TreeTable": {"Columns": true, "Root": true},
+	"ListBox":   {"Items": true, "RowHeight": true, "MultiSelect": true, "Reorderable": true},
+	"Toast":     {"Text": true, "Kind": true, "ActionLabel": true, "Lines": true, "Actions": true, "Pixels": true, "IW": true, "IH": true, "Icon": true},
+	"Stat":      {"Title": true},
+	"Sparkline": {"Values": true, "Kind": true, "Fill": true, "ShowLast": true},
+	"Tooltip":   {"Text": true, "Placement": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
