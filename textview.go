@@ -236,8 +236,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, border)
 	lineH := t.glyphHeight() + 4 // 1-pixel-line font + 4 px line spacing
-	gutterW := t.gutterWidth()
-	textX := r.X + 4 + gutterW
+	textX := r.X + t.textLeftInset()
 	gutterInk := t.GutterColor
 	if gutterInk.A == 0 {
 		gutterInk = dimInk(theme)
@@ -272,8 +271,10 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 			}
 			if t.ShowLineNumbers {
 				num := strconv.Itoa(i + 1)
-				// Right-align the number against the text's left margin.
-				nx := textX - 4 - t.textWidth(num)
+				// Right-justify within the numbers column: every number's right
+				// edge lands at gutterPadL + numbersWidth, leaving gutterPadR of
+				// air before the text.
+				nx := r.X + t.gutterPadL() + t.numbersWidth() - t.textWidth(num)
 				t.drawText(p, nx, y, num, gutterInk)
 			}
 			if t.Highlighter == nil {
@@ -608,12 +609,32 @@ func (t *TextView) scrollCaretIntoView() {
 // or 0 when ShowLineNumbers is false. It sizes to the widest number
 // (the last line's) plus 8 px of padding, so the number column never
 // jitters as the cursor moves between rows of different index widths.
+// gutterPadL is the breathing space from the widget's left edge to the line
+// numbers; gutterPadR the space between the numbers and the text. Both are
+// metric-scaled so the gutter stays airy at any resolution.
+func (t *TextView) gutterPadL() int { return scaled(10) }
+func (t *TextView) gutterPadR() int { return scaled(12) }
+
+// numbersWidth is the width of the widest line number (the last line's), which
+// every line number is right-justified within.
+func (t *TextView) numbersWidth() int { return t.textWidth(strconv.Itoa(len(t.Lines))) }
+
 func (t *TextView) gutterWidth() int {
 	if !t.ShowLineNumbers {
 		return 0
 	}
-	widest := strconv.Itoa(len(t.Lines))
-	return t.textWidth(widest) + 8
+	return t.gutterPadL() + t.numbersWidth() + t.gutterPadR()
+}
+
+// textLeftInset is where the text (and caret) begins, from the widget's left
+// edge: right after the gutter when line numbers show (the gutter already
+// carries its right padding), else a small base inset so text isn't flush to
+// the border. Draw and caretAt share this so click-to-caret cannot drift.
+func (t *TextView) textLeftInset() int {
+	if t.ShowLineNumbers {
+		return t.gutterWidth()
+	}
+	return scaled(4)
 }
 
 // drawSpans paints line at (x, y) as coloured runs: every rune starts
@@ -673,7 +694,7 @@ func (t *TextView) caretAt(x, y int) (line, col int) {
 		line = len(t.Lines) - 1
 	}
 	adv := t.glyphAdvance() // > 0 for every real font (Draw assumes the same)
-	col = (x - 4 - t.gutterWidth() + adv/2) / adv
+	col = (x - t.textLeftInset() + adv/2) / adv
 	if col < 0 {
 		col = 0
 	}

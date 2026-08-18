@@ -252,8 +252,7 @@ func TestCodeEditorSyntaxPaintsSpanColor(t *testing.T) {
 	}
 	lineH := c.glyphHeight() + 4
 	adv := c.glyphAdvance()
-	gutterW := c.textWidth("2") + 8 // two-line buffer -> widest number "2"
-	textX := 4 + gutterW
+	textX := c.textLeftInset() // text origin, past the padded line-number gutter
 	// Vertical bound: the coloured glyphs sit on row 0 only — every kw pixel
 	// is above where row 1 begins (r.Y + 4 + lineH).
 	if minY < 4 || maxY >= 4+lineH {
