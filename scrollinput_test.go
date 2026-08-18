@@ -172,6 +172,49 @@ func newScrollView() *ScrollView {
 	return sv
 }
 
+// A horizontal two-finger swipe (EventScroll with DeltaX, from the browser
+// wheel's deltaX) moves the ScrollView's OffsetX — i.e. drives the horizontal
+// scrollbar — instead of being dropped; a pure vertical notch leaves OffsetX
+// untouched, and a diagonal swipe moves both axes at once. Each axis clamps
+// independently.
+func TestScrollViewHorizontalWheel(t *testing.T) {
+	child := NewLabel("x")
+	child.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
+	sv := NewScrollView(child)
+	sv.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 60})
+	sv.SetContentSize(400, 400) // overflows both axes
+	line := GlyphHeight()
+
+	// Horizontal swipe moves OffsetX and leaves OffsetY alone.
+	sv.OnEvent(Event{Kind: EventScroll, DeltaX: 2})
+	if sv.OffsetX != 2*line {
+		t.Fatalf("swipe right 2: OffsetX=%d, want %d", sv.OffsetX, 2*line)
+	}
+	if sv.OffsetY != 0 {
+		t.Fatalf("horizontal swipe moved OffsetY=%d, want 0", sv.OffsetY)
+	}
+	// Clamp at the right edge.
+	sv.OnEvent(Event{Kind: EventScroll, DeltaX: 1000})
+	if sv.OffsetX == 0 || sv.OffsetX != sv.maxOffsetX() {
+		t.Fatalf("swipe to right edge: OffsetX=%d, want %d", sv.OffsetX, sv.maxOffsetX())
+	}
+	// Clamp at the left edge.
+	sv.OnEvent(Event{Kind: EventScroll, DeltaX: -1000})
+	if sv.OffsetX != 0 {
+		t.Fatalf("swipe to left edge: OffsetX=%d, want 0", sv.OffsetX)
+	}
+	// A pure vertical notch does not move OffsetX.
+	sv.OnEvent(Event{Kind: EventScroll, Delta: 1})
+	if sv.OffsetX != 0 {
+		t.Fatalf("vertical notch moved OffsetX=%d, want 0", sv.OffsetX)
+	}
+	// A diagonal swipe moves both axes together.
+	sv.OnEvent(Event{Kind: EventScroll, DeltaX: 1, Delta: 1})
+	if sv.OffsetX != line || sv.OffsetY != 2*line {
+		t.Fatalf("diagonal: OffsetX=%d OffsetY=%d, want %d,%d", sv.OffsetX, sv.OffsetY, line, 2*line)
+	}
+}
+
 func TestScrollViewWheelAndKeyScroll(t *testing.T) {
 	sv := newScrollView()
 	line := GlyphHeight()

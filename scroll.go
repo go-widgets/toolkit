@@ -235,7 +235,11 @@ func (s *ScrollView) OnEvent(ev Event) {
 	line := s.glyphHeight()
 	switch ev.Kind {
 	case EventScroll:
-		s.Scroll(0, ev.Delta*line)
+		// Both axes: a vertical notch moves OffsetY, a horizontal swipe
+		// (ev.DeltaX, from the browser wheel's deltaX) moves OffsetX, so a
+		// left/right two-finger swipe drives the horizontal scrollbar instead
+		// of being dropped. Scroll clamps each axis independently.
+		s.Scroll(ev.DeltaX*line, ev.Delta*line)
 	case EventClick:
 		// A press on either scrollbar grabs its thumb, or pages the track
 		// toward the click; the content area stays passive for clicks.
