@@ -106,21 +106,21 @@ func TestTreeTableWheelAndKeyScroll(t *testing.T) {
 	}
 
 	tt.OnEvent(Event{Kind: EventScroll, Delta: 2})
-	if tt.ScrollRow != 2 {
-		t.Fatalf("wheel: %d, want 2", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 2 {
+		t.Fatalf("wheel: %d, want 2", tt.ScrollRow().Get())
 	}
 	tt.OnEvent(Event{Kind: EventScroll, Delta: 1000})
-	if tt.ScrollRow != max {
-		t.Fatalf("wheel clamp bottom: %d, want %d", tt.ScrollRow, max)
+	if tt.ScrollRow().Get() != max {
+		t.Fatalf("wheel clamp bottom: %d, want %d", tt.ScrollRow().Get(), max)
 	}
 	tt.OnEvent(Event{Kind: EventScroll, Delta: -1000})
-	if tt.ScrollRow != 0 {
-		t.Fatalf("wheel clamp top: %d, want 0", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 0 {
+		t.Fatalf("wheel clamp top: %d, want 0", tt.ScrollRow().Get())
 	}
 	// A non-handled event kind is a no-op (covers the switch default branch).
 	tt.OnEvent(Event{Kind: EventMouseUp})
-	if tt.ScrollRow != 0 {
-		t.Fatalf("ignored event changed ScrollRow: %d, want 0", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 0 {
+		t.Fatalf("ignored event changed ScrollRow: %d, want 0", tt.ScrollRow().Get())
 	}
 }
 
@@ -291,8 +291,8 @@ func TestVBoxForwardsScrollToChildUnderPointer(t *testing.T) {
 
 	// Point in the lower half hits the TreeTable, not the ListBox.
 	v.OnEvent(Event{Kind: EventScroll, X: 20, Y: 170, Delta: 2})
-	if bottom.ScrollRow != 2 {
-		t.Fatalf("VBox forwarded to wrong child: TreeTable ScrollRow=%d, want 2", bottom.ScrollRow)
+	if bottom.ScrollRow().Get() != 2 {
+		t.Fatalf("VBox forwarded to wrong child: TreeTable ScrollRow=%d, want 2", bottom.ScrollRow().Get())
 	}
 	if top.ScrollRow != 0 {
 		t.Fatalf("ListBox should not have scrolled: %d", top.ScrollRow)
