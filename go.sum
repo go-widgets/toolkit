@@ -1,5 +1,5 @@
-github.com/go-gfx/gfx v0.1.0 h1:tBwT4YYnsdZlESY5MRp8aptg30iZxIH0G/8pZ/Ve3ZY=
-github.com/go-gfx/gfx v0.1.0/go.mod h1:bFt/MWyYWRU3Ic9IaB8XOC9KLMMHRRmahMk4FaIGK7g=
+github.com/go-gfx/gfx v0.6.0 h1:sQkGEmB9YLouHxrscwvS4OW6oELsTtrKtQqsNdJ8L8Q=
+github.com/go-gfx/gfx v0.6.0/go.mod h1:bFt/MWyYWRU3Ic9IaB8XOC9KLMMHRRmahMk4FaIGK7g=
 github.com/go-images/images v0.0.0-20260811115337-bc5d586f8e38 h1:p+DjIujiwUvBiyD0oS9SUatf3pMKo0GpcA4p/Kyv7d8=
 github.com/go-images/images v0.0.0-20260811115337-bc5d586f8e38/go.mod h1:nWwQCf77xG1GhaSD3rvlp7FNjjDhz47vrztyeBvIerk=
 github.com/go-opentype/bidi v0.2.1 h1:7xCGqywPYxmwSfPBgP1Ewrp2Iwg2S03NeKxGWTz2guo=
