@@ -7,6 +7,7 @@ package toolkit
 import (
 	"math"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -65,7 +66,6 @@ func (it *MenuItem) isCheckish() bool { return it.Checkable || it.RadioGroup != 
 type Menu struct {
 	Base
 	Items   []MenuItem
-	Hover   int // index of hovered row, -1 if none
 	OnClose func()
 
 	// Scale multiplies every fixed metric — row height, insets, gutters, the
@@ -90,6 +90,11 @@ type Menu struct {
 	// it) opens its child Menu beside the row; ArrowLeft/Escape closes it.
 	// While open, pointer + key events that fall on the child route into it.
 	openSub int
+
+	// hover is the reactive index of the hovered row (-1 when none). It is
+	// MVVM-only: mutated via [Menu.Hover]().Set and read via [Menu.Hover]().Get,
+	// so there is no settable Hover field a host could poke imperatively.
+	hover *mvvm.Observable[int]
 
 	// scroll is the pixel offset the menu body is shifted up by when its rows
 	// are taller than its Bounds().H (a menu the host clamped to the surface).
@@ -117,7 +122,23 @@ const MenuSeparatorH = 6
 const MenuCheckGutterW = 14
 
 // NewMenu builds a Menu with the given items + Hover and openSub at -1.
-func NewMenu(items []MenuItem) *Menu { return &Menu{Items: items, Hover: -1, openSub: -1} }
+func NewMenu(items []MenuItem) *Menu {
+	m := &Menu{Items: items, openSub: -1}
+	m.hover = mvvm.NewObservable(-1)
+	return m
+}
+
+// Hover is the reactive index of the hovered row as a shared [mvvm.Observable]:
+// -1 when no row is hovered, otherwise the row index. A host binds it (Get /
+// Set / Subscribe); pointer moves and keyboard navigation Set it, and Draw reads
+// it to highlight the row. There is no settable Hover field — the state is
+// MVVM-only. Lazy-initialised to -1 (no hover), the constructor's default.
+func (m *Menu) Hover() *mvvm.Observable[int] {
+	if m.hover == nil {
+		m.hover = mvvm.NewObservable(-1)
+	}
+	return m.hover
+}
 
 // scale is the effective scale factor: Scale when positive, else the toolkit's
 // own [MetricScale].
@@ -222,10 +243,11 @@ func (m *Menu) scrollBy(delta int) {
 // below if it sits past the bottom. Keeps keyboard hover-navigation visible past
 // the fold. A no-op when nothing is hovered.
 func (m *Menu) scrollHoverIntoView() {
-	if m.Hover < 0 {
+	hv := m.Hover().Get()
+	if hv < 0 {
 		return
 	}
-	top := m.rowTop(m.Hover) // content-space top (>= sc(2))
+	top := m.rowTop(hv) // content-space top (>= sc(2))
 	if m.scroll > top {
 		m.scroll = top
 	} else if bot := top + m.rowH(); m.scroll < bot-m.Bounds().H {
@@ -256,6 +278,7 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 		gutter = m.sc(MenuCheckGutterW)
 	}
 	iconGutter := m.iconGutterW()
+	hover := m.Hover().Get()
 	rowH, sepH, inset := m.rowH(), m.sc(MenuSeparatorH), m.sc(8)
 	// Clip the rows to the bounds and paint from -scroll, so a menu whose rows
 	// overflow its (host-clamped) height scrolls instead of spilling past the
@@ -270,14 +293,14 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 				y += sepH
 				continue
 			}
-			if i == m.Hover && (it.Action != nil || it.Submenu != nil) {
+			if i == hover && (it.Action != nil || it.Submenu != nil) {
 				fillRect(p, r.X+m.sc(1), y, r.W-m.sc(2), rowH, theme.Accent)
 			}
 			ink := theme.OnSurface
 			switch {
 			case it.Action == nil && it.Submenu == nil:
 				ink = theme.SurfaceAlt // disabled = greyed out (no action, no submenu)
-			case i == m.Hover:
+			case i == hover:
 				ink = accentInk(theme) // hovered row: invert ink over the Accent fill
 			}
 			if it.Icon != nil {
@@ -305,7 +328,7 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 				sw := m.textWidth(it.Shortcut)
 				sx := r.X + r.W - inset - sw
 				shortcutInk := theme.SurfaceAlt
-				if i == m.Hover && it.Action != nil {
+				if i == hover && it.Action != nil {
 					shortcutInk = accentInk(theme)
 				}
 				m.drawText(p, sx, textY, it.Shortcut, shortcutInk)
@@ -390,14 +413,14 @@ func (m *Menu) OnEvent(ev Event) {
 		// highlight when the pointer has moved off the menu body.
 		if m.localInBounds(ev.X, ev.Y) {
 			idx := m.rowAt(ev.Y)
-			m.Hover = idx
+			m.Hover().Set(idx)
 			if m.isSubmenuParent(idx) {
 				m.openSubAt(idx)
 			} else {
 				m.openSub = -1
 			}
 		} else {
-			m.Hover = -1
+			m.Hover().Set(-1)
 		}
 		return
 	case EventKeyDown:
@@ -414,12 +437,12 @@ func (m *Menu) OnEvent(ev Event) {
 		case "ArrowRight":
 			// Open the hovered row's submenu (if any) and seed its first item so
 			// the very next arrow moves within the child.
-			if m.isSubmenuParent(m.Hover) {
-				m.openSubAt(m.Hover)
-				m.Items[m.Hover].Submenu.moveHover(1)
+			if hv := m.Hover().Get(); m.isSubmenuParent(hv) {
+				m.openSubAt(hv)
+				m.Items[hv].Submenu.moveHover(1)
 			}
 		case "Enter", " ", "Space":
-			m.activate(m.Hover)
+			m.activate(m.Hover().Get())
 		case "Escape":
 			if m.OnClose != nil {
 				m.OnClose()
@@ -638,7 +661,7 @@ func (m *Menu) moveHover(dir int) {
 	if n == 0 {
 		return
 	}
-	cur := m.Hover
+	cur := m.Hover().Get()
 	if cur < 0 {
 		// Seed so the first step lands on the first (down) or last (up) row.
 		if dir < 0 {
@@ -650,7 +673,7 @@ func (m *Menu) moveHover(dir int) {
 	for k := 0; k < n; k++ {
 		cur = (cur + dir + n) % n
 		if m.enabledItem(cur) {
-			m.Hover = cur
+			m.Hover().Set(cur)
 			return
 		}
 	}
@@ -673,7 +696,7 @@ func (m *Menu) selectRadio(idx int) {
 // SetHover updates Hover based on a mouse-Y coordinate (widget-local).
 // Useful for keyboard / mouse-move handlers that want to highlight
 // the row the user is pointing at.
-func (m *Menu) SetHover(y int) { m.Hover = m.rowAt(y) }
+func (m *Menu) SetHover(y int) { m.Hover().Set(m.rowAt(y)) }
 
 // rowAt returns the item index at widget-local y, or -1 if none.
 func (m *Menu) rowAt(y int) int {

@@ -698,22 +698,22 @@ func TestMenuKeyboardNavigation(t *testing.T) {
 
 	// ArrowDown from no hover -> first enabled (0); again skips sep+disabled -> 3.
 	m.OnEvent(kd3b("ArrowDown"))
-	if m.Hover != 0 {
-		t.Fatalf("ArrowDown: Hover=%d, want 0", m.Hover)
+	if m.Hover().Get() != 0 {
+		t.Fatalf("ArrowDown: Hover=%d, want 0", m.Hover().Get())
 	}
 	m.OnEvent(kd3b("ArrowDown"))
-	if m.Hover != 3 {
-		t.Fatalf("ArrowDown skip: Hover=%d, want 3", m.Hover)
+	if m.Hover().Get() != 3 {
+		t.Fatalf("ArrowDown skip: Hover=%d, want 3", m.Hover().Get())
 	}
 	// ArrowDown wraps back to 0.
 	m.OnEvent(kd3b("ArrowDown"))
-	if m.Hover != 0 {
-		t.Fatalf("ArrowDown wrap: Hover=%d, want 0", m.Hover)
+	if m.Hover().Get() != 0 {
+		t.Fatalf("ArrowDown wrap: Hover=%d, want 0", m.Hover().Get())
 	}
 	// ArrowUp wraps to the last enabled (3).
 	m.OnEvent(kd3b("ArrowUp"))
-	if m.Hover != 3 {
-		t.Fatalf("ArrowUp wrap: Hover=%d, want 3", m.Hover)
+	if m.Hover().Get() != 3 {
+		t.Fatalf("ArrowUp wrap: Hover=%d, want 3", m.Hover().Get())
 	}
 	// Enter fires the hovered Action and closes.
 	m.OnEvent(kd3b("Enter"))
@@ -721,7 +721,7 @@ func TestMenuKeyboardNavigation(t *testing.T) {
 		t.Fatalf("Enter: fired[2]=%d closes=%d", fired[2], *closes)
 	}
 	// Space fires too.
-	m.Hover = 0
+	m.Hover().Set(0)
 	m.OnEvent(kd3b(" "))
 	if fired[0] != 1 {
 		t.Fatalf("Space: fired[0]=%d", fired[0])
@@ -738,19 +738,19 @@ func TestMenuKeyboardArrowUpFromNoHover(t *testing.T) {
 	m, _, _ := menuFixture()
 	// First key ArrowUp with Hover == -1 lands on the last enabled row.
 	m.OnEvent(kd3b("ArrowUp"))
-	if m.Hover != 3 {
-		t.Fatalf("ArrowUp from none: Hover=%d, want 3", m.Hover)
+	if m.Hover().Get() != 3 {
+		t.Fatalf("ArrowUp from none: Hover=%d, want 3", m.Hover().Get())
 	}
 }
 
 func TestMenuKeyboardEnterOnNonEnabledIsNoop(t *testing.T) {
 	m, fired, closes := menuFixture()
 	// Hover on a separator/disabled row: Enter does nothing.
-	m.Hover = 1 // separator
+	m.Hover().Set(1) // separator
 	m.OnEvent(kd3b("Enter"))
-	m.Hover = 2 // disabled (nil Action)
+	m.Hover().Set(2) // disabled (nil Action)
 	m.OnEvent(kd3b("Enter"))
-	m.Hover = -1 // no hover
+	m.Hover().Set(-1) // no hover
 	m.OnEvent(kd3b("Enter"))
 	if fired[0]+fired[2] != 0 || *closes != 0 {
 		t.Fatalf("Enter on non-enabled fired something: fired=%v closes=%d", *fired, *closes)
@@ -761,14 +761,14 @@ func TestMenuKeyboardNoEnabledAndEmptyAndDisabled(t *testing.T) {
 	// A menu with no enabled row: moveHover leaves Hover untouched.
 	m := NewMenu([]MenuItem{{Separator: true}, {Label: "x"}}) // no Action anywhere
 	m.OnEvent(kd3b("ArrowDown"))
-	if m.Hover != -1 {
-		t.Fatalf("no-enabled ArrowDown moved Hover=%d", m.Hover)
+	if m.Hover().Get() != -1 {
+		t.Fatalf("no-enabled ArrowDown moved Hover=%d", m.Hover().Get())
 	}
 	// Empty menu: moveHover n==0 guard.
 	e := NewMenu(nil)
 	e.OnEvent(kd3b("ArrowDown"))
-	if e.Hover != -1 {
-		t.Fatalf("empty menu moved Hover=%d", e.Hover)
+	if e.Hover().Get() != -1 {
+		t.Fatalf("empty menu moved Hover=%d", e.Hover().Get())
 	}
 	// A nil OnClose Escape is safe.
 	nc := NewMenu([]MenuItem{{Label: "A", Action: func() {}}})
@@ -778,14 +778,14 @@ func TestMenuKeyboardNoEnabledAndEmptyAndDisabled(t *testing.T) {
 	d.Disabled = true
 	d.OnEvent(kd3b("ArrowDown"))
 	d.OnEvent(kd3b("Enter"))
-	if d.Hover != -1 || fired[0]+fired[2] != 0 {
-		t.Fatalf("disabled menu responded: Hover=%d fired=%v", d.Hover, *fired)
+	if d.Hover().Get() != -1 || fired[0]+fired[2] != 0 {
+		t.Fatalf("disabled menu responded: Hover=%d fired=%v", d.Hover().Get(), *fired)
 	}
 	// An unhandled key (some letter) is ignored.
 	u, _, _ := menuFixture()
 	u.OnEvent(kd3b("x"))
-	if u.Hover != -1 {
-		t.Fatalf("unhandled key moved Hover=%d", u.Hover)
+	if u.Hover().Get() != -1 {
+		t.Fatalf("unhandled key moved Hover=%d", u.Hover().Get())
 	}
 }
 
@@ -799,8 +799,8 @@ func TestContextMenuKeyboard(t *testing.T) {
 	cm.Popup(20, 20)
 	// ArrowDown highlights the first item; Enter fires it and closes the overlay.
 	cm.OnEvent(kd3b("ArrowDown"))
-	if menu.Hover != 0 {
-		t.Fatalf("context ArrowDown: Hover=%d", menu.Hover)
+	if menu.Hover().Get() != 0 {
+		t.Fatalf("context ArrowDown: Hover=%d", menu.Hover().Get())
 	}
 	cm.OnEvent(kd3b("Enter"))
 	if fired != 1 || cm.Open {
@@ -858,8 +858,8 @@ func TestMenuBarKeyboardArrows(t *testing.T) {
 	}
 	// ArrowDown enters the open menu: its first item is highlighted.
 	b.OnEvent(kd3b("ArrowDown"))
-	if b.Menus[2].Hover != 0 {
-		t.Fatalf("ArrowDown into menu: Hover=%d", b.Menus[2].Hover)
+	if b.Menus[2].Hover().Get() != 0 {
+		t.Fatalf("ArrowDown into menu: Hover=%d", b.Menus[2].Hover().Get())
 	}
 	// Escape still closes.
 	b.OnEvent(kd3b("Escape"))

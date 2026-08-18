@@ -520,8 +520,8 @@ func TestMenuSubmenuHoverOpensAndCloses(t *testing.T) {
 	// A move over the open child routes in (the child highlights its row).
 	_, cb, _ := p.openSubmenu()
 	p.OnEvent(Event{Kind: EventMouseMove, X: cb.X + 10, Y: cb.Y + 4})
-	if child.Hover != 0 {
-		t.Fatalf("move into child: child.Hover=%d, want 0", child.Hover)
+	if child.Hover().Get() != 0 {
+		t.Fatalf("move into child: child.Hover=%d, want 0", child.Hover().Get())
 	}
 	// Hovering a non-submenu row closes the child.
 	p.OnEvent(Event{Kind: EventMouseMove, X: 10, Y: p.rowTop(0) + 2})
@@ -531,8 +531,8 @@ func TestMenuSubmenuHoverOpensAndCloses(t *testing.T) {
 	// Re-open, then a move off the body clears Hover (child stays as-is).
 	p.OnEvent(Event{Kind: EventMouseMove, X: 10, Y: p.rowTop(2) + 2})
 	p.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5})
-	if p.Hover != -1 {
-		t.Fatalf("move off body: Hover=%d, want -1", p.Hover)
+	if p.Hover().Get() != -1 {
+		t.Fatalf("move off body: Hover=%d, want -1", p.Hover().Get())
 	}
 }
 
@@ -542,15 +542,15 @@ func TestMenuSubmenuKeyboard(t *testing.T) {
 	p.OnClose = func() { closed++ }
 
 	// ArrowRight on the hovered submenu parent opens it + seeds the child's first row.
-	p.Hover = 2
+	p.Hover().Set(2)
 	p.OnEvent(kd3b("ArrowRight"))
-	if p.openSub != 2 || child.Hover != 0 {
-		t.Fatalf("ArrowRight: openSub=%d childHover=%d, want 2/0", p.openSub, child.Hover)
+	if p.openSub != 2 || child.Hover().Get() != 0 {
+		t.Fatalf("ArrowRight: openSub=%d childHover=%d, want 2/0", p.openSub, child.Hover().Get())
 	}
 	// A non-Left/Escape key routes into the child (ArrowDown keeps Hover on 0).
 	p.OnEvent(kd3b("ArrowDown"))
-	if child.Hover != 0 {
-		t.Fatalf("routed ArrowDown moved child.Hover to %d", child.Hover)
+	if child.Hover().Get() != 0 {
+		t.Fatalf("routed ArrowDown moved child.Hover to %d", child.Hover().Get())
 	}
 	// Enter inside the open child fires the item + closes the chain.
 	p.OnEvent(kd3b("Enter"))
@@ -560,7 +560,7 @@ func TestMenuSubmenuKeyboard(t *testing.T) {
 
 	// ArrowLeft closes the submenu; Escape also closes it.
 	p2, _, _ := submenuFixture()
-	p2.Hover = 2
+	p2.Hover().Set(2)
 	p2.OnEvent(kd3b("ArrowRight"))
 	p2.OnEvent(kd3b("ArrowLeft"))
 	if p2.openSub != -1 {
@@ -583,14 +583,14 @@ func TestMenuSubmenuKeyboard(t *testing.T) {
 func TestMenuEnterAndArrowRightEdgeCases(t *testing.T) {
 	// Enter on a hovered submenu parent (no submenu open yet) opens it.
 	p, _, _ := submenuFixture()
-	p.Hover = 2
+	p.Hover().Set(2)
 	p.OnEvent(kd3b("Enter"))
 	if p.openSub != 2 {
 		t.Fatalf("Enter on submenu parent: openSub=%d, want 2", p.openSub)
 	}
 	// ArrowRight on a NON-submenu hovered row opens nothing.
 	p2, _, _ := submenuFixture()
-	p2.Hover = 0
+	p2.Hover().Set(0)
 	p2.OnEvent(kd3b("ArrowRight"))
 	if p2.openSub != -1 {
 		t.Fatalf("ArrowRight on non-parent opened: openSub=%d", p2.openSub)
@@ -618,8 +618,8 @@ func TestMenuOpenSubmenuGuardsAndNilOnClose(t *testing.T) {
 
 func TestMenuDrawsOpenSubmenuAndHoveredParent(t *testing.T) {
 	p, _, _ := submenuFixture()
-	p.Hover = 2    // submenu parent highlighted (Accent fill + inverted ink)
-	p.openSubAt(2) // child painted beside the row
+	p.Hover().Set(2) // submenu parent highlighted (Accent fill + inverted ink)
+	p.openSubAt(2)   // child painted beside the row
 	surf := makeSurface(320, 120)
 	p.Draw(newP(surf, 320), DefaultLight())
 	// The child paints its Border frame somewhere to the right of the parent.

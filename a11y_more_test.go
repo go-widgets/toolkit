@@ -186,11 +186,11 @@ func TestA11ySteps(t *testing.T) {
 
 func TestA11yMenu(t *testing.T) {
 	m := NewMenu([]MenuItem{{Label: "Cut"}, {Label: "Copy"}})
-	m.Hover = 1
+	m.Hover().Set(1)
 	if got := m.A11y(); got != (A11yInfo{Role: RoleMenu, Value: "Copy"}) {
 		t.Errorf("Menu hover A11y() = %+v", got)
 	}
-	m.Hover = -1
+	m.Hover().Set(-1)
 	if got := m.A11y(); got != (A11yInfo{Role: RoleMenu, Value: ""}) {
 		t.Errorf("Menu no-hover A11y() = %+v", got)
 	}
