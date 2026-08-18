@@ -31,8 +31,15 @@ type IsoNode struct {
 	// X, Y is the node's grid cell (integer world coordinates); the node's
 	// footprint is the unit square [X,X+1] x [Y,Y+1].
 	X, Y int
-	// Shape selects the rendered solid (cube / box / pyramid).
+	// Shape selects the rendered solid (cube / box / pyramid). It is the fallback
+	// geometry: it draws only when Icon is empty.
 	Shape IsoShape
+	// Icon, when non-empty, names an [IsoIcon] in the diagram's registry
+	// ([IsoDiagram.Icons], else [IsoDefaultIcons]) that renders this node instead
+	// of the bare Shape. An unknown id falls back to a plain cube. The field is a
+	// plain string on the value node, so it snapshots for undo and flows through
+	// the observable document like every other field — no per-frame copy.
+	Icon string
 	// Label is the caption drawn above the node and announced to a screen
 	// reader.
 	Label string
@@ -41,16 +48,68 @@ type IsoNode struct {
 	Color RGBA
 }
 
-// IsoConnector is a directed link between two [IsoNode]s, drawn as an isometric
-// line between their top anchors. From and To are node IDs; a connector whose
-// endpoints are not both present in the document is skipped when drawing.
+// IsoConnectorStyle selects the stroke pattern of an [IsoConnector].
+type IsoConnectorStyle int
+
+const (
+	// IsoSolid is a continuous line — the zero value and the legacy default, so a
+	// connector that never sets a style draws exactly as it did before styles
+	// existed.
+	IsoSolid IsoConnectorStyle = iota
+	// IsoDashed is a line of evenly spaced dashes.
+	IsoDashed
+	// IsoDotted is a line of short round dots.
+	IsoDotted
+)
+
+// IsoArrow selects the end decorations of an [IsoConnector].
+type IsoArrow int
+
+const (
+	// IsoArrowNone draws no head — the zero value and the legacy default, so a
+	// connector that never sets an arrow renders as the bare line it always was.
+	IsoArrowNone IsoArrow = iota
+	// IsoArrowSingle draws a filled head at the target (To) end.
+	IsoArrowSingle
+	// IsoArrowDouble draws a head at both the source (From) and target (To) ends.
+	IsoArrowDouble
+)
+
+// IsoConnector is a directed link between two [IsoNode]s. From and To are node
+// IDs; a connector whose endpoints are not both present in the document is
+// skipped when drawing.
+//
+// Every field beyond ID/From/To is an enrichment whose zero value reproduces the
+// original bare connector: an unset connector routes as a single straight
+// segment between the two node top anchors, solid, headless, in the theme's link
+// colour, at the default width — byte-for-byte the pre-enrichment rendering.
 type IsoConnector struct {
 	// ID is the connector's stable identity (the OR-map key).
 	ID string
 	// From and To are the IDs of the source and destination nodes.
 	From, To string
-	// Label is an optional caption (drawn at the segment midpoint).
+	// Label is an optional caption drawn along the routed path (at its midpoint,
+	// offset off the line so it does not sit on the stroke).
 	Label string
+	// Style selects the stroke pattern. The zero value [IsoSolid] is the legacy
+	// continuous line.
+	Style IsoConnectorStyle
+	// Arrow selects the end heads. The zero value [IsoArrowNone] draws none.
+	Arrow IsoArrow
+	// Color is the stroke colour; a zero value (A==0) inherits the theme's link
+	// colour (OnSurface) at draw time, so a connector left uncoloured is still
+	// visible and follows the light/dark theme like the rest of the widget.
+	Color RGBA
+	// Width is the stroke thickness in logical pixels; zero uses the default and
+	// any positive value is routed through the toolkit's HiDPI/density scale, so
+	// connectors thicken in lockstep with the rest of the chrome.
+	Width int
+	// Routed, when true, routes the connector along the isometric grid — a chain
+	// of grid-orthogonal segments anchored on the source and target node faces
+	// (the face nearest the neighbour) — instead of the single straight
+	// anchor-to-anchor segment. The zero value (false) is the legacy straight
+	// line. The route is COMPUTED from the endpoints at draw time, never stored.
+	Routed bool
 }
 
 // IsoDocument is the backing store an [IsoDiagram] edits. It is deliberately a
