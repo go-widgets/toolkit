@@ -64,6 +64,52 @@ func TestBackdropDrawFillAndGrid(t *testing.T) {
 	}
 }
 
+func TestBackdropGradient(t *testing.T) {
+	from := painter.RGB(0x20, 0x40, 0x80)
+	to := painter.RGB(0xE0, 0xC0, 0x40)
+	const w, h = 16, 16
+	th := DefaultLight()
+	render := func(d GradientDir) []byte {
+		return bdRender(&Backdrop{Fill: from, GradientTo: to, GradientDir: d}, w, h, th)
+	}
+	check := func(name string, buf []byte, fx, fy, tx, ty int) {
+		if got := bdPx(buf, w, fx, fy); got != from {
+			t.Errorf("%s start (%d,%d) = %v, want from %v", name, fx, fy, got, from)
+		}
+		if got := bdPx(buf, w, tx, ty); got != to {
+			t.Errorf("%s end (%d,%d) = %v, want to %v", name, tx, ty, got, to)
+		}
+	}
+	check("vertical", render(GradientVertical), 8, 0, 8, h-1)
+	check("horizontal", render(GradientHorizontal), 0, 8, w-1, 8)
+	check("diagonal", render(GradientDiagonal), 0, 0, w-1, h-1)
+	check("cross-diagonal", render(GradientCrossDiagonal), w-1, 0, 0, h-1)
+}
+
+func TestBackdropBevel(t *testing.T) {
+	const w, h = 16, 16
+	th := DefaultLight()
+	lum := func(c RGBA) int { return int(c.R) + int(c.G) + int(c.B) }
+	fill := painter.RGB(0x80, 0x80, 0x80)
+
+	// Raised: bright top edge over a dark bottom edge (pushed out).
+	rb := bdRender(&Backdrop{Fill: fill, Bevel: BevelRaised}, w, h, th)
+	if lum(bdPx(rb, w, 8, 0)) <= lum(bdPx(rb, w, 8, h-1)) {
+		t.Errorf("raised bevel: top %+v should be brighter than bottom %+v", bdPx(rb, w, 8, 0), bdPx(rb, w, 8, h-1))
+	}
+	// Sunken: the inverse.
+	sb := bdRender(&Backdrop{Fill: fill, Bevel: BevelSunken}, w, h, th)
+	if lum(bdPx(sb, w, 8, 0)) >= lum(bdPx(sb, w, 8, h-1)) {
+		t.Errorf("sunken bevel: top %+v should be darker than bottom %+v", bdPx(sb, w, 8, 0), bdPx(sb, w, 8, h-1))
+	}
+	// Fill unset → the bevel derives its hi/lo from the theme background (no panic,
+	// still a visible raised edge).
+	db := bdRender(&Backdrop{Bevel: BevelRaised}, w, h, th)
+	if lum(bdPx(db, w, 8, 0)) <= lum(bdPx(db, w, 8, h-1)) {
+		t.Error("default-fill raised bevel: top should still be brighter than bottom")
+	}
+}
+
 func TestBackdropDrawNoGrid(t *testing.T) {
 	fill := painter.RGB(0x22, 0x22, 0x22)
 	const w, h = 12, 12
