@@ -7,6 +7,7 @@ package toolkit
 import (
 	"strconv"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -25,22 +26,37 @@ import (
 // (Current >= len -> every badge is filled).
 //
 // A click on a badge jumps to that step: OnEvent hit-tests the same
-// badge layout Draw paints, sets Current to the clicked index and fires
-// OnSelect(i). When OnSelect is nil (the zero value) Steps stays a
-// passive progress display — no click has any effect — so a caller that
-// wants a plain indicator opts out simply by leaving the callback unset.
+// badge layout Draw paints and Sets the Current Observable to the clicked
+// index, notifying its subscribers. A host binds Current to react to the
+// jump; there is no click callback.
+//
+// The reactive cursor is MVVM-only: it lives in an unexported Observable
+// exposed via [Steps.Current]. Labels and Orientation are set-once layout
+// config and stay plain fields.
 type Steps struct {
 	Base
-	Labels  []string
-	Current int
-	// OnSelect, when non-nil, fires with the clicked badge's 0-based index
-	// (after Current has been updated to it). Nil keeps Steps display-only.
-	OnSelect func(i int)
+	Labels []string
 	// Orientation lays the badges out left-to-right (Horizontal, the zero
 	// value — a wizard strip) or top-to-bottom (Vertical — a side
 	// checklist). Vertical draws its connectors as vertical lines and
 	// renders each caption to the right of its badge instead of below it.
 	Orientation Orientation
+
+	current *mvvm.Observable[int]
+}
+
+// Current is the 0-indexed cursor into Labels as a shared [mvvm.Observable]:
+// a host binds it (Set / Subscribe / two-way) — there is no settable Current
+// field. A click on a badge Sets it to that index; subscribers are notified.
+// A value outside [0, len(Labels)) means either "no step active yet"
+// (Current < 0 -> every badge is pending) or "all done" (Current >= len ->
+// every badge is filled). The Observable lazy-inits to 0 on first access so a
+// zero-value &Steps{} is usable.
+func (s *Steps) Current() *mvvm.Observable[int] {
+	if s.current == nil {
+		s.current = mvvm.NewObservable(0)
+	}
+	return s.current
 }
 
 // Steps sizing constants. Chosen so the badges + connectors fit inside
@@ -61,7 +77,9 @@ const (
 // NewSteps constructs a Steps indicator with the given labels + the
 // initial current-step cursor.
 func NewSteps(labels []string, current int) *Steps {
-	return &Steps{Labels: labels, Current: current}
+	s := &Steps{Labels: labels}
+	s.current = mvvm.NewObservable(current)
+	return s
 }
 
 // Draw paints each badge, its connector to the previous badge (if any)
@@ -75,6 +93,7 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 		return
 	}
 	vertical := s.Orientation == Vertical
+	current := s.Current().Get()
 	boxW, boxH := scaled(StepBoxW), scaled(StepBoxH)
 	conn, gap := scaled(StepConnectorW), scaled(StepLabelGap)
 	line := max(1, scaled(1))
@@ -102,7 +121,7 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 		}
 		fill := theme.SurfaceAlt
 		ink := theme.OnSurface
-		if i <= s.Current {
+		if i <= current {
 			fill = theme.Accent
 			ink = theme.Background
 		}
@@ -142,12 +161,12 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 // layout Draw paints (badge i advances by StepBoxW/StepBoxH plus one
 // StepConnectorW per gap along the layout axis; the cross axis is the pinned
 // badge column, vertically centred in a tall bar for the horizontal case), and
-// on a hit sets Current to that index and fires OnSelect(i). Only the badge box
-// is sensitive -- a click on a caption or a connector is ignored -- and a nil
-// OnSelect keeps Steps a passive display. Coordinates are widget-local, so the
-// first badge's top-left is (0, cross-offset).
+// on a hit Sets the Current Observable to that index (subscribers are notified;
+// an unchanged index is a no-op per mvvm.Observable). Only the badge box is
+// sensitive -- a click on a caption or a connector is ignored. Coordinates are
+// widget-local, so the first badge's top-left is (0, cross-offset).
 func (s *Steps) OnEvent(ev Event) {
-	if ev.Kind != EventClick || s.OnSelect == nil {
+	if ev.Kind != EventClick {
 		return
 	}
 	vertical := s.Orientation == Vertical
@@ -174,8 +193,7 @@ func (s *Steps) OnEvent(ev Event) {
 		hx := bx - (hitW-boxW)/2
 		hy := by - (hitH-boxH)/2
 		if ev.X >= hx && ev.X < hx+hitW && ev.Y >= hy && ev.Y < hy+hitH {
-			s.Current = i
-			s.OnSelect(i)
+			s.Current().Set(i)
 			return
 		}
 	}

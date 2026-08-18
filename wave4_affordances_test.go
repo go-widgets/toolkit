@@ -89,25 +89,25 @@ func TestBreadcrumbsInertWhenNilOrNonClick(t *testing.T) {
 	}
 }
 
-// --- 4. Steps: OnSelect on badge click ------------------------------------
+// --- 4. Steps: badge click Sets Current -----------------------------------
 
 func TestStepsClickJumpsHorizontal(t *testing.T) {
 	s := NewSteps([]string{"A", "B", "C"}, 0)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 40}) // H > StepBoxH: badges vertically centred
 	got := -1
-	s.OnSelect = func(i int) { got = i }
+	s.Current().Subscribe(func(i int) { got = i })
 
 	// Badge i left = i*(StepBoxW+StepConnectorW); row centred at (40-16)/2 = 12.
 	bx := 2 * (StepBoxW + StepConnectorW)
 	s.OnEvent(Event{Kind: EventClick, X: bx + StepBoxW/2, Y: 12 + StepBoxH/2})
-	if got != 2 || s.Current != 2 {
-		t.Fatalf("badge 2 click: got %d Current %d, want 2/2", got, s.Current)
+	if got != 2 || s.Current().Get() != 2 {
+		t.Fatalf("badge 2 click: got %d Current %d, want 2/2", got, s.Current().Get())
 	}
-	// A click on the connector between badges hits nothing.
+	// A click on the connector between badges hits nothing (Current unchanged).
 	got = -9
 	s.OnEvent(Event{Kind: EventClick, X: StepBoxW + StepConnectorW/2, Y: 12 + StepBoxH/2})
-	if got != -9 {
-		t.Fatalf("connector click fired: got %d", got)
+	if got != -9 || s.Current().Get() != 2 {
+		t.Fatalf("connector click fired: got %d Current %d", got, s.Current().Get())
 	}
 }
 
@@ -116,34 +116,34 @@ func TestStepsClickJumpsVertical(t *testing.T) {
 	s.Orientation = Vertical
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	got := -1
-	s.OnSelect = func(i int) { got = i }
+	s.Current().Subscribe(func(i int) { got = i })
 	// Badge 1 top = 1*(StepBoxH+StepConnectorW); column pinned at x in [0,StepBoxW).
 	by := StepBoxH + StepConnectorW
 	s.OnEvent(Event{Kind: EventClick, X: StepBoxW / 2, Y: by + StepBoxH/2})
-	if got != 1 || s.Current != 1 {
-		t.Fatalf("vertical badge 1 click: got %d Current %d", got, s.Current)
+	if got != 1 || s.Current().Get() != 1 {
+		t.Fatalf("vertical badge 1 click: got %d Current %d", got, s.Current().Get())
 	}
 }
 
-func TestStepsInertWhenNilOrNonClickOrShortBar(t *testing.T) {
+func TestStepsInertWhenNonClickOrShortBar(t *testing.T) {
 	// Short bar (H <= StepBoxH): yOff branch stays 0; badge 0 still clickable.
-	s := NewSteps([]string{"A"}, 0)
+	// Start at -1 so a jump to badge 0 is a real change the subscriber sees.
+	s := NewSteps([]string{"A"}, -1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: StepBoxH})
-	got := -1
-	s.OnSelect = func(i int) { got = i }
+	got := -9
+	s.Current().Subscribe(func(i int) { got = i })
 	s.OnEvent(Event{Kind: EventClick, X: StepBoxW / 2, Y: StepBoxH / 2})
-	if got != 0 {
-		t.Fatalf("short-bar badge click: got %d", got)
+	if got != 0 || s.Current().Get() != 0 {
+		t.Fatalf("short-bar badge click: got %d Current %d", got, s.Current().Get())
 	}
-	// Nil OnSelect: no-op. Non-click: ignored.
-	s2 := NewSteps([]string{"A"}, 0)
+	// Non-click: ignored — the Current Observable is never Set.
+	s2 := NewSteps([]string{"A"}, -1)
 	s2.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 40})
-	s2.OnEvent(Event{Kind: EventClick, X: 5, Y: 15}) // nil OnSelect
 	fired := false
-	s2.OnSelect = func(int) { fired = true }
+	s2.Current().Subscribe(func(int) { fired = true })
 	s2.OnEvent(Event{Kind: EventMouseMove, X: 5, Y: 15})
 	if fired {
-		t.Fatal("non-click fired OnSelect")
+		t.Fatal("non-click Set Current")
 	}
 }
 

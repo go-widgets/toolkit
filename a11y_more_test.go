@@ -176,7 +176,8 @@ func TestA11ySteps(t *testing.T) {
 	if got := s.A11y(); got != (A11yInfo{Role: RoleGroup, Value: "Payment"}) {
 		t.Errorf("Steps in-range A11y() = %+v", got)
 	}
-	oor := &Steps{Labels: []string{"Account"}, Current: 9}
+	oor := &Steps{Labels: []string{"Account"}}
+	oor.Current().Set(9)
 	if got := oor.A11y(); got != (A11yInfo{Role: RoleGroup, Value: ""}) {
 		t.Errorf("Steps out-of-range A11y() = %+v", got)
 	}
