@@ -214,6 +214,27 @@ func TestTextViewLineNumbersRightJustified(t *testing.T) {
 	}
 }
 
+// CaretPixel is the exact inverse of the click→caret mapping: placing a click at
+// CaretPixel(line, col) lands back on (line, col) — at any metric scale and with
+// the padded line-number gutter — so a host never has to duplicate the gutter /
+// advance geometry.
+func TestTextViewCaretPixelRoundTrips(t *testing.T) {
+	defer SetMetricScale(1)
+	for _, sc := range []float64{1, 2} {
+		SetMetricScale(sc)
+		v := NewTextView("hello\nbrave new\nworld here")
+		v.ShowLineNumbers = true
+		v.SetBounds(Rect{X: 7, Y: 3, W: 400, H: 300})
+		for _, tc := range [][2]int{{0, 0}, {0, 5}, {1, 3}, {2, 4}, {1, 0}} {
+			x, y := v.CaretPixel(tc[0], tc[1])
+			gl, gc := v.caretAt(x-v.Bounds().X, y-v.Bounds().Y)
+			if gl != tc[0] || gc != tc[1] {
+				t.Errorf("scale %v: CaretPixel(%d,%d) round-tripped to (%d,%d)", sc, tc[0], tc[1], gl, gc)
+			}
+		}
+	}
+}
+
 // A custom GutterColor overrides the muted default.
 func TestTextViewGutterColorOverride(t *testing.T) {
 	const w, h = 120, 40
