@@ -87,7 +87,7 @@ func (g *Gantt) A11y() A11yInfo {
 func (t *PagingToolbar) A11y() A11yInfo {
 	return A11yInfo{
 		Role:  RoleToolbar,
-		Value: "page " + strconv.Itoa(t.Page) + " of " + strconv.Itoa(t.PageCount),
+		Value: "page " + strconv.Itoa(t.Page().Get()) + " of " + strconv.Itoa(t.PageCount),
 	}
 }
 
