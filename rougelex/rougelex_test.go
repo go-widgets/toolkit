@@ -22,6 +22,9 @@ func distinctPalette() Palette {
 		Function:    c(4),
 		Class:       c(5),
 		Builtin:     c(6),
+		Tag:         c(12),
+		Variable:    c(13),
+		Attribute:   c(14),
 		String:      c(7),
 		Number:      c(8),
 		Comment:     c(9),
@@ -53,6 +56,10 @@ func TestColorForCategories(t *testing.T) {
 		{rouge.NameFunction, p.Function, "name.function"},
 		{rouge.NameClass, p.Class, "name.class"},
 		{rouge.NameBuiltin, p.Builtin, "name.builtin"},
+		{rouge.NameTag, p.Tag, "name.tag"},
+		{rouge.NameVariable, p.Variable, "name.variable"},
+		{rouge.NameVariableGlobal, p.Variable, "name.variable.global (descendant)"},
+		{rouge.NameAttribute, p.Attribute, "name.attribute"},
 		{rouge.KeywordType, p.Type, "keyword.type"},
 		{rouge.Keyword, p.Keyword, "keyword"},
 		{rouge.KeywordNamespace, p.Keyword, "keyword.namespace (descendant)"},
@@ -91,6 +98,15 @@ func TestDefaultPaletteDerivesFromTheme(t *testing.T) {
 	}
 	if want := blend(th.Accent, th.OnSurface, 0.4); p.Function != want {
 		t.Errorf("Function = %+v, want %+v", p.Function, want)
+	}
+	if want := blend(th.Accent, th.OnSurface, 0.25); p.Tag != want {
+		t.Errorf("Tag = %+v, want %+v", p.Tag, want)
+	}
+	if want := blend(th.Accent, th.OnSurface, 0.4); p.Variable != want {
+		t.Errorf("Variable = %+v, want %+v", p.Variable, want)
+	}
+	if want := blend(th.OnSurface, th.Accent, 0.5); p.Attribute != want {
+		t.Errorf("Attribute = %+v, want %+v", p.Attribute, want)
 	}
 }
 
@@ -197,5 +213,106 @@ func TestHighlightZeroPaletteUsesTheme(t *testing.T) {
 	customRows := custom.Highlight("go", []string{"package x"}, th)
 	if spanColor(customRows, 0, 0) != distinctPalette().Keyword {
 		t.Errorf("custom palette keyword = %+v, want custom Keyword", spanColor(customRows, 0, 0))
+	}
+}
+
+// --- LaTeX: the Name subtypes the TeX lexer leans on -----------------------
+//
+// The rouge TeX/LaTeX lexer emits Name.Tag for \begin{env}/\end{env}, Keyword
+// for a command, Name.Variable for a math control sequence, Name.Attribute for
+// a command's optional [..] argument, Comment for a % comment and Punctuation
+// for math delimiters. Each must resolve to its own palette field (not the
+// plain-name Default), so a LaTeX buffer is fully coloured.
+func TestHighlightLatexNameSubtypes(t *testing.T) {
+	p := distinctPalette()
+	h := &Highlighter{Palette: p}
+	// \begin{doc} -> Name.Tag, whole match at rune 0.
+	if got := spanColor(h.Highlight("latex", []string{`\begin{doc}`}, nil), 0, 0); got != p.Tag {
+		t.Errorf(`\begin{doc}: colour %+v, want Tag %+v`, got, p.Tag)
+	}
+	// \textbf -> Keyword (a command).
+	if got := spanColor(h.Highlight("latex", []string{`\textbf`}, nil), 0, 0); got != p.Keyword {
+		t.Errorf(`\textbf: colour %+v, want Keyword %+v`, got, p.Keyword)
+	}
+	// $\a$ -> Punctuation delimiters around a Name.Variable control sequence.
+	mv := h.Highlight("latex", []string{`$\a$`}, nil)
+	if got := spanColor(mv, 0, 0); got != p.Punctuation {
+		t.Errorf(`$ delimiter: colour %+v, want Punctuation %+v`, got, p.Punctuation)
+	}
+	if got := spanColor(mv, 0, 2); got != p.Variable {
+		t.Errorf(`\a math: colour %+v, want Variable %+v`, got, p.Variable)
+	}
+	// \includegraphics[opt] -> Keyword then Name.Attribute for the [..] arg.
+	attr := h.Highlight("latex", []string{`\includegraphics[opt]`}, nil)
+	if got := spanColor(attr, 0, 16); got != p.Attribute { // '[' starts at rune 16
+		t.Errorf(`[opt] attribute: colour %+v, want Attribute %+v`, got, p.Attribute)
+	}
+	// % comment -> Comment.
+	if got := spanColor(h.Highlight("latex", []string{`% note`}, nil), 0, 0); got != p.Comment {
+		t.Errorf(`%% comment: colour %+v, want Comment %+v`, got, p.Comment)
+	}
+}
+
+// --- named palettes: registry, ThemeNames, PaletteByName -------------------
+
+func TestThemeNamesOrder(t *testing.T) {
+	// "Default" (theme-derived) must be first, then the fixed schemes, in the
+	// order a picker presents them.
+	want := []string{"Default", "Monokai", "Solarized", "GitHub", "Dracula"}
+	got := ThemeNames()
+	if len(got) != len(want) {
+		t.Fatalf("ThemeNames = %v, want %v", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Errorf("ThemeNames[%d] = %q, want %q", i, got[i], want[i])
+		}
+	}
+}
+
+func TestPaletteByNameDefaultIsZero(t *testing.T) {
+	// "Default" resolves (ok==true) to the zero Palette, so a Highlighter set
+	// to it stays theme-derived exactly like the zero value.
+	p, ok := PaletteByName("Default")
+	if !ok {
+		t.Fatal("PaletteByName(\"Default\") not found")
+	}
+	if p != (Palette{}) {
+		t.Errorf("Default palette = %+v, want zero (theme-derived)", p)
+	}
+}
+
+func TestPaletteByNameUnknown(t *testing.T) {
+	// An unknown name returns the zero Palette and ok==false.
+	if p, ok := PaletteByName("no-such-scheme"); ok || p != (Palette{}) {
+		t.Errorf("unknown scheme: got (%+v, %v), want (zero, false)", p, ok)
+	}
+}
+
+// TestNamedSchemesColourLatexTokens Highlights a LaTeX snippet under every
+// shared scheme and asserts a Tag (\begin{env}), a Keyword (command) and a
+// Variable (math \a) each get that scheme's own colour. The theme-derived
+// "Default" scheme instead follows the theme (DefaultPalette).
+func TestNamedSchemesColourLatexTokens(t *testing.T) {
+	th := toolkit.DefaultDark()
+	for _, name := range ThemeNames() {
+		pal, ok := PaletteByName(name)
+		if !ok {
+			t.Fatalf("PaletteByName(%q) not found", name)
+		}
+		want := pal
+		if pal == (Palette{}) { // "Default": follow the theme.
+			want = DefaultPalette(th)
+		}
+		h := &Highlighter{Palette: pal}
+		if got := spanColor(h.Highlight("latex", []string{`\begin{doc}`}, th), 0, 0); got != want.Tag {
+			t.Errorf("%s: \\begin tag = %+v, want Tag %+v", name, got, want.Tag)
+		}
+		if got := spanColor(h.Highlight("latex", []string{`\textbf`}, th), 0, 0); got != want.Keyword {
+			t.Errorf("%s: \\textbf command = %+v, want Keyword %+v", name, got, want.Keyword)
+		}
+		if got := spanColor(h.Highlight("latex", []string{`$\a$`}, th), 0, 2); got != want.Variable {
+			t.Errorf("%s: math var = %+v, want Variable %+v", name, got, want.Variable)
+		}
 	}
 }

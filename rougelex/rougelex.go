@@ -5,7 +5,7 @@
 // Package rougelex is the batteries-included syntax highlighter for
 // github.com/go-widgets/toolkit's CodeEditor, backed by the pure-Go
 // github.com/go-rouge/rouge lexers (Go, Ruby, Python, JavaScript, CSS, HTML,
-// JSON, YAML, SQL, shell, Markdown, diff, …).
+// JSON, YAML, SQL, shell, Markdown, LaTeX, diff, …).
 //
 // It lives in its own module so importing the core toolkit never pulls a
 // lexing engine — and its transitive regexp dependency — into a consumer that
@@ -18,7 +18,12 @@
 // The highlighter maps rouge's token stream onto a small Palette of ink
 // colours. The zero-value Palette derives its colours from the theme handed to
 // Highlight, so an editor colours itself consistently with the surrounding UI;
-// set an explicit Palette to pin a fixed scheme (e.g. VS Code "Dark+").
+// set an explicit Palette to pin a fixed scheme. A set of shared named schemes
+// (Monokai, Solarized, GitHub, Dracula, plus the theme-derived "Default") is
+// available via ThemeNames and PaletteByName for a scheme picker:
+//
+//	pal, _ := rougelex.PaletteByName("Monokai")
+//	ed.Syntax = &rougelex.Highlighter{Palette: pal}
 package rougelex
 
 import (
@@ -34,6 +39,12 @@ import (
 // takes Function, a Literal.String.Double takes String, and so on); anything
 // unmatched takes Default.
 //
+// Tag, Variable and Attribute cover the Name subtypes that markup, templating
+// and LaTeX lean on: Name.Tag is an HTML/XML element and a LaTeX
+// \begin{env}/\end{env}; Name.Variable is a template/shell variable and a
+// LaTeX math control sequence (\alpha); Name.Attribute is an HTML attribute and
+// a LaTeX command's optional argument ([width=1cm]).
+//
 // The zero value (every field's alpha 0) is the sentinel for "derive from the
 // theme": Highlight then fills the palette with DefaultPalette(theme).
 type Palette struct {
@@ -43,6 +54,9 @@ type Palette struct {
 	Function    toolkit.RGBA
 	Class       toolkit.RGBA
 	Builtin     toolkit.RGBA
+	Tag         toolkit.RGBA
+	Variable    toolkit.RGBA
+	Attribute   toolkit.RGBA
 	String      toolkit.RGBA
 	Number      toolkit.RGBA
 	Comment     toolkit.RGBA
@@ -52,8 +66,10 @@ type Palette struct {
 
 // DefaultPalette derives a theme-consistent palette from a toolkit theme:
 // keywords take the accent, comments a dimmed ink, strings and numbers an
-// ink/accent blend, and plain names the ordinary ink. It is what Highlight
-// uses when the Highlighter's Palette is the zero value.
+// ink/accent blend, and plain names the ordinary ink. Tags and variables read
+// as structural, so they lean toward the accent; attributes lean toward the
+// ink, like strings. It is what Highlight uses when the Highlighter's Palette
+// is the zero value.
 func DefaultPalette(theme *toolkit.Theme) Palette {
 	ink := theme.OnSurface
 	accent := theme.Accent
@@ -64,6 +80,9 @@ func DefaultPalette(theme *toolkit.Theme) Palette {
 		Function:    blend(accent, ink, 0.4),
 		Class:       blend(accent, ink, 0.25),
 		Builtin:     blend(accent, ink, 0.4),
+		Tag:         blend(accent, ink, 0.25),
+		Variable:    blend(accent, ink, 0.4),
+		Attribute:   blend(ink, accent, 0.5),
 		String:      blend(ink, accent, 0.5),
 		Number:      blend(ink, accent, 0.5),
 		Comment:     blend(ink, theme.Surface, 0.45),
@@ -73,8 +92,8 @@ func DefaultPalette(theme *toolkit.Theme) Palette {
 }
 
 // colorFor resolves a rouge token to a palette colour, most-specific category
-// first (KeywordType before Keyword, Name.Function/Class/Builtin before the
-// plain-name Default).
+// first (KeywordType before Keyword, Name.Function/Class/Builtin/Tag/Variable/
+// Attribute before the plain-name Default).
 func (p Palette) colorFor(t *rouge.Token) toolkit.RGBA {
 	switch {
 	case t.Matches(rouge.Comment):
@@ -89,6 +108,12 @@ func (p Palette) colorFor(t *rouge.Token) toolkit.RGBA {
 		return p.Class
 	case t.Matches(rouge.NameBuiltin):
 		return p.Builtin
+	case t.Matches(rouge.NameTag):
+		return p.Tag
+	case t.Matches(rouge.NameVariable):
+		return p.Variable
+	case t.Matches(rouge.NameAttribute):
+		return p.Attribute
 	case t.Matches(rouge.KeywordType):
 		return p.Type
 	case t.Matches(rouge.Keyword):
