@@ -62,12 +62,84 @@ type Backdrop struct {
 	// "no background", and there is no transparent colour that says otherwise.
 	// The zero value (false) fills as before, byte-identical.
 	NoFill bool
+	// GradientTo, when its alpha is non-zero, fills the ground as a linear
+	// gradient from Fill (the start edge) to GradientTo (the end edge) along
+	// GradientDir, instead of a solid Fill — the toolbar/panel face a host would
+	// otherwise hand-draw with a per-pixel PutPixel loop. Gradient fills a
+	// rectangle (Radius is ignored while it is set). The zero value (A==0) keeps
+	// the solid Fill, byte-identical to before this field existed.
+	GradientTo painter.RGBA
+	// GradientDir is the gradient's direction — vertical (the default), horizontal,
+	// diagonal or cross-diagonal. Meaningful only when GradientTo is set.
+	GradientDir GradientDir
+	// Bevel draws a 1-pixel 3D bevel around the fill: none (the default), raised
+	// (a bright top+left over a dark bottom+right — a pushed-out Fluxbox toolbar
+	// section) or sunken (the inverse). The zero value (BevelNone) draws no bevel,
+	// byte-identical to before this field existed.
+	Bevel BevelKind
+
 	// Interactive makes the Backdrop catch pointer events. The zero value
 	// (false) is event-transparent: HitTest returns false so clicks pass
 	// through to whatever is composited over the backdrop — the least-
 	// surprising default for a decorative ground. Set it true for a backdrop
 	// that should consume clicks (a modal scrim shielding the content beneath).
 	Interactive bool
+}
+
+// GradientDir is the direction of a Backdrop's linear gradient fill.
+type GradientDir int
+
+const (
+	// GradientVertical runs the gradient top (Fill) to bottom (GradientTo).
+	GradientVertical GradientDir = iota
+	// GradientHorizontal runs it left (Fill) to right (GradientTo).
+	GradientHorizontal
+	// GradientDiagonal runs it top-left (Fill) to bottom-right (GradientTo).
+	GradientDiagonal
+	// GradientCrossDiagonal runs it top-right (Fill) to bottom-left (GradientTo).
+	GradientCrossDiagonal
+)
+
+// BevelKind selects a Backdrop's 1-pixel 3D edge bevel.
+type BevelKind int
+
+const (
+	// BevelNone draws no bevel (the default).
+	BevelNone BevelKind = iota
+	// BevelRaised draws a bright top+left over a dark bottom+right, so the face
+	// reads as pushed out toward the viewer.
+	BevelRaised
+	// BevelSunken is the inverse — dark top+left, bright bottom+right — so the
+	// face reads as pressed in.
+	BevelSunken
+)
+
+// fillGradient fills r with a linear gradient from `from` to `to` along dir. The
+// axis-aligned directions fill a line at a time; the diagonals go per-pixel (the
+// only way to vary along both axes), mirroring the classic Fluxbox toolbar
+// gradients. A single-pixel extent along the axis collapses to `from`.
+func fillGradient(p painter.Painter, r Rect, from, to RGBA, dir GradientDir) {
+	switch dir {
+	case GradientHorizontal:
+		for i := 0; i < r.W; i++ {
+			fillRect(p, r.X+i, r.Y, 1, r.H, lerpRGBA(from, to, i, r.W))
+		}
+	case GradientDiagonal, GradientCrossDiagonal:
+		den := (r.W - 1) + (r.H - 1) + 1
+		for j := 0; j < r.H; j++ {
+			for i := 0; i < r.W; i++ {
+				step := i + j
+				if dir == GradientCrossDiagonal {
+					step = (r.W - 1 - i) + j
+				}
+				p.PutPixel(r.X+i, r.Y+j, lerpRGBA(from, to, step, den))
+			}
+		}
+	default: // GradientVertical
+		for j := 0; j < r.H; j++ {
+			fillRect(p, r.X, r.Y+j, r.W, 1, lerpRGBA(from, to, j, r.H))
+		}
+	}
 }
 
 // NewBackdrop builds a Backdrop with a solid fill and a grid every step units
@@ -104,10 +176,28 @@ func (b *Backdrop) Draw(p painter.Painter, theme *Theme) {
 		if fill == (painter.RGBA{}) {
 			fill = theme.Background
 		}
-		if b.Radius > 0 {
+		switch {
+		case b.GradientTo.A != 0:
+			fillGradient(p, r, fill, b.GradientTo, b.GradientDir)
+		case b.Radius > 0:
 			fillRoundRect(p, r.X, r.Y, r.W, r.H, b.Radius, fill)
-		} else {
+		default:
 			p.FillRect(r, fill)
+		}
+	}
+	if b.Bevel != BevelNone {
+		base := b.Fill
+		if base == (painter.RGBA{}) {
+			base = theme.Background
+		}
+		// Highlight/shadow edges lifted toward white / sunk toward black from the
+		// fill, so the bevel reads on any face.
+		hi := blendRGBA(RGBA{R: 255, G: 255, B: 255, A: 255}, base, 0.6)
+		lo := blendRGBA(RGBA{A: 255}, base, 0.55)
+		if b.Bevel == BevelSunken {
+			drawSunkenBevel(p, r, hi, lo)
+		} else {
+			drawRaisedBevel(p, r, hi, lo)
 		}
 	}
 	if b.Stroke.A != 0 {
