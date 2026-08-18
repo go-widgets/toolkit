@@ -28,13 +28,13 @@ func TestDropDownPopoverScrolls(t *testing.T) {
 	opts := wave6Options(15) // 15 > PopoverMaxRows (12): maxPopScroll = 3
 	chosen := -1
 	d := NewDropDown(opts, 0)
-	d.OnSelect = func(i int) { chosen = i }
+	d.Selected().Subscribe(func(i int) { chosen = i })
 	d.SetBounds(Rect{X: 10, Y: 10, W: 100, H: 22})
 
 	// A click opens the popover; Selected 0 keeps the offset at the top.
 	d.OnEvent(Event{Kind: EventClick})
-	if !d.Open || d.popScroll != 0 {
-		t.Fatalf("open: Open=%v popScroll=%d, want true/0", d.Open, d.popScroll)
+	if !d.Open().Get() || d.popScroll != 0 {
+		t.Fatalf("open: Open=%v popScroll=%d, want true/0", d.Open().Get(), d.popScroll)
 	}
 	// Wheel down past the end clamps to maxPopScroll (3).
 	d.OnEvent(Event{Kind: EventScroll, Delta: 9})
@@ -53,8 +53,8 @@ func TestDropDownPopoverScrolls(t *testing.T) {
 	if !d.PopoverClick(pb.X+2, pb.Y+11*PopoverRowH+2) {
 		t.Fatal("PopoverClick inside scrolled popover returned false")
 	}
-	if chosen != 14 || d.Selected != 14 {
-		t.Fatalf("scrolled click: chosen=%d Selected=%d, want 14", chosen, d.Selected)
+	if chosen != 14 || d.Selected().Get() != 14 {
+		t.Fatalf("scrolled click: chosen=%d Selected=%d, want 14", chosen, d.Selected().Get())
 	}
 
 	// Reopening with Selected == 14 scrolls the window to reveal it from below.
@@ -67,19 +67,19 @@ func TestDropDownPopoverScrolls(t *testing.T) {
 	for i := 0; i < 14; i++ {
 		d.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
 	}
-	if d.Selected != 0 || d.popScroll != 0 {
-		t.Fatalf("arrow reveal-above: Selected=%d popScroll=%d, want 0/0", d.Selected, d.popScroll)
+	if d.Selected().Get() != 0 || d.popScroll != 0 {
+		t.Fatalf("arrow reveal-above: Selected=%d popScroll=%d, want 0/0", d.Selected().Get(), d.popScroll)
 	}
 	// ArrowDown to the last option follows the highlight down to the fold.
 	for i := 0; i < 14; i++ {
 		d.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
 	}
-	if d.Selected != 14 || d.popScroll != 3 {
-		t.Fatalf("arrow reveal-below: Selected=%d popScroll=%d, want 14/3", d.Selected, d.popScroll)
+	if d.Selected().Get() != 14 || d.popScroll != 3 {
+		t.Fatalf("arrow reveal-below: Selected=%d popScroll=%d, want 14/3", d.Selected().Get(), d.popScroll)
 	}
 
 	// A closed popover ignores the wheel.
-	d.Open = false
+	d.Open().Set(false)
 	d.popScroll = 2
 	d.OnEvent(Event{Kind: EventScroll, Delta: -5})
 	if d.popScroll != 2 {
@@ -89,13 +89,14 @@ func TestDropDownPopoverScrolls(t *testing.T) {
 	// A short list never scrolls: maxPopScroll floors at 0.
 	small := NewDropDown(wave6Options(3), 0)
 	small.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 22})
-	small.Open = true
+	small.Open().Set(true)
 	small.OnEvent(Event{Kind: EventScroll, Delta: 5})
 	if small.popScroll != 0 {
 		t.Fatalf("short-list popScroll=%d, want 0", small.popScroll)
 	}
 	// DrawPopover with a scroll offset paints without panicking.
-	d.Open, d.popScroll = true, 3
+	d.Open().Set(true)
+	d.popScroll = 3
 	d.DrawPopover(newP(makeSurface(160, 240), 160), DefaultLight())
 }
 

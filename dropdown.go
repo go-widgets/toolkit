@@ -4,31 +4,39 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // DropDown is a one-of-N selector that shows the current choice in a
 // button-like rectangle. Clicking opens a popover ListBox of all
-// Options just below the widget; selecting one closes the popover +
-// fires OnSelect.
+// Options just below the widget; selecting one closes the popover and
+// Sets the Selected Observable.
 //
 // Like Dialog, the popover's rendering surface is owned by the host
-// app; the toolkit exposes Open + Selected so the host knows what to
-// draw. This keeps DropDown independent of how the compositor handles
-// overlay surfaces (some apps use a separate canvas, some draw the
-// popover directly into the same buffer).
+// app; the toolkit exposes Open + Selected — both MVVM-only, as shared
+// [mvvm.Observable] handles behind accessors — so the host knows what to
+// draw and binds/Subscribes to the state. This keeps DropDown independent
+// of how the compositor handles overlay surfaces (some apps use a separate
+// canvas, some draw the popover directly into the same buffer).
 type DropDown struct {
 	Base
 	focusState
-	Options  []string
-	Selected int
-	Open     bool
+	// Options is the set-once list of choices (config). OpenUp is a layout
+	// config flag. The reactive state is MVVM-only: the current selection and
+	// the open/closed flag live in unexported Observables exposed via
+	// [DropDown.Selected] and [DropDown.Open].
+	Options []string
 	// OpenUp makes the popover appear ABOVE the control instead of below it —
 	// set it when the control sits near the bottom edge so the list has room.
-	OpenUp   bool
-	OnSelect func(idx int)
+	OpenUp bool
 
-	// savedSelected remembers Selected at the moment the popover opened via the
-	// keyboard, so Escape can restore it after the arrow keys previewed other
+	selected *mvvm.Observable[int]
+	open     *mvvm.Observable[bool]
+
+	// savedSelected remembers the selection at the moment the popover opened via
+	// the keyboard, so Escape can restore it after the arrow keys previewed other
 	// options without committing.
 	savedSelected int
 
@@ -43,22 +51,48 @@ type DropDown struct {
 	popScroll int
 }
 
+// Selected is the chosen option index as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Selected field. A
+// click, an Enter commit or an arrow-key preview Sets it; subscribers are
+// notified on change.
+func (d *DropDown) Selected() *mvvm.Observable[int] {
+	if d.selected == nil {
+		d.selected = mvvm.NewObservable(0)
+	}
+	return d.selected
+}
+
+// Open is the popover open/closed flag as a shared [mvvm.Observable]: a host
+// binds it to know whether to render the popover — there is no settable Open
+// field. A click toggles it; selecting an option or pressing Escape Sets it
+// false. Subscribers are notified on change.
+func (d *DropDown) Open() *mvvm.Observable[bool] {
+	if d.open == nil {
+		d.open = mvvm.NewObservable(false)
+	}
+	return d.open
+}
+
 // NewDropDown builds a DropDown with the given options + an initial
 // selection (clamped to a valid index, or 0 when options is empty).
 func NewDropDown(options []string, selected int) *DropDown {
 	if selected < 0 || selected >= len(options) {
 		selected = 0
 	}
-	return &DropDown{Options: options, Selected: selected}
+	d := &DropDown{Options: options}
+	d.selected = mvvm.NewObservable(selected)
+	d.open = mvvm.NewObservable(false)
+	return d
 }
 
 // Current returns the currently-selected option's string, or "" when
 // Options is empty.
 func (d *DropDown) Current() string {
-	if d.Selected < 0 || d.Selected >= len(d.Options) {
+	sel := d.Selected().Get()
+	if sel < 0 || sel >= len(d.Options) {
 		return ""
 	}
-	return d.Options[d.Selected]
+	return d.Options[sel]
 }
 
 // Draw paints the closed widget. The popover, when Open, is the
@@ -115,14 +149,15 @@ func (d *DropDown) OnEvent(ev Event) {
 	}
 	switch ev.Kind {
 	case EventClick:
-		d.Open = !d.Open
-		if d.Open {
+		open := !d.Open().Get()
+		d.Open().Set(open)
+		if open {
 			d.scrollSelectedIntoView()
 		}
 	case EventScroll:
 		// Wheel over the open popover shifts its scroll window so options
 		// beyond PopoverMaxRows are reachable; ignored while closed.
-		if d.Open {
+		if d.Open().Get() {
 			d.scrollPopover(ev.Delta)
 		}
 	case EventKeyDown:
@@ -131,50 +166,47 @@ func (d *DropDown) OnEvent(ev Event) {
 }
 
 // onKey drives the dropdown from the keyboard while focused:
-//   - closed: Space or ArrowDown opens the popover, remembering Selected so
+//   - closed: Space or ArrowDown opens the popover, remembering the selection so
 //     Escape can restore it.
-//   - open: ArrowDown/ArrowUp move Selected through the options (clamped, no
+//   - open: ArrowDown/ArrowUp move the selection through the options (clamped, no
 //     commit yet); Enter commits the highlighted option (reusing Select, which
-//     closes + fires OnSelect); Escape restores the pre-open Selected + closes.
+//     closes + Sets Selected); Escape restores the pre-open selection + closes.
 func (d *DropDown) onKey(code string) {
-	if !d.Open {
+	if !d.Open().Get() {
 		switch code {
 		case " ", "Space", "ArrowDown":
-			d.savedSelected = d.Selected
-			d.Open = true
+			d.savedSelected = d.Selected().Get()
+			d.Open().Set(true)
 			d.scrollSelectedIntoView()
 		}
 		return
 	}
 	switch code {
 	case "ArrowDown":
-		if d.Selected < len(d.Options)-1 {
-			d.Selected++
+		if sel := d.Selected().Get(); sel < len(d.Options)-1 {
+			d.Selected().Set(sel + 1)
 		}
 		d.scrollSelectedIntoView()
 	case "ArrowUp":
-		if d.Selected > 0 {
-			d.Selected--
+		if sel := d.Selected().Get(); sel > 0 {
+			d.Selected().Set(sel - 1)
 		}
 		d.scrollSelectedIntoView()
 	case "Enter":
-		d.Select(d.Selected)
+		d.Select(d.Selected().Get())
 	case "Escape":
-		d.Selected = d.savedSelected
-		d.Open = false
+		d.Selected().Set(d.savedSelected)
+		d.Open().Set(false)
 	}
 }
 
-// Select picks idx, closes the popover + fires OnSelect.
+// Select picks idx, Sets the Selected Observable and closes the popover.
 func (d *DropDown) Select(idx int) {
 	if idx < 0 || idx >= len(d.Options) {
 		return
 	}
-	d.Selected = idx
-	d.Open = false
-	if d.OnSelect != nil {
-		d.OnSelect(idx)
-	}
+	d.Selected().Set(idx)
+	d.Open().Set(false)
 }
 
 // PopoverBounds returns the Rect the host should give to its popover
@@ -237,10 +269,11 @@ func (d *DropDown) scrollPopover(delta int) {
 // down if at or past the last visible row. Keeps arrow-key selection following
 // the highlight past the fold.
 func (d *DropDown) scrollSelectedIntoView() {
-	if d.Selected < d.popScroll {
-		d.popScroll = d.Selected
-	} else if d.Selected >= d.popScroll+PopoverMaxRows {
-		d.popScroll = d.Selected - PopoverMaxRows + 1
+	sel := d.Selected().Get()
+	if sel < d.popScroll {
+		d.popScroll = sel
+	} else if sel >= d.popScroll+PopoverMaxRows {
+		d.popScroll = sel - PopoverMaxRows + 1
 	}
 	d.popScroll = d.clampedPopScroll()
 }
@@ -254,11 +287,11 @@ const PopoverRowH = 18
 // extends past the control's Bounds — sits on top; that z-ordering is the one
 // thing the widget can't decide for itself.
 func (d *DropDown) DrawPopover(p painter.Painter, theme *Theme) {
-	if !d.Open {
+	if !d.Open().Get() {
 		return
 	}
 	lb := NewListBox(d.Options)
-	lb.Selected = d.Selected
+	lb.Selected = d.Selected().Get()
 	// Feed the persistent scroll offset into the ListBox's own native virtual
 	// scrolling so options beyond PopoverMaxRows are painted (and a scrollbar
 	// appears) when the popover is scrolled. At popScroll == 0 this is
@@ -270,12 +303,12 @@ func (d *DropDown) DrawPopover(p painter.Painter, theme *Theme) {
 
 // PopoverClick routes a click at (x, y) — in the DropDown's own coordinate
 // frame, the same one Bounds/PopoverBounds use — while the popover is open: a
-// click inside it selects that option (firing OnSelect and closing), a click
+// click inside it selects that option (Setting Selected and closing), a click
 // anywhere else just closes it. Returns true when the open popover consumed the
 // click, false when the DropDown is closed (so the host falls through to its
 // normal hit-testing, where a click on the control reopens it).
 func (d *DropDown) PopoverClick(x, y int) bool {
-	if !d.Open {
+	if !d.Open().Get() {
 		return false
 	}
 	if pb := d.PopoverBounds(); x >= pb.X && x < pb.X+pb.W && y >= pb.Y && y < pb.Y+pb.H {
@@ -284,7 +317,7 @@ func (d *DropDown) PopoverClick(x, y int) bool {
 		// selects the right option. Select clamps an out-of-range index.
 		d.Select(d.clampedPopScroll() + (y-pb.Y)/d.rowH())
 	} else {
-		d.Open = false
+		d.Open().Set(false)
 	}
 	return true
 }
