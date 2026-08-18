@@ -67,6 +67,12 @@ func (s *MomentumScroller) syncBounds() {
 // progress, syncs the bounds and seeds each engine from the view's current
 // offset, so the drag tracks from exactly where the content sits.
 func (s *MomentumScroller) TouchDown(ev Event) {
+	// Claim the view on the FIRST gesture, not at construction: a wrapper that
+	// is never used must leave the view exactly as it was. From here on the
+	// view stops panning and flinging itself, because a host delivers this same
+	// drag to the widget tree as well -- buttons and lists need it -- and the
+	// gesture would otherwise land twice, scrolling at double speed.
+	s.View.SetScrollDriver(s)
 	s.syncBounds()
 	s.AxisX.SetOffset(float64(s.View.OffsetX))
 	s.AxisY.SetOffset(float64(s.View.OffsetY))
