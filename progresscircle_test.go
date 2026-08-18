@@ -21,29 +21,46 @@ func TestProgressCircleConstants(t *testing.T) {
 
 func TestNewProgressCircleDefaults(t *testing.T) {
 	pc := NewProgressCircle()
-	if pc.Fraction != 0 {
-		t.Fatalf("Fraction default = %v, want 0", pc.Fraction)
+	if pc.Fraction().Get() != 0 {
+		t.Fatalf("Fraction default = %v, want 0", pc.Fraction().Get())
 	}
 	if pc.Bounds() != (Rect{}) {
 		t.Fatalf("Bounds default = %+v, want zero", pc.Bounds())
 	}
 }
 
-// --- SetFraction clamps --------------------------------------------------
+// --- Fraction Observable (lazy-init + host binding) ----------------------
 
-func TestProgressCircleSetFractionClamps(t *testing.T) {
-	pc := NewProgressCircle()
-	pc.SetFraction(-0.5)
-	if pc.Fraction != 0 {
-		t.Fatalf("negative clamp: got %v", pc.Fraction)
+// TestProgressCircleFractionObservable covers the zero-value lazy-init of the
+// Fraction accessor and the host binding path: a ProgressCircle built as a bare
+// struct (no NewProgressCircle) still yields a usable Observable, Setting it
+// from outside is reflected by Get and by a subscriber, and a subsequent Draw
+// paints the band at the Set value (there is no imperative Fraction field).
+func TestProgressCircleFractionObservable(t *testing.T) {
+	pc := &ProgressCircle{} // no NewProgressCircle → fraction Observable is nil until accessed
+	if pc.Fraction().Get() != 0 {
+		t.Fatalf("zero-value Fraction = %v, want 0", pc.Fraction().Get())
 	}
-	pc.SetFraction(1.7)
-	if pc.Fraction != 1 {
-		t.Fatalf("over-1 clamp: got %v", pc.Fraction)
+	// A second access returns the same (already-initialised) Observable.
+	if pc.Fraction() != pc.Fraction() {
+		t.Fatal("Fraction() returned different Observables across calls")
 	}
-	pc.SetFraction(0.5)
-	if pc.Fraction != 0.5 {
-		t.Fatalf("normal set: got %v", pc.Fraction)
+	seen := -1.0
+	pc.Fraction().Subscribe(func(v float64) { seen = v })
+	pc.Fraction().Set(1) // a host drives the widget through the Observable
+	if pc.Fraction().Get() != 1 || seen != 1 {
+		t.Fatalf("host Set: value=%v subscriber=%v, want 1/1", pc.Fraction().Get(), seen)
+	}
+
+	// Draw reflects the host Set: the left ring column at mid-height is Accent.
+	const w, h = 60, 60
+	theme := DefaultLight()
+	pc.SetBounds(Rect{X: 4, Y: 4, W: 40, H: 40})
+	buf := makeSurface(w, h)
+	pc.Draw(newP(buf, w), theme)
+	if pixelAt(buf, w, 4+1, 4+20) != theme.Accent {
+		t.Fatalf("Draw did not reflect Fraction Set; left ring mid = %+v",
+			pixelAt(buf, w, 4+1, 4+20))
 	}
 }
 
@@ -83,7 +100,7 @@ func TestProgressCircleDrawFractionOneFillsBand(t *testing.T) {
 	const w, h = 60, 60
 	theme := DefaultLight()
 	pc := NewProgressCircle()
-	pc.SetFraction(1)
+	pc.Fraction().Set(1)
 	pc.SetBounds(Rect{X: 4, Y: 4, W: 40, H: 40})
 	buf := makeSurface(w, h)
 	pc.Draw(newP(buf, w), theme)
@@ -107,7 +124,7 @@ func TestProgressCircleDrawFractionHalfGrowsFromBottom(t *testing.T) {
 	const w, h = 60, 60
 	theme := DefaultLight()
 	pc := NewProgressCircle()
-	pc.SetFraction(0.5)
+	pc.Fraction().Set(0.5)
 	pc.SetBounds(Rect{X: 4, Y: 4, W: 40, H: 40})
 	buf := makeSurface(w, h)
 	pc.Draw(newP(buf, w), theme)
@@ -141,15 +158,16 @@ func TestProgressCircleDrawFractionHalfGrowsFromBottom(t *testing.T) {
 
 // --- Draw out-of-range clamp inside Draw ---------------------------------
 
-// Draw clamps Fraction defensively so callers bypassing SetFraction
-// still render safely. Cover both branches.
+// Draw clamps Fraction defensively so an out-of-range Set still
+// renders safely. Cover both branches.
 func TestProgressCircleDrawClampInDraw(t *testing.T) {
 	const w, h = 60, 60
 	theme := DefaultLight()
-	pc := &ProgressCircle{Fraction: -1}
+	pc := NewProgressCircle()
+	pc.Fraction().Set(-1)
 	pc.SetBounds(Rect{X: 4, Y: 4, W: 40, H: 40})
 	pc.Draw(newP(makeSurface(w, h), w), theme)
-	pc.Fraction = 2
+	pc.Fraction().Set(2)
 	pc.Draw(newP(makeSurface(w, h), w), theme)
 }
 
@@ -160,7 +178,7 @@ func TestProgressCircleDrawCaptionInsideHole(t *testing.T) {
 	const w, h = 60, 60
 	theme := DefaultLight()
 	pc := NewProgressCircle()
-	pc.SetFraction(0.5)
+	pc.Fraction().Set(0.5)
 	pc.SetBounds(Rect{X: 4, Y: 4, W: 40, H: 40})
 	buf := makeSurface(w, h)
 	pc.Draw(newP(buf, w), theme)
@@ -189,7 +207,7 @@ func TestProgressCircleDrawDarkTheme(t *testing.T) {
 	const w, h = 60, 60
 	theme := DefaultDark()
 	pc := NewProgressCircle()
-	pc.SetFraction(0.75)
+	pc.Fraction().Set(0.75)
 	pc.SetBounds(Rect{X: 4, Y: 4, W: 40, H: 40})
 	buf := makeSurface(w, h)
 	pc.Draw(newP(buf, w), theme)
@@ -226,7 +244,7 @@ func TestProgressCircleDrawNonSquareBoundsClampsToSquare(t *testing.T) {
 	const w, h = 100, 60
 	theme := DefaultLight()
 	pc := NewProgressCircle()
-	pc.SetFraction(0.5)
+	pc.Fraction().Set(0.5)
 	pc.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 30})
 	buf := makeSurface(w, h)
 	pc.Draw(newP(buf, w), theme)
@@ -250,7 +268,7 @@ func TestProgressCircleDrawTinyBoundsInnerCollapse(t *testing.T) {
 	const w, h = 40, 40
 	theme := DefaultLight()
 	pc := NewProgressCircle()
-	pc.SetFraction(0.75)
+	pc.Fraction().Set(0.75)
 	pc.SetBounds(Rect{X: 0, Y: 0, W: 2 * ProgressCircleStroke, H: 2 * ProgressCircleStroke})
 	pc.Draw(newP(makeSurface(w, h), w), theme)
 }
@@ -263,7 +281,7 @@ func TestProgressCircleDrawExactStrokeBounds(t *testing.T) {
 	theme := DefaultLight()
 	pc := NewProgressCircle()
 	// Fraction full to exercise the band branch even when inner is 0.
-	pc.SetFraction(1)
+	pc.Fraction().Set(1)
 	pc.SetBounds(Rect{X: 0, Y: 0, W: 2 * ProgressCircleStroke, H: 2 * ProgressCircleStroke})
 	pc.Draw(newP(makeSurface(w, h), w), theme)
 }
@@ -275,7 +293,7 @@ func TestProgressCircleDrawWithEmptyExtraMap(t *testing.T) {
 	theme := DefaultLight()
 	theme.Extra = nil
 	pc := NewProgressCircle()
-	pc.SetFraction(0.4)
+	pc.Fraction().Set(0.4)
 	pc.SetBounds(Rect{X: 4, Y: 4, W: 40, H: 40})
 	pc.Draw(newP(makeSurface(w, h), w), theme)
 }
