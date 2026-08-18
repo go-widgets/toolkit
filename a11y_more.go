@@ -135,7 +135,7 @@ func (r *Rating) A11y() A11yInfo {
 // A11y reports the ColorChooser as a group carrying its current colour as
 // a "#RRGGBB" hex string.
 func (c *ColorChooser) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: hexColor(c.Color)}
+	return A11yInfo{Role: RoleGroup, Value: hexColor(c.Color().Get())}
 }
 
 // A11y reports the ColorPicker as a group carrying its current colour

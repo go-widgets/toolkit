@@ -271,7 +271,7 @@ func TestColorChooserDragScrubsChannel(t *testing.T) {
 	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	cc.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 2*ColorChooserChannelPadY + 3*ColorChooserChannelH})
 	var last RGBA
-	cc.OnChange = func(c RGBA) { last = c }
+	cc.Color().Subscribe(func(c RGBA) { last = c })
 
 	trackX := ColorChooserPadX + 12
 	channelW := 200 - 2*ColorChooserPadX
@@ -280,30 +280,30 @@ func TestColorChooserDragScrubsChannel(t *testing.T) {
 
 	// Press on channel R, far right → R == 255, channel grabbed (active == 1).
 	cc.OnEvent(Event{Kind: EventClick, X: trackX + trackW, Y: rY + 2})
-	if cc.Color.R != 255 || cc.active != 1 {
-		t.Fatalf("press: R=%d active=%d, want 255/1", cc.Color.R, cc.active)
+	if cc.Color().Get().R != 255 || cc.active != 1 {
+		t.Fatalf("press: R=%d active=%d, want 255/1", cc.Color().Get().R, cc.active)
 	}
 	// Drag left of the track (y now irrelevant) → R == 0, still channel R.
 	cc.OnEvent(Event{Kind: EventMouseDrag, X: trackX - 5, Y: 999})
-	if cc.Color.R != 0 {
-		t.Fatalf("drag-left R=%d, want 0", cc.Color.R)
+	if cc.Color().Get().R != 0 {
+		t.Fatalf("drag-left R=%d, want 0", cc.Color().Get().R)
 	}
 	// Drag to the track middle → R ~ 127.
 	cc.OnEvent(Event{Kind: EventMouseDrag, X: trackX + trackW/2, Y: 999})
-	if cc.Color.R < 120 || cc.Color.R > 135 {
-		t.Fatalf("drag-mid R=%d, want ~127", cc.Color.R)
+	if r := cc.Color().Get().R; r < 120 || r > 135 {
+		t.Fatalf("drag-mid R=%d, want ~127", r)
 	}
-	if last != cc.Color {
-		t.Fatal("OnChange did not report the latest colour")
+	if last != cc.Color().Get() {
+		t.Fatal("Subscribe did not report the latest colour")
 	}
 	// Release, then a stray drag is ignored.
 	cc.OnEvent(Event{Kind: EventMouseUp})
 	if cc.active != 0 {
 		t.Fatalf("mouse-up did not release: active=%d", cc.active)
 	}
-	before := cc.Color
+	before := cc.Color().Get()
 	cc.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 5, Y: rY + 2})
-	if cc.Color != before {
+	if cc.Color().Get() != before {
 		t.Fatal("drag after release changed the colour")
 	}
 }
