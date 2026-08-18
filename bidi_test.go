@@ -7,7 +7,7 @@ package toolkit
 import (
 	"testing"
 
-	"github.com/go-opentype/bidi"
+	"github.com/go-typeset/bidi"
 	"github.com/go-widgets/painter"
 )
 
