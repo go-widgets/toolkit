@@ -213,7 +213,7 @@ func routeFocusKey(ce focusEnumerator, ev Event) bool {
 func focusClick(ce focusEnumerator, sx, sy int) {
 	list := focusListOf(ce)
 	for _, w := range list {
-		if w.Bounds().Contains(sx, sy) {
+		if w.HitTest(sx, sy) {
 			setSingleFocus(list, w)
 			return
 		}

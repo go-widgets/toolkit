@@ -177,7 +177,7 @@ func (b *Border) OnEvent(ev Event) {
 	// Otherwise route to the region under the pointer (a nested Paned/Border
 	// then handles its own splitter drag through the same event).
 	for _, w := range b.regions() {
-		if w.Bounds().Contains(sx, sy) {
+		if w.HitTest(sx, sy) {
 			w.OnEvent(translateEvent(ev, pr, w.Bounds()))
 			return
 		}

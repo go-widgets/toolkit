@@ -319,7 +319,7 @@ func (c *Container) OnEvent(ev Event) {
 	}
 	for _, it := range c.items {
 		b := it.Widget.Bounds()
-		if b.W > 0 && b.H > 0 && b.Contains(sx, sy) {
+		if b.W > 0 && b.H > 0 && it.Widget.HitTest(sx, sy) {
 			it.Widget.OnEvent(translateEvent(ev, pr, b))
 			return
 		}
