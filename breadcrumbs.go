@@ -57,9 +57,9 @@ func (b *Breadcrumbs) Draw(p painter.Painter, theme *Theme) {
 		b.drawText(p, x, ty, seg, theme.OnBackground)
 		x += b.textWidth(seg)
 		if i < n-1 {
-			x += BreadcrumbGap
+			x += scaled(BreadcrumbGap)
 			b.drawText(p, x, ty, BreadcrumbSep, theme.Border)
-			x += b.textWidth(BreadcrumbSep) + BreadcrumbGap
+			x += b.textWidth(BreadcrumbSep) + scaled(BreadcrumbGap)
 		}
 	}
 }
@@ -83,7 +83,7 @@ func (b *Breadcrumbs) OnEvent(ev Event) {
 		}
 		x += w
 		if i < n-1 {
-			x += BreadcrumbGap + b.textWidth(BreadcrumbSep) + BreadcrumbGap
+			x += scaled(BreadcrumbGap) + b.textWidth(BreadcrumbSep) + scaled(BreadcrumbGap)
 		}
 	}
 }

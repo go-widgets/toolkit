@@ -43,6 +43,16 @@ const (
 	ViewSwitcherPadX = 12
 )
 
+// ViewSwitcherHeight is the recommended strip height in device pixels at the
+// current [MetricScale] and touch [Density]: the scaled [ViewSwitcherH] clamped
+// UP to the density minimum hit target via [TouchTarget]. A segment is a tap
+// target, so at [DensityTouch] the recommended height reaches the finger floor
+// (>=44 device px); under the default [DensityCompact] the clamp is a
+// pass-through, so at MetricScale 1 it is exactly the historical raw
+// ViewSwitcherH. A host allocating a strip (a HeaderBar-like layout) sizes it
+// to this so its segments are large enough to tap.
+func ViewSwitcherHeight() int { return TouchTarget(scaled(ViewSwitcherH)) }
+
 // NewViewSwitcher constructs a ViewSwitcher over views with the
 // initial highlighted segment at current. current is clamped into
 // the [0, len(views)-1] range, or forced to 0 when views is empty,
@@ -86,7 +96,8 @@ func (v *ViewSwitcher) Draw(p painter.Painter, theme *Theme) {
 		}
 	}
 	// Bottom border line.
-	fillRect(p, r.X, r.Y+r.H-1, r.W, 1, theme.Border)
+	bw := max(1, scaled(1))
+	fillRect(p, r.X, r.Y+r.H-bw, r.W, bw, theme.Border)
 	v.drawFocusRing(p, theme, r)
 }
 

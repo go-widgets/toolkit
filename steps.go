@@ -75,26 +75,29 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 		return
 	}
 	vertical := s.Orientation == Vertical
+	boxW, boxH := scaled(StepBoxW), scaled(StepBoxH)
+	conn, gap := scaled(StepConnectorW), scaled(StepLabelGap)
+	line := max(1, scaled(1))
 	// The badge column is pinned to one edge; the layout axis advances the
 	// other coordinate. Horizontal centres the badge row vertically inside a
 	// tall bar (unchanged); vertical leaves the badge at the left edge so the
 	// caption has room to its right.
 	x, y := r.X, r.Y
-	if !vertical && r.H > StepBoxH {
-		y = r.Y + (r.H-StepBoxH)/2
+	if !vertical && r.H > boxH {
+		y = r.Y + (r.H-boxH)/2
 	}
 	for i, lab := range s.Labels {
 		if i > 0 {
 			if vertical {
 				// Connector: 1-px vertical line at the badge horizontal centre.
-				connX := x + StepBoxW/2
-				fillRect(p, connX, y, 1, StepConnectorW, theme.Border)
-				y += StepConnectorW
+				connX := x + boxW/2
+				fillRect(p, connX, y, line, conn, theme.Border)
+				y += conn
 			} else {
 				// Connector: 1-px horizontal line at the badge vertical centre.
-				connY := y + StepBoxH/2
-				fillRect(p, x, connY, StepConnectorW, 1, theme.Border)
-				x += StepConnectorW
+				connY := y + boxH/2
+				fillRect(p, x, connY, conn, line, theme.Border)
+				x += conn
 			}
 		}
 		fill := theme.SurfaceAlt
@@ -103,34 +106,34 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 			fill = theme.Accent
 			ink = theme.Background
 		}
-		fillRect(p, x, y, StepBoxW, StepBoxH, fill)
-		strokeRect(p, x, y, StepBoxW, StepBoxH, theme.Border)
+		fillRect(p, x, y, boxW, boxH, fill)
+		strokeRect(p, x, y, boxW, boxH, theme.Border)
 		num := strconv.Itoa(i + 1)
 		tw := s.textWidth(num)
-		tx := x + (StepBoxW-tw)/2
-		ty := y + (StepBoxH-s.glyphHeight())/2
+		tx := x + (boxW-tw)/2
+		ty := y + (boxH-s.glyphHeight())/2
 		s.drawText(p, tx, ty, num, ink)
 		if lab != "" {
 			if vertical {
 				// Caption to the right of the badge, vertically centred on it.
-				lx := x + StepBoxW + StepLabelGap
-				ly := y + (StepBoxH-s.glyphHeight())/2
+				lx := x + boxW + gap
+				ly := y + (boxH-s.glyphHeight())/2
 				s.drawText(p, lx, ly, lab, theme.OnBackground)
 			} else {
 				lw := s.textWidth(lab)
-				lx := x + (StepBoxW-lw)/2
+				lx := x + (boxW-lw)/2
 				// A caption wider than its badge is centred under it and would
 				// poke past the left edge on the first step (or the right edge
 				// on the last); keep it within Bounds().
 				lx = clampInt(lx, r.X, r.X+r.W-lw)
-				ly := y + StepBoxH + StepLabelGap
+				ly := y + boxH + gap
 				s.drawText(p, lx, ly, lab, theme.OnBackground)
 			}
 		}
 		if vertical {
-			y += StepBoxH
+			y += boxH
 		} else {
-			x += StepBoxW
+			x += boxW
 		}
 	}
 }
@@ -149,18 +152,28 @@ func (s *Steps) OnEvent(ev Event) {
 	}
 	vertical := s.Orientation == Vertical
 	r := s.Bounds()
+	boxW, boxH := scaled(StepBoxW), scaled(StepBoxH)
+	conn := scaled(StepConnectorW)
+	// A badge is a small affordance drawn boxW x boxH; its TAP target clamps UP
+	// to the density minimum on each axis and centres over the drawn badge (the
+	// Switch.HitRect pattern), WITHOUT changing what's painted. At compact the
+	// clamp is a pass-through, so the hit box is exactly the drawn badge and
+	// byte-identical to before; at touch it reaches the >=44px finger floor.
+	hitW, hitH := TouchTarget(boxW), TouchTarget(boxH)
 	yOff := 0
-	if !vertical && r.H > StepBoxH {
-		yOff = (r.H - StepBoxH) / 2
+	if !vertical && r.H > boxH {
+		yOff = (r.H - boxH) / 2
 	}
 	for i := range s.Labels {
 		bx, by := 0, yOff
 		if vertical {
-			by = i * (StepBoxH + StepConnectorW)
+			by = i * (boxH + conn)
 		} else {
-			bx = i * (StepBoxW + StepConnectorW)
+			bx = i * (boxW + conn)
 		}
-		if ev.X >= bx && ev.X < bx+StepBoxW && ev.Y >= by && ev.Y < by+StepBoxH {
+		hx := bx - (hitW-boxW)/2
+		hy := by - (hitH-boxH)/2
+		if ev.X >= hx && ev.X < hx+hitW && ev.Y >= hy && ev.Y < hy+hitH {
 			s.Current = i
 			s.OnSelect(i)
 			return

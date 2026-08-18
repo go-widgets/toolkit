@@ -89,6 +89,15 @@ func NewTreeTable(cols []TreeTableColumn, root []*TreeTableNode) *TreeTable {
 	return &TreeTable{Columns: cols, Root: root}
 }
 
+// rowH is the effective body-row pixel height used for every body layout and
+// hit-test: the HiDPI-scaled [TreeTableRowHeight] clamped UP to the density
+// minimum hit target via [TouchTarget]. Under [DensityCompact] the clamp is a
+// pass-through, so it equals scaled(TreeTableRowHeight); under [DensityTouch] a
+// short body row grows to the finger floor (>=44 device px) so both the drawn
+// band and its tap target reach it. The header row is a non-interactive band
+// and keeps its plain scaled(TreeTableHeaderHeight).
+func (t *TreeTable) rowH() int { return TouchTarget(scaled(TreeTableRowHeight)) }
+
 // flatten populates rows by walking every tree in Root in depth-first
 // order + skipping the children of any collapsed node — the forest
 // analogue of TreeView.flatten.
@@ -121,7 +130,7 @@ func (t *TreeTable) bodyVisibleRows() int {
 	if h <= 0 {
 		return 0
 	}
-	return h / scaled(TreeTableRowHeight)
+	return h / t.rowH()
 }
 
 // clampScrollRow confines row to [0, max(0, total-window)], the range
@@ -388,23 +397,23 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 	onAccent := accentInk(theme)
 	for i := start; i < end; i++ {
 		row := t.rows[i]
-		y := bodyY + (i-start)*scaled(TreeTableRowHeight)
+		y := bodyY + (i-start)*t.rowH()
 		bg := theme.Surface
 		ink := theme.OnSurface
 		if row.node == t.Selected {
 			bg = theme.Accent
 			ink = onAccent
 		}
-		fillRect(p, r.X, y, bodyW, scaled(TreeTableRowHeight), bg)
+		fillRect(p, r.X, y, bodyW, t.rowH(), bg)
 		cx := r.X
-		cty := y + (scaled(TreeTableRowHeight)-t.glyphHeight())/2
+		cty := y + (t.rowH()-t.glyphHeight())/2
 		for j, col := range t.Columns {
 			cellW := widths[j]
 			if j == 0 {
-				indent := r.X + row.depth*TreeIndentW
+				indent := r.X + row.depth*scaled(TreeIndentW)
 				if len(row.node.Children) > 0 {
-					cxg := indent + 4
-					cyg := y + scaled(TreeTableRowHeight)/2
+					cxg := indent + scaled(4)
+					cyg := y + t.rowH()/2
 					// ▾ (expanded): flat top narrowing to a point at the
 					// bottom. ▸ (collapsed): flat left narrowing to a
 					// point on the right. Same 4-row fillRect technique
@@ -419,7 +428,7 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 						}
 					}
 				}
-				t.drawText(p, indent+TreeChevronW, cty, cellText(row.node, 0), ink)
+				t.drawText(p, indent+scaled(TreeChevronW), cty, cellText(row.node, 0), ink)
 			} else {
 				text := cellText(row.node, j)
 				t.drawText(p, cellTextX(&t.Base, cx, cellW, text, col.Align), cty, text, ink)
@@ -502,7 +511,7 @@ func (t *TreeTable) NodeAt(x, y int) *TreeTableNode {
 	t.flatten()
 	total := len(t.rows)
 	wr := t.bodyVisibleRows()
-	localIdx := (y - scaled(TreeTableHeaderHeight)) / scaled(TreeTableRowHeight)
+	localIdx := (y - scaled(TreeTableHeaderHeight)) / t.rowH()
 	if wr > 0 && total > wr && localIdx >= wr {
 		return nil
 	}
@@ -592,10 +601,10 @@ func (t *TreeTable) OnEvent(ev Event) {
 		// there is simply a no-op.
 		return
 	}
-	localIdx := (ev.Y - scaled(TreeTableHeaderHeight)) / scaled(TreeTableRowHeight)
+	localIdx := (ev.Y - scaled(TreeTableHeaderHeight)) / t.rowH()
 	if windowed && localIdx >= wr {
 		// Below the last painted row (only possible when the body height
-		// isn't an exact multiple of scaled(TreeTableRowHeight)): nothing was
+		// isn't an exact multiple of t.rowH()): nothing was
 		// drawn there.
 		return
 	}
@@ -604,8 +613,8 @@ func (t *TreeTable) OnEvent(ev Event) {
 		return
 	}
 	row := t.rows[idx]
-	chevronX := row.depth*TreeIndentW + 4
-	if ev.X >= chevronX-3 && ev.X < chevronX+8 && len(row.node.Children) > 0 {
+	chevronX := row.depth*scaled(TreeIndentW) + scaled(4)
+	if ev.X >= chevronX-scaled(3) && ev.X < chevronX+scaled(8) && len(row.node.Children) > 0 {
 		row.node.Expanded = !row.node.Expanded
 		t.flatten()
 		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.bodyVisibleRows())

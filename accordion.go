@@ -148,11 +148,11 @@ func (a *Accordion) Draw(p painter.Painter, theme *Theme) {
 	for i, sec := range a.Sections {
 		hr := headers[i]
 		fillRect(p, hr.X, hr.Y, hr.W, hr.H, theme.SurfaceAlt)
-		cx := hr.X + 6
+		cx := hr.X + scaled(6)
 		cy := hr.Y + ExpanderHeaderHeight()/2
 		drawDisclosureChevron(p, cx, cy, a.isExpanded(i), theme.OnSurface)
 		textY := hr.Y + (ExpanderHeaderHeight()-a.glyphHeight())/2
-		a.drawText(p, hr.X+16, textY, sec.Title, theme.OnSurface)
+		a.drawText(p, hr.X+scaled(16), textY, sec.Title, theme.OnSurface)
 		if sec.Body == nil {
 			continue
 		}

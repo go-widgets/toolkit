@@ -489,6 +489,23 @@ const TableRowHeight = 22
 // header + body cell before its text lands.
 const TableCellPadX = 4
 
+// rowH is the effective body-row pixel height used for every body layout, hit
+// test and scrollbar proportion: the HiDPI-scaled [TableRowHeight] clamped UP
+// to the density minimum hit target via [TouchTarget]. Under [DensityCompact]
+// the clamp is a pass-through, so it equals scaled(TableRowHeight) -- and, at
+// the default MetricScale of 1, exactly the historical raw TableRowHeight so a
+// desktop Table is byte-identical. Under [DensityTouch] a short body row grows
+// to the finger floor (>=44 device px) so both the drawn band and its tap
+// target reach it. The header band ([TableHeaderHeight]) keeps its plain scaled
+// height -- sort/resize hit-testing on it is column-driven, not row-height
+// driven.
+func (t *Table) rowH() int { return TouchTarget(scaled(TableRowHeight)) }
+
+// cellPadX is [TableCellPadX] in device pixels at the current HiDPI scale. Body
+// and header cells share it so their text insets track MetricScale together;
+// under the default scale it is the historical raw padding.
+func (t *Table) cellPadX() int { return scaled(TableCellPadX) }
+
 // tableEmptyPlaceholder is the label rendered under the header when
 // Rows is empty. Split into a constant so tests can assert width
 // without hard-coding the string in two places.
@@ -626,7 +643,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		// one TableRowHeight below the header.
 		tw := t.textWidth(tableEmptyPlaceholder)
 		tx := r.X + (r.W-tw)/2
-		ty := bodyY + (TableRowHeight-t.glyphHeight())/2
+		ty := bodyY + (t.rowH()-t.glyphHeight())/2
 		t.drawText(p, tx, ty, tableEmptyPlaceholder, theme.OnSurface)
 		return
 	}
@@ -670,7 +687,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		lines := t.lines()
 		for vi := scroll; vi < end; vi++ {
 			ln := lines[vi]
-			y := bodyY + (vi-scroll)*TableRowHeight
+			y := bodyY + (vi-scroll)*t.rowH()
 			switch {
 			case ln.header:
 				t.drawGroupHeader(p, theme, r, y, ln)
@@ -686,7 +703,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		// Ungrouped body: one line per row, on-screen position == index.
 		// Byte-identical to the pre-grouping loop.
 		for i := scroll; i < end; i++ {
-			y := bodyY + (i-scroll)*TableRowHeight
+			y := bodyY + (i-scroll)*t.rowH()
 			t.drawDataRow(p, theme, r, widths, gutter, y, i, selRow, onAccent)
 		}
 	}
@@ -697,7 +714,7 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// it there too). Drawn inside the same clip as the body rows so it
 	// never spills past Bounds() any more than a row itself would.
 	if t.reorderActive() && t.dropIndicator >= 0 && t.dropIndicator <= len(t.Rows) {
-		iy := bodyY + (t.dropIndicator-scroll)*TableRowHeight
+		iy := bodyY + (t.dropIndicator-scroll)*t.rowH()
 		fillRect(p, r.X, iy-1, r.W, 2, theme.Accent)
 	}
 	if canClip {
@@ -795,8 +812,8 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 		// position) so scrolling never shifts which rows read as odd/even.
 		bg = theme.Background
 	}
-	fillRect(p, r.X, y, r.W, TableRowHeight, bg)
-	cty := y + (TableRowHeight-t.glyphHeight())/2
+	fillRect(p, r.X, y, r.W, t.rowH(), bg)
+	cty := y + (t.rowH()-t.glyphHeight())/2
 	if !t.hScrollable() {
 		cx := r.X
 		for j := range t.Columns {
@@ -812,7 +829,7 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 	f := t.frozenCount()
 	fx := r.X + t.frozenWidth(widths)
 	right := r.X + t.contentWidth()
-	withClip(p, Rect{X: fx, Y: y, W: right - fx, H: TableRowHeight}, func() {
+	withClip(p, Rect{X: fx, Y: y, W: right - fx, H: t.rowH()}, func() {
 		for j := f; j < len(t.Columns); j++ {
 			t.paintCell(p, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
 		}
@@ -835,13 +852,13 @@ func (t *Table) paintCell(p painter.Painter, widths []int, gutter, cellX, cty, y
 	cellW := widths[j]
 	if j == 0 && gutter > 0 {
 		if dg := t.disclosureGutter(); dg > 0 {
-			drawDisclosureChevron(p, cellX+TableCellPadX+4, y+TableRowHeight/2, t.expanded[i], ink)
+			drawDisclosureChevron(p, cellX+t.cellPadX()+scaled(4), y+t.rowH()/2, t.expanded[i], ink)
 			cellX += dg
 		}
 		if t.iconGutter() > 0 {
 			if draw, ok := t.resolveRowIcon(i); ok {
-				iconY := y + (TableRowHeight-scaled(TableIconSize))/2
-				draw(p, Rect{X: cellX + TableCellPadX, Y: iconY, W: scaled(TableIconSize), H: scaled(TableIconSize)}, ink)
+				iconY := y + (t.rowH()-scaled(TableIconSize))/2
+				draw(p, Rect{X: cellX + t.cellPadX(), Y: iconY, W: scaled(TableIconSize), H: scaled(TableIconSize)}, ink)
 			}
 			cellX += t.iconGutter()
 		}
@@ -880,11 +897,11 @@ func withClip(p painter.Painter, clip Rect, fn func()) {
 // stripe spanning the width, a disclosure chevron (▼ open / ▶ collapsed) and
 // the group value with its member count, "value (n)".
 func (t *Table) drawGroupHeader(p painter.Painter, theme *Theme, r Rect, y int, ln tableLine) {
-	fillRect(p, r.X, y, r.W, TableRowHeight, theme.SurfaceAlt)
-	chevX := r.X + TableCellPadX + 4
-	drawDisclosureChevron(p, chevX, y+TableRowHeight/2, !ln.collapsed, theme.OnSurface)
-	tx := r.X + TableCellPadX + scaled(TableIconSize)
-	ty := y + (TableRowHeight-t.glyphHeight())/2
+	fillRect(p, r.X, y, r.W, t.rowH(), theme.SurfaceAlt)
+	chevX := r.X + t.cellPadX() + scaled(4)
+	drawDisclosureChevron(p, chevX, y+t.rowH()/2, !ln.collapsed, theme.OnSurface)
+	tx := r.X + t.cellPadX() + scaled(TableIconSize)
+	ty := y + (t.rowH()-t.glyphHeight())/2
 	t.drawText(p, tx, ty, ln.group+" ("+strconv.Itoa(ln.count)+")", theme.OnSurface)
 }
 
@@ -896,8 +913,8 @@ func (t *Table) drawGroupHeader(p painter.Painter, theme *Theme, r Rect, y int, 
 // scroll, and honours the same column-0 icon gutter so its first cell aligns
 // with the rows above.
 func (t *Table) drawSummaryRow(p painter.Painter, theme *Theme, r Rect, widths []int, gutter, y int, ln tableLine) {
-	fillRect(p, r.X, y, r.W, TableRowHeight, theme.SurfaceAlt)
-	cty := y + (TableRowHeight-t.glyphHeight())/2
+	fillRect(p, r.X, y, r.W, t.rowH(), theme.SurfaceAlt)
+	cty := y + (t.rowH()-t.glyphHeight())/2
 	paint := func(j, cellX int) {
 		text := t.aggregate(t.Columns[j].Aggregate, j, ln.sumStart, ln.sumEnd)
 		if text == "" {
@@ -921,7 +938,7 @@ func (t *Table) drawSummaryRow(p painter.Painter, theme *Theme, r Rect, widths [
 	f := t.frozenCount()
 	fx := r.X + t.frozenWidth(widths)
 	right := r.X + t.contentWidth()
-	withClip(p, Rect{X: fx, Y: y, W: right - fx, H: TableRowHeight}, func() {
+	withClip(p, Rect{X: fx, Y: y, W: right - fx, H: t.rowH()}, func() {
 		for j := f; j < len(t.Columns); j++ {
 			paint(j, t.columnScreenX(r.X, widths, j))
 		}
@@ -937,9 +954,9 @@ func (t *Table) drawSummaryRow(p painter.Painter, theme *Theme, r Rect, widths [
 // parent row. Reached only for detail lines, which lines() emits solely while
 // RowDetail is non-nil, so RowDetail is safe to call here.
 func (t *Table) drawDetailRow(p painter.Painter, theme *Theme, r Rect, y int, ln tableLine) {
-	fillRect(p, r.X, y, r.W, TableRowHeight, theme.SurfaceAlt)
-	tx := r.X + t.leadGutter() + TableCellPadX
-	ty := y + (TableRowHeight-t.glyphHeight())/2
+	fillRect(p, r.X, y, r.W, t.rowH(), theme.SurfaceAlt)
+	tx := r.X + t.leadGutter() + t.cellPadX()
+	ty := y + (t.rowH()-t.glyphHeight())/2
 	t.drawText(p, tx, ty, t.RowDetail(ln.dataRow), theme.OnSurface)
 }
 
@@ -981,7 +998,7 @@ func (t *Table) scrollbarGeom() (sbGeom, bool) {
 	r := t.Bounds()
 	trackTop := scaled(TableHeaderHeight)
 	trackH := r.H - scaled(TableHeaderHeight)
-	contentH := t.lineCount() * TableRowHeight
+	contentH := t.lineCount() * t.rowH()
 	thumbH := trackH * trackH / contentH
 	if thumbH < tableScrollbarThumbMin {
 		thumbH = tableScrollbarThumbMin
@@ -991,9 +1008,9 @@ func (t *Table) scrollbarGeom() (sbGeom, bool) {
 		cross0:     r.W - scrollbarWidth,
 		trackStart: trackTop,
 		trackLen:   trackH,
-		thumbStart: trackTop + scroll*TableRowHeight*(trackH-thumbH)/(contentH-trackH),
+		thumbStart: trackTop + scroll*t.rowH()*(trackH-thumbH)/(contentH-trackH),
 		thumbLen:   thumbH,
-		travelNum:  TableRowHeight * (trackH - thumbH),
+		travelNum:  t.rowH() * (trackH - thumbH),
 		travelDen:  contentH - trackH,
 		maxScroll:  t.maxScrollRow(),
 	}, true
@@ -1083,21 +1100,22 @@ func (t *Table) columnWidths(total int) []int {
 // b supplies the effective font so right/centre alignment measures the
 // text in the Table's own font (b.textWidth) rather than the global one.
 func cellTextX(b *Base, cellX, cellW int, text string, align Align) int {
+	pad := scaled(TableCellPadX)
 	switch align {
 	case AlignRight:
-		x := cellX + cellW - TableCellPadX - b.textWidth(text)
-		if min := cellX + TableCellPadX; x < min {
+		x := cellX + cellW - pad - b.textWidth(text)
+		if min := cellX + pad; x < min {
 			x = min
 		}
 		return x
 	case AlignCenter:
 		x := cellX + (cellW-b.textWidth(text))/2
-		if min := cellX + TableCellPadX; x < min {
+		if min := cellX + pad; x < min {
 			x = min
 		}
 		return x
 	default: // AlignLeft
-		return cellX + TableCellPadX
+		return cellX + pad
 	}
 }
 
@@ -1111,7 +1129,7 @@ func (t *Table) iconGutter() int {
 	if t.RowIcon == nil {
 		return 0
 	}
-	return TableCellPadX + scaled(TableIconSize)
+	return t.cellPadX() + scaled(TableIconSize)
 }
 
 // disclosureGutter is the leading pixel gutter reserved inside the first
@@ -1123,7 +1141,7 @@ func (t *Table) disclosureGutter() int {
 	if t.RowDetail == nil {
 		return 0
 	}
-	return TableCellPadX + scaled(TableIconSize)
+	return t.cellPadX() + scaled(TableIconSize)
 }
 
 // leadGutter is the total leading gutter carved from column 0: the disclosure
@@ -1300,7 +1318,8 @@ func (t *Table) bodyVisibleRows() int {
 	if h <= 0 {
 		return 0
 	}
-	return (h + TableRowHeight - 1) / TableRowHeight
+	rh := t.rowH()
+	return (h + rh - 1) / rh
 }
 
 // bodyOverflows reports whether Rows holds more entries than fit in
@@ -2025,7 +2044,7 @@ func (t *Table) rowAt(localY int) int {
 	if localY < scaled(TableHeaderHeight) {
 		return -1
 	}
-	vi := t.clampScrollRow() + (localY-scaled(TableHeaderHeight))/TableRowHeight
+	vi := t.clampScrollRow() + (localY-scaled(TableHeaderHeight))/t.rowH()
 	if !t.useLineModel() {
 		if vi < 0 || vi >= len(t.Rows) {
 			return -1
@@ -2049,7 +2068,7 @@ func (t *Table) lineAt(localY int) (tableLine, bool) {
 	if localY < scaled(TableHeaderHeight) || !t.grouped() {
 		return tableLine{}, false
 	}
-	vi := t.clampScrollRow() + (localY-scaled(TableHeaderHeight))/TableRowHeight
+	vi := t.clampScrollRow() + (localY-scaled(TableHeaderHeight))/t.rowH()
 	lines := t.lines()
 	if vi < 0 || vi >= len(lines) {
 		return tableLine{}, false
@@ -2067,7 +2086,7 @@ func (t *Table) lineAt(localY int) (tableLine, bool) {
 func (t *Table) cellRect(row, col int) Rect {
 	r := t.Bounds()
 	widths := t.columnWidths(t.contentWidth())
-	y := r.Y + scaled(TableHeaderHeight) + (t.visualIndex(row)-t.clampScrollRow())*TableRowHeight
+	y := r.Y + scaled(TableHeaderHeight) + (t.visualIndex(row)-t.clampScrollRow())*t.rowH()
 	cellX := t.columnScreenX(r.X, widths, col)
 	cellW := widths[col]
 	if col == 0 {
@@ -2076,7 +2095,7 @@ func (t *Table) cellRect(row, col int) Rect {
 			cellW -= g
 		}
 	}
-	return Rect{X: cellX, Y: y, W: cellW, H: TableRowHeight}
+	return Rect{X: cellX, Y: y, W: cellW, H: t.rowH()}
 }
 
 // beginEdit opens an inline text editor over cell (row,col), seeded with the
@@ -2189,7 +2208,7 @@ func (t *Table) rowInsertIndexAt(localY int) int {
 	if localY < scaled(TableHeaderHeight) {
 		return scroll
 	}
-	idx := scroll + (localY-scaled(TableHeaderHeight)+TableRowHeight/2)/TableRowHeight
+	idx := scroll + (localY-scaled(TableHeaderHeight)+t.rowH()/2)/t.rowH()
 	if idx > len(t.Rows) {
 		idx = len(t.Rows)
 	}

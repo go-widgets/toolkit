@@ -144,13 +144,19 @@ func (t *TreeView) walkTree(n *TreeNode, depth int) {
 	}
 }
 
-// rowHeight returns the effective per-row pixel height, applying the
-// same "0 means default" fallback everywhere it's needed.
+// rowHeight returns the effective per-row pixel height, applying the same "0
+// means default" fallback everywhere it's needed, then clamping UP to the
+// density minimum hit target via [TouchTarget]. Under [DensityCompact] the
+// clamp is a pass-through, so the row is byte-identical to the configured (or
+// default scaled-18) height; under [DensityTouch] a short row grows to the
+// finger floor (>=44 device px) so both the drawn band and its tap target reach
+// it.
 func (t *TreeView) rowHeight() int {
-	if t.RowHeight <= 0 {
-		return scaled(18)
+	h := t.RowHeight
+	if h <= 0 {
+		h = scaled(18)
 	}
-	return t.RowHeight
+	return TouchTarget(h)
 }
 
 // windowRows returns how many full rows fit inside Bounds().H at the
