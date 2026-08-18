@@ -193,19 +193,20 @@ func TestToggleButtonHoverAndDisabled(t *testing.T) {
 	}
 	// Click toggles Pressed (Accent face wins over hover).
 	toggled := 0
-	tb.OnToggle = func(bool) { toggled++ }
+	tb.Pressed().Subscribe(func(bool) { toggled++ })
 	tb.OnEvent(Event{Kind: EventClick})
-	if !tb.Pressed || toggled != 1 {
-		t.Fatalf("toggle click: pressed=%v toggled=%d", tb.Pressed, toggled)
+	if !tb.Pressed().Get() || toggled != 1 {
+		t.Fatalf("toggle click: pressed=%v toggled=%d", tb.Pressed().Get(), toggled)
 	}
 	// Disabled: inert + muted.
 	tb.Disabled = true
-	tb.Pressed, tb.hovered = false, false
+	tb.Pressed().Set(false)
+	tb.hovered = false
 	toggled = 0
 	tb.OnEvent(Event{Kind: EventClick})
 	tb.OnEvent(Event{Kind: EventMouseMove, X: 20, Y: 10})
-	if tb.Pressed || toggled != 0 || tb.hovered {
-		t.Fatalf("disabled toggle reacted: pressed=%v toggled=%d hovered=%v", tb.Pressed, toggled, tb.hovered)
+	if tb.Pressed().Get() || toggled != 0 || tb.hovered {
+		t.Fatalf("disabled toggle reacted: pressed=%v toggled=%d hovered=%v", tb.Pressed().Get(), toggled, tb.hovered)
 	}
 	dis := makeSurface(40, 20)
 	tb.Draw(newP(dis, 40), th)

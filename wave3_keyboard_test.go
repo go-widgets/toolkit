@@ -131,21 +131,21 @@ func TestSwitchKeyToggles(t *testing.T) {
 func TestToggleButtonKeyToggles(t *testing.T) {
 	toggles := 0
 	tb := NewToggleButton("X", false)
-	tb.OnToggle = func(p bool) { toggles++ }
+	tb.Pressed().Subscribe(func(p bool) { toggles++ })
 	tb.OnEvent(kd(" "))
-	if !tb.Pressed || toggles != 1 {
-		t.Fatalf("space: Pressed=%v toggles=%d", tb.Pressed, toggles)
+	if !tb.Pressed().Get() || toggles != 1 {
+		t.Fatalf("space: Pressed=%v toggles=%d", tb.Pressed().Get(), toggles)
 	}
 	tb.OnEvent(kd("Enter"))
-	if tb.Pressed || toggles != 2 {
-		t.Fatalf("enter: Pressed=%v toggles=%d", tb.Pressed, toggles)
+	if tb.Pressed().Get() || toggles != 2 {
+		t.Fatalf("enter: Pressed=%v toggles=%d", tb.Pressed().Get(), toggles)
 	}
 	tb.Disabled = true
 	tb.OnEvent(kd(" "))
-	if tb.Pressed || toggles != 2 {
-		t.Fatalf("disabled toggle activated (Pressed=%v)", tb.Pressed)
+	if tb.Pressed().Get() || toggles != 2 {
+		t.Fatalf("disabled toggle activated (Pressed=%v)", tb.Pressed().Get())
 	}
-	NewToggleButton("nil", false).OnEvent(kd("Enter")) // nil OnToggle safe
+	NewToggleButton("nil", false).OnEvent(kd("Enter")) // no subscriber safe
 }
 
 // --- RadioButton / RadioGroup --------------------------------------------
