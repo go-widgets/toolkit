@@ -45,7 +45,7 @@ func TestNotebookNeverPaintsOutsideBounds(t *testing.T) {
 		nb.AddTab("Bar", NewBarChart([]float64{4, 7, 2, 8, 5, 3}))
 		nb.AddTab("Pie", NewPieChart([]float64{3, 5, 2, 4, 1}))
 		nb.AddTab("Docs", NewMarkdownView("# Charts\n\n- line\n- bar\n- pie"))
-		nb.Active = active
+		nb.Active().Set(active)
 		nb.SetBounds(r)
 		buf := makeSurface(w, h)
 		nb.Draw(newP(buf, w), DefaultLight())

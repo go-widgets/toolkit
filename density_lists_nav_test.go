@@ -320,12 +320,15 @@ func TestNotebookTabHitTouch(t *testing.T) {
 	n.AddTab("one", nil)
 	n.AddTab("two", nil)
 	n.SetBounds(Rect{X: 0, Y: 0, W: 320, H: 200})
+	// Seed the active tab to 1 so a click that selects tab 0 is an observable
+	// change, letting the subscriber prove the click landed on the tab row.
+	n.Active().Set(1)
 	got := -1
-	n.OnTabChanged = func(i int) { got = i }
+	n.Active().Subscribe(func(i int) { got = i })
 	// Top strip is 44 tall; a click at y=40 is still on the tab row.
 	n.OnEvent(Event{Kind: EventClick, X: 10, Y: 40})
-	if n.Active != 0 || got != 0 {
-		t.Fatalf("touch tab click Active=%d cb=%d, want 0/0 (44px strip)", n.Active, got)
+	if n.Active().Get() != 0 || got != 0 {
+		t.Fatalf("touch tab click Active=%d cb=%d, want 0/0 (44px strip)", n.Active().Get(), got)
 	}
 }
 

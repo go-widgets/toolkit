@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // NotebookTab is one entry in a Notebook. Label is the human title
 // painted on the tab; Page is the widget shown when the tab is
@@ -35,15 +38,19 @@ const (
 // NotebookTabStripH tall) and the strip SCROLLS: the mouse wheel over a
 // vertical strip shifts the stacked tabs (clamped at both ends), and arrow-key
 // tab switching scrolls the strip to keep the active tab in view, so a strip
-// with more tabs than fit stays fully reachable. Clicking a tab swaps Active +
-// fires OnTabChanged.
+// with more tabs than fit stays fully reachable. Clicking a tab Sets the Active
+// Observable (notifying its subscribers).
+//
+// The reactive active-tab index is MVVM-only: it lives in an unexported
+// Observable exposed via [Notebook.Active]. Tabs and TabSide are set-once
+// layout config and stay plain fields.
 type Notebook struct {
 	Base
 	focusState
-	Tabs         []NotebookTab
-	Active       int
-	TabSide      TabSide
-	OnTabChanged func(idx int)
+	Tabs    []NotebookTab
+	TabSide TabSide
+
+	active *mvvm.Observable[int]
 
 	// tabScroll is the index of the first tab shown at the top of a vertical
 	// (Left/Right) strip -- the scroll offset that makes an over-long vertical
@@ -52,6 +59,17 @@ type Notebook struct {
 	// stale value is harmless; at tabScroll == 0 the strip renders + hit-tests
 	// byte-identically to before scrolling existed.
 	tabScroll int
+}
+
+// Active is the active tab index as a shared [mvvm.Observable]: a host binds it
+// (Set / Subscribe / two-way) — there is no settable Active field. A tab click
+// or a keyboard tab move Sets it; subscribers are notified. The accessor
+// lazy-inits to 0 so a bare &Notebook{} is usable without a constructor.
+func (n *Notebook) Active() *mvvm.Observable[int] {
+	if n.active == nil {
+		n.active = mvvm.NewObservable(0)
+	}
+	return n.active
 }
 
 // Geometry constants for the tab strip: the strip's thickness (its height for a
@@ -194,10 +212,11 @@ func (n *Notebook) scrollActiveIntoView() {
 	if vis <= 0 {
 		return
 	}
-	if n.Active < n.tabScroll {
-		n.tabScroll = n.Active
-	} else if n.Active >= n.tabScroll+vis {
-		n.tabScroll = n.Active - vis + 1
+	active := n.Active().Get()
+	if active < n.tabScroll {
+		n.tabScroll = active
+	} else if active >= n.tabScroll+vis {
+		n.tabScroll = active - vis + 1
 	}
 	n.tabScroll = n.clampedTabScroll()
 }
@@ -243,8 +262,11 @@ func (n *Notebook) drawActiveEdge(p painter.Painter, tr Rect, ink RGBA) {
 	}
 }
 
-// NewNotebook returns an empty Notebook with no tabs + Active = 0.
-func NewNotebook() *Notebook { return &Notebook{} }
+// NewNotebook returns an empty Notebook with no tabs + the Active Observable
+// initialised to 0.
+func NewNotebook() *Notebook {
+	return &Notebook{active: mvvm.NewObservable(0)}
+}
 
 // AddTab appends a tab to the strip with label + the page widget
 // shown when that tab is active.
@@ -259,11 +281,12 @@ func (n *Notebook) AddTab(label string, page Widget) {
 func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
 	withClip(p, n.Bounds(), func() {
 		strip := n.stripRect()
+		active := n.Active().Get()
 		fillRect(p, strip.X, strip.Y, strip.W, strip.H, theme.SurfaceAlt)
 		for i, tab := range n.Tabs {
 			tr := n.tabRect(i)
 			fill := theme.SurfaceAlt
-			if i == n.Active {
+			if i == active {
 				fill = theme.Surface
 			}
 			fillRect(p, tr.X, tr.Y, tr.W, tr.H, fill)
@@ -272,13 +295,13 @@ func (n *Notebook) Draw(p painter.Painter, theme *Theme) {
 			textX := tr.X + (tr.W-tw)/2
 			textY := tr.Y + (tr.H-n.glyphHeight())/2
 			n.drawText(p, textX, textY, tab.Label, theme.OnSurface)
-			if i == n.Active {
+			if i == active {
 				n.drawActiveEdge(p, tr, theme.Accent)
 			}
 		}
 		// Active page in the body area, clipped to it.
-		if n.Active >= 0 && n.Active < len(n.Tabs) {
-			page := n.Tabs[n.Active].Page
+		if active >= 0 && active < len(n.Tabs) {
+			page := n.Tabs[active].Page
 			if page != nil {
 				body := n.bodyRect()
 				page.SetBounds(body)
@@ -303,8 +326,8 @@ func (n *Notebook) OnEvent(ev Event) {
 		}
 	}
 	if ev.Kind == EventKeyDown && !n.Disabled {
-		// Arrow keys move the active tab along the strip, wrapping, firing
-		// OnTabChanged -- the tablist keyboard convention. Both axes are accepted
+		// Arrow keys move the active tab along the strip, wrapping, Setting the
+		// Active Observable -- the tablist keyboard convention. Both axes are accepted
 		// so it works for a horizontal (Top/Bottom) or vertical (Left/Right) strip.
 		switch ev.Code {
 		case "ArrowLeft", "ArrowUp":
@@ -328,8 +351,8 @@ func (n *Notebook) OnEvent(ev Event) {
 			return
 		}
 	}
-	if n.Active >= 0 && n.Active < len(n.Tabs) {
-		page := n.Tabs[n.Active].Page
+	if active := n.Active().Get(); active >= 0 && active < len(n.Tabs) {
+		page := n.Tabs[active].Page
 		if page != nil {
 			body := n.bodyRect()
 			page.SetBounds(body)
@@ -338,27 +361,25 @@ func (n *Notebook) OnEvent(ev Event) {
 	}
 }
 
-// setActive selects tab idx and fires OnTabChanged (nil-safe) -- the shared
-// mutate+callback path for a tab click and a keyboard tab move.
+// setActive selects tab idx and Sets the Active Observable (notifying its
+// subscribers) -- the shared mutate path for a tab click and a keyboard tab
+// move.
 func (n *Notebook) setActive(idx int) {
-	n.Active = idx
+	n.Active().Set(idx)
 	// Keep the newly-active tab visible on a vertical strip (a no-op for a
 	// horizontal strip or an already-visible tab), so keyboard tab switching
 	// onto an off-screen tab scrolls it into view.
 	n.scrollActiveIntoView()
-	if n.OnTabChanged != nil {
-		n.OnTabChanged(idx)
-	}
 }
 
-// stepTab moves Active delta tabs along the strip, wrapping at both ends, and
-// fires OnTabChanged. A no-op when there are no tabs.
+// stepTab moves the active tab delta tabs along the strip, wrapping at both
+// ends, and Sets the Active Observable. A no-op when there are no tabs.
 func (n *Notebook) stepTab(delta int) {
 	count := len(n.Tabs)
 	if count == 0 {
 		return
 	}
-	cur := n.Active
+	cur := n.Active().Get()
 	if cur < 0 || cur >= count {
 		cur = 0
 	}

@@ -603,37 +603,37 @@ func TestComboBoxDrawOpenHighlightRow(t *testing.T) {
 func TestNotebookKeyMovesTab(t *testing.T) {
 	changed := -1
 	n := &Notebook{Tabs: []NotebookTab{{Label: "A"}, {Label: "B"}, {Label: "C"}}}
-	n.OnTabChanged = func(i int) { changed = i }
+	n.Active().Subscribe(func(i int) { changed = i })
 	n.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 100})
 	n.OnEvent(kd("ArrowRight")) // 0 -> 1
-	if n.Active != 1 || changed != 1 {
-		t.Fatalf("ArrowRight: Active=%d cb=%d", n.Active, changed)
+	if n.Active().Get() != 1 || changed != 1 {
+		t.Fatalf("ArrowRight: Active=%d cb=%d", n.Active().Get(), changed)
 	}
 	n.OnEvent(kd("ArrowLeft")) // 1 -> 0
 	n.OnEvent(kd("ArrowLeft")) // 0 -> 2 (wrap)
-	if n.Active != 2 {
-		t.Fatalf("ArrowLeft wrap: Active=%d", n.Active)
+	if n.Active().Get() != 2 {
+		t.Fatalf("ArrowLeft wrap: Active=%d", n.Active().Get())
 	}
 	n.OnEvent(kd("ArrowDown")) // 2 -> 0 (wrap), axis-agnostic
-	if n.Active != 0 {
-		t.Fatalf("ArrowDown wrap: Active=%d", n.Active)
+	if n.Active().Get() != 0 {
+		t.Fatalf("ArrowDown wrap: Active=%d", n.Active().Get())
 	}
 	// Disabled ignores the tab-move key.
 	n.Disabled = true
 	n.OnEvent(kd("ArrowRight"))
-	if n.Active != 0 {
-		t.Fatalf("disabled notebook moved tab (Active=%d)", n.Active)
+	if n.Active().Get() != 0 {
+		t.Fatalf("disabled notebook moved tab (Active=%d)", n.Active().Get())
 	}
-	// Out-of-range Active is treated as 0 by stepTab; empty tabs are a no-op.
+	// Out-of-range active index is treated as 0 by stepTab; empty tabs are a no-op.
 	n.Disabled = false
-	n.Active = 99
+	n.Active().Set(99)
 	n.OnEvent(kd("ArrowRight"))
-	if n.Active != 1 {
-		t.Fatalf("out-of-range Active step: Active=%d, want 1", n.Active)
+	if n.Active().Get() != 1 {
+		t.Fatalf("out-of-range Active step: Active=%d, want 1", n.Active().Get())
 	}
 	empty := &Notebook{}
 	empty.OnEvent(kd("ArrowRight")) // no panic
-	// Nil callback is safe.
+	// A notebook with no subscriber bound is safe.
 	nn := &Notebook{Tabs: []NotebookTab{{Label: "A"}, {Label: "B"}}}
 	nn.OnEvent(kd("ArrowRight"))
 }

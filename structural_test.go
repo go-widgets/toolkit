@@ -107,14 +107,14 @@ func TestNotebookAddTabAndDraw(t *testing.T) {
 func TestNotebookClickSelectsTab(t *testing.T) {
 	got := -1
 	n := NewNotebook()
-	n.OnTabChanged = func(i int) { got = i }
+	n.Active().Subscribe(func(i int) { got = i })
 	n.AddTab("A", &recordingWidget{})
 	n.AddTab("B", &recordingWidget{})
 	n.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
 	// Click at x=100 in the strip → tab idx = 100 / 80 = 1.
 	n.OnEvent(Event{Kind: EventClick, X: 100, Y: 5})
-	if n.Active != 1 || got != 1 {
-		t.Fatalf("Active=%d got=%d", n.Active, got)
+	if n.Active().Get() != 1 || got != 1 {
+		t.Fatalf("Active=%d got=%d", n.Active().Get(), got)
 	}
 }
 
@@ -123,7 +123,7 @@ func TestNotebookClickOutOfRangeTab(t *testing.T) {
 	n.AddTab("A", &recordingWidget{})
 	n.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
 	n.OnEvent(Event{Kind: EventClick, X: 500, Y: 5})
-	if n.Active != 0 {
+	if n.Active().Get() != 0 {
 		t.Fatal("out-of-range tab click must not select")
 	}
 }
@@ -184,8 +184,8 @@ func TestNotebookTabSides(t *testing.T) {
 
 			// Click the middle tab → Active = 1.
 			n.OnEvent(Event{Kind: EventClick, X: c.clickAt[0], Y: c.clickAt[1]})
-			if n.Active != 1 {
-				t.Fatalf("%s: click tab 1 → Active=%d", c.name, n.Active)
+			if n.Active().Get() != 1 {
+				t.Fatalf("%s: click tab 1 → Active=%d", c.name, n.Active().Get())
 			}
 			// Draw: the active tab's edge carries the Accent indicator.
 			buf := makeSurface(w, h)
@@ -202,11 +202,30 @@ func TestNotebookTabSides(t *testing.T) {
 	}
 }
 
-func TestNotebookNilOnTabChangedNoPanic(t *testing.T) {
+func TestNotebookClickNoSubscriberNoPanic(t *testing.T) {
 	n := NewNotebook()
 	n.AddTab("A", &recordingWidget{})
 	n.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
+	// No subscriber bound: a tab click Sets the Active Observable without panic.
 	n.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
+}
+
+// TestNotebookBareAccessorInitAndBind proves the Active accessor lazy-inits on a
+// bare &Notebook{} (no constructor) and that a host can bind it: a Subscribe on
+// the freshly-initialised Observable observes a keyboard tab move.
+func TestNotebookBareAccessorInitAndBind(t *testing.T) {
+	n := &Notebook{Tabs: []NotebookTab{{Label: "A"}, {Label: "B"}}}
+	// Accessor lazy-inits to 0 without a prior constructor call.
+	if got := n.Active().Get(); got != 0 {
+		t.Fatalf("bare &Notebook{} Active().Get() = %d, want 0", got)
+	}
+	seen := -1
+	n.Active().Subscribe(func(i int) { seen = i })
+	n.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
+	n.OnEvent(kd("ArrowRight")) // 0 -> 1
+	if n.Active().Get() != 1 || seen != 1 {
+		t.Fatalf("bound accessor: Active=%d seen=%d, want 1/1", n.Active().Get(), seen)
+	}
 }
 
 func TestNotebookNilPageDrawNoPanic(t *testing.T) {
@@ -225,7 +244,7 @@ func TestNotebookNilPageEventNoPanic(t *testing.T) {
 
 func TestNotebookEmptyDrawAndEvent(t *testing.T) {
 	n := NewNotebook()
-	n.Active = 5 // out of range to exercise Draw/OnEvent guards
+	n.Active().Set(5) // out of range to exercise Draw/OnEvent guards
 	n.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
 	n.Draw(newP(make([]byte, 200*80*4), 200), DefaultLight())
 	n.OnEvent(Event{Kind: EventClick, X: 50, Y: 50})
