@@ -113,50 +113,50 @@ func TestAccordionMultipleKeyboardTogglesState(t *testing.T) {
 	}
 }
 
-// --- Carousel.OnChange --------------------------------------------------------
+// --- Carousel.Current Observable ----------------------------------------------
 
-func TestCarouselOnChangeFiresOnStepAndDot(t *testing.T) {
+func TestCarouselCurrentFiresOnStepAndDot(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
 	c.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 120})
 	var got, calls int
-	c.OnChange = func(i int) { got, calls = i, calls+1 }
+	c.Current().Subscribe(func(i int) { got, calls = i, calls+1 })
 
 	c.Next() // 0 -> 1
-	if c.Current != 1 || got != 1 || calls != 1 {
-		t.Fatalf("Next: Current=%d got=%d calls=%d, want 1/1/1", c.Current, got, calls)
+	if c.Current().Get() != 1 || got != 1 || calls != 1 {
+		t.Fatalf("Next: Current=%d got=%d calls=%d, want 1/1/1", c.Current().Get(), got, calls)
 	}
 	c.Prev() // 1 -> 0
-	if c.Current != 0 || got != 0 || calls != 2 {
-		t.Fatalf("Prev: Current=%d got=%d calls=%d, want 0/0/2", c.Current, got, calls)
+	if c.Current().Get() != 0 || got != 0 || calls != 2 {
+		t.Fatalf("Prev: Current=%d got=%d calls=%d, want 0/0/2", c.Current().Get(), got, calls)
 	}
 	// Click the dot for slide 2 (dots strip is at the bottom of the bounds).
 	dr := c.dotRect(2)
 	c.OnEvent(Event{Kind: EventClick, X: dr.X + dr.W/2, Y: dr.Y + dr.H/2})
-	if c.Current != 2 || got != 2 || calls != 3 {
-		t.Fatalf("dot click: Current=%d got=%d calls=%d, want 2/2/3", c.Current, got, calls)
+	if c.Current().Get() != 2 || got != 2 || calls != 3 {
+		t.Fatalf("dot click: Current=%d got=%d calls=%d, want 2/2/3", c.Current().Get(), got, calls)
 	}
-	// Clicking the already-active dot is a no-op move: OnChange stays silent.
+	// Clicking the already-active dot is a no-op move: subscribers stay silent.
 	dr2 := c.dotRect(2)
 	c.OnEvent(Event{Kind: EventClick, X: dr2.X + dr2.W/2, Y: dr2.Y + dr2.H/2})
 	if calls != 3 {
-		t.Fatalf("active-dot click fired OnChange: calls=%d, want 3", calls)
+		t.Fatalf("active-dot click notified subscribers: calls=%d, want 3", calls)
 	}
 }
 
-func TestCarouselOnChangeClampNoFireAndNilSafe(t *testing.T) {
+func TestCarouselCurrentClampNoFireAndBindSafe(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b")})
-	c.Current = 1 // at the last slide, Wrap is false
+	c.Current().Set(1) // at the last slide, Wrap is false
 	calls := 0
-	c.OnChange = func(int) { calls++ }
+	unsub := c.Current().Subscribe(func(int) { calls++ })
 	c.Next() // clamped: no move, no fire
-	if c.Current != 1 || calls != 0 {
-		t.Fatalf("clamped Next: Current=%d calls=%d, want 1/0", c.Current, calls)
+	if c.Current().Get() != 1 || calls != 0 {
+		t.Fatalf("clamped Next: Current=%d calls=%d, want 1/0", c.Current().Get(), calls)
 	}
-	// Nil callback: a real move must not panic.
-	c.OnChange = nil
+	// No subscribers bound: a real move must not panic.
+	unsub()
 	c.Prev()
-	if c.Current != 0 {
-		t.Fatalf("nil-callback Prev: Current=%d, want 0", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("unbound Prev: Current=%d, want 0", c.Current().Get())
 	}
 }
 
