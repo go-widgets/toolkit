@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // SparkKind selects a Sparkline's visual form.
 type SparkKind int
@@ -38,10 +41,34 @@ type Sparkline struct {
 	// brighter final bar on a SparkBar.
 	ShowLast bool
 
-	// Hover + HoverIndex draw a hover crosshair (SparkLine) or highlight the
-	// hovered bar (SparkBar). Opt-in; the zero value draws none.
-	Hover      bool
-	HoverIndex int
+	// hover + hoverIndex are the reactive hover state (MVVM-only): a crosshair
+	// (SparkLine) or a highlighted bar (SparkBar). Exposed via [Sparkline.Hover]
+	// / [Sparkline.HoverIndex]; there is no settable field. Opt-in — the zero
+	// values (hover false) draw none.
+	hover      *mvvm.Observable[bool]
+	hoverIndex *mvvm.Observable[int]
+}
+
+// Hover is the reactive "crosshair shown" flag as a shared [mvvm.Observable]: a
+// host binds it (Set / Subscribe / two-way) — there is no settable Hover field.
+// A pointer move over the spark Sets it true, a move off Sets it false; Draw
+// reads it. Lazily initialised to false when first accessed.
+func (s *Sparkline) Hover() *mvvm.Observable[bool] {
+	if s.hover == nil {
+		s.hover = mvvm.NewObservable(false)
+	}
+	return s.hover
+}
+
+// HoverIndex is the reactive index of the hovered sample as a shared
+// [mvvm.Observable]: a host binds it — there is no settable HoverIndex field. A
+// pointer move Sets it to the nearest data point; Draw reads it. Lazily
+// initialised to 0 when first accessed.
+func (s *Sparkline) HoverIndex() *mvvm.Observable[int] {
+	if s.hoverIndex == nil {
+		s.hoverIndex = mvvm.NewObservable(0)
+	}
+	return s.hoverIndex
 }
 
 // ValueAt maps a widget-local x to the nearest data point, returning its index
@@ -64,9 +91,10 @@ func (s *Sparkline) ValueAt(localX int) (index int, value float64, ok bool) {
 }
 
 // drawHover paints the crosshair (SparkLine) or a highlight outline on the
-// hovered bar (SparkBar) when Hover is set and HoverIndex is in range.
+// hovered bar (SparkBar) when Hover is true and HoverIndex is in range.
 func (s *Sparkline) drawHover(p painter.Painter, theme *Theme, mn, mx float64, pl Rect) {
-	if !s.Hover || s.HoverIndex < 0 || s.HoverIndex >= len(s.Values) {
+	idx := s.HoverIndex().Get()
+	if !s.Hover().Get() || idx < 0 || idx >= len(s.Values) {
 		return
 	}
 	r := s.Bounds()
@@ -76,10 +104,10 @@ func (s *Sparkline) drawHover(p painter.Painter, theme *Theme, mn, mx float64, p
 		if slot < 1 {
 			slot = 1
 		}
-		strokeRect(p, pl.X+s.HoverIndex*slot, r.Y, slot, r.H-1, theme.Accent)
+		strokeRect(p, pl.X+idx*slot, r.Y, slot, r.H-1, theme.Accent)
 		return
 	}
-	hx, hy := s.pointAt(s.HoverIndex, mn, mx, pl)
+	hx, hy := s.pointAt(idx, mn, mx, pl)
 	drawLine(p, hx, r.Y, hx, r.Y+r.H-1, dimInk(theme))
 	fillRect(p, clampInt(hx-1, r.X, r.X+r.W-2), clampInt(hy-1, r.Y, r.Y+r.H-2), 2, 2, theme.Accent)
 }
@@ -89,7 +117,12 @@ func (s *Sparkline) drawHover(p painter.Painter, theme *Theme, mn, mx float64, p
 const SparkPad = 1
 
 // NewSparkline builds a SparkLine over the given values.
-func NewSparkline(values []float64) *Sparkline { return &Sparkline{Values: values} }
+func NewSparkline(values []float64) *Sparkline {
+	s := &Sparkline{Values: values}
+	s.hover = mvvm.NewObservable(false)
+	s.hoverIndex = mvvm.NewObservable(0)
+	return s
+}
 
 // HitTest returns false unconditionally: a Sparkline is decorative, like Label.
 func (s *Sparkline) HitTest(_, _ int) bool { return false }

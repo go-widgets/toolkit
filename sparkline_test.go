@@ -239,3 +239,31 @@ func countPNGInk(t *testing.T, data []byte, col RGBA) int {
 	}
 	return n
 }
+
+// TestSparklineHoverObservables covers the zero-value lazy-init of the Hover and
+// HoverIndex accessors and the host binding path: a Sparkline built as a bare
+// struct (no NewSparkline) still yields usable Observables, and Setting them
+// from outside is reflected by the widget (there is no imperative Hover /
+// HoverIndex field).
+func TestSparklineHoverObservables(t *testing.T) {
+	s := &Sparkline{} // no NewSparkline → Observables are nil until accessed
+	if s.Hover().Get() {
+		t.Fatalf("zero-value Sparkline Hover = %v, want false", s.Hover().Get())
+	}
+	if got := s.HoverIndex().Get(); got != 0 {
+		t.Fatalf("zero-value Sparkline HoverIndex = %d, want 0", got)
+	}
+	// Host binding: Set from outside is seen by the widget + its subscribers.
+	seenHover := false
+	seenIndex := -1
+	s.Hover().Subscribe(func(v bool) { seenHover = v })
+	s.HoverIndex().Subscribe(func(v int) { seenIndex = v })
+	s.Hover().Set(true)
+	s.HoverIndex().Set(3)
+	if !s.Hover().Get() || !seenHover {
+		t.Fatalf("host Set Hover: get=%v subscriber=%v, want true/true", s.Hover().Get(), seenHover)
+	}
+	if s.HoverIndex().Get() != 3 || seenIndex != 3 {
+		t.Fatalf("host Set HoverIndex: get=%d subscriber=%d, want 3/3", s.HoverIndex().Get(), seenIndex)
+	}
+}

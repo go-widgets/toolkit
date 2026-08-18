@@ -69,13 +69,14 @@ func (s *Sparkline) OnEvent(ev Event) {
 		return
 	}
 	if !s.localInBounds(ev.X, ev.Y) {
-		s.Hover = false
+		s.Hover().Set(false)
 		return
 	}
 	if i, _, ok := s.ValueAt(ev.X); ok {
-		s.Hover, s.HoverIndex = true, i
+		s.Hover().Set(true)
+		s.HoverIndex().Set(i)
 	} else {
-		s.Hover = false
+		s.Hover().Set(false)
 	}
 }
 
