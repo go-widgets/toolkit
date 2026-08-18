@@ -80,6 +80,17 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// behind Observable accessors, the owned sub-widgets + pages are unexported,
 	// so there is no exported state field to allow — the empty set enforces that.
 	"PagedView": {},
+	// Batch 5 (date/time/color/misc): the selected date/time, colour, view, step,
+	// text and hover state are unexported behind accessors; the values below are
+	// set-once config (func hooks auto-allowed).
+	"ColorChooser": {},
+	"TimePicker":   {"MinuteStep": true, "Use12h": true},
+	"Calendar":     {"TodayY": true, "TodayM": true, "TodayD": true},
+	"DatePicker":   {"Cal": true},
+	"Wizard":       {"Steps": true, "PressFeedback": true},
+	"Agenda":       {"Events": true, "DayNames": true, "StartHour": true, "EndHour": true, "Calendars": true, "Year": true, "Month": true},
+	"SearchEntry":  {},
+	"Menu":         {"Items": true, "Scale": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
