@@ -76,6 +76,10 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Gantt":       {"Tasks": true, "Units": true},
 	"RangeSlider": {"Orientation": true, "Step": true, "Min": true, "Max": true},
 	"Kanban":      {"Columns": true},
+	// PagedView: all reactive state (mode / current page / zoom) is unexported
+	// behind Observable accessors, the owned sub-widgets + pages are unexported,
+	// so there is no exported state field to allow — the empty set enforces that.
+	"PagedView": {},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
