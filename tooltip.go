@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // TooltipPlacement selects which side of the anchor the bubble sits on. Below
 // is the zero value (the original behaviour).
@@ -22,18 +25,44 @@ const (
 )
 
 // Tooltip is a small text bubble shown near the cursor when the user
-// hovers over a target widget. The host app drives Visible + Anchor
-// (typically toggled by a mouse-enter/leave handler with a 500 ms
-// delay); the toolkit's role is the rendering geometry.
+// hovers over a target widget. The host app drives the reactive
+// visibility + anchor (typically toggled by a mouse-enter/leave handler
+// with a 500 ms delay) through the [Tooltip.Visible] and [Tooltip.Anchor]
+// Observables; the toolkit's role is the rendering geometry.
 //
 // Auto-sized to the Text width + padding; positioned on the side of the anchor
-// chosen by Placement (below by default).
+// chosen by Placement (below by default). Text + Placement are set-once config;
+// the reactive state (whether it is shown, and which rect it points at) is
+// MVVM-only, unexported behind the Observable accessors.
 type Tooltip struct {
 	Base
 	Text      string
-	Visible   bool
 	Placement TooltipPlacement
-	Anchor    Rect // widget the tooltip belongs to
+
+	visible *mvvm.Observable[bool]
+	anchor  *mvvm.Observable[Rect]
+}
+
+// Visible is the tooltip's shown/hidden state as a shared [mvvm.Observable]: a
+// host binds it (Set / Subscribe / two-way) — there is no settable Visible
+// field. [Tooltip.Show] Sets it true, [Tooltip.Hide] Sets it false; Draw reads
+// it. Lazily initialised to false so a bare &Tooltip{} is usable.
+func (t *Tooltip) Visible() *mvvm.Observable[bool] {
+	if t.visible == nil {
+		t.visible = mvvm.NewObservable(false)
+	}
+	return t.visible
+}
+
+// Anchor is the rect the tooltip points at as a shared [mvvm.Observable]:
+// [Tooltip.Show] Sets it to the anchored widget's rect. There is no settable
+// Anchor field. Lazily initialised to the zero Rect so a bare &Tooltip{} is
+// usable.
+func (t *Tooltip) Anchor() *mvvm.Observable[Rect] {
+	if t.anchor == nil {
+		t.anchor = mvvm.NewObservable(Rect{})
+	}
+	return t.anchor
 }
 
 // TooltipPadX / TooltipPadY are the inner text-padding constants.
@@ -42,13 +71,20 @@ const (
 	TooltipPadY = 4
 )
 
-// NewTooltip builds a hidden tooltip with the given text.
-func NewTooltip(text string) *Tooltip { return &Tooltip{Text: text} }
+// NewTooltip builds a hidden tooltip with the given text. Both reactive
+// Observables are initialised (Visible false, Anchor the zero Rect).
+func NewTooltip(text string) *Tooltip {
+	return &Tooltip{
+		Text:    text,
+		visible: mvvm.NewObservable(false),
+		anchor:  mvvm.NewObservable(Rect{}),
+	}
+}
 
 // Show makes the tooltip visible, anchored to the given widget rect.
 func (t *Tooltip) Show(anchor Rect) {
-	t.Visible = true
-	t.Anchor = anchor
+	t.Visible().Set(true)
+	t.Anchor().Set(anchor)
 	w := t.textWidth(t.Text) + 2*TooltipPadX
 	h := t.glyphHeight() + 2*TooltipPadY
 	var x, y int
@@ -66,11 +102,11 @@ func (t *Tooltip) Show(anchor Rect) {
 }
 
 // Hide removes the tooltip from view.
-func (t *Tooltip) Hide() { t.Visible = false }
+func (t *Tooltip) Hide() { t.Visible().Set(false) }
 
 // Draw paints the bubble when Visible.
 func (t *Tooltip) Draw(p painter.Painter, theme *Theme) {
-	if !t.Visible {
+	if !t.Visible().Get() {
 		return
 	}
 	r := t.Bounds()

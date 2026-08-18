@@ -643,18 +643,57 @@ func TestNewMessageDialogShape(t *testing.T) {
 // --- Tooltip -------------------------------------------------------------
 
 func TestTooltipShowAndHide(t *testing.T) {
+	anchor := Rect{X: 10, Y: 10, W: 40, H: 20}
 	tt := NewTooltip("Hi")
-	tt.Show(Rect{X: 10, Y: 10, W: 40, H: 20})
-	if !tt.Visible {
+	tt.Show(anchor)
+	if !tt.Visible().Get() {
 		t.Fatal("after Show: not Visible")
+	}
+	if got := tt.Anchor().Get(); got != anchor {
+		t.Fatalf("after Show: Anchor = %+v, want %+v", got, anchor)
 	}
 	b := tt.Bounds()
 	if b.X != 10 || b.Y != 32 {
 		t.Fatalf("tooltip bounds = %+v", b)
 	}
 	tt.Hide()
-	if tt.Visible {
+	if tt.Visible().Get() {
 		t.Fatal("after Hide: still Visible")
+	}
+	// Hide leaves the Anchor untouched (it records the last-shown rect).
+	if got := tt.Anchor().Get(); got != anchor {
+		t.Fatalf("after Hide: Anchor = %+v, want %+v", got, anchor)
+	}
+}
+
+// TestTooltipBareZeroValue proves a bare &Tooltip{} (no constructor) is usable:
+// the Observable accessors lazily initialise to false / zero Rect, and a host
+// can bind + drive them just like a constructed tooltip.
+func TestTooltipBareZeroValue(t *testing.T) {
+	tt := &Tooltip{}
+	if tt.Visible().Get() {
+		t.Fatal("bare &Tooltip{}: Visible should default false")
+	}
+	if got := tt.Anchor().Get(); got != (Rect{}) {
+		t.Fatalf("bare &Tooltip{}: Anchor should default zero Rect, got %+v", got)
+	}
+	// Host binds the visibility Observable and drives it through Show/Hide.
+	var seen []bool
+	tt.Visible().SubscribeChanged(func() { seen = append(seen, tt.Visible().Get()) })
+	anchor := Rect{X: 5, Y: 5, W: 20, H: 10}
+	tt.Show(anchor)
+	if !tt.Visible().Get() {
+		t.Fatal("bare &Tooltip{}: not Visible after Show")
+	}
+	if got := tt.Anchor().Get(); got != anchor {
+		t.Fatalf("bare &Tooltip{}: Anchor = %+v, want %+v", got, anchor)
+	}
+	tt.Hide()
+	if tt.Visible().Get() {
+		t.Fatal("bare &Tooltip{}: still Visible after Hide")
+	}
+	if len(seen) != 2 || seen[0] != true || seen[1] != false {
+		t.Fatalf("host bind saw %v, want [true false]", seen)
 	}
 }
 
