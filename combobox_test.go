@@ -25,18 +25,18 @@ func TestComboBoxFilteredEmptyReturnsAll(t *testing.T) {
 func TestComboBoxFilteredSubset(t *testing.T) {
 	c := newTestComboBox()
 	// "ap" (case-insensitive) matches "Apple" + "Apricot" only.
-	c.Text = "AP"
+	c.Text().Set("AP")
 	got := c.Filtered()
 	if len(got) != 2 || got[0] != "Apple" || got[1] != "Apricot" {
-		t.Fatalf("Filtered(%q) = %v, want [Apple Apricot]", c.Text, got)
+		t.Fatalf("Filtered(%q) = %v, want [Apple Apricot]", c.Text().Get(), got)
 	}
 }
 
 func TestComboBoxFilteredNoMatch(t *testing.T) {
 	c := newTestComboBox()
-	c.Text = "zzz"
+	c.Text().Set("zzz")
 	if got := c.Filtered(); len(got) != 0 {
-		t.Fatalf("Filtered(%q) = %v, want none", c.Text, got)
+		t.Fatalf("Filtered(%q) = %v, want none", c.Text().Get(), got)
 	}
 }
 
@@ -64,7 +64,7 @@ func TestComboBoxPopoverBounds(t *testing.T) {
 
 func TestComboBoxDrawClosedWithText(t *testing.T) {
 	c := newTestComboBox()
-	c.Text = "Banana"
+	c.Text().Set("Banana")
 	surf := makeSurface(200, 300)
 	c.Draw(newP(surf, 200), DefaultLight())
 	// The chevron's widest row (a plain fillRect) lands on the right edge.
@@ -83,7 +83,7 @@ func TestComboBoxDrawClosedWithPlaceholder(t *testing.T) {
 
 func TestComboBoxDrawOpenPaintsPopover(t *testing.T) {
 	c := newTestComboBox()
-	c.Open = true
+	c.Open().Set(true)
 	surf := makeSurface(200, 300)
 	c.Draw(newP(surf, 200), DefaultLight())
 	pb := c.PopoverBounds()
@@ -92,15 +92,15 @@ func TestComboBoxDrawOpenPaintsPopover(t *testing.T) {
 	}
 }
 
-func TestComboBoxTypingFiltersAndFiresOnChange(t *testing.T) {
+func TestComboBoxTypingFiltersAndNotifiesText(t *testing.T) {
 	c := newTestComboBox()
 	var changed string
-	c.OnChange = func(s string) { changed = s }
+	c.Text().Subscribe(func(s string) { changed = s })
 	c.OnEvent(Event{Kind: EventChar, Code: "B"})
-	if c.Text != "B" || changed != "B" {
-		t.Fatalf("after typing: Text=%q changed=%q, want both B", c.Text, changed)
+	if c.Text().Get() != "B" || changed != "B" {
+		t.Fatalf("after typing: Text=%q changed=%q, want both B", c.Text().Get(), changed)
 	}
-	if !c.Open {
+	if !c.Open().Get() {
 		t.Error("typing should open the popover")
 	}
 	if got := c.Filtered(); len(got) != 1 || got[0] != "Banana" {
@@ -111,21 +111,21 @@ func TestComboBoxTypingFiltersAndFiresOnChange(t *testing.T) {
 func TestComboBoxCharEmptyIgnored(t *testing.T) {
 	c := newTestComboBox()
 	c.OnEvent(Event{Kind: EventChar, Code: ""})
-	if c.Text != "" || c.Open {
-		t.Errorf("empty char should be a no-op, got Text=%q Open=%v", c.Text, c.Open)
+	if c.Text().Get() != "" || c.Open().Get() {
+		t.Errorf("empty char should be a no-op, got Text=%q Open=%v", c.Text().Get(), c.Open().Get())
 	}
 }
 
 func TestComboBoxBackspaceEdits(t *testing.T) {
 	c := newTestComboBox()
-	c.Text = "Ba"
+	c.Text().Set("Ba")
 	var changed string
-	c.OnChange = func(s string) { changed = s }
+	c.Text().Subscribe(func(s string) { changed = s })
 	c.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if c.Text != "B" || changed != "B" {
-		t.Fatalf("after backspace: Text=%q changed=%q, want both B", c.Text, changed)
+	if c.Text().Get() != "B" || changed != "B" {
+		t.Fatalf("after backspace: Text=%q changed=%q, want both B", c.Text().Get(), changed)
 	}
-	if !c.Open {
+	if !c.Open().Get() {
 		t.Error("backspace should open the popover")
 	}
 }
@@ -133,73 +133,105 @@ func TestComboBoxBackspaceEdits(t *testing.T) {
 func TestComboBoxBackspaceEmptyNoop(t *testing.T) {
 	c := newTestComboBox()
 	c.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if c.Text != "" {
-		t.Errorf("backspace on empty text should be a no-op, got %q", c.Text)
+	if c.Text().Get() != "" {
+		t.Errorf("backspace on empty text should be a no-op, got %q", c.Text().Get())
 	}
 }
 
 func TestComboBoxClickTogglesOpen(t *testing.T) {
 	c := newTestComboBox()
 	c.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if !c.Open {
+	if !c.Open().Get() {
 		t.Fatal("field click did not open popover")
 	}
 	// A second click on the field (above the popover) closes it.
 	c.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if c.Open {
+	if c.Open().Get() {
 		t.Fatal("second field click did not close popover")
 	}
 }
 
 func TestComboBoxClickOptionSelects(t *testing.T) {
 	c := newTestComboBox()
-	c.Open = true
-	var selected, changed string
-	c.OnSelect = func(s string) { selected = s }
-	c.OnChange = func(s string) { changed = s }
+	c.Open().Set(true)
+	var changed string
+	c.Text().Subscribe(func(s string) { changed = s })
 	pb := c.PopoverBounds()
 	// Row index 1 ("Apricot"): field-local y = (pb.Y - r.Y) + row*comboRowH + half.
 	ly := 1*comboRowH + comboRowH/2
 	c.OnEvent(Event{Kind: EventClick, X: 10, Y: (pb.Y - 0) + ly})
-	if c.Text != "Apricot" || selected != "Apricot" || changed != "Apricot" {
-		t.Fatalf("select: Text=%q OnSelect=%q OnChange=%q, want all Apricot", c.Text, selected, changed)
+	if c.Text().Get() != "Apricot" || changed != "Apricot" {
+		t.Fatalf("select: Text=%q notified=%q, want all Apricot", c.Text().Get(), changed)
 	}
-	if c.Open {
+	if c.Open().Get() {
 		t.Error("selecting an option should close the popover")
 	}
 }
 
 func TestComboBoxEnterSelectsFirstFiltered(t *testing.T) {
 	c := newTestComboBox()
-	c.Text = "ap"
+	c.Text().Set("ap")
 	var selected string
-	c.OnSelect = func(s string) { selected = s }
+	c.Text().Subscribe(func(s string) { selected = s })
 	c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if c.Text != "Apple" || selected != "Apple" {
-		t.Fatalf("Enter: Text=%q OnSelect=%q, want Apple", c.Text, selected)
+	if c.Text().Get() != "Apple" || selected != "Apple" {
+		t.Fatalf("Enter: Text=%q notified=%q, want Apple", c.Text().Get(), selected)
 	}
 }
 
 func TestComboBoxEnterNoMatchNoop(t *testing.T) {
 	c := newTestComboBox()
-	c.Text = "zzz"
+	c.Text().Set("zzz")
 	c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if c.Text != "zzz" {
-		t.Errorf("Enter with no match should not change Text, got %q", c.Text)
+	if c.Text().Get() != "zzz" {
+		t.Errorf("Enter with no match should not change Text, got %q", c.Text().Get())
 	}
 }
 
-func TestComboBoxNilCallbacksSafe(t *testing.T) {
+// TestComboBoxZeroValueBindsThroughAccessors builds a bare &ComboBox{} (no
+// constructor) and drives it purely through the accessors: the first Text() /
+// Open() call lazily initialises each nil Observable to its zero value, and a
+// host binding via Subscribe sees every mutation. This proves the widget is
+// usable as a plain struct literal and that hosts bind to the reactive state
+// exactly as they would after NewComboBox.
+func TestComboBoxZeroValueBindsThroughAccessors(t *testing.T) {
+	c := &ComboBox{Options: []string{"Apple", "Apricot"}}
+	// Nil -> lazy init to the zero value.
+	if c.Text().Get() != "" {
+		t.Fatalf("zero-value Text().Get() = %q, want empty", c.Text().Get())
+	}
+	if c.Open().Get() {
+		t.Fatal("zero-value Open().Get() = true, want false")
+	}
+	// Host binds both observables.
+	var gotText string
+	var gotOpen bool
+	c.Text().Subscribe(func(s string) { gotText = s })
+	c.Open().Subscribe(func(b bool) { gotOpen = b })
+	// A keystroke edit Sets Text and opens the popover; the host sees both.
+	c.OnEvent(Event{Kind: EventChar, Code: "A"})
+	if c.Text().Get() != "A" || gotText != "A" {
+		t.Fatalf("bound Text after typing: Get=%q host=%q, want A", c.Text().Get(), gotText)
+	}
+	if !c.Open().Get() || !gotOpen {
+		t.Fatalf("bound Open after typing: Get=%v host=%v, want true", c.Open().Get(), gotOpen)
+	}
+	// Picking an option Sets Text and closes; the host sees both.
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	if c.Text().Get() != "Apple" || gotText != "Apple" {
+		t.Fatalf("bound Text after Enter: Get=%q host=%q, want Apple", c.Text().Get(), gotText)
+	}
+	if c.Open().Get() || gotOpen {
+		t.Fatalf("bound Open after Enter: Get=%v host=%v, want false", c.Open().Get(), gotOpen)
+	}
+}
+
+func TestComboBoxUnhandledEventsSafe(t *testing.T) {
 	c := newTestComboBox()
-	// No OnChange / OnSelect set: every mutating path must be panic-safe.
-	c.OnEvent(Event{Kind: EventChar, Code: "A"})            // OnChange nil
-	c.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"}) // OnChange nil
-	c.Text = "ap"
-	c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"}) // OnSelect+OnChange nil
-	c.Open = true
-	pb := c.PopoverBounds()
-	c.OnEvent(Event{Kind: EventClick, X: 10, Y: pb.Y + comboRowH/2}) // select, nil cbs
 	// An unhandled key code and event kind are quietly ignored.
 	c.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
 	c.OnEvent(Event{Kind: EventMouseUp, X: 1, Y: 1})
+	if c.Text().Get() != "" || c.Open().Get() {
+		t.Errorf("unhandled events mutated state: Text=%q Open=%v", c.Text().Get(), c.Open().Get())
+	}
 }

@@ -80,7 +80,7 @@ func TestA11yRangeControls(t *testing.T) {
 
 func TestA11yComboBoxTagFieldTimePicker(t *testing.T) {
 	cb := NewComboBox([]string{"apple", "apricot"})
-	cb.Text = "ap"
+	cb.Text().Set("ap")
 	if got := cb.A11y(); got != (A11yInfo{Role: RoleCombobox, Name: "ap"}) {
 		t.Errorf("ComboBox A11y() = %+v", got)
 	}

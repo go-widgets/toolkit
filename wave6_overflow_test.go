@@ -106,9 +106,9 @@ func TestComboBoxPopoverScrolls(t *testing.T) {
 	opts := wave6Options(15) // all contain "o": empty query matches every one
 	c := NewComboBox(opts)
 	var selected string
-	c.OnSelect = func(s string) { selected = s }
+	c.Text().Subscribe(func(s string) { selected = s })
 	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 24})
-	c.Open = true
+	c.Open().Set(true)
 
 	// Height stays clamped to PopoverMaxRows even with 15 matches.
 	if got := c.PopoverBounds().H; got != PopoverMaxRows*comboRowH {
@@ -135,12 +135,12 @@ func TestComboBoxPopoverScrolls(t *testing.T) {
 	pb := c.PopoverBounds()
 	ly := 11*comboRowH + comboRowH/2
 	c.OnEvent(Event{Kind: EventClick, X: 10, Y: (pb.Y - 0) + ly})
-	if selected != "o14" || c.Text != "o14" {
-		t.Fatalf("scrolled click: selected=%q Text=%q, want o14", selected, c.Text)
+	if selected != "o14" || c.Text().Get() != "o14" {
+		t.Fatalf("scrolled click: selected=%q Text=%q, want o14", selected, c.Text().Get())
 	}
 
 	// ArrowUp back to the top reveals the highlight from above.
-	c.Open = true
+	c.Open().Set(true)
 	c.highlight, c.popScroll = 14, 3
 	for i := 0; i < 14; i++ {
 		c.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
@@ -161,7 +161,7 @@ func TestComboBoxPopoverScrolls(t *testing.T) {
 		t.Fatalf("backspace did not reset popScroll (got %d)", c.popScroll)
 	}
 	// A closed popover ignores the wheel.
-	c.Open = false
+	c.Open().Set(false)
 	c.popScroll = 1
 	c.OnEvent(Event{Kind: EventScroll, Delta: 5})
 	if c.popScroll != 1 {
@@ -170,13 +170,14 @@ func TestComboBoxPopoverScrolls(t *testing.T) {
 	// A short list never scrolls.
 	short := NewComboBox(wave6Options(3))
 	short.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 24})
-	short.Open = true
+	short.Open().Set(true)
 	short.OnEvent(Event{Kind: EventScroll, Delta: 5})
 	if short.popScroll != 0 {
 		t.Fatalf("short-list popScroll=%d, want 0", short.popScroll)
 	}
 	// Draw a scrolled popover (exercises the offset highlight branch).
-	c.Open, c.popScroll, c.highlight = true, 3, 14
+	c.Open().Set(true)
+	c.popScroll, c.highlight = 3, 14
 	c.Draw(newP(makeSurface(200, 320), 200), DefaultLight())
 }
 

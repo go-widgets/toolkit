@@ -20,7 +20,7 @@ import (
 
 // A11y reports the ComboBox as a combobox named by its current field text
 // (either free text typed or a picked option).
-func (c *ComboBox) A11y() A11yInfo { return A11yInfo{Role: RoleCombobox, Name: c.Text} }
+func (c *ComboBox) A11y() A11yInfo { return A11yInfo{Role: RoleCombobox, Name: c.Text().Get()} }
 
 // A11y reports the TreeTable as a tree carrying the selected node's first-column
 // label (the column that carries the tree structure), or "" with no selection.

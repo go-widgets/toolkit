@@ -499,8 +499,8 @@ func TestComboBoxKeyboardHighlight(t *testing.T) {
 	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 20})
 	// ArrowDown opens the popover and moves the highlight, clamped at the last.
 	c.OnEvent(kd("ArrowDown")) // 0 -> 1
-	if !c.Open || c.highlight != 1 {
-		t.Fatalf("ArrowDown: Open=%v highlight=%d", c.Open, c.highlight)
+	if !c.Open().Get() || c.highlight != 1 {
+		t.Fatalf("ArrowDown: Open=%v highlight=%d", c.Open().Get(), c.highlight)
 	}
 	c.OnEvent(kd("ArrowDown")) // 1 -> 2
 	c.OnEvent(kd("ArrowDown")) // clamp at 2
@@ -515,7 +515,7 @@ func TestComboBoxKeyboardHighlight(t *testing.T) {
 	}
 	// Escape closes.
 	c.OnEvent(kd("Escape"))
-	if c.Open {
+	if c.Open().Get() {
 		t.Fatal("escape did not close combobox")
 	}
 
@@ -523,11 +523,11 @@ func TestComboBoxKeyboardHighlight(t *testing.T) {
 	sel := ""
 	c2 := NewComboBox([]string{"Apple", "Apricot", "Banana"})
 	c2.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 20})
-	c2.OnSelect = func(s string) { sel = s }
+	c2.Text().Subscribe(func(s string) { sel = s })
 	c2.OnEvent(kd("ArrowDown")) // highlight 1
 	c2.OnEvent(kd("Enter"))
-	if sel != "Apricot" || c2.Text != "Apricot" || c2.Open {
-		t.Fatalf("enter select: sel=%q Text=%q Open=%v", sel, c2.Text, c2.Open)
+	if sel != "Apricot" || c2.Text().Get() != "Apricot" || c2.Open().Get() {
+		t.Fatalf("enter select: sel=%q Text=%q Open=%v", sel, c2.Text().Get(), c2.Open().Get())
 	}
 
 	// Typing resets the highlight to the first match; Backspace too.
@@ -545,17 +545,17 @@ func TestComboBoxKeyboardHighlight(t *testing.T) {
 
 	// Enter with no matches is a no-op.
 	c4 := NewComboBox([]string{"Apple"})
-	c4.Text = "zzz"
+	c4.Text().Set("zzz")
 	c4.OnEvent(kd("Enter"))
-	if c4.Text != "zzz" {
-		t.Fatalf("enter with no matches selected something: Text=%q", c4.Text)
+	if c4.Text().Get() != "zzz" {
+		t.Fatalf("enter with no matches selected something: Text=%q", c4.Text().Get())
 	}
 
 	// Disabled ignores keys.
 	c5 := NewComboBox([]string{"Apple"})
 	c5.Disabled = true
 	c5.OnEvent(kd("ArrowDown"))
-	if c5.Open {
+	if c5.Open().Get() {
 		t.Fatal("disabled combobox opened")
 	}
 }
@@ -573,7 +573,7 @@ func TestComboBoxHighlightRowClamps(t *testing.T) {
 		t.Fatalf("below-range highlightRow=%d, want 0", got)
 	}
 	// No visible rows -> 0.
-	c.Text = "zzz"
+	c.Text().Set("zzz")
 	if got := c.highlightRow(); got != 0 {
 		t.Fatalf("empty highlightRow=%d, want 0", got)
 	}
@@ -582,7 +582,7 @@ func TestComboBoxHighlightRowClamps(t *testing.T) {
 func TestComboBoxDrawOpenHighlightRow(t *testing.T) {
 	c := NewComboBox([]string{"a", "b", "c"})
 	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 18})
-	c.Open = true
+	c.Open().Set(true)
 	c.highlight = 1
 	surf := makeSurface(120, 200)
 	c.Draw(newP(surf, 120), DefaultLight())
