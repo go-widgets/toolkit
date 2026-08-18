@@ -70,47 +70,46 @@ func TestTableOnSelectNilSafe(t *testing.T) {
 	}
 }
 
-// --- Accordion.OnToggle -------------------------------------------------------
+// --- Accordion.Expanded (MVVM) ------------------------------------------------
 
-func TestAccordionOnToggleFiresExclusive(t *testing.T) {
+func TestAccordionExpandedObservableFiresExclusive(t *testing.T) {
 	a := NewAccordion([]AccordionSection{{Title: "One"}, {Title: "Two"}})
 	a.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 300})
-	var gotI int
-	var gotExp, called bool
-	a.OnToggle = func(i int, expanded bool) { gotI, gotExp, called = i, expanded, true }
+	var got, calls int
+	// A host binds the exclusive expanded index via Subscribe; there is no
+	// OnToggle callback anymore.
+	a.Expanded().Subscribe(func(v int) { got, calls = v, calls+1 })
 
-	// Click header 0 -> expands it, reporting (0, true).
+	// Click header 0 -> Sets Expanded to 0 (one notification).
 	a.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if !called || gotI != 0 || !gotExp {
-		t.Fatalf("expand: called=%v i=%d exp=%v, want true/0/true", called, gotI, gotExp)
+	if got != 0 || calls != 1 {
+		t.Fatalf("expand: got=%d calls=%d, want 0/1", got, calls)
 	}
-	// Click header 0 again -> collapses it, reporting (0, false).
+	// Click header 0 again -> collapses, Sets Expanded to -1.
 	a.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if gotI != 0 || gotExp {
-		t.Fatalf("collapse: i=%d exp=%v, want 0/false", gotI, gotExp)
+	if got != -1 || calls != 2 {
+		t.Fatalf("collapse: got=%d calls=%d, want -1/2", got, calls)
 	}
 }
 
-func TestAccordionOnToggleFiresMultipleAndKeyboard(t *testing.T) {
+func TestAccordionMultipleKeyboardTogglesState(t *testing.T) {
 	a := NewAccordion([]AccordionSection{{Title: "One"}, {Title: "Two"}})
 	a.Multiple = true
 	a.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 300})
-	var gotI int
-	var gotExp bool
-	calls := 0
-	a.OnToggle = func(i int, expanded bool) { gotI, gotExp, calls = i, expanded, calls+1 }
 
-	// Keyboard: focus starts on section 0; Enter toggles it open in Multiple mode.
+	// Keyboard: focus starts on section 0; Enter toggles it open in Multiple
+	// mode. Multiple mode tracks per-section state independently of the
+	// Expanded Observable, so assert via isExpanded.
 	a.SetFocused(true)
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if gotI != 0 || !gotExp || calls != 1 {
-		t.Fatalf("keyboard toggle: i=%d exp=%v calls=%d, want 0/true/1", gotI, gotExp, calls)
+	if !a.isExpanded(0) {
+		t.Fatalf("keyboard toggle: section 0 should be expanded")
 	}
 	// Move focus down and toggle section 1 independently (Multiple mode).
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
 	a.OnEvent(Event{Kind: EventKeyDown, Code: " "})
-	if gotI != 1 || !gotExp || calls != 2 {
-		t.Fatalf("second toggle: i=%d exp=%v calls=%d, want 1/true/2", gotI, gotExp, calls)
+	if !a.isExpanded(0) || !a.isExpanded(1) {
+		t.Fatalf("second toggle: both sections should be expanded: 0=%v 1=%v", a.isExpanded(0), a.isExpanded(1))
 	}
 }
 

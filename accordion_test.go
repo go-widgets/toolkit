@@ -10,11 +10,32 @@ import "testing"
 
 func TestNewAccordionStartsAllCollapsed(t *testing.T) {
 	a := NewAccordion([]AccordionSection{{Title: "A"}, {Title: "B"}})
-	if a.Expanded != -1 {
-		t.Fatalf("Expanded = %d, want -1", a.Expanded)
+	if a.Expanded().Get() != -1 {
+		t.Fatalf("Expanded = %d, want -1", a.Expanded().Get())
 	}
 	if a.Multiple {
 		t.Fatal("Multiple should default false")
+	}
+}
+
+// TestAccordionExpandedAccessorLazyInit verifies the accessor initialises the
+// Observable on a bare &Accordion{} (nil field -> New), defaulting to the int
+// zero value 0, and that a host can bind it (Subscribe) and drive it (Set).
+func TestAccordionExpandedAccessorLazyInit(t *testing.T) {
+	a := &Accordion{}
+	if got := a.Expanded().Get(); got != 0 {
+		t.Fatalf("bare &Accordion{} Expanded() = %d, want 0 (int zero default)", got)
+	}
+	// The accessor returns the same Observable on every call (no re-init).
+	if a.Expanded() != a.Expanded() {
+		t.Fatal("Expanded() must return the same Observable instance")
+	}
+	// Host-bind check: a subscriber is notified when the value changes.
+	var got, calls int
+	a.Expanded().Subscribe(func(v int) { got, calls = v, calls+1 })
+	a.Expanded().Set(1)
+	if got != 1 || calls != 1 {
+		t.Fatalf("host bind: got=%d calls=%d, want 1/1", got, calls)
 	}
 }
 
@@ -26,8 +47,8 @@ func TestAccordionExclusiveExpandCollapsesSiblings(t *testing.T) {
 
 	// Click header 0 (y in [0, ExpanderHeaderH)) -> expands section 0.
 	a.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if a.Expanded != 0 {
-		t.Fatalf("Expanded = %d, want 0", a.Expanded)
+	if a.Expanded().Get() != 0 {
+		t.Fatalf("Expanded = %d, want 0", a.Expanded().Get())
 	}
 
 	// Click header 1: with section 0 expanded, header 1 sits below
@@ -37,16 +58,16 @@ func TestAccordionExclusiveExpandCollapsesSiblings(t *testing.T) {
 	headers, _ := a.sectionRects()
 	h1 := headers[1]
 	a.OnEvent(Event{Kind: EventClick, X: h1.X + 5, Y: h1.Y + 5})
-	if a.Expanded != 1 {
-		t.Fatalf("Expanded = %d, want 1 (section 0 should have collapsed)", a.Expanded)
+	if a.Expanded().Get() != 1 {
+		t.Fatalf("Expanded = %d, want 1 (section 0 should have collapsed)", a.Expanded().Get())
 	}
 
 	// Clicking the same (now open) header again fully collapses.
 	headers, _ = a.sectionRects()
 	h1 = headers[1]
 	a.OnEvent(Event{Kind: EventClick, X: h1.X + 5, Y: h1.Y + 5})
-	if a.Expanded != -1 {
-		t.Fatalf("Expanded = %d, want -1 after re-clicking open header", a.Expanded)
+	if a.Expanded().Get() != -1 {
+		t.Fatalf("Expanded = %d, want -1 after re-clicking open header", a.Expanded().Get())
 	}
 }
 
@@ -112,7 +133,7 @@ func TestAccordionBodyClickRoutesToExpandedSection(t *testing.T) {
 	body := &recordingWidget{}
 	a := NewAccordion([]AccordionSection{{Title: "A", Body: body}})
 	a.SetBounds(Rect{X: 30, Y: 20, W: 200, H: 100})
-	a.Expanded = 0
+	a.Expanded().Set(0)
 
 	// Body spans [ExpanderHeaderH, H) in widget-local space.
 	a.OnEvent(Event{Kind: EventClick, X: 5, Y: ExpanderHeaderH + 10})
@@ -128,7 +149,7 @@ func TestAccordionBodyClickRoutesToExpandedSection(t *testing.T) {
 func TestAccordionBodyClickIgnoredWhenNilBody(t *testing.T) {
 	a := NewAccordion([]AccordionSection{{Title: "A", Body: nil}})
 	a.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
-	a.Expanded = 0
+	a.Expanded().Set(0)
 	// Must not panic; click lands inside the (nil-bodied) expanded
 	// section's body rect.
 	a.OnEvent(Event{Kind: EventClick, X: 5, Y: ExpanderHeaderH + 5})
@@ -154,7 +175,7 @@ func TestAccordionIgnoresNonClick(t *testing.T) {
 	// Enter/Space toggle the focused section as of Wave 3; an unrelated key
 	// (Tab) must not.
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if a.Expanded != -1 {
+	if a.Expanded().Get() != -1 {
 		t.Fatal("KeyDown must not toggle a section")
 	}
 }
@@ -165,8 +186,8 @@ func TestAccordionClickOutsideAnyHeaderIsNoOp(t *testing.T) {
 	// there's dead space below the header that belongs to no rect.
 	a.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	a.OnEvent(Event{Kind: EventClick, X: 5, Y: 90})
-	if a.Expanded != -1 {
-		t.Fatalf("Expanded = %d, want -1 (click landed outside any header/body)", a.Expanded)
+	if a.Expanded().Get() != -1 {
+		t.Fatalf("Expanded = %d, want -1 (click landed outside any header/body)", a.Expanded().Get())
 	}
 }
 
@@ -214,7 +235,7 @@ func TestAccordionDrawExpandedSectionRendersBody(t *testing.T) {
 		{Title: "B", Body: bodyB},
 	})
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	a.Expanded = 0
+	a.Expanded().Set(0)
 	a.Draw(newP(makeSurface(w, h), w), theme)
 	if bodyA.draws != 1 {
 		t.Fatalf("expanded body A draws = %d, want 1", bodyA.draws)
@@ -228,7 +249,7 @@ func TestAccordionDrawNilBodyNoPanic(t *testing.T) {
 	const w, h = 100, 100
 	a := NewAccordion([]AccordionSection{{Title: "A", Body: nil}})
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	a.Expanded = 0
+	a.Expanded().Set(0)
 	a.Draw(newP(makeSurface(w, h), w), DefaultLight())
 }
 
@@ -240,7 +261,7 @@ func TestAccordionDrawZeroRemainingSpaceSkipsBody(t *testing.T) {
 	body := &recordingWidget{}
 	a := NewAccordion([]AccordionSection{{Title: "A", Body: body}})
 	a.SetBounds(Rect{X: 0, Y: 0, W: 100, H: ExpanderHeaderH}) // no room left over
-	a.Expanded = 0
+	a.Expanded().Set(0)
 	a.Draw(newP(makeSurface(100, ExpanderHeaderH), 100), DefaultLight())
 	if body.draws != 0 {
 		t.Fatal("zero-height body rect must not be drawn")
@@ -252,7 +273,7 @@ func TestAccordionDrawZeroRemainingSpaceSkipsBody(t *testing.T) {
 func TestAccordionSectionRectsNegativeRemainingClamped(t *testing.T) {
 	a := NewAccordion([]AccordionSection{{Title: "A"}, {Title: "B"}, {Title: "C"}})
 	a.SetBounds(Rect{X: 0, Y: 0, W: 100, H: ExpanderHeaderH}) // shorter than 3 headers
-	a.Expanded = 0
+	a.Expanded().Set(0)
 	_, bodies := a.sectionRects()
 	if bodies[0].H != 0 {
 		t.Fatalf("body H = %d, want 0 (clamped, negative remaining)", bodies[0].H)
@@ -268,7 +289,7 @@ func TestAccordionDrawChevronDirection(t *testing.T) {
 	collapsed := makeSurface(w, h)
 	a.Draw(newP(collapsed, w), theme)
 
-	a.Expanded = 0
+	a.Expanded().Set(0)
 	expanded := makeSurface(w, h)
 	a.Draw(newP(expanded, w), theme)
 

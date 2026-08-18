@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // AccordionSection is one titled, collapsible slot in an Accordion:
 // a header row showing Title + a body Widget shown only while the
@@ -20,9 +23,10 @@ type AccordionSection struct {
 // header expands it + collapses any other expanded section. Setting
 // Multiple lets every header toggle independently instead.
 //
-// Expanded (used when Multiple is false) is the index of the single
-// expanded section, or -1 when every section is collapsed. In
-// Multiple mode Expanded is ignored + each section's open/closed
+// The expanded state (used when Multiple is false) is the index of the single
+// expanded section, or -1 when every section is collapsed. It is MVVM-only,
+// exposed via [Accordion.Expanded]: a host binds the Observable rather than
+// setting a field. In Multiple mode it is ignored + each section's open/closed
 // state is tracked independently.
 //
 // The remaining vertical space below all headers (Bounds().H minus
@@ -33,15 +37,9 @@ type Accordion struct {
 	Base
 	focusState
 	Sections []AccordionSection
-	Expanded int
 	Multiple bool
 
-	// OnToggle fires whenever a section's expanded state flips through a user
-	// interaction -- a header click, or Enter/Space on the focused header. i is
-	// the section index and expanded is its NEW state (true = just opened). In
-	// exclusive mode, opening section i also collapses whichever section was
-	// open, but OnToggle reports only the section the user acted on. Nil is safe.
-	OnToggle func(i int, expanded bool)
+	expanded *mvvm.Observable[int]
 
 	// multiExpanded tracks per-section expanded state in Multiple
 	// mode. Lazily allocated on first toggle; nil means "nothing
@@ -53,9 +51,25 @@ type Accordion struct {
 	focusedSection int
 }
 
+// Expanded is the index of the single expanded section as a shared
+// [mvvm.Observable] (or -1 when every section is collapsed, in exclusive mode):
+// a host binds it (Set / Subscribe / two-way) -- there is no settable Expanded
+// field. A header click or an Enter/Space key press Sets it; subscribers are
+// notified. In Multiple mode the per-section state is tracked separately and
+// this Observable is not consulted. The lazy default is the int zero value 0
+// (matching a bare &Accordion{}); [NewAccordion] initialises it to -1.
+func (a *Accordion) Expanded() *mvvm.Observable[int] {
+	if a.expanded == nil {
+		a.expanded = mvvm.NewObservable(0)
+	}
+	return a.expanded
+}
+
 // NewAccordion builds an Accordion with every section collapsed.
 func NewAccordion(sections []AccordionSection) *Accordion {
-	return &Accordion{Sections: sections, Expanded: -1}
+	a := &Accordion{Sections: sections}
+	a.expanded = mvvm.NewObservable(-1)
+	return a
 }
 
 // isExpanded reports whether section i is currently open.
@@ -63,34 +77,26 @@ func (a *Accordion) isExpanded(i int) bool {
 	if a.Multiple {
 		return a.multiExpanded[i]
 	}
-	return a.Expanded == i
+	return a.Expanded().Get() == i
 }
 
 // toggle flips section i's expanded state: independently in Multiple
 // mode, or exclusively (collapsing any other open section, and
-// collapsing to -1 when i was already the open one) otherwise.
+// collapsing to -1 when i was already the open one) otherwise. In exclusive
+// mode the new index is written through the [Accordion.Expanded] Observable, so
+// a host bound to it is notified.
 func (a *Accordion) toggle(i int) {
 	if a.Multiple {
 		if a.multiExpanded == nil {
 			a.multiExpanded = make(map[int]bool)
 		}
 		a.multiExpanded[i] = !a.multiExpanded[i]
-		a.fireToggle(i)
 		return
 	}
-	if a.Expanded == i {
-		a.Expanded = -1
+	if a.Expanded().Get() == i {
+		a.Expanded().Set(-1)
 	} else {
-		a.Expanded = i
-	}
-	a.fireToggle(i)
-}
-
-// fireToggle reports section i's new expanded state through OnToggle (nil-safe)
-// -- the shared notify tail both the Multiple and exclusive toggle paths run.
-func (a *Accordion) fireToggle(i int) {
-	if a.OnToggle != nil {
-		a.OnToggle(i, a.isExpanded(i))
+		a.Expanded().Set(i)
 	}
 }
 
