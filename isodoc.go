@@ -112,20 +112,76 @@ type IsoConnector struct {
 	Routed bool
 }
 
+// IsoZone is a rectangular coloured region on the ground plane (z=0) that groups
+// nodes visually. It occupies the tile rectangle [X, X+W] x [Y, Y+H]: (X, Y) is
+// its minimum corner in grid cells and (W, H) is its size in cells. Like every
+// other entity it is a plain value so the whole document snapshots cheaply for
+// undo and mirrors into a CRDT OR-map keyed by ID.
+type IsoZone struct {
+	// ID is the zone's stable identity — the OR-map key. A document must not hold
+	// two zones with the same ID; [IsoDoc.PutZone] upserts on it.
+	ID string
+	// X, Y is the zone's minimum corner in grid cells (integer world
+	// coordinates).
+	X, Y int
+	// W, H is the zone's size in grid cells. The widget's editing commands keep
+	// both at least 1, so a zone always covers a non-empty rectangle.
+	W, H int
+	// Color is the zone's fill colour; its alpha is the fill opacity, so a
+	// semi-transparent value tints the ground without hiding the grid. A zero
+	// value (A==0) inherits a translucent theme accent at draw time, so a zone
+	// created without a colour is still visible and follows the theme.
+	Color RGBA
+	// Label is an optional caption drawn in a corner of the zone and announced to
+	// a screen reader.
+	Label string
+}
+
+// IsoText is a standalone text annotation anchored at a tile position on the
+// ground plane. It is not attached to any node; it floats on the topmost layer,
+// above every node, connector and zone. Like the other entities it is a plain
+// value for cheap snapshotting and CRDT mirroring.
+type IsoText struct {
+	// ID is the annotation's stable identity (the OR-map key).
+	ID string
+	// X, Y is the annotation's anchor tile (integer world coordinates); the text
+	// is centred on that cell's projected ground centre.
+	X, Y int
+	// Text is the string drawn. An empty string still selects and moves as an
+	// (invisible) annotation, so an editor can place one and fill it in later.
+	Text string
+	// Color is the ink; a zero value (A==0) inherits the theme's OnSurface colour
+	// at draw time so an uncoloured annotation is still legible and theme-aware.
+	Color RGBA
+	// Size is the integer type scale routed through the toolkit HiDPI/density
+	// scale (1 is the base bitmap font, 2 double-height, ...). Zero uses the
+	// widget's effective font, so an annotation placed without a size matches the
+	// rest of the chrome.
+	Size int
+}
+
 // IsoDocument is the backing store an [IsoDiagram] edits. It is deliberately a
-// small interface over "a set of nodes and a set of connectors, keyed by ID,
-// with change notification" so the widget never reaches into a concrete store.
-// The bundled [IsoDoc] backs it with go-widgets/mvvm observable lists; a
-// structured-collab CRDT (nodes/connectors as OR-maps with LWW fields) that
-// implements this same interface is a drop-in replacement — the widget compiles
-// unchanged against either.
+// small interface over "sets of nodes, connectors, zones and text annotations,
+// each keyed by ID, with change notification" so the widget never reaches into a
+// concrete store. The bundled [IsoDoc] backs it with go-widgets/mvvm observable
+// lists; a structured-collab CRDT (each entity set an OR-map with LWW fields)
+// that implements this same interface is a drop-in replacement — the widget
+// compiles unchanged against either.
 type IsoDocument interface {
 	// Nodes returns a snapshot copy of every node, in insertion order.
 	Nodes() []IsoNode
 	// Connectors returns a snapshot copy of every connector, in insertion order.
 	Connectors() []IsoConnector
+	// Zones returns a snapshot copy of every zone, in insertion order.
+	Zones() []IsoZone
+	// Texts returns a snapshot copy of every text annotation, in insertion order.
+	Texts() []IsoText
 	// Node returns the node with the given ID and whether it was found.
 	Node(id string) (IsoNode, bool)
+	// Zone returns the zone with the given ID and whether it was found.
+	Zone(id string) (IsoZone, bool)
+	// Text returns the text annotation with the given ID and whether it was found.
+	Text(id string) (IsoText, bool)
 	// PutNode inserts a node or, when one already has the same ID, replaces it
 	// (an OR-map upsert with last-writer-wins fields).
 	PutNode(n IsoNode)
@@ -136,6 +192,14 @@ type IsoDocument interface {
 	PutConnector(c IsoConnector)
 	// RemoveConnector deletes a connector by ID; a missing ID is a no-op.
 	RemoveConnector(id string)
+	// PutZone inserts or replaces a zone by ID.
+	PutZone(z IsoZone)
+	// RemoveZone deletes a zone by ID; a missing ID is a no-op.
+	RemoveZone(id string)
+	// PutText inserts or replaces a text annotation by ID.
+	PutText(t IsoText)
+	// RemoveText deletes a text annotation by ID; a missing ID is a no-op.
+	RemoveText(id string)
 	// Subscribe registers fn to run after every mutation and returns a function
 	// that unsubscribes it.
 	Subscribe(fn func()) (unsubscribe func())
@@ -151,6 +215,8 @@ type IsoDocument interface {
 type IsoDoc struct {
 	nodes *mvvm.ObservableList[IsoNode]
 	conns *mvvm.ObservableList[IsoConnector]
+	zones *mvvm.ObservableList[IsoZone]
+	texts *mvvm.ObservableList[IsoText]
 }
 
 // NewIsoDoc returns an empty document.
@@ -158,6 +224,8 @@ func NewIsoDoc() *IsoDoc {
 	return &IsoDoc{
 		nodes: mvvm.NewObservableList[IsoNode](),
 		conns: mvvm.NewObservableList[IsoConnector](),
+		zones: mvvm.NewObservableList[IsoZone](),
+		texts: mvvm.NewObservableList[IsoText](),
 	}
 }
 
@@ -171,11 +239,25 @@ func (d *IsoDoc) NodeList() *mvvm.ObservableList[IsoNode] { return d.nodes }
 // [IsoDoc.NodeList]).
 func (d *IsoDoc) ConnectorList() *mvvm.ObservableList[IsoConnector] { return d.conns }
 
+// ZoneList exposes the underlying observable zone collection (see
+// [IsoDoc.NodeList]).
+func (d *IsoDoc) ZoneList() *mvvm.ObservableList[IsoZone] { return d.zones }
+
+// TextList exposes the underlying observable text-annotation collection (see
+// [IsoDoc.NodeList]).
+func (d *IsoDoc) TextList() *mvvm.ObservableList[IsoText] { return d.texts }
+
 // Nodes returns a snapshot copy of every node.
 func (d *IsoDoc) Nodes() []IsoNode { return d.nodes.Slice() }
 
 // Connectors returns a snapshot copy of every connector.
 func (d *IsoDoc) Connectors() []IsoConnector { return d.conns.Slice() }
+
+// Zones returns a snapshot copy of every zone.
+func (d *IsoDoc) Zones() []IsoZone { return d.zones.Slice() }
+
+// Texts returns a snapshot copy of every text annotation.
+func (d *IsoDoc) Texts() []IsoText { return d.texts.Slice() }
 
 // nodeIndex returns the position of the node with the given ID, or -1.
 func (d *IsoDoc) nodeIndex(id string) int {
@@ -191,6 +273,27 @@ func (d *IsoDoc) nodeIndex(id string) int {
 func (d *IsoDoc) connIndex(id string) int {
 	for i := 0; i < d.conns.Len(); i++ {
 		if d.conns.At(i).ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// zoneIndex returns the position of the zone with the given ID, or -1.
+func (d *IsoDoc) zoneIndex(id string) int {
+	for i := 0; i < d.zones.Len(); i++ {
+		if d.zones.At(i).ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// textIndex returns the position of the text annotation with the given ID, or
+// -1.
+func (d *IsoDoc) textIndex(id string) int {
+	for i := 0; i < d.texts.Len(); i++ {
+		if d.texts.At(i).ID == id {
 			return i
 		}
 	}
@@ -244,14 +347,66 @@ func (d *IsoDoc) RemoveConnector(id string) {
 	}
 }
 
-// Subscribe runs fn after any node or connector edit and returns an
-// unsubscribe function. It fans out to both observable lists so a single
+// Zone returns the zone with the given ID and whether it exists.
+func (d *IsoDoc) Zone(id string) (IsoZone, bool) {
+	if i := d.zoneIndex(id); i >= 0 {
+		return d.zones.At(i), true
+	}
+	return IsoZone{}, false
+}
+
+// PutZone upserts z by its ID.
+func (d *IsoDoc) PutZone(z IsoZone) {
+	if i := d.zoneIndex(z.ID); i >= 0 {
+		d.zones.Set(i, z)
+		return
+	}
+	d.zones.Append(z)
+}
+
+// RemoveZone deletes the zone with id.
+func (d *IsoDoc) RemoveZone(id string) {
+	if i := d.zoneIndex(id); i >= 0 {
+		d.zones.RemoveAt(i)
+	}
+}
+
+// Text returns the text annotation with the given ID and whether it exists.
+func (d *IsoDoc) Text(id string) (IsoText, bool) {
+	if i := d.textIndex(id); i >= 0 {
+		return d.texts.At(i), true
+	}
+	return IsoText{}, false
+}
+
+// PutText upserts t by its ID.
+func (d *IsoDoc) PutText(t IsoText) {
+	if i := d.textIndex(t.ID); i >= 0 {
+		d.texts.Set(i, t)
+		return
+	}
+	d.texts.Append(t)
+}
+
+// RemoveText deletes the text annotation with id.
+func (d *IsoDoc) RemoveText(id string) {
+	if i := d.textIndex(id); i >= 0 {
+		d.texts.RemoveAt(i)
+	}
+}
+
+// Subscribe runs fn after any node, connector, zone or text edit and returns an
+// unsubscribe function. It fans out to every observable list so a single
 // subscription covers the whole document.
 func (d *IsoDoc) Subscribe(fn func()) (unsubscribe func()) {
 	un := d.nodes.SubscribeChanged(fn)
 	uc := d.conns.SubscribeChanged(fn)
+	uz := d.zones.SubscribeChanged(fn)
+	ut := d.texts.SubscribeChanged(fn)
 	return func() {
 		un()
 		uc()
+		uz()
+		ut()
 	}
 }
