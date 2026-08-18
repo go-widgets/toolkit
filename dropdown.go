@@ -104,7 +104,7 @@ func (d *DropDown) rowH() int { return scaled(PopoverRowH) }
 // HitRect is the DropDown's tap/toggle target: Bounds clamped up to the touch
 // minimum on each axis and centred. Byte-identical to Bounds at
 // [DensityCompact].
-func (d *DropDown) HitRect() Rect { return hitRectFor(d.Bounds()) }
+func (d *DropDown) HitRect() Rect { return touchHitRect(d.Bounds()) }
 
 // OnEvent toggles Open on click. Selection happens via Select() which
 // the host wires to its popover ListBox's OnActivate. A Disabled dropdown

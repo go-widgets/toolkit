@@ -42,7 +42,7 @@ func DatePickerFieldH() int { return GlyphHeight() + scaled(datePickerFieldPadY)
 // HitRect is the DatePicker field's tap/toggle target: Bounds clamped up to the
 // touch minimum on each axis and centred. Byte-identical to Bounds at
 // [DensityCompact].
-func (dp *DatePicker) HitRect() Rect { return hitRectFor(dp.Bounds()) }
+func (dp *DatePicker) HitRect() Rect { return touchHitRect(dp.Bounds()) }
 
 // NewDatePicker builds a DatePicker initialised to (year, month, day).
 func NewDatePicker(year, month, day int) *DatePicker {

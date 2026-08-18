@@ -112,13 +112,13 @@ func (s *SearchEntry) clearSlot() Rect {
 // HitRect is the SearchEntry's field-level tap target: Bounds clamped up to the
 // touch minimum on each axis and centred. Byte-identical to Bounds at
 // [DensityCompact].
-func (s *SearchEntry) HitRect() Rect { return hitRectFor(s.Bounds()) }
+func (s *SearchEntry) HitRect() Rect { return touchHitRect(s.Bounds()) }
 
 // ClearHitRect is the finger target for the trailing "clear" affordance: the
 // drawn clear slot clamped up to the touch minimum on each axis and centred over
 // it, so the narrow 16-logical-pixel glyph still exposes a 44px grab under
 // [DensityTouch]. At [DensityCompact] it equals the drawn slot byte-for-byte.
-func (s *SearchEntry) ClearHitRect() Rect { return hitRectFor(s.clearSlot()) }
+func (s *SearchEntry) ClearHitRect() Rect { return touchHitRect(s.clearSlot()) }
 
 // OnEvent handles character insertion (EventChar), Backspace deletion
 // (EventKeyDown / "Backspace"), and click-to-clear in the right icon

@@ -154,7 +154,7 @@ const (
 // HitRect is the ComboBox field's tap/toggle target: Bounds clamped up to the
 // touch minimum on each axis and centred, byte-identical to Bounds at
 // [DensityCompact].
-func (c *ComboBox) HitRect() Rect { return hitRectFor(c.Bounds()) }
+func (c *ComboBox) HitRect() Rect { return touchHitRect(c.Bounds()) }
 
 // PopoverBounds returns the Rect the filtered list occupies below the field:
 // same X and W as the field, height proportional to the visible option count.

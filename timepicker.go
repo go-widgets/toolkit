@@ -47,7 +47,7 @@ const (
 // so they cannot each grow to the 44px floor without overlapping; the field
 // clamp guarantees the control as a whole meets the touch height, while the
 // cells (scaled(tpCellW) wide) grow with density so the steppers stay legible.
-func (tp *TimePicker) HitRect() Rect { return hitRectFor(tp.Bounds()) }
+func (tp *TimePicker) HitRect() Rect { return touchHitRect(tp.Bounds()) }
 
 // NewTimePicker builds a TimePicker initialised to (hour, minute). The inputs
 // are normalised into range (hour into 0..23, minute into 0..59) so an

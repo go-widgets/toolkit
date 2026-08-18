@@ -200,11 +200,11 @@ func (rp *DateRangePicker) nextArrowRect() Rect {
 // floor under [DensityTouch]. They sit at opposite header ends, so the enlarged
 // grabs never overlap. At [DensityCompact] each equals its drawn cell
 // byte-for-byte.
-func (rp *DateRangePicker) PrevArrowHitRect() Rect { return hitRectFor(rp.prevArrowRect()) }
+func (rp *DateRangePicker) PrevArrowHitRect() Rect { return touchHitRect(rp.prevArrowRect()) }
 
 // NextArrowHitRect is the finger target for the next-month arrow; see
 // PrevArrowHitRect.
-func (rp *DateRangePicker) NextArrowHitRect() Rect { return hitRectFor(rp.nextArrowRect()) }
+func (rp *DateRangePicker) NextArrowHitRect() Rect { return touchHitRect(rp.nextArrowRect()) }
 
 // OnEvent handles clicks (widget-local coordinates): the header arrows page the
 // month; a day-cell click is forwarded to the embedded Calendar, whose OnSelect

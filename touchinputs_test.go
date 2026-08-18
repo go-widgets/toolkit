@@ -25,7 +25,7 @@ import "testing"
 // arithmetic, not a restatement of it.
 const touchFloor = 44
 
-// wantTouchHit is the independent oracle for hitRectFor at DensityTouch / 1x: it
+// wantTouchHit is the independent oracle for touchHitRect at DensityTouch / 1x: it
 // clamps each axis up to touchFloor and re-centres the enlarged rect over the
 // original, reproducing the intended geometry from first principles so a widget
 // that computes it a different way is caught.
@@ -40,13 +40,13 @@ func wantTouchHit(b Rect) Rect {
 	return Rect{X: b.X - (w-b.W)/2, Y: b.Y - (h-b.H)/2, W: w, H: h}
 }
 
-// TestHitRectForControlRun validates the shared hitRectFor helper against a
+// TestTouchHitRectControlRun validates the shared touchHitRect helper against a
 // KNOWN-GOOD control — the already-shipped, already-tested [Switch.HitRect] — and
 // against the independent wantTouchHit oracle, at both densities, before any
 // family widget relies on it. A new instrument is proven against a trusted one
-// first: if hitRectFor ever diverges from Switch's clamp, this fails here rather
+// first: if touchHitRect ever diverges from Switch's clamp, this fails here rather
 // than in thirteen widget tests at once.
-func TestHitRectForControlRun(t *testing.T) {
+func TestTouchHitRectControlRun(t *testing.T) {
 	defer restoreDensity()
 
 	rects := []Rect{
@@ -56,33 +56,33 @@ func TestHitRectForControlRun(t *testing.T) {
 		{X: 5, Y: 7, W: 20, H: 200},    // tall but narrow (the other axis clamps)
 	}
 
-	// Compact: hitRectFor is a pure pass-through, equal to the input rect and to
+	// Compact: touchHitRect is a pure pass-through, equal to the input rect and to
 	// the control Switch's hit rect byte-for-byte.
 	for _, b := range rects {
 		s := NewSwitch(false)
 		s.SetBounds(b)
-		if got := hitRectFor(b); got != b {
-			t.Fatalf("compact hitRectFor(%+v) = %+v, want the input rect", b, got)
+		if got := touchHitRect(b); got != b {
+			t.Fatalf("compact touchHitRect(%+v) = %+v, want the input rect", b, got)
 		}
-		if got, ctrl := hitRectFor(b), s.HitRect(); got != ctrl {
-			t.Fatalf("compact hitRectFor(%+v) = %+v, control Switch.HitRect = %+v", b, got, ctrl)
+		if got, ctrl := touchHitRect(b), s.HitRect(); got != ctrl {
+			t.Fatalf("compact touchHitRect(%+v) = %+v, control Switch.HitRect = %+v", b, got, ctrl)
 		}
 	}
 
-	// Touch: hitRectFor must equal BOTH the control and the oracle.
+	// Touch: touchHitRect must equal BOTH the control and the oracle.
 	SetDensity(DensityTouch)
 	for _, b := range rects {
 		s := NewSwitch(false)
 		s.SetBounds(b)
-		got := hitRectFor(b)
+		got := touchHitRect(b)
 		if ctrl := s.HitRect(); got != ctrl {
-			t.Fatalf("touch hitRectFor(%+v) = %+v, control Switch.HitRect = %+v", b, got, ctrl)
+			t.Fatalf("touch touchHitRect(%+v) = %+v, control Switch.HitRect = %+v", b, got, ctrl)
 		}
 		if want := wantTouchHit(b); got != want {
-			t.Fatalf("touch hitRectFor(%+v) = %+v, oracle = %+v", b, got, want)
+			t.Fatalf("touch touchHitRect(%+v) = %+v, oracle = %+v", b, got, want)
 		}
 		if got.W < touchFloor || got.H < touchFloor {
-			t.Fatalf("touch hitRectFor(%+v) = %+v, both axes must reach %d", b, got, touchFloor)
+			t.Fatalf("touch touchHitRect(%+v) = %+v, both axes must reach %d", b, got, touchFloor)
 		}
 	}
 }

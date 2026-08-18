@@ -209,20 +209,6 @@ func (b *Button) activate() {
 	}
 }
 
-// touchHitRect is the generic form of the [Switch.HitRect] worked example: it
-// clamps a widget's drawn Bounds UP to the current density hit-target on each
-// axis (via [TouchTarget]) and centres the (possibly larger) hit rect over the
-// unchanged bounds. Under the default [DensityCompact] the minimum is 0, so
-// TouchTarget is a pass-through and the returned rect equals r byte-for-byte;
-// under [DensityTouch] a small control grows a finger-sized hit area around its
-// unchanged pixels. Every interactive control in the CONTROLS family routes its
-// HitRect through this one seam so the clamp+centre rule can never drift between
-// widgets. Only the hit region grows — Draw is never involved.
-func touchHitRect(r Rect) Rect {
-	w, h := TouchTarget(r.W), TouchTarget(r.H)
-	return Rect{X: r.X - (w-r.W)/2, Y: r.Y - (h-r.H)/2, W: w, H: h}
-}
-
 // HitRect is the button's interactive rectangle: its drawn Bounds clamped up to
 // the density hit-target and centred over them. Byte-identical to Bounds under
 // DensityCompact; a small button exposes a >=44px finger target under

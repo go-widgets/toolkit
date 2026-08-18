@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"math"
+
+	"github.com/go-widgets/painter"
+)
 
 // ScatterPoint is one (X, Y) sample plotted by a ScatterChart.
 type ScatterPoint struct{ X, Y float64 }
@@ -38,7 +42,7 @@ func (c *ScatterChart) NearestPoint(localX, localY int) (series, point int, pt S
 	}
 	r := c.Bounds()
 	tx, ty := localX+r.X, localY+r.Y
-	best := 1 << 62
+	best := math.MaxInt // sentinel larger than any achievable squared pixel distance
 	for si, s := range c.Series {
 		for pi, q := range s {
 			x, y := c.project(q, xr, yr)

@@ -89,7 +89,7 @@ func (s *Scale) thumbRect() Rect {
 // scaleThumbSize (16 logical px) across otherwise offers a 24px target under
 // [DensityTouch]; this lifts it to the 44px floor without changing the painted
 // thumb. At [DensityCompact] it equals the drawn thumb byte-for-byte.
-func (s *Scale) ThumbHitRect() Rect { return hitRectFor(s.thumbRect()) }
+func (s *Scale) ThumbHitRect() Rect { return touchHitRect(s.thumbRect()) }
 
 // Draw paints a macOS-style slider: a rounded track whose filled portion (up
 // to the thumb) is Accent and whose remainder is SurfaceAlt, with a circular

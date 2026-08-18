@@ -218,7 +218,7 @@ func (c *ColorPicker) alphaRectLocal() Rect {
 // minimum on each axis and centred over it, so the 20-logical-pixel chip reaches
 // the 44px floor under [DensityTouch]. At [DensityCompact] it equals the drawn
 // button byte-for-byte.
-func (c *ColorPicker) EyedropHitRect() Rect { return hitRectFor(c.eyedropRectLocal()) }
+func (c *ColorPicker) EyedropHitRect() Rect { return touchHitRect(c.eyedropRectLocal()) }
 
 // swatchRectLocal is the solid preview swatch, bottom-left.
 func (c *ColorPicker) swatchRectLocal() Rect {
