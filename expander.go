@@ -27,8 +27,13 @@ type Expander struct {
 const ExpanderHeaderH = 24
 
 // ExpanderHeaderHeight is the header height in device pixels at the current
-// [MetricScale].
-func ExpanderHeaderHeight() int { return scaled(ExpanderHeaderH) }
+// [MetricScale] and touch [Density]: the scaled [ExpanderHeaderH] clamped UP to
+// the density minimum hit target via [TouchTarget]. The header is the clickable
+// row, so at [DensityTouch] it grows to the finger floor (>=44 device px);
+// under the default [DensityCompact] the clamp is a pass-through, so at
+// MetricScale 1 it is exactly the historical raw ExpanderHeaderH. Accordion
+// shares this height for its own header rows.
+func ExpanderHeaderHeight() int { return TouchTarget(scaled(ExpanderHeaderH)) }
 
 // NewExpander builds an Expander with a label + initial content
 // widget (may be nil to render header-only).
@@ -44,7 +49,7 @@ func (e *Expander) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, ExpanderHeaderHeight(), theme.SurfaceAlt)
 	// Chevron: small triangle in Theme.OnSurface. Collapsed → right-
 	// pointing (▶), expanded → down-pointing (▼). 5-px tall.
-	cx := r.X + 6
+	cx := r.X + scaled(6)
 	cy := r.Y + ExpanderHeaderHeight()/2
 	if e.Expanded {
 		// ▼ : flat top (widest row), point at bottom (narrow tip).
@@ -62,7 +67,7 @@ func (e *Expander) Draw(p painter.Painter, theme *Theme) {
 		}
 	}
 	textY := r.Y + (ExpanderHeaderHeight()-e.glyphHeight())/2
-	e.drawText(p, r.X+16, textY, e.Label, theme.OnSurface)
+	e.drawText(p, r.X+scaled(16), textY, e.Label, theme.OnSurface)
 	if e.Expanded && e.Content != nil {
 		body := Rect{X: r.X, Y: r.Y + ExpanderHeaderHeight(), W: r.W, H: r.H - ExpanderHeaderHeight()}
 		e.Content.SetBounds(body)

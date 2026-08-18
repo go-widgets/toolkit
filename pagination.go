@@ -44,6 +44,18 @@ const PaginationGap = 2
 // rendered inline before the window heuristic kicks in.
 const paginationMaxButtons = 7
 
+// btnW / btnH are the effective per-button pixel size used for both the drawn
+// cell and the click hit-test: the scaled [PaginationBtnW]/[PaginationBtnH]
+// clamped UP to the density minimum hit target via [TouchTarget]. Each button
+// is a tap target, so at [DensityTouch] it grows to the finger floor (>=44
+// device px) on both axes; under the default [DensityCompact] the clamp is a
+// pass-through, so at MetricScale 1 the button is exactly the historical raw
+// size. gap is [PaginationGap] in device pixels (no floor -- it is a spacer,
+// not a target).
+func (pg *Pagination) btnW() int { return TouchTarget(scaled(PaginationBtnW)) }
+func (pg *Pagination) btnH() int { return TouchTarget(scaled(PaginationBtnH)) }
+func (pg *Pagination) gap() int  { return scaled(PaginationGap) }
+
 // paginationEllipsis is the label used in the collapsed window slots.
 const paginationEllipsis = "..."
 
@@ -71,7 +83,7 @@ func NewPagination(current, total int) *Pagination {
 func (pg *Pagination) Draw(p painter.Painter, theme *Theme) {
 	r := pg.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	if pg.Total <= 0 || r.W < PaginationBtnW || r.H < PaginationBtnH {
+	if pg.Total <= 0 || r.W < pg.btnW() || r.H < pg.btnH() {
 		return
 	}
 	// The prev + slots + next strip has a natural width (set by the slot
@@ -82,11 +94,11 @@ func (pg *Pagination) Draw(p painter.Painter, theme *Theme) {
 		x := r.X
 		// Prev button.
 		pg.drawStep(p, theme, x, r.Y, "<", pg.Current > 1)
-		x += PaginationBtnW + PaginationGap
+		x += pg.btnW() + pg.gap()
 		// Numeric / ellipsis buttons.
 		for _, slot := range slots {
 			pg.drawSlot(p, theme, x, r.Y, slot)
-			x += PaginationBtnW + PaginationGap
+			x += pg.btnW() + pg.gap()
 		}
 		// Next button.
 		pg.drawStep(p, theme, x, r.Y, ">", pg.Current < pg.Total)
@@ -97,14 +109,15 @@ func (pg *Pagination) Draw(p painter.Painter, theme *Theme) {
 // drawStep paints one of the "<" / ">" step buttons. enabled=false
 // renders the label in Border (disabled tone).
 func (pg *Pagination) drawStep(p painter.Painter, theme *Theme, x, y int, label string, enabled bool) {
-	fillRect(p, x, y, PaginationBtnW, PaginationBtnH, theme.SurfaceAlt)
-	strokeRect(p, x, y, PaginationBtnW, PaginationBtnH, theme.Border)
+	bw, bh := pg.btnW(), pg.btnH()
+	fillRect(p, x, y, bw, bh, theme.SurfaceAlt)
+	strokeRect(p, x, y, bw, bh, theme.Border)
 	ink := theme.OnSurface
 	if !enabled {
 		ink = theme.Border
 	}
-	tx := x + (PaginationBtnW-pg.textWidth(label))/2
-	ty := y + (PaginationBtnH-pg.glyphHeight())/2
+	tx := x + (bw-pg.textWidth(label))/2
+	ty := y + (bh-pg.glyphHeight())/2
 	pg.drawText(p, tx, ty, label, ink)
 }
 
@@ -121,10 +134,11 @@ func (pg *Pagination) drawSlot(p painter.Painter, theme *Theme, x, y int, slot p
 	} else if slot.page == 0 {
 		ink = theme.Border
 	}
-	fillRect(p, x, y, PaginationBtnW, PaginationBtnH, fill)
-	strokeRect(p, x, y, PaginationBtnW, PaginationBtnH, theme.Border)
-	tx := x + (PaginationBtnW-pg.textWidth(label))/2
-	ty := y + (PaginationBtnH-pg.glyphHeight())/2
+	bw, bh := pg.btnW(), pg.btnH()
+	fillRect(p, x, y, bw, bh, fill)
+	strokeRect(p, x, y, bw, bh, theme.Border)
+	tx := x + (bw-pg.textWidth(label))/2
+	ty := y + (bh-pg.glyphHeight())/2
 	pg.drawText(p, tx, ty, label, ink)
 }
 
@@ -158,13 +172,13 @@ func (pg *Pagination) OnEvent(ev Event) {
 		return
 	}
 	r := pg.Bounds()
-	if ev.Y < 0 || ev.Y >= PaginationBtnH || ev.Y >= r.H {
+	if ev.Y < 0 || ev.Y >= pg.btnH() || ev.Y >= r.H {
 		return
 	}
-	stride := PaginationBtnW + PaginationGap
+	stride := pg.btnW() + pg.gap()
 	idx := ev.X / stride
 	xOff := ev.X - idx*stride
-	if xOff >= PaginationBtnW {
+	if xOff >= pg.btnW() {
 		return // gap between buttons
 	}
 	slots := pg.slots()

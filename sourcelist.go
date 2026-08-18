@@ -93,7 +93,10 @@ type slRow struct {
 	reorderable bool
 }
 
-// SourceList metrics (pixels).
+// SourceList metrics (base LOGICAL pixels; every use is routed through [scaled]
+// so the sidebar tracks HiDPI [MetricScale] and touch [Density] together --
+// under the default MetricScale 1 / DensityCompact each value is exactly its
+// historical raw pixel size, so a desktop SourceList is byte-identical).
 const (
 	slHeaderH    = 24
 	slRowH       = 28
@@ -105,6 +108,15 @@ const (
 	slRowInset   = 6
 	slPillRadius = 6
 )
+
+// rowHeight is the effective item-row pixel height used for both layout and
+// hit-testing: the scaled [slRowH] clamped UP to the density minimum hit target
+// via [TouchTarget]. Under [DensityCompact] the clamp is a pass-through (and, at
+// MetricScale 1, exactly the historical raw slRowH); under [DensityTouch] a row
+// grows to the finger floor (>=44 device px) so both the drawn pill band and
+// its tap target reach it. Section headers keep their plain scaled(slHeaderH) --
+// they are not selectable.
+func (s *SourceList) rowHeight() int { return TouchTarget(scaled(slRowH)) }
 
 // SourceRowDragPrefix is the payload scheme a SourceList reorder drag carries:
 // DragData returns this prefix followed by "<section>:<row>", and AcceptsDrop
@@ -169,28 +181,29 @@ func (s *SourceList) SetBounds(r Rect) {
 // section with a non-empty Title) then the section's item rows.
 func (s *SourceList) layout() {
 	b := s.Bounds()
-	y := b.Y + slTopPad
+	y := b.Y + scaled(slTopPad)
+	headerH, rowH := scaled(slHeaderH), s.rowHeight()
 	s.rows = s.rows[:0]
 	for si := range s.Sections {
 		sec := &s.Sections[si]
 		if sec.Title != "" {
 			s.rows = append(s.rows, slRow{
-				rect:    Rect{X: b.X, Y: y, W: b.W, H: slHeaderH},
+				rect:    Rect{X: b.X, Y: y, W: b.W, H: headerH},
 				section: si,
 				row:     -1,
 			})
-			y += slHeaderH
+			y += headerH
 		}
 		for ri := range sec.Items {
 			s.rows = append(s.rows, slRow{
-				rect:        Rect{X: b.X, Y: y, W: b.W, H: slRowH},
+				rect:        Rect{X: b.X, Y: y, W: b.W, H: rowH},
 				section:     si,
 				row:         ri,
 				reorderable: sec.Reorderable,
 			})
-			y += slRowH
+			y += rowH
 		}
-		y += slSectGap
+		y += scaled(slSectGap)
 	}
 }
 
@@ -199,21 +212,23 @@ func (s *SourceList) layout() {
 func (s *SourceList) Draw(p painter.Painter, theme *Theme) {
 	b := s.Bounds()
 	fillRect(p, b.X, b.Y, b.W, b.H, theme.SurfaceAlt)
-	fillRect(p, b.X+b.W-1, b.Y, 1, b.H, theme.Border)
+	hair := max(1, scaled(1))
+	fillRect(p, b.X+b.W-hair, b.Y, hair, b.H, theme.Border)
 
 	withClip(p, b, func() {
 		headerInk := mutedInk(theme)
 		for _, row := range s.rows {
 			if row.row < 0 {
 				ty := row.rect.Y + (row.rect.H-s.glyphHeight())/2
-				s.drawText(p, row.rect.X+slLeftPad, ty, s.Sections[row.section].Title, headerInk)
+				s.drawText(p, row.rect.X+scaled(slLeftPad), ty, s.Sections[row.section].Title, headerInk)
 				continue
 			}
 			s.drawItem(p, theme, row)
 		}
 		if s.dragging {
 			if _, lineY, ok := s.dropTarget(s.dragY); ok {
-				fillRect(p, b.X+slRowInset, lineY-1, b.W-2*slRowInset, 2, theme.Accent)
+				line := max(1, scaled(2))
+				fillRect(p, b.X+scaled(slRowInset), lineY-line/2, b.W-2*scaled(slRowInset), line, theme.Accent)
 			}
 		}
 	})
@@ -224,23 +239,24 @@ func (s *SourceList) Draw(p painter.Painter, theme *Theme) {
 func (s *SourceList) drawItem(p painter.Painter, theme *Theme, row slRow) {
 	r := row.rect
 	item := s.Sections[row.section].Items[row.row]
+	inset, iconPx := scaled(slRowInset), scaled(slIconPx)
 	ink := theme.OnSurface
 	if row.section == s.selSection && row.row == s.selRow {
-		hl := Rect{X: r.X + slRowInset, Y: r.Y + 2, W: r.W - 2*slRowInset, H: r.H - 4}
-		p.FillRoundRect(hl, slPillRadius, theme.Accent)
+		hl := Rect{X: r.X + inset, Y: r.Y + scaled(2), W: r.W - 2*inset, H: r.H - scaled(4)}
+		p.FillRoundRect(hl, scaled(slPillRadius), theme.Accent)
 		ink = theme.Background
 	}
 
-	tx := r.X + slLeftPad
+	tx := r.X + scaled(slLeftPad)
 	if item.Icon != nil {
-		iy := r.Y + (r.H-slIconPx)/2
-		item.Icon.SetBounds(Rect{X: r.X + slLeftPad, Y: iy, W: slIconPx, H: slIconPx})
+		iy := r.Y + (r.H-iconPx)/2
+		item.Icon.SetBounds(Rect{X: r.X + scaled(slLeftPad), Y: iy, W: iconPx, H: iconPx})
 		item.Icon.Draw(p, theme)
-		tx += slIconPx + slIconGap
+		tx += iconPx + scaled(slIconGap)
 	}
 
 	ty := r.Y + (r.H-s.glyphHeight())/2
-	avail := r.X + r.W - slRowInset - tx
+	avail := r.X + r.W - inset - tx
 	label := item.Label
 	if s.textWidth(label) > avail {
 		label = ellipsize(s.EffectiveFont(), label, avail)
@@ -319,7 +335,8 @@ func (s *SourceList) dropTargetIndex(y int) (section, index int, ok bool) {
 	}
 	first := band[0].rect.Y
 	last := band[len(band)-1].rect
-	if y < first-slRowH || y > last.Y+last.H+slRowH {
+	rowH := s.rowHeight()
+	if y < first-rowH || y > last.Y+last.H+rowH {
 		return s.pressedSection, 0, false
 	}
 	for i, row := range band {

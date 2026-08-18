@@ -133,10 +133,24 @@ func (m *Menu) scale() float64 {
 	return m.Scale
 }
 
-// sc scales a fixed pixel metric to the menu's scale, rounding to the nearest
-// device pixel. Every geometry metric (draw AND hit-test) goes through it so the
-// two stay consistent at any scale.
-func (m *Menu) sc(v int) int { return int(math.Round(float64(v) * m.scale())) }
+// sc scales a fixed pixel metric to the menu's scale AND the toolkit's touch
+// [Density], rounding to the nearest device pixel. Every geometry metric (draw
+// AND hit-test) goes through it so the two stay consistent at any scale. The
+// density factor composes multiplicatively, mirroring the package [scaled]
+// seam; under [DensityCompact] it is exactly 1.0, so a menu at the default
+// density is byte-for-byte what it was before the touch axis existed.
+func (m *Menu) sc(v int) int {
+	return int(math.Round(float64(v) * m.scale() * densityFactor(density)))
+}
+
+// rowH is the effective menu-row pixel height used for both draw and hit-test:
+// the scaled [MenuRowH] clamped UP to the density minimum hit target via
+// [TouchTarget]. Under [DensityCompact] the clamp is a pass-through, so it
+// equals sc(MenuRowH); under [DensityTouch] a short row grows to the finger
+// floor (>=44 device px) so both the drawn row band and its tap target reach
+// it. Separator rows keep their plain sc(MenuSeparatorH) -- they are not
+// interactive.
+func (m *Menu) rowH() int { return TouchTarget(m.sc(MenuRowH)) }
 
 // hasIconGutter reports whether any item carries an Icon, so Draw reserves an
 // icon cell before every label (keeping them aligned).
@@ -166,7 +180,7 @@ func (m *Menu) rowsHeight() int {
 		if m.Items[i].Separator {
 			h += m.sc(MenuSeparatorH)
 		} else {
-			h += m.sc(MenuRowH)
+			h += m.rowH()
 		}
 	}
 	return h
@@ -214,7 +228,7 @@ func (m *Menu) scrollHoverIntoView() {
 	top := m.rowTop(m.Hover) // content-space top (>= sc(2))
 	if m.scroll > top {
 		m.scroll = top
-	} else if bot := top + m.sc(MenuRowH); m.scroll < bot-m.Bounds().H {
+	} else if bot := top + m.rowH(); m.scroll < bot-m.Bounds().H {
 		m.scroll = bot - m.Bounds().H
 	}
 	m.scroll = m.clampedScroll()
@@ -242,7 +256,7 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 		gutter = m.sc(MenuCheckGutterW)
 	}
 	iconGutter := m.iconGutterW()
-	rowH, sepH, inset := m.sc(MenuRowH), m.sc(MenuSeparatorH), m.sc(8)
+	rowH, sepH, inset := m.rowH(), m.sc(MenuSeparatorH), m.sc(8)
 	// Clip the rows to the bounds and paint from -scroll, so a menu whose rows
 	// overflow its (host-clamped) height scrolls instead of spilling past the
 	// surface. When every row fits, maxScroll == 0 pins scroll to 0 and the clip
@@ -316,7 +330,7 @@ func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 func (m *Menu) drawCheckGlyph(p painter.Painter, gx, rowY int, radio bool, ink RGBA) {
 	glyphBox := m.sc(10)
 	dot := max(1, m.sc(1))
-	boxY := rowY + (m.sc(MenuRowH)-glyphBox)/2
+	boxY := rowY + (m.rowH()-glyphBox)/2
 	if radio {
 		fillRect(p, gx+m.sc(3), boxY+m.sc(3), glyphBox-m.sc(6), glyphBox-m.sc(6), ink)
 		return
@@ -415,7 +429,7 @@ func (m *Menu) OnEvent(ev Event) {
 	case EventScroll:
 		// Native wheel scroll: one notch moves one row. A no-op when the whole
 		// menu already fits (maxScroll == 0).
-		m.scrollBy(ev.Delta * m.sc(MenuRowH))
+		m.scrollBy(ev.Delta * m.rowH())
 	case EventClick:
 		m.activate(m.rowAt(ev.Y))
 	}
@@ -512,7 +526,7 @@ func (m *Menu) rowTop(idx int) int {
 		if m.Items[k].Separator {
 			cy += m.sc(MenuSeparatorH)
 		} else {
-			cy += m.sc(MenuRowH)
+			cy += m.rowH()
 		}
 	}
 	return cy
@@ -545,7 +559,7 @@ func (m *Menu) preferredSize() (w, h int) {
 		if rowW > w {
 			w = rowW
 		}
-		h += m.sc(MenuRowH)
+		h += m.rowH()
 	}
 	return w, h
 }
@@ -608,7 +622,7 @@ func (m *Menu) rowAt(y int) int {
 	}
 	cy := m.sc(2)
 	for i, it := range m.Items {
-		h := m.sc(MenuRowH)
+		h := m.rowH()
 		if it.Separator {
 			h = m.sc(MenuSeparatorH)
 		}
@@ -643,6 +657,14 @@ type MenuBar struct {
 // MenuBarH is the pixel height of the bar strip.
 const MenuBarH = 22
 
+// barH is the effective strip height used for the fill, the name cells and the
+// click band: the scaled [MenuBarH] clamped UP to the density minimum hit
+// target via [TouchTarget]. Under [DensityCompact] the clamp is a pass-through
+// (and, at MetricScale 1, exactly the historical raw MenuBarH); under
+// [DensityTouch] the strip grows to the finger floor (>=44 device px) so a
+// top-level name is a large-enough tap target.
+func (b *MenuBar) barH() int { return TouchTarget(scaled(MenuBarH)) }
+
 // MenuBarItemW is the DEFAULT (minimum) pixel width allocated per
 // top-level name. Names whose TextWidth exceeds this bound scale up
 // (with 2×MenuBarItemPadX horizontal padding on each side); shorter
@@ -669,14 +691,18 @@ func (b *MenuBar) AddMenu(name string, m *Menu) {
 // Exposed so hosts that render their own popover under a clicked
 // name know how wide the "click zone" was.
 func (b *MenuBar) NameWidth(i int) int {
+	floor := scaled(MenuBarItemW)
 	if i < 0 || i >= len(b.Names) {
-		return MenuBarItemW
+		return TouchTarget(floor)
 	}
-	w := b.textWidth(b.Names[i]) + 2*MenuBarItemPadX
-	if w < MenuBarItemW {
-		return MenuBarItemW
+	w := b.textWidth(b.Names[i]) + 2*scaled(MenuBarItemPadX)
+	if w < floor {
+		w = floor
 	}
-	return w
+	// A name cell is a tap target, so clamp its width UP to the density minimum
+	// hit target: a pass-through at compact (byte-identical), the >=44px finger
+	// floor at touch.
+	return TouchTarget(w)
 }
 
 // NameOriginX returns the X offset of the i-th top-level name within
@@ -694,24 +720,24 @@ func (b *MenuBar) NameOriginX(i int) int {
 // Draw paints the bar + every name + a highlight on the Active name.
 func (b *MenuBar) Draw(p painter.Painter, theme *Theme) {
 	r := b.Bounds()
-	fillRect(p, r.X, r.Y, r.W, scaled(MenuBarH), theme.SurfaceAlt)
+	fillRect(p, r.X, r.Y, r.W, b.barH(), theme.SurfaceAlt)
 	for i, name := range b.Names {
 		iw := b.NameWidth(i)
 		ix := r.X + b.NameOriginX(i)
 		ink := theme.OnSurface
 		switch {
 		case i == b.Active:
-			fillRect(p, ix, r.Y, iw, scaled(MenuBarH), theme.Accent)
+			fillRect(p, ix, r.Y, iw, b.barH(), theme.Accent)
 			ink = accentInk(theme)
 		case b.hoverName == i+1:
 			// A hovered (but not open) name raises to Surface — a subtle
 			// lighter cell against the SurfaceAlt bar. Skipped for the active
 			// name, whose Accent highlight already wins.
-			fillRect(p, ix, r.Y, iw, scaled(MenuBarH), theme.Surface)
+			fillRect(p, ix, r.Y, iw, b.barH(), theme.Surface)
 		}
 		tw := b.textWidth(name)
 		textX := ix + (iw-tw)/2
-		textY := r.Y + (scaled(MenuBarH)-b.glyphHeight())/2
+		textY := r.Y + (b.barH()-b.glyphHeight())/2
 		b.drawText(p, textX, textY, name, ink)
 	}
 }
@@ -727,7 +753,7 @@ func (b *MenuBar) OnEvent(ev Event) {
 	case EventMouseMove:
 		// Track the name under the pointer for the hover highlight; clear it
 		// when the pointer leaves the strip.
-		if ev.Y < 0 || ev.Y >= scaled(MenuBarH) {
+		if ev.Y < 0 || ev.Y >= b.barH() {
 			b.hoverName = 0
 			return
 		}
@@ -742,7 +768,7 @@ func (b *MenuBar) OnEvent(ev Event) {
 			cx += w
 		}
 	case EventClick:
-		if ev.Y >= scaled(MenuBarH) {
+		if ev.Y >= b.barH() {
 			return
 		}
 		// Auto-sized widths: walk the names + find whichever cell

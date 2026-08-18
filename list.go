@@ -128,6 +128,21 @@ func NewListBox(items []string) *ListBox {
 	}
 }
 
+// rowHeight is the effective per-row pixel height used for every layout and
+// hit-test: the configured RowHeight clamped UP to the density minimum hit
+// target via [TouchTarget]. Under [DensityCompact] the clamp is a pass-through
+// (the minimum is 0), so the row is byte-identical to RowHeight; under
+// [DensityTouch] a short row grows to the finger floor (>=44 device px) so both
+// the drawn band and its tap target reach it. A non-positive RowHeight returns
+// 0 unchanged -- the "no rows fit" sentinel callers already guard on -- so the
+// clamp never conjures a phantom row height out of a disabled list.
+func (l *ListBox) rowHeight() int {
+	if l.RowHeight <= 0 {
+		return 0
+	}
+	return TouchTarget(l.RowHeight)
+}
+
 // ListBox is a DragSource + DropTarget when Reorderable (see the type doc).
 var (
 	_ DragSource = (*ListBox)(nil)
@@ -197,9 +212,10 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 	if end > len(l.Items) {
 		end = len(l.Items)
 	}
+	rh := l.rowHeight()
 	for i := start; i < end; i++ {
 		item := l.Items[i]
-		y := r.Y + (i-start)*l.RowHeight
+		y := r.Y + (i-start)*rh
 		bg := theme.Surface
 		ink := theme.OnSurface
 		hi := i == l.Selected
@@ -210,13 +226,13 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 			bg = theme.Accent
 			ink = accentInk(theme)
 		}
-		fillRect(p, cr.X, y, cr.W, l.RowHeight, bg)
+		fillRect(p, cr.X, y, cr.W, rh, bg)
 		if l.ItemRenderer != nil {
 			// DataView seam: hand the whole row content rect to the host.
-			l.ItemRenderer(p, theme, Rect{X: cr.X, Y: y, W: cr.W, H: l.RowHeight}, i, item, hi, ink)
+			l.ItemRenderer(p, theme, Rect{X: cr.X, Y: y, W: cr.W, H: rh}, i, item, hi, ink)
 		} else {
 			// Vertically centre the 7-px glyph inside the row.
-			textY := y + (l.RowHeight-l.glyphHeight())/2
+			textY := y + (rh-l.glyphHeight())/2
 			l.drawText(p, cr.X+scaled(4), textY, item, ink)
 		}
 	}
@@ -250,11 +266,12 @@ func (l *ListBox) drawDropIndicator(p painter.Painter, theme *Theme, cr Rect, st
 	if rel < 0 || rel > end-start {
 		return
 	}
-	y := cr.Y + rel*l.RowHeight - dropIndicatorHeight/2
+	thick := scaled(dropIndicatorHeight)
+	y := cr.Y + rel*l.rowHeight() - thick/2
 	if y < cr.Y {
 		y = cr.Y
 	}
-	fillRect(p, cr.X, y, cr.W, dropIndicatorHeight, theme.Accent)
+	fillRect(p, cr.X, y, cr.W, thick, theme.Accent)
 }
 
 // visibleRows is how many rows fit vertically within Bounds().H at
@@ -270,8 +287,9 @@ func (l *ListBox) visibleRows() int {
 	if h <= 0 {
 		return 0
 	}
-	n := h / l.RowHeight
-	if h%l.RowHeight != 0 {
+	rh := l.rowHeight()
+	n := h / rh
+	if h%rh != 0 {
 		n++
 	}
 	return n
@@ -370,7 +388,7 @@ func (l *ListBox) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 // ScrollView's proportion math but driven by ScrollRow (whole rows).
 func (l *ListBox) scrollbarGeom() (sbGeom, bool) {
 	r := l.Bounds()
-	contentH := len(l.Items) * l.RowHeight
+	contentH := len(l.Items) * l.rowHeight()
 	if r.H <= 0 || contentH <= r.H {
 		return sbGeom{}, false
 	}
@@ -508,7 +526,7 @@ func (l *ListBox) IndexAt(x, y int) int {
 	if l.RowHeight <= 0 || y < 0 {
 		return -1
 	}
-	idx := l.clampedScrollRow() + y/l.RowHeight
+	idx := l.clampedScrollRow() + y/l.rowHeight()
 	if idx < 0 || idx >= len(l.Items) {
 		return -1
 	}
@@ -522,7 +540,7 @@ func (l *ListBox) onClick(ev Event) {
 	if ev.Y < 0 { // Go truncates toward zero -- guard early.
 		return
 	}
-	idx := l.clampedScrollRow() + ev.Y/l.RowHeight
+	idx := l.clampedScrollRow() + ev.Y/l.rowHeight()
 	if idx >= len(l.Items) {
 		return
 	}
@@ -563,10 +581,11 @@ func (l *ListBox) rowInsertionIndex(y int) int {
 	if y < 0 {
 		y = 0
 	}
-	row := y / l.RowHeight
-	within := y % l.RowHeight
+	rh := l.rowHeight()
+	row := y / rh
+	within := y % rh
 	idx := l.clampedScrollRow() + row
-	if within >= l.RowHeight/2 {
+	if within >= rh/2 {
 		idx++
 	}
 	// idx can never be negative here: y and clampedScrollRow() are both

@@ -28,7 +28,7 @@ const (
 	TabRight
 )
 
-// Notebook is a tabbed container. A scaled(NotebookTabStripH)-thick strip on the side
+// Notebook is a tabbed container. A n.stripH()-thick strip on the side
 // chosen by TabSide (Top by default) hosts the tabs; the rest is the active
 // page's body. For Top/Bottom the tabs run horizontally (each scaled(NotebookTabWidth)
 // wide, shrunk to fit); for Left/Right they stack vertically (each
@@ -62,18 +62,29 @@ const (
 	NotebookTabWidth  = 80
 )
 
+// stripH is the effective tab-strip thickness -- the height of a Top/Bottom
+// strip and the per-tab stacked height of a Left/Right strip -- used for both
+// layout and hit-testing: the scaled [NotebookTabStripH] clamped UP to the
+// density minimum hit target via [TouchTarget]. Under [DensityCompact] the
+// clamp is a pass-through (byte-identical to scaled(NotebookTabStripH)); under
+// [DensityTouch] a tab grows to the finger floor (>=44 device px) along its
+// short axis so it is a large-enough tap target. The strip's other extent
+// ([NotebookTabWidth], 80px) already clears the floor, so it keeps its plain
+// scaled width.
+func (n *Notebook) stripH() int { return TouchTarget(scaled(NotebookTabStripH)) }
+
 // stripRect is the tab-strip band on the chosen side.
 func (n *Notebook) stripRect() Rect {
 	r := n.Bounds()
 	switch n.TabSide {
 	case TabBottom:
-		return Rect{X: r.X, Y: r.Y + r.H - scaled(NotebookTabStripH), W: r.W, H: scaled(NotebookTabStripH)}
+		return Rect{X: r.X, Y: r.Y + r.H - n.stripH(), W: r.W, H: n.stripH()}
 	case TabLeft:
 		return Rect{X: r.X, Y: r.Y, W: scaled(NotebookTabWidth), H: r.H}
 	case TabRight:
 		return Rect{X: r.X + r.W - scaled(NotebookTabWidth), Y: r.Y, W: scaled(NotebookTabWidth), H: r.H}
 	default: // TabTop
-		return Rect{X: r.X, Y: r.Y, W: r.W, H: scaled(NotebookTabStripH)}
+		return Rect{X: r.X, Y: r.Y, W: r.W, H: n.stripH()}
 	}
 }
 
@@ -100,16 +111,16 @@ func (n *Notebook) tabRect(i int) Rect {
 	switch n.TabSide {
 	case TabBottom:
 		tw := n.tabW()
-		return Rect{X: r.X + i*tw, Y: r.Y + r.H - scaled(NotebookTabStripH), W: tw, H: scaled(NotebookTabStripH)}
+		return Rect{X: r.X + i*tw, Y: r.Y + r.H - n.stripH(), W: tw, H: n.stripH()}
 	case TabLeft:
-		ty := r.Y + (i-n.clampedTabScroll())*scaled(NotebookTabStripH)
-		return Rect{X: r.X, Y: ty, W: scaled(NotebookTabWidth), H: scaled(NotebookTabStripH)}
+		ty := r.Y + (i-n.clampedTabScroll())*n.stripH()
+		return Rect{X: r.X, Y: ty, W: scaled(NotebookTabWidth), H: n.stripH()}
 	case TabRight:
-		ty := r.Y + (i-n.clampedTabScroll())*scaled(NotebookTabStripH)
-		return Rect{X: r.X + r.W - scaled(NotebookTabWidth), Y: ty, W: scaled(NotebookTabWidth), H: scaled(NotebookTabStripH)}
+		ty := r.Y + (i-n.clampedTabScroll())*n.stripH()
+		return Rect{X: r.X + r.W - scaled(NotebookTabWidth), Y: ty, W: scaled(NotebookTabWidth), H: n.stripH()}
 	default: // TabTop
 		tw := n.tabW()
-		return Rect{X: r.X + i*tw, Y: r.Y, W: tw, H: scaled(NotebookTabStripH)}
+		return Rect{X: r.X + i*tw, Y: r.Y, W: tw, H: n.stripH()}
 	}
 }
 
@@ -126,7 +137,7 @@ func (n *Notebook) visibleTabs() int {
 	if h < 0 {
 		h = 0
 	}
-	return h / scaled(NotebookTabStripH)
+	return h / n.stripH()
 }
 
 // maxTabScroll is the highest tabScroll that still fills a vertical strip:
@@ -196,13 +207,13 @@ func (n *Notebook) bodyRect() Rect {
 	r := n.Bounds()
 	switch n.TabSide {
 	case TabBottom:
-		return Rect{X: r.X, Y: r.Y, W: r.W, H: r.H - scaled(NotebookTabStripH)}
+		return Rect{X: r.X, Y: r.Y, W: r.W, H: r.H - n.stripH()}
 	case TabLeft:
 		return Rect{X: r.X + scaled(NotebookTabWidth), Y: r.Y, W: r.W - scaled(NotebookTabWidth), H: r.H}
 	case TabRight:
 		return Rect{X: r.X, Y: r.Y, W: r.W - scaled(NotebookTabWidth), H: r.H}
 	default: // TabTop
-		return Rect{X: r.X, Y: r.Y + scaled(NotebookTabStripH), W: r.W, H: r.H - scaled(NotebookTabStripH)}
+		return Rect{X: r.X, Y: r.Y + n.stripH(), W: r.W, H: r.H - n.stripH()}
 	}
 }
 
@@ -219,15 +230,16 @@ func (n *Notebook) tabAt(px, py int) int {
 // drawActiveEdge paints the accent indicator on the active tab's body-facing
 // edge — an underline for Top, an overline for Bottom, a side bar for Left/Right.
 func (n *Notebook) drawActiveEdge(p painter.Painter, tr Rect, ink RGBA) {
+	e := max(1, scaled(2))
 	switch n.TabSide {
 	case TabBottom:
-		fillRect(p, tr.X, tr.Y, tr.W, 2, ink)
+		fillRect(p, tr.X, tr.Y, tr.W, e, ink)
 	case TabLeft:
-		fillRect(p, tr.X+tr.W-2, tr.Y, 2, tr.H, ink)
+		fillRect(p, tr.X+tr.W-e, tr.Y, e, tr.H, ink)
 	case TabRight:
-		fillRect(p, tr.X, tr.Y, 2, tr.H, ink)
+		fillRect(p, tr.X, tr.Y, e, tr.H, ink)
 	default: // TabTop
-		fillRect(p, tr.X, tr.Y+tr.H-2, tr.W, 2, ink)
+		fillRect(p, tr.X, tr.Y+tr.H-e, tr.W, e, ink)
 	}
 }
 
