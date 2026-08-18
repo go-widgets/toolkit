@@ -21,7 +21,7 @@ func TestAccordionForwardsWheelToExpandedBody(t *testing.T) {
 	body := &recordingWidget{}
 	a := NewAccordion([]AccordionSection{{Title: "A", Body: body}})
 	a.SetBounds(Rect{X: 30, Y: 20, W: 200, H: 100})
-	a.Expanded = 0
+	a.Expanded().Set(0)
 
 	// Wheel over the expanded body forwards a translated EventScroll to it. The
 	// body spans [ExpanderHeaderH, H) in widget-local space; the forwarded event
@@ -52,7 +52,7 @@ func TestAccordionForwardsWheelToExpandedBody(t *testing.T) {
 func TestAccordionForwardsWheelNilBodyNoPanic(t *testing.T) {
 	a := NewAccordion([]AccordionSection{{Title: "A", Body: nil}})
 	a.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
-	a.Expanded = 0
+	a.Expanded().Set(0)
 	a.OnEvent(Event{Kind: EventScroll, X: 5, Y: ExpanderHeaderH + 5, Delta: 1})
 }
 

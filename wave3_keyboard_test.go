@@ -802,40 +802,40 @@ func TestAccordionKeyboard(t *testing.T) {
 	a.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 300})
 	// Enter toggles the focused (initially first) section.
 	a.OnEvent(kd("Enter"))
-	if a.Expanded != 0 {
-		t.Fatalf("Enter toggle: Expanded=%d", a.Expanded)
+	if a.Expanded().Get() != 0 {
+		t.Fatalf("Enter toggle: Expanded=%d", a.Expanded().Get())
 	}
 	a.OnEvent(kd("Enter")) // collapse
-	if a.Expanded != -1 {
-		t.Fatalf("Enter collapse: Expanded=%d", a.Expanded)
+	if a.Expanded().Get() != -1 {
+		t.Fatalf("Enter collapse: Expanded=%d", a.Expanded().Get())
 	}
 	// ArrowDown moves header focus; Space toggles the now-focused section.
 	a.OnEvent(kd("ArrowDown")) // focus 1
 	a.OnEvent(kd(" "))
-	if a.Expanded != 1 {
-		t.Fatalf("focus+space: Expanded=%d", a.Expanded)
+	if a.Expanded().Get() != 1 {
+		t.Fatalf("focus+space: Expanded=%d", a.Expanded().Get())
 	}
 	// ArrowDown clamps at the last section.
 	a.OnEvent(kd("ArrowDown")) // focus 2
 	a.OnEvent(kd("ArrowDown")) // clamp at 2
 	a.OnEvent(kd(" "))
-	if a.Expanded != 2 {
-		t.Fatalf("clamp last: Expanded=%d", a.Expanded)
+	if a.Expanded().Get() != 2 {
+		t.Fatalf("clamp last: Expanded=%d", a.Expanded().Get())
 	}
 	// ArrowUp clamps at the first section.
 	a.OnEvent(kd("ArrowUp"))
 	a.OnEvent(kd("ArrowUp"))
 	a.OnEvent(kd("ArrowUp")) // clamp at 0
 	a.OnEvent(kd("Enter"))
-	if a.Expanded != 0 {
-		t.Fatalf("clamp first: Expanded=%d", a.Expanded)
+	if a.Expanded().Get() != 0 {
+		t.Fatalf("clamp first: Expanded=%d", a.Expanded().Get())
 	}
 	// Disabled ignores keys.
 	a.Disabled = true
 	a.OnEvent(kd("ArrowDown"))
 	a.OnEvent(kd("Enter"))
-	if a.Expanded != 0 {
-		t.Fatalf("disabled accordion changed (Expanded=%d)", a.Expanded)
+	if a.Expanded().Get() != 0 {
+		t.Fatalf("disabled accordion changed (Expanded=%d)", a.Expanded().Get())
 	}
 	// Empty accordion is a no-op.
 	NewAccordion(nil).OnEvent(kd("Enter"))

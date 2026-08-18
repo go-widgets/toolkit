@@ -303,11 +303,11 @@ func TestA11yChromeWidgets(t *testing.T) {
 
 func TestA11yAccordion(t *testing.T) {
 	single := NewAccordion([]AccordionSection{{Title: "A"}, {Title: "B"}})
-	single.Expanded = 1
+	single.Expanded().Set(1)
 	if got := single.A11y(); got != (A11yInfo{Role: RoleGroup, Value: "B"}) {
 		t.Errorf("Accordion single-mode A11y() = %+v", got)
 	}
-	single.Expanded = -1
+	single.Expanded().Set(-1)
 	if got := single.A11y(); got != (A11yInfo{Role: RoleGroup, Value: ""}) {
 		t.Errorf("Accordion nothing-expanded A11y() = %+v", got)
 	}
