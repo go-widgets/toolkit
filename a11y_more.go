@@ -322,7 +322,7 @@ func (l *LevelBar) A11y() A11yInfo {
 // A11y reports the ProgressCircle as a progressbar carrying its fraction as
 // a whole-number percentage.
 func (p *ProgressCircle) A11y() A11yInfo {
-	return A11yInfo{Role: RoleProgressbar, Value: percent(p.Fraction)}
+	return A11yInfo{Role: RoleProgressbar, Value: percent(p.Fraction().Get())}
 }
 
 // A11y reports the Spinner as a status region carrying "busy" while active.

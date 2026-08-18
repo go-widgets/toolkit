@@ -4,9 +4,12 @@
 
 package toolkit
 
-import "strconv"
+import (
+	"strconv"
 
-import "github.com/go-widgets/painter"
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // ProgressCircleSize is the default side-length in pixels of a
 // ProgressCircle rendered with a zero-sized Bounds. Roughly matches
@@ -38,28 +41,32 @@ const ProgressCircleStroke = 4
 // drawn in theme.OnSurface centred inside the inner square.
 type ProgressCircle struct {
 	Base
-	Fraction float64 // 0..1; clamped by Draw
+	// The reactive fill fraction is MVVM-only: the current value lives in an
+	// unexported Observable exposed via [ProgressCircle.Fraction].
+	fraction *mvvm.Observable[float64]
+}
+
+// Fraction is the fill fraction in [0, 1] as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Fraction field.
+// 0 = empty, 1 = full; Draw clamps defensively so an out-of-range Set still
+// renders a valid frame.
+func (pc *ProgressCircle) Fraction() *mvvm.Observable[float64] {
+	if pc.fraction == nil {
+		pc.fraction = mvvm.NewObservable(0.0)
+	}
+	return pc.fraction
 }
 
 // NewProgressCircle constructs a ProgressCircle at Fraction=0.
-func NewProgressCircle() *ProgressCircle { return &ProgressCircle{} }
-
-// SetFraction clamps + assigns Fraction. 0 = empty, 1 = full. Kept
-// as a symmetrical helper to ProgressBar.SetFraction so both widgets
-// present the same knob to callers.
-func (pc *ProgressCircle) SetFraction(f float64) {
-	if f < 0 {
-		f = 0
-	}
-	if f > 1 {
-		f = 1
-	}
-	pc.Fraction = f
+func NewProgressCircle() *ProgressCircle {
+	pc := &ProgressCircle{}
+	pc.fraction = mvvm.NewObservable(0.0)
+	return pc
 }
 
 // Draw paints the track, the hole, the fill band, and the centred
-// percentage caption. Draw clamps Fraction defensively so callers
-// bypassing SetFraction still render a valid frame.
+// percentage caption. Draw clamps Fraction defensively so an
+// out-of-range Set still renders a valid frame.
 func (pc *ProgressCircle) Draw(p painter.Painter, theme *Theme) {
 	r := pc.Bounds()
 	// Fall back to a square of scaled(ProgressCircleSize) when Bounds is
@@ -91,8 +98,8 @@ func (pc *ProgressCircle) Draw(p painter.Painter, theme *Theme) {
 	}
 	// Fill band: Accent band inside the ring, growing from the
 	// bottom edge upward as Fraction grows from 0 to 1. Clamp
-	// Fraction so callers that bypassed SetFraction still render.
-	f := pc.Fraction
+	// Fraction so an out-of-range Set still renders.
+	f := pc.Fraction().Get()
 	if f < 0 {
 		f = 0
 	}

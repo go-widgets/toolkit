@@ -230,7 +230,7 @@ func TestA11yFeedbackWidgets(t *testing.T) {
 	pb := NewProgressBar()
 	pb.Fraction = 0.42
 	pc := NewProgressCircle()
-	pc.Fraction = 0.5
+	pc.Fraction().Set(0.5)
 	lvl := NewLevelBar(10)
 	lvl.Value = 4
 	activeSpinner := NewSpinner()
