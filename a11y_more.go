@@ -205,8 +205,8 @@ func (t *TreeView) A11y() A11yInfo {
 		if n := len(t.SelectedNodes()); n > 0 {
 			v = strconv.Itoa(n) + " selected"
 		}
-	} else if t.Selected != nil {
-		v = t.Selected.Label
+	} else if sel := t.Selected().Get(); sel != nil {
+		v = sel.Label
 	}
 	return A11yInfo{Role: RoleTree, Value: v}
 }

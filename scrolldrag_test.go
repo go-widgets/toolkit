@@ -217,12 +217,12 @@ func TestTreeViewScrollbarDrag(t *testing.T) {
 		t.Fatal("pressing the thumb should begin a drag")
 	}
 	tv.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 3, Y: 45})
-	if tv.ScrollRow != 9 { // (40*16+34)/69 = 9.7 -> 9
-		t.Fatalf("mid drag ScrollRow = %d, want 9", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 9 { // (40*16+34)/69 = 9.7 -> 9
+		t.Fatalf("mid drag ScrollRow = %d, want 9", tv.ScrollRow().Get())
 	}
 	tv.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 3, Y: 90})
-	if tv.ScrollRow != 16 {
-		t.Fatalf("drag past the end ScrollRow = %d, want 16 (clamped)", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 16 {
+		t.Fatalf("drag past the end ScrollRow = %d, want 16 (clamped)", tv.ScrollRow().Get())
 	}
 	tv.OnEvent(Event{Kind: EventMouseUp})
 	if tv.sbDrag.active {
@@ -232,13 +232,13 @@ func TestTreeViewScrollbarDrag(t *testing.T) {
 	// Track press below the thumb pages down; a content press selects.
 	tv.ScrollTo(0)
 	tv.OnEvent(Event{Kind: EventClick, X: trackX + 3, Y: 60})
-	if tv.ScrollRow != 5 {
-		t.Fatalf("page-down ScrollRow = %d, want 5", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 5 {
+		t.Fatalf("page-down ScrollRow = %d, want 5", tv.ScrollRow().Get())
 	}
 	tv.ScrollTo(0)
-	tv.Selected = nil
+	tv.Selected().Set(nil)
 	tv.OnEvent(Event{Kind: EventClick, X: 20, Y: 5}) // root row
-	if tv.Selected == nil {
+	if tv.Selected().Get() == nil {
 		t.Fatal("a content press must select a node")
 	}
 }
@@ -259,8 +259,8 @@ func TestTreeScrollbarWidgetsIgnoreUnrelatedEvents(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 90})
 	tv.ScrollTo(4)
 	tv.OnEvent(Event{Kind: EventKeyUp, X: 10, Y: 10})
-	if tv.ScrollRow != 4 || tv.sbDrag.active {
-		t.Fatalf("TreeView must ignore EventKeyUp: ScrollRow=%d active=%v", tv.ScrollRow, tv.sbDrag.active)
+	if tv.ScrollRow().Get() != 4 || tv.sbDrag.active {
+		t.Fatalf("TreeView must ignore EventKeyUp: ScrollRow=%d active=%v", tv.ScrollRow().Get(), tv.sbDrag.active)
 	}
 }
 

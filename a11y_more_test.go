@@ -121,7 +121,7 @@ func TestA11yTreeView(t *testing.T) {
 	root := &TreeNode{Label: "root", Expanded: true, Children: []*TreeNode{child1, child2}}
 
 	tv := NewTreeView(root)
-	tv.Selected = child1
+	tv.Selected().Set(child1)
 	if got := tv.A11y(); got != (A11yInfo{Role: RoleTree, Value: "child1"}) {
 		t.Errorf("TreeView single-select A11y() = %+v", got)
 	}

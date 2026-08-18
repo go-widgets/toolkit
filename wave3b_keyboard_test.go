@@ -325,8 +325,8 @@ func tvVisible(t *testing.T, tv *TreeView) {
 	tv.flatten()
 	idx := tv.cursorRow()
 	wr := tv.windowRows()
-	if idx < tv.ScrollRow || idx >= tv.ScrollRow+wr {
-		t.Fatalf("cursor row %d outside window [%d,%d)", idx, tv.ScrollRow, tv.ScrollRow+wr)
+	if idx < tv.ScrollRow().Get() || idx >= tv.ScrollRow().Get()+wr {
+		t.Fatalf("cursor row %d outside window [%d,%d)", idx, tv.ScrollRow().Get(), tv.ScrollRow().Get()+wr)
 	}
 }
 
@@ -336,21 +336,21 @@ func TestTreeViewKeyCursorAndActivate(t *testing.T) {
 	tv.OnActivate = func(n *TreeNode) { activated = n }
 
 	tv.OnEvent(kd3b("ArrowDown")) // none -> row 0 (root)
-	if tv.Selected != tv.Root {
-		t.Fatalf("ArrowDown from none: Selected=%v", tv.Selected)
+	if tv.Selected().Get() != tv.Root {
+		t.Fatalf("ArrowDown from none: Selected=%v", tv.Selected().Get())
 	}
 	tvVisible(t, tv)
 
 	tv.OnEvent(kd3b("End")) // last row, scrolls
 	tv.flatten()
-	if tv.Selected != tv.rows[len(tv.rows)-1].node || tv.ScrollRow != len(tv.rows)-tv.windowRows() {
-		t.Fatalf("End: ScrollRow=%d", tv.ScrollRow)
+	if tv.Selected().Get() != tv.rows[len(tv.rows)-1].node || tv.ScrollRow().Get() != len(tv.rows)-tv.windowRows() {
+		t.Fatalf("End: ScrollRow=%d", tv.ScrollRow().Get())
 	}
 	tvVisible(t, tv)
 
 	tv.OnEvent(kd3b("Home"))
-	if tv.Selected != tv.Root || tv.ScrollRow != 0 {
-		t.Fatalf("Home: Selected=%v ScrollRow=%d", tv.Selected, tv.ScrollRow)
+	if tv.Selected().Get() != tv.Root || tv.ScrollRow().Get() != 0 {
+		t.Fatalf("Home: Selected=%v ScrollRow=%d", tv.Selected().Get(), tv.ScrollRow().Get())
 	}
 	tv.OnEvent(kd3b("PageDown"))
 	tvVisible(t, tv)
@@ -358,21 +358,21 @@ func TestTreeViewKeyCursorAndActivate(t *testing.T) {
 	tvVisible(t, tv)
 
 	// A non-navigation key is ignored.
-	before := tv.Selected
+	before := tv.Selected().Get()
 	tv.OnEvent(kd3b("Tab"))
-	if tv.Selected != before {
+	if tv.Selected().Get() != before {
 		t.Fatalf("Tab moved cursor")
 	}
 
 	// Enter activates the cursor node.
 	tv.OnEvent(kd3b("Enter"))
-	if activated != tv.Selected {
-		t.Fatalf("Enter activate: activated=%v want=%v", activated, tv.Selected)
+	if activated != tv.Selected().Get() {
+		t.Fatalf("Enter activate: activated=%v want=%v", activated, tv.Selected().Get())
 	}
 	// Space too.
 	activated = nil
 	tv.OnEvent(kd3b(" "))
-	if activated != tv.Selected {
+	if activated != tv.Selected().Get() {
 		t.Fatalf("Space activate: activated=%v", activated)
 	}
 }
@@ -400,48 +400,48 @@ func TestTreeViewKeyExpandCollapse(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 20 * 18}) // tall: everything visible
 
 	// ArrowRight on a collapsed parent expands it.
-	tv.Selected = a
+	tv.Selected().Set(a)
 	tv.OnEvent(kd3b("ArrowRight"))
 	if !a.Expanded {
 		t.Fatal("ArrowRight did not expand a")
 	}
 	// ArrowRight again (now expanded) descends to the first child.
 	tv.OnEvent(kd3b("ArrowRight"))
-	if tv.Selected != a1 {
-		t.Fatalf("ArrowRight descend: Selected=%v want a1", tv.Selected)
+	if tv.Selected().Get() != a1 {
+		t.Fatalf("ArrowRight descend: Selected=%v want a1", tv.Selected().Get())
 	}
 	// ArrowLeft on a leaf moves to the parent.
 	tv.OnEvent(kd3b("ArrowLeft"))
-	if tv.Selected != a {
-		t.Fatalf("ArrowLeft to parent: Selected=%v want a", tv.Selected)
+	if tv.Selected().Get() != a {
+		t.Fatalf("ArrowLeft to parent: Selected=%v want a", tv.Selected().Get())
 	}
 	// ArrowLeft on the expanded parent collapses it (cursor stays on a).
 	tv.OnEvent(kd3b("ArrowLeft"))
-	if a.Expanded || tv.Selected != a {
-		t.Fatalf("ArrowLeft collapse: Expanded=%v Selected=%v", a.Expanded, tv.Selected)
+	if a.Expanded || tv.Selected().Get() != a {
+		t.Fatalf("ArrowLeft collapse: Expanded=%v Selected=%v", a.Expanded, tv.Selected().Get())
 	}
 	// ArrowLeft again (a now collapsed) moves to the parent root.
 	tv.OnEvent(kd3b("ArrowLeft"))
-	if tv.Selected != root {
-		t.Fatalf("ArrowLeft to root: Selected=%v", tv.Selected)
+	if tv.Selected().Get() != root {
+		t.Fatalf("ArrowLeft to root: Selected=%v", tv.Selected().Get())
 	}
 	// ArrowRight on the expanded root descends to its first child (a).
 	tv.OnEvent(kd3b("ArrowRight"))
-	if tv.Selected != a {
-		t.Fatalf("ArrowRight root descend: Selected=%v want a", tv.Selected)
+	if tv.Selected().Get() != a {
+		t.Fatalf("ArrowRight root descend: Selected=%v want a", tv.Selected().Get())
 	}
 	// ArrowRight on a leaf (b) does nothing.
-	tv.Selected = b
+	tv.Selected().Set(b)
 	tv.OnEvent(kd3b("ArrowRight"))
-	if tv.Selected != b {
-		t.Fatalf("ArrowRight on leaf moved: Selected=%v", tv.Selected)
+	if tv.Selected().Get() != b {
+		t.Fatalf("ArrowRight on leaf moved: Selected=%v", tv.Selected().Get())
 	}
 	// ArrowLeft at the top level with nothing to collapse stays put.
-	tv.Selected = root
+	tv.Selected().Set(root)
 	tv.Root.Expanded = false // collapse via field so ArrowLeft hits parent-search
 	tv.OnEvent(kd3b("ArrowLeft"))
-	if tv.Selected != root {
-		t.Fatalf("ArrowLeft at top stayed? Selected=%v", tv.Selected)
+	if tv.Selected().Get() != root {
+		t.Fatalf("ArrowLeft at top stayed? Selected=%v", tv.Selected().Get())
 	}
 	tv.Root.Expanded = true
 }
@@ -452,53 +452,53 @@ func TestTreeViewKeyEdgeCases(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 20 * 18})
 
 	// ArrowRight with no cursor selects the first row.
-	tv.Selected = nil
+	tv.Selected().Set(nil)
 	tv.OnEvent(kd3b("ArrowRight"))
-	if tv.Selected != root {
-		t.Fatalf("ArrowRight from none: Selected=%v", tv.Selected)
+	if tv.Selected().Get() != root {
+		t.Fatalf("ArrowRight from none: Selected=%v", tv.Selected().Get())
 	}
 	// ArrowLeft with no cursor is a no-op.
-	tv.Selected = nil
+	tv.Selected().Set(nil)
 	tv.OnEvent(kd3b("ArrowLeft"))
-	if tv.Selected != nil {
-		t.Fatalf("ArrowLeft from none moved: Selected=%v", tv.Selected)
+	if tv.Selected().Get() != nil {
+		t.Fatalf("ArrowLeft from none moved: Selected=%v", tv.Selected().Get())
 	}
 	// Selected points at a not-currently-visible node (a1 under collapsed a):
 	// cursorRow returns -1, so ArrowDown restarts at row 0.
 	a.Expanded = false
-	tv.Selected = a1
+	tv.Selected().Set(a1)
 	tv.OnEvent(kd3b("ArrowDown"))
-	if tv.Selected != root {
-		t.Fatalf("ArrowDown from invisible cursor: Selected=%v want root", tv.Selected)
+	if tv.Selected().Get() != root {
+		t.Fatalf("ArrowDown from invisible cursor: Selected=%v want root", tv.Selected().Get())
 	}
 
 	// MultiSelect: a plain move also updates the selection set.
 	tv.MultiSelect = true
-	tv.Selected = root
+	tv.Selected().Set(root)
 	tv.OnEvent(kd3b("ArrowDown"))
-	if !tv.IsSelected(tv.Selected) {
+	if !tv.IsSelected(tv.Selected().Get()) {
 		t.Fatal("multiselect arrow did not select cursor node")
 	}
 	// Enter while MultiSelect collapses the selection to the cursor node and
 	// fires OnActivate (activateCursor's MultiSelect branch).
 	activated := (*TreeNode)(nil)
 	tv.OnActivate = func(n *TreeNode) { activated = n }
-	cursorNode := tv.Selected
+	cursorNode := tv.Selected().Get()
 	tv.OnEvent(kd3b("Enter"))
 	if activated != cursorNode || !tv.IsSelected(cursorNode) {
 		t.Fatalf("multiselect Enter: activated=%v", activated)
 	}
 	// Enter with no cursor on a non-empty tree is a no-op (nil-return branch).
 	tv.OnActivate = func(n *TreeNode) { t.Fatalf("activated with nil cursor: %v", n) }
-	tv.Selected = nil
+	tv.Selected().Set(nil)
 	tv.OnEvent(kd3b("Enter"))
 
 	// Disabled ignores keys.
 	tv.Disabled = true
-	keep := tv.Selected
+	keep := tv.Selected().Get()
 	tv.OnEvent(kd3b("ArrowDown"))
-	if tv.Selected != keep {
-		t.Fatalf("disabled tree moved (Selected=%v)", tv.Selected)
+	if tv.Selected().Get() != keep {
+		t.Fatalf("disabled tree moved (Selected=%v)", tv.Selected().Get())
 	}
 
 	// Empty tree + nil OnActivate are safe.
@@ -506,13 +506,13 @@ func TestTreeViewKeyEdgeCases(t *testing.T) {
 	empty.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 54})
 	empty.OnEvent(kd3b("ArrowDown"))
 	empty.OnEvent(kd3b("Enter"))
-	if empty.Selected != nil {
-		t.Fatalf("empty tree moved (Selected=%v)", empty.Selected)
+	if empty.Selected().Get() != nil {
+		t.Fatalf("empty tree moved (Selected=%v)", empty.Selected().Get())
 	}
 	// Enter on a live tree with no OnActivate is safe.
 	nl := NewTreeView(root)
 	nl.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 54})
-	nl.Selected = root
+	nl.Selected().Set(root)
 	nl.OnEvent(kd3b("Enter"))
 }
 

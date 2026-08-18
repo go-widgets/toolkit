@@ -887,7 +887,7 @@ func TestTreeViewSelectFiresOnActivate(t *testing.T) {
 	if picked == nil || picked.Label != "child" {
 		t.Fatalf("picked = %+v", picked)
 	}
-	if tv.Selected != picked {
+	if tv.Selected().Get() != picked {
 		t.Fatal("Selected != picked")
 	}
 }
@@ -897,7 +897,7 @@ func TestTreeViewClickOutOfRangeIgnored(t *testing.T) {
 	tv := NewTreeView(root)
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	tv.OnEvent(Event{Kind: EventClick, X: 50, Y: 500})
-	if tv.Selected != nil {
+	if tv.Selected().Get() != nil {
 		t.Fatal("out-of-range click selected something")
 	}
 }
@@ -907,7 +907,7 @@ func TestTreeViewClickNegativeYIgnored(t *testing.T) {
 	tv := NewTreeView(root)
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	tv.OnEvent(Event{Kind: EventClick, X: 50, Y: -10})
-	if tv.Selected != nil {
+	if tv.Selected().Get() != nil {
 		t.Fatal("negative Y selected something")
 	}
 }
@@ -916,7 +916,7 @@ func TestTreeViewIgnoresNonClick(t *testing.T) {
 	root := &TreeNode{Label: "root"}
 	tv := NewTreeView(root)
 	tv.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if tv.Selected != nil {
+	if tv.Selected().Get() != nil {
 		t.Fatal("KeyDown should not select")
 	}
 }
@@ -1043,7 +1043,7 @@ func TestTreeViewDrawExpandedHierarchy(t *testing.T) {
 			{Label: "b", Expanded: true, Children: []*TreeNode{{Label: "b1"}}},
 		}}
 	tv := NewTreeView(root)
-	tv.Selected = root
+	tv.Selected().Set(root)
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	tv.Draw(newP(makeSurface(200, 100), 200), DefaultLight())
 }

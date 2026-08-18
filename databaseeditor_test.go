@@ -510,7 +510,7 @@ func TestDBEditorEventRoutesToPanes(t *testing.T) {
 
 	// A click in the tree pane selects a node.
 	d.OnEvent(Event{Kind: EventClick, X: 20, Y: 40})
-	if d.Tree().Selected == nil {
+	if d.Tree().Selected().Get() == nil {
 		t.Fatal("click over the tree pane did not reach it")
 	}
 }

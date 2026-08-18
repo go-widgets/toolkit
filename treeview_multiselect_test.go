@@ -51,13 +51,13 @@ func TestTreeViewMultiSelectDefaultsFalse(t *testing.T) {
 	}
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
 	clickLabel(tv, 1, false, false) // a
-	if tv.Selected == nil || tv.Selected.Label != "a" {
-		t.Fatalf("Selected = %+v, want a", tv.Selected)
+	if tv.Selected().Get() == nil || tv.Selected().Get().Label != "a" {
+		t.Fatalf("Selected = %+v, want a", tv.Selected().Get())
 	}
 	if len(tv.SelectedNodes()) != 0 {
 		t.Fatal("SelectedNodes should be empty when MultiSelect is false")
 	}
-	if tv.IsSelected(tv.Selected) {
+	if tv.IsSelected(tv.Selected().Get()) {
 		t.Fatal("IsSelected should be false when MultiSelect is false")
 	}
 }
@@ -71,16 +71,16 @@ func TestTreeViewSingleSelectIgnoresModifiers(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
 
 	clickLabel(tv, 1, false, false) // a
-	if tv.Selected.Label != "a" {
-		t.Fatalf("Selected = %s, want a", tv.Selected.Label)
+	if tv.Selected().Get().Label != "a" {
+		t.Fatalf("Selected = %s, want a", tv.Selected().Get().Label)
 	}
 	clickLabel(tv, 4, true, false) // Ctrl-click c
-	if tv.Selected.Label != "c" {
-		t.Fatalf("after Ctrl-click: Selected = %s, want c", tv.Selected.Label)
+	if tv.Selected().Get().Label != "c" {
+		t.Fatalf("after Ctrl-click: Selected = %s, want c", tv.Selected().Get().Label)
 	}
 	clickLabel(tv, 2, false, true) // Shift-click b
-	if tv.Selected.Label != "b" {
-		t.Fatalf("after Shift-click: Selected = %s, want b", tv.Selected.Label)
+	if tv.Selected().Get().Label != "b" {
+		t.Fatalf("after Shift-click: Selected = %s, want b", tv.Selected().Get().Label)
 	}
 }
 
@@ -95,7 +95,7 @@ func TestTreeViewSingleSelectExpandCollapseUnaffected(t *testing.T) {
 	if !root.Expanded {
 		t.Fatal("chevron click should expand")
 	}
-	if tv.Selected != nil {
+	if tv.Selected().Get() != nil {
 		t.Fatal("chevron click should not select")
 	}
 }
@@ -109,14 +109,14 @@ func TestTreeViewMultiSelectPlainClickSelectsOnlyOne(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
 
 	clickLabel(tv, 1, false, false) // a
-	if !tv.IsSelected(a) || tv.Selected != a {
+	if !tv.IsSelected(a) || tv.Selected().Get() != a {
 		t.Fatal("plain click should select + anchor a")
 	}
 	clickLabel(tv, 4, false, false) // c
 	if tv.IsSelected(a) {
 		t.Fatal("plain click should clear prior selection (a still selected)")
 	}
-	if !tv.IsSelected(c) || tv.Selected != c {
+	if !tv.IsSelected(c) || tv.Selected().Get() != c {
 		t.Fatal("plain click should select + anchor c")
 	}
 	if got := tv.SelectedNodes(); len(got) != 1 || got[0] != c {
@@ -138,7 +138,7 @@ func TestTreeViewMultiSelectCtrlToggle(t *testing.T) {
 	if !tv.IsSelected(a) || !tv.IsSelected(c) {
 		t.Fatal("Ctrl-click should add without clearing prior selection")
 	}
-	if tv.Selected != c {
+	if tv.Selected().Get() != c {
 		t.Fatal("Ctrl-click should move the anchor to the clicked node")
 	}
 	clickLabel(tv, 1, true, false) // Ctrl-click a again: toggle off
@@ -221,7 +221,7 @@ func TestTreeViewMultiSelectShiftWithNoAnchorFallsBackToPlainSelect(t *testing.T
 	// No prior click at all: Selected is nil, so Shift-click has no
 	// anchor to range from and must behave like a plain click.
 	clickLabel(tv, 4, false, true) // Shift-click c
-	if !tv.IsSelected(c) || tv.Selected != c {
+	if !tv.IsSelected(c) || tv.Selected().Get() != c {
 		t.Fatal("Shift-click with no anchor should select just the clicked node")
 	}
 	if got := tv.SelectedNodes(); len(got) != 1 {
@@ -264,7 +264,7 @@ func TestTreeViewSetSelectionAndClear(t *testing.T) {
 	if !tv.IsSelected(a) || !tv.IsSelected(c) {
 		t.Fatal("SetSelection should select both nodes")
 	}
-	if tv.Selected != c {
+	if tv.Selected().Get() != c {
 		t.Fatal("SetSelection should anchor the last node")
 	}
 
@@ -272,7 +272,7 @@ func TestTreeViewSetSelectionAndClear(t *testing.T) {
 	if tv.IsSelected(a) || tv.IsSelected(c) {
 		t.Fatal("ClearSelection should empty the set")
 	}
-	if tv.Selected != c {
+	if tv.Selected().Get() != c {
 		t.Fatal("ClearSelection should not touch the anchor")
 	}
 	if got := tv.SelectedNodes(); got != nil {
@@ -284,10 +284,10 @@ func TestTreeViewSetSelectionEmptyLeavesAnchorAlone(t *testing.T) {
 	root, a, _, _, _, _, _, _ := newMultiSelectTree()
 	tv := NewTreeView(root)
 	tv.MultiSelect = true
-	tv.Selected = a
+	tv.Selected().Set(a)
 
 	tv.SetSelection() // no nodes
-	if tv.Selected != a {
+	if tv.Selected().Get() != a {
 		t.Fatal("SetSelection with no nodes should not move the anchor")
 	}
 	if got := tv.SelectedNodes(); got != nil {
@@ -409,7 +409,7 @@ func TestTreeViewSingleSelectDrawOnlyHighlightsSelected(t *testing.T) {
 	// MultiSelect left false: even if the (unexported) selection set
 	// were somehow populated, Draw must ignore it and paint solely
 	// based on Selected.
-	tv.Selected = c
+	tv.Selected().Set(c)
 
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
 	w := 200

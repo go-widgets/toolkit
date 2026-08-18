@@ -27,7 +27,7 @@ func TestTreeViewRowRendererPerRowContentRect(t *testing.T) {
 	root, a, b, b1, c, d, _, e := newMultiSelectTree()
 	theme := DefaultLight()
 	tv := NewTreeView(root)
-	tv.Selected = root // depth-0 row is the selected one
+	tv.Selected().Set(root) // depth-0 row is the selected one
 	// W=200, H large enough for all 7 visible rows (7*18=126) -> no window,
 	// no scrollbar gutter. X offset non-zero to prove the rect is absolute.
 	tv.SetBounds(Rect{X: 3, Y: 2, W: 200, H: 200})
@@ -120,7 +120,7 @@ func TestTreeViewRowRendererWindowedGutterInset(t *testing.T) {
 	rh := tv.rowHeight()
 	// 4 rows visible; scroll so the window starts partway down.
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 4 * rh})
-	tv.ScrollRow = 10
+	tv.ScrollRow().Set(10)
 
 	var nodes []*TreeNode
 	var widths []int
@@ -158,7 +158,7 @@ func TestTreeViewRowRendererPaintsOverSelectionBackground(t *testing.T) {
 	theme := DefaultLight()
 	root, a, _, _, _, _, _, _ := newMultiSelectTree()
 	tv := NewTreeView(root)
-	tv.Selected = a // row 1, depth 1, no children -> no chevron in the indent zone
+	tv.Selected().Set(a) // row 1, depth 1, no children -> no chevron in the indent zone
 	const w, h = 200, 200
 	tv.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 
@@ -215,7 +215,7 @@ func TestTreeViewRowRendererNilUnchanged(t *testing.T) {
 
 	mk := func(withNilRenderer bool) []byte {
 		tv := NewTreeView(root)
-		tv.Selected = root
+		tv.Selected().Set(root)
 		tv.SetBounds(Rect{X: 2, Y: 1, W: 180, H: 200})
 		if withNilRenderer {
 			tv.RowRenderer = nil
