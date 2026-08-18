@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // TreeNode is one entry in a TreeView. Children are nested arbitrarily
 // deep; Expanded controls whether the children are rendered.
@@ -33,7 +36,6 @@ type TreeView struct {
 	Base
 	focusState
 	Root       *TreeNode
-	Selected   *TreeNode
 	OnActivate func(node *TreeNode)
 	RowHeight  int // default 18
 
@@ -49,14 +51,6 @@ type TreeView struct {
 	// spinner. The zero value (nil) keeps the original one-line Label render,
 	// byte-identical to before this field existed.
 	RowRenderer func(p painter.Painter, theme *Theme, contentRect Rect, node *TreeNode, selected bool, ink RGBA)
-
-	// ScrollRow is the index, into the current visible-flattened node
-	// list, of the top row Draw paints. It's clamped on every Draw /
-	// OnEvent to [0, max(0, visibleCount-windowRows)], so it's always
-	// safe to set directly; prefer ScrollTo/ScrollBy for arithmetic on
-	// it. When the whole tree fits in Bounds().H, ScrollRow==0 paints
-	// byte-identically to a TreeView with no virtualization.
-	ScrollRow int
 
 	// MultiSelect enables a multi-node selection set on top of the
 	// single-node Selected anchor. When false (the default), TreeView
@@ -81,13 +75,27 @@ type TreeView struct {
 	// (false) draws the built-in scrollbar as before.
 	HideScrollbar bool
 
-	// selected is the multi-select set. Only consulted when
-	// MultiSelect is true. Selected remains the "anchor" node used as
-	// the start of a Shift range: it follows plain + Ctrl clicks, but
-	// a Shift click (a range extension) never itself becomes the new
+	// selected is the primary (anchor) selection as a shared
+	// [mvvm.Observable]: a host binds it (Set / Subscribe / two-way)
+	// via the [TreeView.Selected] accessor — there is no settable
+	// Selected field. The zero value is nil (no selection).
+	selected *mvvm.Observable[*TreeNode]
+
+	// scrollRow is the reactive scroll position (top visible row index)
+	// as a shared [mvvm.Observable], exposed via [TreeView.ScrollRow].
+	// It's clamped on every Draw / OnEvent to [0, max(0,
+	// visibleCount-windowRows)]; prefer ScrollTo/ScrollBy for
+	// arithmetic on it. When the whole tree fits in Bounds().H it is 0,
+	// painting byte-identically to a TreeView with no virtualization.
+	scrollRow *mvvm.Observable[int]
+
+	// selectionSet is the multi-select set. Only consulted when
+	// MultiSelect is true. The Selected anchor node is used as the
+	// start of a Shift range: it follows plain + Ctrl clicks, but a
+	// Shift click (a range extension) never itself becomes the new
 	// anchor, so repeated Shift clicks keep extending from the same
 	// origin.
-	selected map[*TreeNode]bool
+	selectionSet map[*TreeNode]bool
 
 	// rows is a transient flat list of (node, depth) pairs computed on
 	// every Draw + OnEvent so hit-tests + paint share one definition
@@ -112,7 +120,33 @@ const TreeIndentW = 16
 // NewTreeView builds a TreeView rooted at root (which may be nil for
 // an empty initial view).
 func NewTreeView(root *TreeNode) *TreeView {
-	return &TreeView{Root: root, RowHeight: scaled(18)}
+	t := &TreeView{Root: root, RowHeight: scaled(18)}
+	t.selected = mvvm.NewObservable[*TreeNode](nil)
+	t.scrollRow = mvvm.NewObservable(0)
+	return t
+}
+
+// Selected is the current single (anchor) selection as a shared
+// [mvvm.Observable]: a host binds it (Set / Subscribe / two-way) —
+// there is no settable Selected field. A click, an arrow-key move, or
+// SetSelection Sets it (notifying subscribers); the zero value is nil.
+func (t *TreeView) Selected() *mvvm.Observable[*TreeNode] {
+	if t.selected == nil {
+		t.selected = mvvm.NewObservable[*TreeNode](nil)
+	}
+	return t.selected
+}
+
+// ScrollRow is the reactive index, into the current visible-flattened
+// node list, of the top row Draw paints, as a shared [mvvm.Observable].
+// It's clamped on every Draw / OnEvent to [0, max(0,
+// visibleCount-windowRows)]; prefer ScrollTo/ScrollBy for arithmetic on
+// it. When the whole tree fits in Bounds().H it is 0.
+func (t *TreeView) ScrollRow() *mvvm.Observable[int] {
+	if t.scrollRow == nil {
+		t.scrollRow = mvvm.NewObservable(0)
+	}
+	return t.scrollRow
 }
 
 // flatten populates rows by walking Root in depth-first order +
@@ -182,13 +216,13 @@ func (t *TreeView) clampScrollRow(row, total, window int) int {
 // flattened shape + the widget's bounds.
 func (t *TreeView) ScrollTo(row int) {
 	t.flatten()
-	t.ScrollRow = t.clampScrollRow(row, len(t.rows), t.windowRows())
+	t.ScrollRow().Set(t.clampScrollRow(row, len(t.rows), t.windowRows()))
 }
 
 // ScrollBy adjusts ScrollRow by delta, with the same clamping as
 // ScrollTo. Negative delta scrolls up.
 func (t *TreeView) ScrollBy(delta int) {
-	t.ScrollTo(t.ScrollRow + delta)
+	t.ScrollTo(t.ScrollRow().Get() + delta)
 }
 
 // scrollToSelected nudges ScrollRow by the minimum amount needed to
@@ -197,13 +231,14 @@ func (t *TreeView) ScrollBy(delta int) {
 // there's no valid target row, and computing one anyway is exactly
 // how a stray -1 "not found" index turns into a negative ScrollRow.
 func (t *TreeView) scrollToSelected() {
-	if t.Selected == nil {
+	sel := t.Selected().Get()
+	if sel == nil {
 		return
 	}
 	t.flatten()
 	idx := -1
 	for i, row := range t.rows {
-		if row.node == t.Selected {
+		if row.node == sel {
 			idx = i
 			break
 		}
@@ -212,13 +247,14 @@ func (t *TreeView) scrollToSelected() {
 		return
 	}
 	wr := t.windowRows()
+	sr := t.ScrollRow().Get()
 	switch {
-	case idx < t.ScrollRow:
-		t.ScrollRow = idx
-	case wr > 0 && idx >= t.ScrollRow+wr:
-		t.ScrollRow = idx - wr + 1
+	case idx < sr:
+		sr = idx
+	case wr > 0 && idx >= sr+wr:
+		sr = idx - wr + 1
 	}
-	t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), wr)
+	t.ScrollRow().Set(t.clampScrollRow(sr, len(t.rows), wr))
 }
 
 // handleKey drives the keyboard roving cursor over the visible flattened
@@ -255,11 +291,12 @@ func (t *TreeView) handleKey(ev Event) {
 // cursorRow returns the flattened-row index of Selected, or -1 when nothing is
 // selected or Selected is not currently visible. Callers flatten() first.
 func (t *TreeView) cursorRow() int {
-	if t.Selected == nil {
+	sel := t.Selected().Get()
+	if sel == nil {
 		return -1
 	}
 	for i, row := range t.rows {
-		if row.node == t.Selected {
+		if row.node == sel {
 			return i
 		}
 	}
@@ -271,7 +308,7 @@ func (t *TreeView) cursorRow() int {
 // scrolls to keep it visible. Callers pass an in-range idx.
 func (t *TreeView) setCursorRow(idx int) {
 	node := t.rows[idx].node
-	t.Selected = node
+	t.Selected().Set(node)
 	if t.MultiSelect {
 		t.SetSelection(node)
 	}
@@ -282,14 +319,15 @@ func (t *TreeView) setCursorRow(idx int) {
 // node would. A nil Selected (nothing under the cursor) is a no-op, and a nil
 // OnActivate is safe.
 func (t *TreeView) activateCursor() {
-	if t.Selected == nil {
+	sel := t.Selected().Get()
+	if sel == nil {
 		return
 	}
 	if t.MultiSelect {
-		t.SetSelection(t.Selected)
+		t.SetSelection(sel)
 	}
 	if t.OnActivate != nil {
-		t.OnActivate(t.Selected)
+		t.OnActivate(sel)
 	}
 }
 
@@ -310,7 +348,7 @@ func (t *TreeView) expandOrDescend(cur int) {
 	if !node.Expanded {
 		node.Expanded = true
 		t.flatten()
-		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.windowRows())
+		t.ScrollRow().Set(t.clampScrollRow(t.ScrollRow().Get(), len(t.rows), t.windowRows()))
 		return
 	}
 	// The node is expanded and has children, so its first child is the very
@@ -330,7 +368,7 @@ func (t *TreeView) collapseOrParent(cur int) {
 	if len(node.Children) > 0 && node.Expanded {
 		node.Expanded = false
 		t.flatten()
-		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.windowRows())
+		t.ScrollRow().Set(t.clampScrollRow(t.ScrollRow().Get(), len(t.rows), t.windowRows()))
 		return
 	}
 	depth := t.rows[cur].depth
@@ -346,20 +384,20 @@ func (t *TreeView) collapseOrParent(cur int) {
 // only reflects MultiSelect state; when MultiSelect is false it
 // always returns false (single-select uses Selected directly).
 func (t *TreeView) IsSelected(n *TreeNode) bool {
-	return t.selected != nil && t.selected[n]
+	return t.selectionSet != nil && t.selectionSet[n]
 }
 
 // SelectedNodes returns the multi-selected nodes in visible
 // (pre-order, expanded-aware) traversal order. Empty when
 // MultiSelect is false or nothing is selected.
 func (t *TreeView) SelectedNodes() []*TreeNode {
-	if len(t.selected) == 0 {
+	if len(t.selectionSet) == 0 {
 		return nil
 	}
 	t.flatten()
-	out := make([]*TreeNode, 0, len(t.selected))
+	out := make([]*TreeNode, 0, len(t.selectionSet))
 	for _, row := range t.rows {
-		if t.selected[row.node] {
+		if t.selectionSet[row.node] {
 			out = append(out, row.node)
 		}
 	}
@@ -369,19 +407,19 @@ func (t *TreeView) SelectedNodes() []*TreeNode {
 // SetSelection replaces the multi-select set with nodes. The last
 // node (if any) becomes the anchor (Selected).
 func (t *TreeView) SetSelection(nodes ...*TreeNode) {
-	t.selected = make(map[*TreeNode]bool, len(nodes))
+	t.selectionSet = make(map[*TreeNode]bool, len(nodes))
 	for _, n := range nodes {
-		t.selected[n] = true
+		t.selectionSet[n] = true
 	}
 	if len(nodes) > 0 {
-		t.Selected = nodes[len(nodes)-1]
+		t.Selected().Set(nodes[len(nodes)-1])
 	}
 }
 
 // ClearSelection empties the multi-select set. Selected (the anchor)
 // is left untouched.
 func (t *TreeView) ClearSelection() {
-	t.selected = nil
+	t.selectionSet = nil
 }
 
 // ToggleSelect flips n's membership in the multi-select set.
@@ -389,13 +427,13 @@ func (t *TreeView) ToggleSelect(n *TreeNode) {
 	if n == nil {
 		return
 	}
-	if t.selected == nil {
-		t.selected = make(map[*TreeNode]bool)
+	if t.selectionSet == nil {
+		t.selectionSet = make(map[*TreeNode]bool)
 	}
-	if t.selected[n] {
-		delete(t.selected, n)
+	if t.selectionSet[n] {
+		delete(t.selectionSet, n)
 	} else {
-		t.selected[n] = true
+		t.selectionSet[n] = true
 	}
 }
 
@@ -420,11 +458,11 @@ func (t *TreeView) SelectRange(a, b *TreeNode) {
 	if ai > bi {
 		ai, bi = bi, ai
 	}
-	if t.selected == nil {
-		t.selected = make(map[*TreeNode]bool)
+	if t.selectionSet == nil {
+		t.selectionSet = make(map[*TreeNode]bool)
 	}
 	for i := ai; i <= bi; i++ {
-		t.selected[t.rows[i].node] = true
+		t.selectionSet[t.rows[i].node] = true
 	}
 }
 
@@ -440,7 +478,8 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 	total := len(t.rows)
 	wr := t.windowRows()
 	windowed := wr > 0 && total > wr
-	t.ScrollRow = t.clampScrollRow(t.ScrollRow, total, wr)
+	scroll := t.clampScrollRow(t.ScrollRow().Get(), total, wr)
+	t.ScrollRow().Set(scroll)
 
 	rowW := r.W
 	if windowed {
@@ -448,7 +487,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 	}
 	start, end := 0, total
 	if windowed {
-		start = t.ScrollRow
+		start = scroll
 		end = start + wr
 	}
 
@@ -468,7 +507,7 @@ func (t *TreeView) Draw(p painter.Painter, theme *Theme) {
 		y := r.Y + (i-start)*rh
 		bg := theme.Surface
 		ink := theme.OnSurface
-		isSel := row.node == t.Selected
+		isSel := row.node == t.Selected().Get()
 		if t.MultiSelect {
 			isSel = t.IsSelected(row.node)
 		}
@@ -533,7 +572,7 @@ func (t *TreeView) ScrollExtent() (offset, window, total int, shown bool) {
 	if window <= 0 || total <= window {
 		return 0, window, total, false
 	}
-	return t.clampScrollRow(t.ScrollRow, total, window), window, total, true
+	return t.clampScrollRow(t.ScrollRow().Get(), total, window), window, total, true
 }
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and
@@ -553,7 +592,7 @@ func (t *TreeView) scrollbarGeom() (sbGeom, bool) {
 		thumbH = scaled(8)
 	}
 	maxScroll := total - wr // > 0 here (total > wr)
-	scroll := t.clampScrollRow(t.ScrollRow, total, wr)
+	scroll := t.clampScrollRow(t.ScrollRow().Get(), total, wr)
 	return sbGeom{
 		cross0:     r.W - scrollbarTrack(),
 		crossW:     scrollbarTrack(),
@@ -613,7 +652,7 @@ func (t *TreeView) NodeAt(x, y int) *TreeNode {
 	if wr > 0 && total > wr && localIdx >= wr {
 		return nil
 	}
-	idx := localIdx + t.clampScrollRow(t.ScrollRow, total, wr)
+	idx := localIdx + t.clampScrollRow(t.ScrollRow().Get(), total, wr)
 	if idx < 0 || idx >= total {
 		return nil
 	}
@@ -686,7 +725,8 @@ func (t *TreeView) OnEvent(ev Event) {
 	total := len(t.rows)
 	wr := t.windowRows()
 	windowed := wr > 0 && total > wr
-	t.ScrollRow = t.clampScrollRow(t.ScrollRow, total, wr)
+	scroll := t.clampScrollRow(t.ScrollRow().Get(), total, wr)
+	t.ScrollRow().Set(scroll)
 	if ev.Y < 0 {
 		return
 	}
@@ -696,7 +736,7 @@ func (t *TreeView) OnEvent(ev Event) {
 		// isn't an exact multiple of rh): nothing was drawn there.
 		return
 	}
-	idx := localIdx + t.ScrollRow
+	idx := localIdx + scroll
 	if idx >= total {
 		return
 	}
@@ -708,21 +748,21 @@ func (t *TreeView) OnEvent(ev Event) {
 		// visible row count out from under ScrollRow: re-flatten +
 		// re-clamp so it never points past the new end of the list.
 		t.flatten()
-		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.windowRows())
+		t.ScrollRow().Set(t.clampScrollRow(t.ScrollRow().Get(), len(t.rows), t.windowRows()))
 		return
 	}
 	if t.MultiSelect {
 		switch {
-		case ev.Shift && t.Selected != nil:
-			t.SelectRange(t.Selected, row.node)
+		case ev.Shift && t.Selected().Get() != nil:
+			t.SelectRange(t.Selected().Get(), row.node)
 		case ev.Ctrl:
 			t.ToggleSelect(row.node)
-			t.Selected = row.node
+			t.Selected().Set(row.node)
 		default:
 			t.SetSelection(row.node)
 		}
 	} else {
-		t.Selected = row.node
+		t.Selected().Set(row.node)
 	}
 	if t.OnActivate != nil {
 		t.OnActivate(row.node)

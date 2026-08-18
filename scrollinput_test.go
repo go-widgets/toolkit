@@ -143,21 +143,21 @@ func TestTreeViewWheelAndKeyScroll(t *testing.T) {
 	}
 
 	tv.OnEvent(Event{Kind: EventScroll, Delta: 2})
-	if tv.ScrollRow != 2 {
-		t.Fatalf("wheel: %d, want 2", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 2 {
+		t.Fatalf("wheel: %d, want 2", tv.ScrollRow().Get())
 	}
 	tv.OnEvent(Event{Kind: EventScroll, Delta: 1000})
-	if tv.ScrollRow != max {
-		t.Fatalf("wheel clamp bottom: %d, want %d", tv.ScrollRow, max)
+	if tv.ScrollRow().Get() != max {
+		t.Fatalf("wheel clamp bottom: %d, want %d", tv.ScrollRow().Get(), max)
 	}
 	tv.OnEvent(Event{Kind: EventScroll, Delta: -1000})
-	if tv.ScrollRow != 0 {
-		t.Fatalf("wheel clamp top: %d, want 0", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 0 {
+		t.Fatalf("wheel clamp top: %d, want 0", tv.ScrollRow().Get())
 	}
 	// A non-handled event kind is a no-op (covers the switch default branch).
 	tv.OnEvent(Event{Kind: EventMouseUp})
-	if tv.ScrollRow != 0 {
-		t.Fatalf("ignored event changed ScrollRow: %d, want 0", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 0 {
+		t.Fatalf("ignored event changed ScrollRow: %d, want 0", tv.ScrollRow().Get())
 	}
 }
 

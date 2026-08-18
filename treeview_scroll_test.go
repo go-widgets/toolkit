@@ -78,8 +78,8 @@ func TestTreeViewScrollSmallTreeByteIdenticalToUnvirtualized(t *testing.T) {
 	if !bytes.Equal(got, want) {
 		t.Fatal("Draw of a fully-fitting tree is not byte-identical to the pre-virtualization algorithm")
 	}
-	if tv.ScrollRow != 0 {
-		t.Fatalf("ScrollRow = %d, want 0 (whole tree fits)", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollRow = %d, want 0 (whole tree fits)", tv.ScrollRow().Get())
 	}
 }
 
@@ -101,8 +101,8 @@ func TestTreeViewScrollSmallTreeRegressionExpandCollapseAndMultiSelect(t *testin
 		t.Fatal("expand/collapse broken by adding virtualization")
 	}
 
-	if tv.ScrollRow != 0 {
-		t.Fatalf("ScrollRow = %d, want 0 (whole tree still fits after collapse)", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollRow = %d, want 0 (whole tree still fits after collapse)", tv.ScrollRow().Get())
 	}
 }
 
@@ -111,7 +111,7 @@ func TestTreeViewScrollSmallTreeRegressionExpandCollapseAndMultiSelect(t *testin
 func TestTreeViewScrollWindowsLargeTree(t *testing.T) {
 	root, children := manyLeaves(20) // flattened: root(0), n0..n19(1..20)
 	tv := NewTreeView(root)
-	tv.Selected = children[15] // flattened idx 16
+	tv.Selected().Set(children[15]) // flattened idx 16
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90})
 
 	theme := DefaultLight()
@@ -136,8 +136,8 @@ func TestTreeViewScrollWindowsLargeTree(t *testing.T) {
 
 	// Scroll so idx16 enters the window: max = total(21) - window(5) = 16.
 	tv.ScrollTo(16)
-	if tv.ScrollRow != 16 {
-		t.Fatalf("ScrollRow = %d, want 16", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 16 {
+		t.Fatalf("ScrollRow = %d, want 16", tv.ScrollRow().Get())
 	}
 	buf2 := makeSurface(200, 90)
 	tv.Draw(newP(buf2, 200), theme)
@@ -156,8 +156,8 @@ func TestTreeViewZeroHeightBoundsSkipsVirtualization(t *testing.T) {
 
 	tv.Draw(newP(makeSurface(200, 200), 200), DefaultLight())
 	tv.OnEvent(Event{Kind: EventClick, X: 80, Y: 18}) // row 1: a
-	if tv.Selected == nil || tv.Selected.Label != "a" {
-		t.Fatalf("Selected = %+v, want a despite H=0 bounds", tv.Selected)
+	if tv.Selected().Get() == nil || tv.Selected().Get().Label != "a" {
+		t.Fatalf("Selected = %+v, want a despite H=0 bounds", tv.Selected().Get())
 	}
 }
 
@@ -176,14 +176,14 @@ func TestTreeViewScrollCollapseViaHostReClampsScrollRow(t *testing.T) {
 
 	// Flattened total = root+subA+20 leaves+subB = 23; max ScrollRow=18.
 	tv.ScrollTo(18)
-	if tv.ScrollRow != 18 {
-		t.Fatalf("ScrollRow = %d, want 18", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 18 {
+		t.Fatalf("ScrollRow = %d, want 18", tv.ScrollRow().Get())
 	}
 
 	subA.Expanded = false // flattened count drops to 3 (root, subA, subB)
 	tv.Draw(newP(makeSurface(200, 90), 200), DefaultLight())
-	if tv.ScrollRow != 0 {
-		t.Fatalf("ScrollRow after collapse = %d, want re-clamped to 0", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollRow after collapse = %d, want re-clamped to 0", tv.ScrollRow().Get())
 	}
 }
 
@@ -200,8 +200,8 @@ func TestTreeViewScrollClickCollapseReClampsScrollRow(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90}) // windowRows=5
 
 	tv.ScrollTo(2) // window [2,7): B, b0, b1, b2, b3
-	if tv.ScrollRow != 2 {
-		t.Fatalf("ScrollRow = %d, want 2", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 2 {
+		t.Fatalf("ScrollRow = %d, want 2", tv.ScrollRow().Get())
 	}
 
 	// B (depth 1) sits at local row 0 of the window: chevron at X=20.
@@ -210,8 +210,8 @@ func TestTreeViewScrollClickCollapseReClampsScrollRow(t *testing.T) {
 		t.Fatal("chevron click should have collapsed B")
 	}
 	// Post-collapse flattened total = root,A,B,C = 4 <= window(5): re-clamp to 0.
-	if tv.ScrollRow != 0 {
-		t.Fatalf("ScrollRow after click-collapse = %d, want re-clamped to 0", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollRow after click-collapse = %d, want re-clamped to 0", tv.ScrollRow().Get())
 	}
 }
 
@@ -225,8 +225,8 @@ func TestTreeViewScrollClickWithNonZeroScrollRowSelectsCorrectNode(t *testing.T)
 	tv.ScrollTo(8) // window [8,13): n7..n11
 	// Local row 2 of the window → flattened idx 10 → children[9] (n9).
 	tv.OnEvent(Event{Kind: EventClick, X: 80, Y: 2 * 18})
-	if tv.Selected != children[9] {
-		t.Fatalf("Selected = %v, want n9 (children[9])", tv.Selected)
+	if tv.Selected().Get() != children[9] {
+		t.Fatalf("Selected = %v, want n9 (children[9])", tv.Selected().Get())
 	}
 }
 
@@ -238,7 +238,7 @@ func TestTreeViewClickBelowWindowIgnored(t *testing.T) {
 	tv.ScrollTo(2)
 
 	tv.OnEvent(Event{Kind: EventClick, X: 80, Y: 5 * 18}) // local row 5 == windowRows: past the window
-	if tv.Selected != nil {
+	if tv.Selected().Get() != nil {
 		t.Fatal("click below the painted window should not select anything")
 	}
 }
@@ -251,21 +251,21 @@ func TestTreeViewScrollToAndScrollByClamp(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90}) // windowRows=5, total=21, max=16
 
 	tv.ScrollTo(-5)
-	if tv.ScrollRow != 0 {
-		t.Fatalf("ScrollTo(-5) = %d, want clamped to 0", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollTo(-5) = %d, want clamped to 0", tv.ScrollRow().Get())
 	}
 	tv.ScrollTo(999)
-	if tv.ScrollRow != 16 {
-		t.Fatalf("ScrollTo(999) = %d, want clamped to 16", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 16 {
+		t.Fatalf("ScrollTo(999) = %d, want clamped to 16", tv.ScrollRow().Get())
 	}
 	tv.ScrollTo(10)
 	tv.ScrollBy(3)
-	if tv.ScrollRow != 13 {
-		t.Fatalf("ScrollBy(3) from 10 = %d, want 13", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 13 {
+		t.Fatalf("ScrollBy(3) from 10 = %d, want 13", tv.ScrollRow().Get())
 	}
 	tv.ScrollBy(-100)
-	if tv.ScrollRow != 0 {
-		t.Fatalf("ScrollBy(-100) = %d, want clamped to 0", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollBy(-100) = %d, want clamped to 0", tv.ScrollRow().Get())
 	}
 }
 
@@ -275,11 +275,11 @@ func TestTreeViewScrollToSelectedNilIsNoop(t *testing.T) {
 	root, _, _, _, _, _, _, _ := newMultiSelectTree()
 	tv := NewTreeView(root)
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 18}) // windowRows=1
-	tv.ScrollRow = 3
+	tv.ScrollRow().Set(3)
 
 	tv.scrollToSelected()
-	if tv.ScrollRow != 3 {
-		t.Fatalf("scrollToSelected with nil Selected changed ScrollRow to %d, want unchanged 3", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 3 {
+		t.Fatalf("scrollToSelected with nil Selected changed ScrollRow to %d, want unchanged 3", tv.ScrollRow().Get())
 	}
 }
 
@@ -288,13 +288,13 @@ func TestTreeViewScrollToSelectedNotVisibleIsNoop(t *testing.T) {
 	root, _, _, _, _, d, d1, _ := newMultiSelectTree()
 	tv := NewTreeView(root)
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
-	tv.Selected = d1
-	tv.ScrollRow = 0
+	tv.Selected().Set(d1)
+	tv.ScrollRow().Set(0)
 	_ = d
 
 	tv.scrollToSelected()
-	if tv.ScrollRow != 0 {
-		t.Fatalf("scrollToSelected with a hidden Selected changed ScrollRow to %d, want unchanged 0", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 0 {
+		t.Fatalf("scrollToSelected with a hidden Selected changed ScrollRow to %d, want unchanged 0", tv.ScrollRow().Get())
 	}
 }
 
@@ -304,17 +304,17 @@ func TestTreeViewScrollToSelectedAdjustsMinimally(t *testing.T) {
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90}) // windowRows=5, total=21
 
 	// Selected below the window: scroll down just enough to reveal it.
-	tv.Selected = children[15] // flattened idx 16
+	tv.Selected().Set(children[15]) // flattened idx 16
 	tv.scrollToSelected()
-	if want := 16 - 5 + 1; tv.ScrollRow != want {
-		t.Fatalf("ScrollRow = %d, want %d (minimal downward scroll)", tv.ScrollRow, want)
+	if want := 16 - 5 + 1; tv.ScrollRow().Get() != want {
+		t.Fatalf("ScrollRow = %d, want %d (minimal downward scroll)", tv.ScrollRow().Get(), want)
 	}
 
 	// Selected above the window: scroll up to put it at the top.
-	tv.Selected = children[0] // flattened idx 1
+	tv.Selected().Set(children[0]) // flattened idx 1
 	tv.scrollToSelected()
-	if tv.ScrollRow != 1 {
-		t.Fatalf("ScrollRow = %d, want 1 (minimal upward scroll)", tv.ScrollRow)
+	if tv.ScrollRow().Get() != 1 {
+		t.Fatalf("ScrollRow = %d, want 1 (minimal upward scroll)", tv.ScrollRow().Get())
 	}
 }
 
