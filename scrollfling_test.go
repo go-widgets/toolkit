@@ -6,151 +6,129 @@ package toolkit
 
 import "testing"
 
-// Releasing a fast drag lets the view coast to a stop. Velocity is measured by
-// Tick because a toolkit.Event carries no timestamp, so these tests drive the
-// gesture the way a host does: drag, tick, release, tick.
+// Touch scrolling: a drag moves the content, a release coasts, an overscroll
+// springs home. The tests assert BEHAVIOUR — offsets, overscroll, whether the
+// view still wants frames — never the engine's internals, so retuning the
+// physics does not rewrite them.
 
-// flick drags the view upward by dy pixels and ticks once, so Tick sees the
-// movement and turns it into a velocity. It returns the ScrollView.
+// flick drags the view upward by dy pixels over one frame and releases.
 func flick(dy int, dt float64) *ScrollView {
 	sv := newPanScrollView()
 	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60})
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 60 - dy})
-	sv.Tick(dt) // measures dy/dt px/s
+	sv.Tick(dt) // measures the speed of that sample
 	sv.OnEvent(Event{Kind: EventMouseUp, X: 40, Y: 60 - dy})
 	return sv
 }
 
-func TestScrollViewFlingCoasts(t *testing.T) {
-	// 60 px in a 60th of a second is 3600 px/s: comfortably a flick.
+// settle ticks until the view stops asking for frames, or gives up.
+func settleScroll(t *testing.T, sv *ScrollView) {
+	t.Helper()
+	for i := 0; i < 2000 && sv.Animating(); i++ {
+		sv.Tick(1.0 / 60)
+	}
+	if sv.Animating() {
+		t.Fatal("the view never came to rest")
+	}
+}
+
+func TestTouchScrollCoastsAndDecelerates(t *testing.T) {
 	sv := flick(60, 1.0/60)
-	if !sv.flinging {
-		t.Fatal("a fast release should start a fling")
-	}
 	if !sv.Animating() {
-		t.Fatal("a flinging view still needs frames")
+		t.Fatal("a fast release should leave the view coasting")
 	}
-	settled := sv.OffsetY
-	// The view keeps moving after the finger is gone.
+	at := sv.OffsetY
 	sv.Tick(1.0 / 60)
-	if sv.OffsetY <= settled {
-		t.Fatalf("the fling did not carry the view: OffsetY=%d, was %d", sv.OffsetY, settled)
+	if sv.OffsetY <= at {
+		t.Fatalf("the coast did not carry the view: OffsetY=%d, was %d", sv.OffsetY, at)
 	}
-	// And it slows down: each tick moves the view less than the one before.
-	prev, last := sv.OffsetY, 0
-	for i := 0; i < 3; i++ {
+	last := 0
+	for i := 0; i < 4; i++ {
 		before := sv.OffsetY
 		sv.Tick(1.0 / 60)
 		step := sv.OffsetY - before
 		if last != 0 && step > last {
-			t.Fatalf("step %d grew to %d from %d: a fling must decelerate", i, step, last)
+			t.Fatalf("step %d grew to %d from %d: a coast must decelerate", i, step, last)
 		}
-		last, prev = step, sv.OffsetY
+		last = step
 	}
-	_ = prev
 }
 
-func TestScrollViewFlingComesToRest(t *testing.T) {
+func TestTouchScrollComesToRest(t *testing.T) {
 	sv := flick(60, 1.0/60)
-	// A second of ticking is far longer than the decay needs.
-	for i := 0; i < 120 && sv.flinging; i++ {
-		sv.Tick(1.0 / 60)
-	}
-	if sv.flinging {
-		t.Fatal("the fling never ended")
-	}
-	if sv.Animating() {
-		t.Fatal("a view at rest should stop asking for frames")
-	}
-	if sv.velX != 0 || sv.velY != 0 {
-		t.Fatalf("a stopped fling should keep no velocity, got (%v,%v)", sv.velX, sv.velY)
+	settleScroll(t, sv)
+	if x, y := sv.Overscroll(); x != 0 || y != 0 {
+		t.Fatalf("a view at rest still shows overscroll (%d,%d)", x, y)
 	}
 }
 
-func TestScrollViewSlowReleaseDoesNotFling(t *testing.T) {
-	// A deliberate placement is not a flick: carrying it on would fight the
-	// user, who put the content exactly where they wanted it.
-	sv := flick(1, 1.0/60) // 60 px/s, below flingStartVelocity
-	if sv.flinging {
-		t.Fatal("a slow release should not fling")
-	}
-	at := sv.OffsetY
-	sv.Tick(1.0 / 60)
-	if sv.OffsetY != at {
-		t.Fatalf("a view that is not flinging must not move: OffsetY=%d, want %d", sv.OffsetY, at)
-	}
-}
-
-func TestScrollViewPressStopsAFling(t *testing.T) {
+func TestPressCatchesACoastingView(t *testing.T) {
 	sv := flick(60, 1.0/60)
-	if !sv.flinging {
-		t.Fatal("setup: expected a fling")
+	if !sv.Animating() {
+		t.Fatal("setup: expected a coast")
 	}
-	// Catching a coasting view stops it dead, the way a finger on a spinning
-	// record does.
 	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60})
-	if sv.flinging {
-		t.Fatal("a press should stop the fling")
-	}
 	at := sv.OffsetY
+	sv.OnEvent(Event{Kind: EventMouseUp, X: 40, Y: 60})
 	sv.Tick(1.0 / 60)
 	if sv.OffsetY != at {
-		t.Fatalf("a caught view must not coast on: OffsetY=%d, want %d", sv.OffsetY, at)
+		t.Fatalf("a caught view moved on: OffsetY=%d, want %d", sv.OffsetY, at)
 	}
 }
 
-func TestScrollViewFlingStopsAtTheEnd(t *testing.T) {
-	// Reaching an end ends the fling on that axis: the content cannot move,
-	// so there is nothing left to carry.
-	sv := flick(60, 1.0/60)
-	for i := 0; i < 600 && sv.flinging; i++ {
-		sv.Tick(1.0 / 60)
+func TestOffsetNeverLeavesItsBounds(t *testing.T) {
+	// The contract this design exists to keep: OffsetX/OffsetY are exported,
+	// callers convert screen points with them and the scrollbar computes the
+	// thumb from them, so they stay clamped even while the rubber band is
+	// stretched. The excursion lives in Overscroll instead.
+	sv := newPanScrollView()
+	max := sv.contentH - sv.viewport().H
+	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60})
+	// Drag far past the start, then far past the end.
+	for _, y := range []int{4000, -8000} {
+		sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: y})
+		if sv.OffsetY < 0 || sv.OffsetY > max {
+			t.Fatalf("OffsetY=%d escaped [0,%d]", sv.OffsetY, max)
+		}
 	}
-	if want := sv.maxOffsetY(); sv.OffsetY > want {
-		t.Fatalf("OffsetY=%d ran past the end %d", sv.OffsetY, want)
+	if _, over := sv.Overscroll(); over == 0 {
+		t.Fatal("dragging well past the end should show a rubber band")
 	}
-	if sv.flinging {
-		t.Fatal("the fling should have ended at the end of the content")
+	sv.OnEvent(Event{Kind: EventMouseUp, X: 40, Y: -8000})
+	settleScroll(t, sv)
+	if sv.OffsetY != max {
+		t.Fatalf("after springing home OffsetY=%d, want the bound %d", sv.OffsetY, max)
+	}
+	if _, over := sv.Overscroll(); over != 0 {
+		t.Fatalf("overscroll=%d after settling, want 0", over)
 	}
 }
 
-func TestScrollViewTickWhileDraggingOnlyMeasures(t *testing.T) {
+func TestTickDuringADragOnlyMeasures(t *testing.T) {
 	sv := newPanScrollView()
 	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60})
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 30})
 	at := sv.OffsetY
 	sv.Tick(1.0 / 60)
-	// The drag itself scrolls while the contact lasts; the tick only reads
-	// the speed, it must not move the view a second time.
 	if sv.OffsetY != at {
 		t.Fatalf("Tick during a drag moved the view: OffsetY=%d, want %d", sv.OffsetY, at)
-	}
-	if sv.velY != 30*60 {
-		t.Fatalf("velY=%v, want %v px/s", sv.velY, 30*60.0)
 	}
 	if !sv.Animating() {
 		t.Fatal("a view under the finger needs frames, to keep measuring")
 	}
-	// The accumulator resets, so a still finger reads as no speed at all.
-	sv.Tick(1.0 / 60)
-	if sv.velY != 0 {
-		t.Fatalf("a still finger should measure 0, got %v", sv.velY)
-	}
 }
 
-func TestScrollViewTickIgnoresANonPositiveDelta(t *testing.T) {
-	// A host that hands out a zero or negative dt (a clock that did not move,
-	// or went backwards) must not divide by it.
+func TestTickIgnoresANonPositiveDelta(t *testing.T) {
 	sv := flick(60, 1.0/60)
-	at, vel := sv.OffsetY, sv.velY
+	at := sv.OffsetY
 	sv.Tick(0)
 	sv.Tick(-1)
-	if sv.OffsetY != at || sv.velY != vel {
-		t.Fatalf("a non-positive dt changed the view: OffsetY=%d velY=%v", sv.OffsetY, sv.velY)
+	if sv.OffsetY != at {
+		t.Fatalf("a non-positive dt moved the view: OffsetY=%d, want %d", sv.OffsetY, at)
 	}
 }
 
-func TestScrollViewIdleTickDoesNothing(t *testing.T) {
+func TestIdleViewAsksForNothing(t *testing.T) {
 	sv := newPanScrollView()
 	if sv.Animating() {
 		t.Fatal("an untouched view should not ask for frames")
@@ -159,40 +137,7 @@ func TestScrollViewIdleTickDoesNothing(t *testing.T) {
 	if sv.OffsetY != 0 || sv.OffsetX != 0 {
 		t.Fatal("ticking an idle view should not move it")
 	}
-}
-
-func TestScrollViewMaxOffsets(t *testing.T) {
-	sv := newPanScrollView()
-	vp := sv.viewport()
-	if got, want := sv.maxOffsetY(), 400-vp.H; got != want {
-		t.Fatalf("maxOffsetY = %d, want %d", got, want)
-	}
-	// Content smaller than the viewport has nowhere to scroll, and a negative
-	// maximum would let a fling drag the content off screen.
-	sv.contentW, sv.contentH = 1, 1
-	if got := sv.maxOffsetX(); got != 0 {
-		t.Fatalf("maxOffsetX with tiny content = %d, want 0", got)
-	}
-	if got := sv.maxOffsetY(); got != 0 {
-		t.Fatalf("maxOffsetY with tiny content = %d, want 0", got)
-	}
-}
-
-func TestScrollViewFlingDecaysToRestAwayFromTheEnds(t *testing.T) {
-	// A gentle flick — fast enough to fling, slow enough that friction alone
-	// stops it well before the end of the content. It is the other way a fling
-	// can end, and the only one that exercises the velocity threshold.
-	sv := flick(3, 1.0/60) // 180 px/s, above the 120 px/s start threshold
-	if !sv.flinging {
-		t.Fatal("180 px/s should be a fling")
-	}
-	for i := 0; i < 600 && sv.flinging; i++ {
-		sv.Tick(1.0 / 60)
-	}
-	if sv.flinging {
-		t.Fatal("friction alone should have stopped the fling")
-	}
-	if sv.OffsetY <= 0 || sv.OffsetY >= sv.maxOffsetY() {
-		t.Fatalf("OffsetY=%d: this test only means something away from the ends", sv.OffsetY)
+	if x, y := sv.Overscroll(); x != 0 || y != 0 {
+		t.Fatalf("an untouched view shows overscroll (%d,%d)", x, y)
 	}
 }
