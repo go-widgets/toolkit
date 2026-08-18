@@ -74,6 +74,11 @@ type IsoDiagram struct {
 	Cols, Rows int
 	// DefaultShape is the solid a newly placed node takes.
 	DefaultShape IsoShape
+	// Icons, when non-nil, is the per-widget icon registry an [IsoNode]'s Icon id
+	// resolves through; nil uses the package-global [IsoDefaultIcons]. A host sets
+	// this to give one diagram its own component library without touching the
+	// shared default.
+	Icons *IsoIconRegistry
 	// Mode selects the left-drag behaviour (move vs connect).
 	Mode IsoMode
 
@@ -211,6 +216,15 @@ func (d *IsoDiagram) nodeHeight(n IsoNode) float64 {
 	return 1
 }
 
+// iconRegistry is the registry a node's Icon id resolves through: the widget's
+// own override when set, otherwise the package-global default.
+func (d *IsoDiagram) iconRegistry() *IsoIconRegistry {
+	if d.Icons != nil {
+		return d.Icons
+	}
+	return IsoDefaultIcons()
+}
+
 // nodeSolid builds the iso solid for a node in world space, coloured c.
 func (d *IsoDiagram) nodeSolid(n IsoNode, c stdcolor.RGBA) iso.Shape {
 	pos := iso.V(float64(n.X), float64(n.Y), 0)
@@ -332,7 +346,18 @@ func (d *IsoDiagram) scene(theme *Theme) *iso.Scene {
 		sc.Add(iso.Line{From: iso.V(0, float64(j), 0), To: iso.V(float64(d.Cols), float64(j), 0), Color: grid, Width: 1})
 	}
 	for _, n := range d.doc.Nodes() {
-		sc.Add(d.nodeSolid(n, d.resolveColor(n, theme)))
+		base := d.resolveColor(n, theme)
+		if n.Icon == "" {
+			// No icon: draw the bare shape solid (cube / box / pyramid), exactly as
+			// before — the icon system is purely additive.
+			sc.Add(d.nodeSolid(n, base))
+			continue
+		}
+		// An icon id (known, or an unknown one that resolves to the cube fallback)
+		// contributes its depth-sortable solids to the same scene. A sprite icon
+		// adds no shapes here and is blitted after the scene renders (drawSprites).
+		icon, _ := d.iconRegistry().Resolve(n.Icon)
+		sc.Add(icon.Render(n.X, n.Y, base).Shapes...)
 	}
 	link := stdColor(theme.OnSurface)
 	for _, c := range d.doc.Connectors() {
@@ -343,6 +368,31 @@ func (d *IsoDiagram) scene(theme *Theme) *iso.Scene {
 		}
 	}
 	return sc
+}
+
+// spriteRect is the widget-local pixel rectangle a billboarded sprite icon fills
+// for node n: a TileW-sized square standing on the projected ground centre of
+// the node's cell, i.e. its bottom-centre sits on that ground point so the
+// sprite reads as planted on the tile.
+func (d *IsoDiagram) spriteRect(n IsoNode) Rect {
+	p := d.proj.Project(iso.V(float64(n.X)+0.5, float64(n.Y)+0.5, 0))
+	s := iround(d.proj.TileW)
+	return Rect{X: iround(p.X) - s/2, Y: iround(p.Y) - s, W: s, H: s}
+}
+
+// drawSprites blits the sprite of every icon node whose icon contributes one,
+// over the already-rendered scene (into the same buffer, so it is captured by
+// the single blit). Primitive-only icons contribute no sprite and are skipped.
+func (d *IsoDiagram) drawSprites(img *raster.Image, theme *Theme) {
+	for _, n := range d.doc.Nodes() {
+		if n.Icon == "" {
+			continue
+		}
+		icon, _ := d.iconRegistry().Resolve(n.Icon)
+		if sprite := icon.Render(n.X, n.Y, d.resolveColor(n, theme)).Sprite; sprite != nil {
+			blitSprite(img, d.spriteRect(n), sprite)
+		}
+	}
 }
 
 // fillRaster paints every pixel of img the flat colour c.
@@ -364,6 +414,7 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 	img := raster.New(b.W, b.H)
 	fillRaster(img, theme.Surface)
 	d.scene(theme).Render(img)
+	d.drawSprites(img, theme)
 	blitImage(p, b, b, img.Pix, b.W, b.H)
 
 	// rubber-band preview while connecting

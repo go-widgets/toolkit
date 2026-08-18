@@ -31,8 +31,15 @@ type IsoNode struct {
 	// X, Y is the node's grid cell (integer world coordinates); the node's
 	// footprint is the unit square [X,X+1] x [Y,Y+1].
 	X, Y int
-	// Shape selects the rendered solid (cube / box / pyramid).
+	// Shape selects the rendered solid (cube / box / pyramid). It is the fallback
+	// geometry: it draws only when Icon is empty.
 	Shape IsoShape
+	// Icon, when non-empty, names an [IsoIcon] in the diagram's registry
+	// ([IsoDiagram.Icons], else [IsoDefaultIcons]) that renders this node instead
+	// of the bare Shape. An unknown id falls back to a plain cube. The field is a
+	// plain string on the value node, so it snapshots for undo and flows through
+	// the observable document like every other field — no per-frame copy.
+	Icon string
 	// Label is the caption drawn above the node and announced to a screen
 	// reader.
 	Label string
