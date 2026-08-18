@@ -3,7 +3,7 @@ module github.com/go-widgets/toolkit/rougelex
 go 1.26.4
 
 require (
-	github.com/go-rouge/rouge v0.1.0
+	github.com/go-rouge/rouge v0.2.0
 	github.com/go-widgets/toolkit v0.201.0
 )
 
