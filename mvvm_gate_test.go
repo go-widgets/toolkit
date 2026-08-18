@@ -37,7 +37,9 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// of its reactive state (URL / Editing / Focused / Bookmarked / Copied) is
 	// unexported behind Observable accessors.
 	"AddressBar": {"Radius": true, "TextPad": true},
-	"Rating":     {"Max": true},
+	// Max is cell count; FilledColor/EmptyColor are set-once appearance overrides
+	// for the star tones. All reactive state (the score) is on the Value Observable.
+	"Rating": {"Max": true, "FilledColor": true, "EmptyColor": true},
 	// Batch 2 (leaf widgets): reactive state is unexported behind accessors
 	// (Fraction/Active/Value/Checked/Pressed/On/Expanded); the values below are
 	// set-once appearance/layout config that legitimately stays a plain field.

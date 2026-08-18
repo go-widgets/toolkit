@@ -38,6 +38,17 @@ type Theme struct {
 	Accent       RGBA
 	Border       RGBA
 
+	// StarFilled / StarEmpty are the two tones a star-rating strip paints:
+	// StarFilled is the warm gold of a scored star, StarEmpty the neutral grey
+	// of an un-scored one. They are palette colours so a rating reads the same
+	// as the rest of the theme (and re-tints in light vs dark) rather than
+	// hardcoding gold/grey. A theme that leaves them zero (A==0) — the GTK
+	// loader and the built-in GTK/Fluent/Adwaita palettes do — lets [Rating]
+	// fall back to a built-in gold and the theme's own Border grey, so every
+	// theme still shows stars without having to know the field exists.
+	StarFilled RGBA
+	StarEmpty  RGBA
+
 	// Extra holds @define-color entries from GTK-source themes that don't
 	// map to one of the canonical fields above (headerbar_bg_color,
 	// success_color, ...). Populated by LoadGTKTheme; nil for code-built
@@ -60,6 +71,8 @@ func DefaultLight() *Theme {
 		OnSurface:    RGB(0x1A, 0x1A, 0x1A),
 		Accent:       RGB(0x35, 0x84, 0xE4),
 		Border:       RGB(0xB0, 0xB4, 0xB8),
+		StarFilled:   RGB(0xF5, 0xB8, 0x00),
+		StarEmpty:    RGB(0xC4, 0xC8, 0xCD),
 	}
 }
 
@@ -74,5 +87,7 @@ func DefaultDark() *Theme {
 		OnSurface:    RGB(0xE6, 0xE7, 0xEE),
 		Accent:       RGB(0x4F, 0x9D, 0xF2),
 		Border:       RGB(0x3A, 0x3E, 0x46),
+		StarFilled:   RGB(0xFF, 0xC9, 0x33),
+		StarEmpty:    RGB(0x4A, 0x4E, 0x57),
 	}
 }
