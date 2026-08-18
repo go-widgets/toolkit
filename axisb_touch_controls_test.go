@@ -279,7 +279,7 @@ func TestRatingCellPitchScales(t *testing.T) {
 		r := NewRating(0, 5)
 		r.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 20})
 		r.OnEvent(Event{Kind: EventClick, X: x, Y: 5})
-		return r.Value
+		return r.Value().Get()
 	}
 
 	if got := click(DensityCompact, 20); got != 2 { // 20/16 = 1 -> star 2
