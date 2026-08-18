@@ -7,6 +7,7 @@ package toolkit
 import (
 	"strconv"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -47,14 +48,8 @@ type Kanban struct {
 	// Columns are the board's lists, left to right.
 	Columns []KanbanColumn
 	// OnCardClick fires when a card is clicked, with the 0-indexed column
-	// and card. Nil is safe (the click still updates Selected*).
+	// and card. Nil is safe (the click still updates the selection).
 	OnCardClick func(col, card int)
-	// SelectedCol / SelectedCard identify the highlighted card, or -1 (the
-	// value NewKanban seeds) for "no selection". An out-of-range pair
-	// collapses to "no highlight" in Draw the same defensive way Table
-	// collapses a stale Selected.
-	SelectedCol  int
-	SelectedCard int
 	// OnCardMove fires when a drag drops a card at a new position, with the
 	// source (fromCol, fromCard) and the destination (toCol, toIdx) the card
 	// now occupies. Nil is safe -- the board still updates Columns in place.
@@ -80,6 +75,39 @@ type Kanban struct {
 	// to its own body. Grown lazily to len(Columns); a nil/short slice means
 	// "every column at offset 0" — byte-identical to before scrolling existed.
 	colScroll []int
+
+	// selectedCol / selectedCard identify the highlighted card. The reactive
+	// selection is MVVM-only: the current (col, card) lives in two unexported
+	// Observables exposed via [Kanban.SelectedCol] / [Kanban.SelectedCard], each
+	// -1 (the value NewKanban seeds) for "no selection". An out-of-range pair
+	// collapses to "no highlight" in Draw the same defensive way Table collapses
+	// a stale Selected.
+	selectedCol  *mvvm.Observable[int]
+	selectedCard *mvvm.Observable[int]
+}
+
+// SelectedCol is the highlighted card's column index as a shared
+// [mvvm.Observable]: a host binds it (Set / Subscribe / two-way) — there is no
+// settable SelectedCol field. A card click Sets it (paired with SelectedCard);
+// subscribers are notified. A bare &Kanban{} lazily seeds 0 on first access,
+// matching the old zero-value field.
+func (k *Kanban) SelectedCol() *mvvm.Observable[int] {
+	if k.selectedCol == nil {
+		k.selectedCol = mvvm.NewObservable(0)
+	}
+	return k.selectedCol
+}
+
+// SelectedCard is the highlighted card's index within its column as a shared
+// [mvvm.Observable]: a host binds it (Set / Subscribe / two-way) — there is no
+// settable SelectedCard field. A card click Sets it (paired with SelectedCol);
+// subscribers are notified. A bare &Kanban{} lazily seeds 0 on first access,
+// matching the old zero-value field.
+func (k *Kanban) SelectedCard() *mvvm.Observable[int] {
+	if k.selectedCard == nil {
+		k.selectedCard = mvvm.NewObservable(0)
+	}
+	return k.selectedCard
 }
 
 // KanbanCard is one card in a column: a bold Title over a muted
@@ -129,7 +157,10 @@ const kanbanStripeInset = 6
 // (SelectedCol / SelectedCard both -1), mirroring how NewTable seeds
 // Selected to -1.
 func NewKanban(cols []KanbanColumn) *Kanban {
-	return &Kanban{Columns: cols, SelectedCol: -1, SelectedCard: -1}
+	k := &Kanban{Columns: cols}
+	k.selectedCol = mvvm.NewObservable(-1)
+	k.selectedCard = mvvm.NewObservable(-1)
+	return k
 }
 
 // colWidth is the equal pixel width each column claims: the widget's
@@ -261,9 +292,10 @@ func (k *Kanban) Draw(p painter.Painter, theme *Theme) {
 	// "none" so a stale or unconstructed Selected* never enters the
 	// accent branch for a card that no longer exists.
 	selCol, selCard := -1, -1
-	if k.SelectedCol >= 0 && k.SelectedCol < n &&
-		k.SelectedCard >= 0 && k.SelectedCard < len(k.Columns[k.SelectedCol].Cards) {
-		selCol, selCard = k.SelectedCol, k.SelectedCard
+	sc, scd := k.SelectedCol().Get(), k.SelectedCard().Get()
+	if sc >= 0 && sc < n &&
+		scd >= 0 && scd < len(k.Columns[sc].Cards) {
+		selCol, selCard = sc, scd
 	}
 
 	for i, col := range k.Columns {
@@ -460,7 +492,8 @@ func (k *Kanban) moveCard(fromCol, fromCard, toCol, toIdx int) {
 	copy(dst[toIdx+1:], dst[toIdx:])
 	dst[toIdx] = card
 	k.Columns[toCol].Cards = dst
-	k.SelectedCol, k.SelectedCard = toCol, toIdx
+	k.SelectedCol().Set(toCol)
+	k.SelectedCard().Set(toIdx)
 }
 
 // CardAt maps widget-local (x, y) to the (column, card) it lands on, or
@@ -500,7 +533,8 @@ func (k *Kanban) OnEvent(ev Event) {
 		k.dragging, k.moved = true, false
 		k.dragCol, k.dragCard = col, card
 		k.dragX, k.dragY = ev.X, ev.Y
-		k.SelectedCol, k.SelectedCard = col, card
+		k.SelectedCol().Set(col)
+		k.SelectedCard().Set(card)
 		if k.OnCardClick != nil {
 			k.OnCardClick(col, card)
 		}
@@ -523,7 +557,7 @@ func (k *Kanban) OnEvent(ev Event) {
 		toIdx := k.dropIndexAt(toCol, ev.Y)
 		k.moveCard(fromCol, fromCard, toCol, toIdx)
 		if k.OnCardMove != nil {
-			k.OnCardMove(fromCol, fromCard, toCol, k.SelectedCard)
+			k.OnCardMove(fromCol, fromCard, toCol, k.SelectedCard().Get())
 		}
 	}
 }

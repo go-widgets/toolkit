@@ -54,9 +54,10 @@ func (c *CycleButton) A11y() A11yInfo {
 // mirroring how Draw collapses a stale selection.
 func (k *Kanban) A11y() A11yInfo {
 	v := ""
-	if k.SelectedCol >= 0 && k.SelectedCol < len(k.Columns) &&
-		k.SelectedCard >= 0 && k.SelectedCard < len(k.Columns[k.SelectedCol].Cards) {
-		v = k.Columns[k.SelectedCol].Cards[k.SelectedCard].Title
+	sc, scd := k.SelectedCol().Get(), k.SelectedCard().Get()
+	if sc >= 0 && sc < len(k.Columns) &&
+		scd >= 0 && scd < len(k.Columns[sc].Cards) {
+		v = k.Columns[sc].Cards[scd].Title
 	}
 	return A11yInfo{Role: RoleGroup, Value: v}
 }

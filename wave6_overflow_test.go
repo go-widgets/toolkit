@@ -555,8 +555,8 @@ func TestKanbanColumnScrolls(t *testing.T) {
 	colW := k.colWidth()
 	lr := k.cardLocalRect(0, 2, colW) // card 2 is now the top visible card
 	k.OnEvent(Event{Kind: EventClick, X: lr.X + 2, Y: lr.Y + 2})
-	if clicked != 2 || k.SelectedCard != 2 {
-		t.Fatalf("scrolled click: clicked=%d SelectedCard=%d, want 2", clicked, k.SelectedCard)
+	if clicked != 2 || k.SelectedCard().Get() != 2 {
+		t.Fatalf("scrolled click: clicked=%d SelectedCard=%d, want 2", clicked, k.SelectedCard().Get())
 	}
 	// Draw a scrolled board.
 	k.Draw(newP(makeSurface(300, KanbanHeaderH+1+3*cardSlot), 300), DefaultLight())

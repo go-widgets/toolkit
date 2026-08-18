@@ -40,8 +40,45 @@ func rgbaEq(t *testing.T, img *image.RGBA, x, y int, want RGBA, what string) {
 
 func TestNewKanban(t *testing.T) {
 	k := NewKanban(nil)
-	if k.SelectedCol != -1 || k.SelectedCard != -1 {
-		t.Fatalf("NewKanban seeds: got (%d,%d), want (-1,-1)", k.SelectedCol, k.SelectedCard)
+	if k.SelectedCol().Get() != -1 || k.SelectedCard().Get() != -1 {
+		t.Fatalf("NewKanban seeds: got (%d,%d), want (-1,-1)", k.SelectedCol().Get(), k.SelectedCard().Get())
+	}
+}
+
+// TestKanbanBareAccessors exercises the nil→init lazy path of both selection
+// accessors on a zero-value &Kanban{} (no constructor), and that a host binding
+// via Subscribe on each observable observes the widget's own click mutation.
+func TestKanbanBareAccessors(t *testing.T) {
+	var k Kanban
+	// Nil observables initialise to the zero value on first access.
+	if got := k.SelectedCol().Get(); got != 0 {
+		t.Fatalf("bare SelectedCol().Get() = %d, want 0", got)
+	}
+	if got := k.SelectedCard().Get(); got != 0 {
+		t.Fatalf("bare SelectedCard().Get() = %d, want 0", got)
+	}
+	// Host binds both; the widget's own click Set path notifies on change.
+	gotCol, gotCard := -1, -1
+	k.SelectedCol().Subscribe(func(v int) { gotCol = v })
+	k.SelectedCard().Subscribe(func(v int) { gotCard = v })
+	k.Columns = []KanbanColumn{
+		{Title: "A", Cards: []KanbanCard{{Title: "a0"}}},
+		{Title: "B", Cards: []KanbanCard{{Title: "b0"}, {Title: "b1"}}},
+	}
+	k.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 300})
+	colW := k.colWidth()
+	lr := k.cardLocalRect(1, 1, colW) // column 1 (0->1), card 1 (0->1): both change
+	k.OnEvent(Event{Kind: EventClick, X: lr.X + 3, Y: lr.Y + 3})
+	if k.SelectedCol().Get() != 1 || gotCol != 1 {
+		t.Fatalf("after click: SelectedCol=%d host=%d, want 1/1", k.SelectedCol().Get(), gotCol)
+	}
+	if k.SelectedCard().Get() != 1 || gotCard != 1 {
+		t.Fatalf("after click: SelectedCard=%d host=%d, want 1/1", k.SelectedCard().Get(), gotCard)
+	}
+	// Host drives the selection directly through the observables.
+	k.SelectedCard().Set(0)
+	if gotCard != 0 {
+		t.Fatalf("host Set not observed: host=%d, want 0", gotCard)
 	}
 }
 
@@ -52,7 +89,8 @@ func TestNewKanban(t *testing.T) {
 func TestKanbanRenderPixels(t *testing.T) {
 	theme := DefaultLight()
 	k := sampleBoard()
-	k.SelectedCol, k.SelectedCard = 1, 0 // highlight "Build"
+	k.SelectedCol().Set(1) // highlight "Build"
+	k.SelectedCard().Set(0)
 
 	const w, h = 600, 300
 	img, err := RenderImage(k, w, h, theme)
@@ -103,24 +141,25 @@ func TestKanbanClickSelects(t *testing.T) {
 	// Click inside column 0, card 1.
 	lr := k.cardLocalRect(0, 1, colW)
 	k.OnEvent(Event{Kind: EventClick, X: lr.X + 5, Y: lr.Y + 5})
-	if k.SelectedCol != 0 || k.SelectedCard != 1 {
-		t.Fatalf("selection: got (%d,%d), want (0,1)", k.SelectedCol, k.SelectedCard)
+	if k.SelectedCol().Get() != 0 || k.SelectedCard().Get() != 1 {
+		t.Fatalf("selection: got (%d,%d), want (0,1)", k.SelectedCol().Get(), k.SelectedCard().Get())
 	}
 	if gotCol != 0 || gotCard != 1 {
 		t.Fatalf("OnCardClick: got (%d,%d), want (0,1)", gotCol, gotCard)
 	}
 
 	// Click in the header band (Y within KanbanHeaderH) misses every card.
-	k.SelectedCol, k.SelectedCard = 5, 5
+	k.SelectedCol().Set(5)
+	k.SelectedCard().Set(5)
 	k.OnEvent(Event{Kind: EventClick, X: 10, Y: 2})
-	if k.SelectedCol != 5 || k.SelectedCard != 5 {
-		t.Fatalf("header click mutated selection: (%d,%d)", k.SelectedCol, k.SelectedCard)
+	if k.SelectedCol().Get() != 5 || k.SelectedCard().Get() != 5 {
+		t.Fatalf("header click mutated selection: (%d,%d)", k.SelectedCol().Get(), k.SelectedCard().Get())
 	}
 
 	// A non-click event is ignored entirely.
 	k.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if k.SelectedCol != 5 || k.SelectedCard != 5 {
-		t.Fatalf("non-click event mutated selection: (%d,%d)", k.SelectedCol, k.SelectedCard)
+	if k.SelectedCol().Get() != 5 || k.SelectedCard().Get() != 5 {
+		t.Fatalf("non-click event mutated selection: (%d,%d)", k.SelectedCol().Get(), k.SelectedCard().Get())
 	}
 }
 
@@ -132,8 +171,8 @@ func TestKanbanClickNilCallback(t *testing.T) {
 	colW := (600 - 2*KanbanColGap) / 3
 	lr := k.cardLocalRect(2, 0, colW)
 	k.OnEvent(Event{Kind: EventClick, X: lr.X + 3, Y: lr.Y + 3})
-	if k.SelectedCol != 2 || k.SelectedCard != 0 {
-		t.Fatalf("selection: got (%d,%d), want (2,0)", k.SelectedCol, k.SelectedCard)
+	if k.SelectedCol().Get() != 2 || k.SelectedCard().Get() != 0 {
+		t.Fatalf("selection: got (%d,%d), want (2,0)", k.SelectedCol().Get(), k.SelectedCard().Get())
 	}
 }
 
@@ -143,8 +182,8 @@ func TestKanbanEmptyClick(t *testing.T) {
 	k := NewKanban(nil)
 	k.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	k.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
-	if k.SelectedCol != -1 || k.SelectedCard != -1 {
-		t.Fatalf("empty click mutated selection: (%d,%d)", k.SelectedCol, k.SelectedCard)
+	if k.SelectedCol().Get() != -1 || k.SelectedCard().Get() != -1 {
+		t.Fatalf("empty click mutated selection: (%d,%d)", k.SelectedCol().Get(), k.SelectedCard().Get())
 	}
 }
 

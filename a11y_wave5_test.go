@@ -144,13 +144,15 @@ func TestA11yKanban(t *testing.T) {
 		t.Errorf("Kanban no-selection A11y() = %+v", got)
 	}
 
-	k.SelectedCol, k.SelectedCard = 0, 1
+	k.SelectedCol().Set(0)
+	k.SelectedCard().Set(1)
 	if got := k.A11y(); got != (A11yInfo{Role: RoleGroup, Value: "Ship it"}) {
 		t.Errorf("Kanban selected A11y() = %+v", got)
 	}
 
 	// Out-of-range card index collapses to no highlight.
-	k.SelectedCol, k.SelectedCard = 0, 9
+	k.SelectedCol().Set(0)
+	k.SelectedCard().Set(9)
 	if got := k.A11y(); got != (A11yInfo{Role: RoleGroup, Value: ""}) {
 		t.Errorf("Kanban out-of-range A11y() = %+v", got)
 	}
