@@ -80,7 +80,7 @@ func (b *IconButton) A11y() A11yInfo { return A11yInfo{Role: RoleButton, Name: b
 func (b *SplitButton) A11y() A11yInfo { return A11yInfo{Role: RoleButton, Name: b.Label} }
 
 // A11y reports the SearchEntry as a searchbox carrying its current text.
-func (s *SearchEntry) A11y() A11yInfo { return A11yInfo{Role: RoleSearchbox, Value: s.Text} }
+func (s *SearchEntry) A11y() A11yInfo { return A11yInfo{Role: RoleSearchbox, Value: s.Text().Get()} }
 
 // A11y reports the TextView as a textbox carrying its full buffer text.
 func (t *TextView) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: t.Text()} }
