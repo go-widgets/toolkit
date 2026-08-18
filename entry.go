@@ -47,24 +47,12 @@ type Entry struct {
 // its literal 4, byte-identical to the pre-density field.
 const entryPadX = 4
 
-// hitRectFor clamps a widget's drawn rectangle up to the current density's
-// minimum hit dimension on each axis (via [TouchTarget]) and re-centres the
-// enlarged rect over the original, so the interactive target meets the touch
-// floor without moving or resizing what Draw paints. Under [DensityCompact]
-// TouchTarget is a pass-through, so the returned rect equals r byte-for-byte —
-// the shared engine behind every INPUTS/PICKERS HitRect, mirroring the worked
-// [Switch.HitRect] example.
-func hitRectFor(r Rect) Rect {
-	w, h := TouchTarget(r.W), TouchTarget(r.H)
-	return Rect{X: r.X - (w-r.W)/2, Y: r.Y - (h-r.H)/2, W: w, H: h}
-}
-
 // HitRect is the Entry's interactive tap target: its drawn [Widget.Bounds] with
 // each axis clamped up to the touch minimum and centred, so a single-line field
 // only a glyph-row tall still offers a finger the platform's 44-logical-pixel
 // reach under [DensityTouch]. At [DensityCompact] it equals Bounds byte-for-byte
 // (the clamp is a pass-through), leaving desktop hit-testing unchanged.
-func (e *Entry) HitRect() Rect { return hitRectFor(e.Bounds()) }
+func (e *Entry) HitRect() Rect { return touchHitRect(e.Bounds()) }
 
 // NewEntry builds an Entry with initial text + cursor parked at end.
 func NewEntry(initial string) *Entry {

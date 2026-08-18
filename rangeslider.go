@@ -127,10 +127,10 @@ func (s *RangeSlider) thumbRect(v float64) Rect {
 // each drawn thumb clamped up to the touch minimum on both axes and centred over
 // the knob, so a 16-logical-pixel handle exposes a 44px target under
 // [DensityTouch]. At [DensityCompact] each equals its drawn thumb byte-for-byte.
-func (s *RangeSlider) LowThumbHitRect() Rect { return hitRectFor(s.thumbRect(s.Low)) }
+func (s *RangeSlider) LowThumbHitRect() Rect { return touchHitRect(s.thumbRect(s.Low)) }
 
 // HighThumbHitRect is the finger grab for the High handle; see LowThumbHitRect.
-func (s *RangeSlider) HighThumbHitRect() Rect { return hitRectFor(s.thumbRect(s.High)) }
+func (s *RangeSlider) HighThumbHitRect() Rect { return touchHitRect(s.thumbRect(s.High)) }
 
 // Draw paints the rounded track, the Accent band between the two handles, and
 // a circular white thumb at each handle -- matching Scale's macOS styling.

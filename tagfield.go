@@ -66,7 +66,7 @@ func NewTagField(tags ...string) *TagField {
 // reused Chip (see OnEvent), so their own touch behaviour follows Chip's scaling
 // in lockstep rather than being re-derived here — keeping the token pills and
 // their hit rects consistent with a standalone Chip at every density.
-func (t *TagField) HitRect() Rect { return hitRectFor(t.Bounds()) }
+func (t *TagField) HitRect() Rect { return touchHitRect(t.Bounds()) }
 
 // chipWidth is the auto-sized width a closable Chip carrying tag would
 // take -- the same formula Chip.Draw uses (text + horizontal pads +

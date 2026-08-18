@@ -56,7 +56,7 @@ const (
 // HitRect is the ColorChooser field's tap target: Bounds clamped up to the touch
 // minimum on each axis and centred. Byte-identical to Bounds at
 // [DensityCompact].
-func (c *ColorChooser) HitRect() Rect { return hitRectFor(c.Bounds()) }
+func (c *ColorChooser) HitRect() Rect { return touchHitRect(c.Bounds()) }
 
 // NewColorChooser builds a chooser starting at initial. Alpha is
 // forced to 0xFF so a freshly-constructed chooser always reads as

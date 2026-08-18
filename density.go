@@ -128,3 +128,18 @@ func (s *Switch) HitRect() Rect {
 		H: h,
 	}
 }
+
+// touchHitRect is the generic form of the [Switch.HitRect] worked example and
+// the single seam every widget's HitRect routes through: it clamps a drawn
+// rectangle UP to the current density hit-target on each axis (via
+// [TouchTarget]) and centres the (possibly larger) hit rect over the unchanged
+// input. Under the default [DensityCompact] the minimum is 0, so TouchTarget is
+// a pass-through and the returned rect equals r byte-for-byte; under
+// [DensityTouch] a small control grows a finger-sized hit area around its
+// unchanged pixels. Sharing this one helper across the CONTROLS/CHROME and
+// INPUTS/PICKERS families keeps the clamp+centre rule from ever drifting between
+// widgets. Only the hit region grows — Draw is never involved.
+func touchHitRect(r Rect) Rect {
+	w, h := TouchTarget(r.W), TouchTarget(r.H)
+	return Rect{X: r.X - (w-r.W)/2, Y: r.Y - (h-r.H)/2, W: w, H: h}
+}
