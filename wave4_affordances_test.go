@@ -432,7 +432,7 @@ func TestRangeSliderTieBreakByDirection(t *testing.T) {
 	}
 	// The stacked thumbs' shared centre coordinate (widget-local).
 	ref := mk()
-	centre := ref.thumbPos(ref.Low) - 0 + scaleThumbSize/2
+	centre := ref.thumbPos(ref.Low().Get()) - 0 + scaleThumbSize/2
 
 	// A press to the RIGHT of the stack grabs High and pulls it open rightward.
 	right := mk()
@@ -440,8 +440,8 @@ func TestRangeSliderTieBreakByDirection(t *testing.T) {
 	if right.active != 2 {
 		t.Fatalf("right press grabbed handle %d, want 2 (High)", right.active)
 	}
-	if !(right.High > right.Low) {
-		t.Fatalf("right press did not open High: Low=%v High=%v", right.Low, right.High)
+	if !(right.High().Get() > right.Low().Get()) {
+		t.Fatalf("right press did not open High: Low=%v High=%v", right.Low().Get(), right.High().Get())
 	}
 
 	// A press to the LEFT of the stack grabs Low and pulls it open leftward.
@@ -450,8 +450,8 @@ func TestRangeSliderTieBreakByDirection(t *testing.T) {
 	if left.active != 1 {
 		t.Fatalf("left press grabbed handle %d, want 1 (Low)", left.active)
 	}
-	if !(left.Low < left.High) {
-		t.Fatalf("left press did not open Low: Low=%v High=%v", left.Low, left.High)
+	if !(left.Low().Get() < left.High().Get()) {
+		t.Fatalf("left press did not open Low: Low=%v High=%v", left.Low().Get(), left.High().Get())
 	}
 }
 
