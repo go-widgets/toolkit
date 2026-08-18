@@ -33,9 +33,23 @@ func SetMetricScale(f float64) {
 func MetricScale() float64 { return metricScale }
 
 // scaled rounds a base (logical-pixel) metric to device pixels at the current
-// scale. It is the single seam every widget's pixel constant passes through, so
-// scaling stays consistent across the toolkit.
-func scaled(v int) int { return int(float64(v)*metricScale + 0.5) }
+// HiDPI scale AND touch density. It is the single seam every widget's pixel
+// constant passes through, so both HiDPI ([MetricScale]) and density
+// ([Density]) re-size the whole toolkit from one place, without any widget
+// changing its own code. The two compose multiplicatively:
+//
+//	device = round(base × metricScale × densityFactor(density))
+//
+// Under the default [DensityCompact] the factor is exactly 1.0, so this reduces
+// to the pure HiDPI form and every metric is byte-identical to a density-less
+// toolkit.
+func scaled(v int) int { return int(float64(v)*metricScale*densityFactor(density) + 0.5) }
+
+// dpiScaled rounds a base (logical-pixel) length to device pixels at the current
+// HiDPI [MetricScale] ONLY — it does NOT apply the touch [Density] factor. It
+// backs [MinHitTarget], whose floor is an absolute reachability guarantee in
+// logical pixels that must grow with panel DPI but not with spacing density.
+func dpiScaled(v int) int { return int(float64(v)*metricScale + 0.5) }
 
 // Scaled is the exported form of [scaled]: it rounds a base (logical-pixel)
 // metric to device pixels at the current [MetricScale]. Sibling packages that
