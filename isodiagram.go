@@ -163,7 +163,16 @@ type IsoDiagram struct {
 	// clip is the widget-internal clipboard populated by Copy/Cut and consumed by
 	// Paste/Duplicate — a private model, not the system clipboard.
 	clip isoClip
-	seq  int // monotonic id source for placed nodes/connectors/zones/texts
+	// placeIcon is the "armed" palette icon id: while non-empty, a plain tap on
+	// empty ground drops a node carrying this icon instead of a bare default node
+	// (the click-to-place companion of the drag-and-drop path). It is an
+	// mvvm.Observable so the selection crosses the palette/diagram boundary the
+	// MVVM way — a host binds an [IsoIconPalette]'s selected-icon observable into
+	// it — instead of the widget copying an id out every frame. "" (the zero
+	// value) disarms placement, so a diagram no host ever arms behaves exactly as
+	// it did before the palette existed.
+	placeIcon *mvvm.Observable[string]
+	seq       int // monotonic id source for placed nodes/connectors/zones/texts
 
 	// interaction state
 	gesture     isoGesture
@@ -219,16 +228,20 @@ func NewIsoDiagram(doc IsoDocument) *IsoDiagram {
 		doc = NewIsoDoc()
 	}
 	d := &IsoDiagram{
-		Cols:    10,
-		Rows:    10,
-		doc:     doc,
-		proj:    iso.NewDefault(geometry.Pt(0, 0)),
-		menu:    NewContextMenu(NewMenu(nil)),
-		selConn: mvvm.NewObservable(""),
-		selZone: mvvm.NewObservable(""),
-		selText: mvvm.NewObservable(""),
-		selSet:  mvvm.NewObservableList[IsoEntityRef](),
+		Cols:      10,
+		Rows:      10,
+		doc:       doc,
+		proj:      iso.NewDefault(geometry.Pt(0, 0)),
+		menu:      NewContextMenu(NewMenu(nil)),
+		selConn:   mvvm.NewObservable(""),
+		selZone:   mvvm.NewObservable(""),
+		selText:   mvvm.NewObservable(""),
+		selSet:    mvvm.NewObservableList[IsoEntityRef](),
+		placeIcon: mvvm.NewObservable(""),
 	}
+	// Arming (or disarming) the click-to-place icon only changes the placement
+	// cursor's intent; a repaint keeps any host-drawn affordance in step.
+	d.placeIcon.Subscribe(func(string) { d.invalidate() })
 	// Any change to the multi-selection repaints, so a purely additive selection
 	// (one that does not move the last-of-kind the mono channels reflect) still
 	// invalidates.
@@ -1064,14 +1077,20 @@ func (d *IsoDiagram) nextID(prefix string) string {
 	}
 }
 
-// placeAt places a new node of the default shape at grid cell (gx, gy), selects
-// it and returns its id. It does not snapshot — the caller wraps it in an edit.
-func (d *IsoDiagram) placeAt(gx, gy int) string {
+// placeIconAt places a new node of the default shape carrying icon id icon at
+// grid cell (gx, gy), selects it and returns its id. An empty icon leaves the
+// node drawing as its bare shape — so [IsoDiagram.placeAt] is exactly this with
+// no icon. It does not snapshot — the caller wraps it in an edit.
+func (d *IsoDiagram) placeIconAt(gx, gy int, icon string) string {
 	id := d.nextID("n")
-	d.doc.PutNode(IsoNode{ID: id, X: gx, Y: gy, Shape: d.DefaultShape})
+	d.doc.PutNode(IsoNode{ID: id, X: gx, Y: gy, Shape: d.DefaultShape, Icon: icon})
 	d.setSelected(id)
 	return id
 }
+
+// placeAt places a new bare (icon-less) node at grid cell (gx, gy); see
+// [IsoDiagram.placeIconAt].
+func (d *IsoDiagram) placeAt(gx, gy int) string { return d.placeIconAt(gx, gy, "") }
 
 // commitPlace is placeAt as a standalone undoable command.
 func (d *IsoDiagram) commitPlace(gx, gy int) string {
@@ -1080,6 +1099,32 @@ func (d *IsoDiagram) commitPlace(gx, gy int) string {
 	d.invalidate()
 	return id
 }
+
+// commitPlaceIcon is placeIconAt as a standalone undoable command: it drops a
+// node carrying icon icon at cell (gx, gy) in one snapshot, so a single Undo
+// removes it. It is the shared placement step behind both the drag-and-drop drop
+// ([IsoDiagram.onDrop]) and the click-to-place tap ([IsoDiagram.onRelease]).
+func (d *IsoDiagram) commitPlaceIcon(gx, gy int, icon string) string {
+	d.beginEdit()
+	id := d.placeIconAt(gx, gy, icon)
+	d.invalidate()
+	return id
+}
+
+// PlacementIconObservable exposes the armed click-to-place icon id so a host can
+// bind an [IsoIconPalette]'s selected-icon observable straight into it: once
+// bound, picking an icon in the palette arms the diagram, and the next tap on
+// empty ground drops a node carrying that icon. Binding is the MVVM alternative
+// to the drag-and-drop path for hosts whose back-end has no inter-widget drag.
+func (d *IsoDiagram) PlacementIconObservable() *mvvm.Observable[string] { return d.placeIcon }
+
+// PlacementIcon returns the armed click-to-place icon id, or "" when placement is
+// disarmed.
+func (d *IsoDiagram) PlacementIcon() string { return d.placeIcon.Get() }
+
+// SetPlacementIcon arms (or, with "", disarms) the click-to-place icon — the
+// setter counterpart of [IsoDiagram.PlacementIconObservable].
+func (d *IsoDiagram) SetPlacementIcon(id string) { d.placeIcon.Set(id) }
 
 // commitDelete removes a node (and its connectors) as an undoable command,
 // clearing the selection if it was selected.
@@ -1350,7 +1395,31 @@ func (d *IsoDiagram) OnEvent(ev Event) {
 		d.ZoomAt(f, ev.X, ev.Y)
 	case EventKeyDown:
 		d.onKey(ev)
+	case EventDrop:
+		d.onDrop(ev)
 	}
+}
+
+// AcceptsDrop makes the diagram a [DropTarget] for icon drops from an
+// [IsoIconPalette]: it accepts exactly the payloads [DecodeIsoIconPayload]
+// recognises (an "iso-icon:<id>" item, possibly among several newline-separated
+// ones), so a host shows the accept cursor over the canvas only for a real icon
+// drag and never for an unrelated payload.
+func (d *IsoDiagram) AcceptsDrop(payload string) bool {
+	_, ok := DecodeIsoIconPayload(payload)
+	return ok
+}
+
+// onDrop places a node carrying the dropped icon at the ground cell under the
+// drop point, as one undoable edit. A payload that carries no icon id (a foreign
+// drag that reached the canvas anyway) drops nothing.
+func (d *IsoDiagram) onDrop(ev Event) {
+	icon, ok := DecodeIsoIconPayload(ev.Code)
+	if !ok {
+		return
+	}
+	gx, gy := d.cellAtLocal(ev.X, ev.Y)
+	d.commitPlaceIcon(gx, gy, icon)
 }
 
 // onPress starts a gesture from a button press.
@@ -1542,7 +1611,11 @@ func (d *IsoDiagram) onRelease(ev Event) {
 	case isoGesturePan:
 		if !d.moved {
 			gx, gy := d.cellAtLocal(d.pressX, d.pressY)
-			d.commitPlace(gx, gy)
+			if icon := d.placeIcon.Get(); icon != "" {
+				d.commitPlaceIcon(gx, gy, icon)
+			} else {
+				d.commitPlace(gx, gy)
+			}
 		}
 	case isoGestureZoneCreate:
 		gx0, gy0 := d.cellAtLocal(d.pressX, d.pressY)
