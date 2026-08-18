@@ -6,6 +6,7 @@ package toolkit
 
 import (
 	"bytes"
+	"strings"
 	"testing"
 )
 
@@ -126,6 +127,9 @@ func TestTextViewLineNumberGutter(t *testing.T) {
 	// Gutter OFF: 'h' of "hello" paints at textX=4.
 	off := NewTextView("hello\nworld")
 	off.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	if off.gutterWidth() != 0 {
+		t.Fatalf("gutter-off: gutterWidth = %d, want 0", off.gutterWidth())
+	}
 	bufOff := makeSurface(w, h)
 	off.Draw(newP(bufOff, w), theme)
 	if !scanHasColor(bufOff, w, 4, 4, 4+GlyphAdvance(), 4+GlyphHeight(), theme.OnSurface) {
@@ -139,8 +143,8 @@ func TestTextViewLineNumberGutter(t *testing.T) {
 	bufOn := makeSurface(w, h)
 	on.Draw(newP(bufOn, w), theme)
 
-	gutterW := TextWidth("2") + 8 // widest number is "2"
-	textX := 4 + gutterW
+	gutterW := on.gutterWidth() // padded, metric-scaled: padL + numbersWidth + padR
+	textX := gutterW            // text begins right after the gutter's right padding
 	// The number ink (dimInk) is painted somewhere in the gutter column.
 	if !scanHasColor(bufOn, w, 0, 4, gutterW, 4+GlyphHeight(), dimInk(theme)) {
 		t.Fatal("gutter-on: line number not painted in the gutter")
@@ -148,6 +152,15 @@ func TestTextViewLineNumberGutter(t *testing.T) {
 	// The text now starts at textX, not at the legacy x=4.
 	if !scanHasColor(bufOn, w, textX, 4, textX+GlyphAdvance(), 4+GlyphHeight(), theme.OnSurface) {
 		t.Fatal("gutter-on: text not shifted right by the gutter width")
+	}
+	// Breathing room: no number ink flush at the very left edge, and clear
+	// Surface between the numbers column and the text (left + right padding).
+	if scanHasColor(bufOn, w, 0, 4, 1, 4+GlyphHeight(), dimInk(theme)) {
+		t.Fatal("gutter-on: number ink flush against the left edge (no left padding)")
+	}
+	numsRight := on.gutterPadL() + on.numbersWidth()
+	if !scanHasColor(bufOn, w, numsRight, 4, textX, 4+GlyphHeight(), theme.Surface) {
+		t.Fatal("gutter-on: no right padding between the numbers and the text")
 	}
 
 	// Caret math accounts for the gutter: a focused, cursored view
@@ -159,9 +172,45 @@ func TestTextViewLineNumberGutter(t *testing.T) {
 	cur.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	bufCur := makeSurface(w, h)
 	cur.Draw(newP(bufCur, w), theme)
-	caretX := 4 + (TextWidth("1") + 8) + 2*GlyphAdvance()
+	caretX := cur.gutterWidth() + 2*GlyphAdvance()
 	if pixelAt(bufCur, w, caretX, 10) != theme.OnSurface {
 		t.Fatalf("caret not at gutter-offset x=%d", caretX)
+	}
+}
+
+// Line numbers are RIGHT-justified within the gutter: a 1-digit number sits
+// further right than the 2-digit numbers it shares the column with — the
+// left part of the column (where a 2-digit number's first glyph lands) is
+// blank on the 1-digit row.
+func TestTextViewLineNumbersRightJustified(t *testing.T) {
+	const w, h = 160, 240
+	theme := DefaultLight()
+	lines := make([]string, 12) // last line "12" is 2 digits, so numbersWidth = width("12")
+	for i := range lines {
+		lines[i] = "x"
+	}
+	v := NewTextView(strings.Join(lines, "\n"))
+	v.ShowLineNumbers = true
+	v.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	buf := makeSurface(w, h)
+	v.Draw(newP(buf, w), theme)
+
+	lineH := GlyphHeight() + 4
+	rowY := func(i int) int { return 4 + i*lineH } // line i's glyph top
+	// Column split: [padL, indentEnd) is where a 1-digit number is NOT drawn
+	// (it's pushed right); [indentEnd, padL+numbersWidth) holds the single digit.
+	indentEnd := v.gutterPadL() + v.numbersWidth() - TextWidth("1")
+
+	// Row 0 ("1", 1 digit): the indent region is blank, the digit sits to its right.
+	if scanHasColor(buf, w, v.gutterPadL(), rowY(0), indentEnd, rowY(0)+GlyphHeight(), dimInk(theme)) {
+		t.Fatal(`"1" is not right-justified: ink found in the left indent region`)
+	}
+	if !scanHasColor(buf, w, indentEnd, rowY(0), v.gutterPadL()+v.numbersWidth(), rowY(0)+GlyphHeight(), dimInk(theme)) {
+		t.Fatal(`"1" digit not painted in the right part of the numbers column`)
+	}
+	// Row 11 ("12", 2 digits): fills the whole numbers column, incl. the indent region.
+	if !scanHasColor(buf, w, v.gutterPadL(), rowY(11), indentEnd, rowY(11)+GlyphHeight(), dimInk(theme)) {
+		t.Fatal(`"12" should occupy the left of the numbers column (2-digit width)`)
 	}
 }
 
