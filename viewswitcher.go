@@ -4,12 +4,15 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // ViewSwitcher is a libadwaita/GTK-style horizontal segmented tab
 // picker: an evenly-divided strip of same-width segments where
 // exactly one is highlighted as the active view. Clicking a segment
-// swaps Current and fires OnChange with the new index.
+// swaps the active view, notifying the Current Observable's subscribers.
 //
 // The strip's background is Theme.SurfaceAlt; the active segment
 // paints in Theme.Accent with the accent-inverted ink
@@ -25,9 +28,22 @@ import "github.com/go-widgets/painter"
 type ViewSwitcher struct {
 	Base
 	focusState
-	Views    []string
-	Current  int
-	OnChange func(i int)
+	// Views is the segment titles (config). The reactive selection is MVVM-only:
+	// the active index lives in an unexported Observable exposed via
+	// [ViewSwitcher.Current].
+	Views []string
+
+	current *mvvm.Observable[int]
+}
+
+// Current is the active segment index as a shared [mvvm.Observable]: a host binds
+// it (Set / Subscribe / two-way) — there is no settable Current field. A click or
+// a key move Sets it; subscribers are notified.
+func (v *ViewSwitcher) Current() *mvvm.Observable[int] {
+	if v.current == nil {
+		v.current = mvvm.NewObservable(0)
+	}
+	return v.current
 }
 
 // Sizing constants for the strip's default vertical extent and its
@@ -67,7 +83,9 @@ func NewViewSwitcher(views []string, current int) *ViewSwitcher {
 	} else if current >= n {
 		current = n - 1
 	}
-	return &ViewSwitcher{Views: views, Current: current}
+	v := &ViewSwitcher{Views: views}
+	v.current = mvvm.NewObservable(current)
+	return v
 }
 
 // Draw paints the strip background, then each segment with the
@@ -81,11 +99,12 @@ func (v *ViewSwitcher) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
 	n := len(v.Views)
 	if n > 0 {
+		cur := v.Current().Get()
 		segW := r.W / n
 		for i, title := range v.Views {
 			sx := r.X + i*segW
 			ink := theme.OnSurface
-			if i == v.Current {
+			if i == cur {
 				fillRect(p, sx, r.Y, segW, r.H, theme.Accent)
 				ink = accentInk(theme)
 			}
@@ -102,7 +121,7 @@ func (v *ViewSwitcher) Draw(p painter.Painter, theme *Theme) {
 }
 
 // OnEvent handles a click by locating which segment the X coordinate
-// lands on and updating Current + firing OnChange. Non-click events,
+// lands on and Setting the Current Observable. Non-click events,
 // clicks with an empty Views slice, clicks on a zero-width strip and
 // clicks that fall outside every segment are all no-ops.
 func (v *ViewSwitcher) OnEvent(ev Event) {
@@ -110,8 +129,9 @@ func (v *ViewSwitcher) OnEvent(ev Event) {
 		if v.Disabled {
 			return
 		}
-		// Left/Right (or Up/Down) move the active segment, wrapping, firing
-		// OnChange -- the segmented-tablist keyboard convention.
+		// Left/Right (or Up/Down) move the active segment, wrapping, notifying the
+		// Current Observable's subscribers -- the segmented-tablist keyboard
+		// convention.
 		switch ev.Code {
 		case "ArrowLeft", "ArrowUp":
 			v.step(-1)
@@ -139,23 +159,21 @@ func (v *ViewSwitcher) OnEvent(ev Event) {
 	v.setCurrent(idx)
 }
 
-// setCurrent selects segment idx and fires OnChange (nil-safe) -- the shared
-// mutate+callback path for a click and a keyboard move.
+// setCurrent selects segment idx by Setting the Current Observable -- the shared
+// mutate path for a click and a keyboard move. Subscribers are notified on change
+// (an unchanged value is a no-op, per mvvm.Observable).
 func (v *ViewSwitcher) setCurrent(idx int) {
-	v.Current = idx
-	if v.OnChange != nil {
-		v.OnChange(idx)
-	}
+	v.Current().Set(idx)
 }
 
-// step moves Current delta segments, wrapping at both ends, and fires OnChange.
-// A no-op when there are no views.
+// step moves the active segment delta positions, wrapping at both ends, and
+// notifies the Current Observable's subscribers. A no-op when there are no views.
 func (v *ViewSwitcher) step(delta int) {
 	n := len(v.Views)
 	if n == 0 {
 		return
 	}
-	cur := v.Current
+	cur := v.Current().Get()
 	if cur < 0 || cur >= n {
 		cur = 0
 	}

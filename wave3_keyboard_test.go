@@ -641,31 +641,31 @@ func TestNotebookKeyMovesTab(t *testing.T) {
 func TestViewSwitcherKeyMovesSegment(t *testing.T) {
 	changed := -1
 	v := &ViewSwitcher{Views: []string{"A", "B", "C"}}
-	v.OnChange = func(i int) { changed = i }
+	v.Current().Subscribe(func(i int) { changed = i })
 	v.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 30})
 	v.OnEvent(kd("ArrowRight")) // 0 -> 1
-	if v.Current != 1 || changed != 1 {
-		t.Fatalf("ArrowRight: Current=%d cb=%d", v.Current, changed)
+	if v.Current().Get() != 1 || changed != 1 {
+		t.Fatalf("ArrowRight: Current=%d cb=%d", v.Current().Get(), changed)
 	}
 	v.OnEvent(kd("ArrowLeft")) // 1 -> 0
 	v.OnEvent(kd("ArrowLeft")) // 0 -> 2 (wrap)
-	if v.Current != 2 {
-		t.Fatalf("ArrowLeft wrap: Current=%d", v.Current)
+	if v.Current().Get() != 2 {
+		t.Fatalf("ArrowLeft wrap: Current=%d", v.Current().Get())
 	}
 	v.Disabled = true
 	v.OnEvent(kd("ArrowRight"))
-	if v.Current != 2 {
-		t.Fatalf("disabled view switcher moved (Current=%d)", v.Current)
+	if v.Current().Get() != 2 {
+		t.Fatalf("disabled view switcher moved (Current=%d)", v.Current().Get())
 	}
 	v.Disabled = false
-	v.Current = 99 // out of range -> treated as 0
+	v.Current().Set(99) // out of range -> treated as 0
 	v.OnEvent(kd("ArrowRight"))
-	if v.Current != 1 {
-		t.Fatalf("out-of-range Current step: Current=%d", v.Current)
+	if v.Current().Get() != 1 {
+		t.Fatalf("out-of-range Current step: Current=%d", v.Current().Get())
 	}
 	(&ViewSwitcher{}).OnEvent(kd("ArrowRight")) // empty, no panic
 	vn := &ViewSwitcher{Views: []string{"A", "B"}}
-	vn.OnEvent(kd("ArrowRight"))                  // nil OnChange safe
+	vn.OnEvent(kd("ArrowRight"))                  // no subscriber safe
 	vn.OnEvent(Event{Kind: EventChar, Code: "a"}) // non-click/keydown ignored
 }
 
