@@ -17,4 +17,12 @@ require github.com/go-widgets/mvvm v0.5.0
 
 require github.com/go-images/images v0.0.0-20260811115337-bc5d586f8e38
 
-require github.com/go-gfx/gfx v0.6.0
+require (
+	github.com/go-gfx/gfx v0.6.0
+	github.com/go-iconoir/iconoir v0.2.0
+)
+
+require (
+	golang.org/x/image v0.45.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
+)
