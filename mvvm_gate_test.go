@@ -100,6 +100,12 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Stat":      {"Title": true},
 	"Sparkline": {"Values": true, "Kind": true, "Fill": true, "ShowLast": true},
 	"Tooltip":   {"Text": true, "Placement": true},
+	// CodeMinimap is draw-only chrome: its buffer/spans/top/visible are per-paint
+	// snapshots fed through Update (not settable widget state), so it holds no
+	// reactive state at all. Its only exported field, OnScrollToLine, is a func
+	// hook (auto-allowed), so the empty config set enforces that no imperative
+	// state field is ever added.
+	"CodeMinimap": {},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
