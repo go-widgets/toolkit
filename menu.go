@@ -431,8 +431,72 @@ func (m *Menu) OnEvent(ev Event) {
 		// menu already fits (maxScroll == 0).
 		m.scrollBy(ev.Delta * m.rowH())
 	case EventClick:
-		m.activate(m.rowAt(ev.Y))
+		m.activate(m.hitRow(ev.Y))
 	}
+}
+
+// hitRow resolves a widget-local Y coordinate to the index of the row a click at
+// that Y would ACT ON: the row under y when it is an enabled row (in range, not a
+// separator, carrying an Action or a Submenu), else -1. It is the single
+// row-resolution path an EventClick drives — activate(hitRow(y)) — and the exact
+// query [Menu.RowAt] answers, so an external click-router and this widget's own
+// click handling can never resolve a point to different rows. It composes
+// [Menu.rowAt] (which already folds in the scroll offset, [Menu.scale] and the
+// touch [Density]) with [Menu.enabledItem]; passing -1 on to activate is a no-op,
+// so routing the click through it is behaviour-preserving.
+func (m *Menu) hitRow(y int) int {
+	idx := m.rowAt(y)
+	if !m.enabledItem(idx) {
+		return -1
+	}
+	return idx
+}
+
+// RowAt reports the index of the menu entry under the widget-local point (x, y)
+// — the SAME coordinate space [Menu.OnEvent] receives — that a click there would
+// activate, or -1 when the point is outside the menu's bounds, over a separator,
+// or over a disabled (no Action and no Submenu) row. In other words it returns
+// EXACTLY the rows OnEvent acts on: a compositor that paints the menu and routes
+// its own clicks can ask "which row is under this point" instead of mirroring
+// [MenuRowH], the body top pad, separator heights, the scroll offset and the
+// scale/density factors — which drift out of sync when those change.
+//
+// It shares its row resolution with the click path through [Menu.hitRow], so the
+// answer can never diverge from what a click actually does; the x/y bounds guard
+// ([Base.localInBounds]) is the only part specific to this query, mirroring the
+// bounds check a host performs before forwarding a click. It does NOT recurse
+// into an open submenu (a separate overlay the host positions and routes on its
+// own); the index is always into this menu's own [Menu.Items].
+func (m *Menu) RowAt(x, y int) int {
+	if !m.localInBounds(x, y) {
+		return -1
+	}
+	return m.hitRow(y)
+}
+
+// RowTop returns the widget-local top Y of row i — the Y at which its band begins
+// in the same coordinate space [Menu.RowAt] takes and [Menu.OnEvent] receives,
+// i.e. with the current scroll offset already applied (so it is negative for a
+// row scrolled above the fold). It is the exact top [Menu.Draw] paints the row
+// at. Panic-free for any i: an i past the last row returns the body's bottom edge
+// and a negative i the top inset, matching the internal geometry.
+func (m *Menu) RowTop(i int) int {
+	return m.rowTop(i) - m.clampedScroll()
+}
+
+// RowHeight returns the pixel height of row i in the current scale and touch
+// density: [Menu.rowH] for a normal row, the scaled [MenuSeparatorH] for a
+// separator, or -1 when i is out of range. Paired with [Menu.RowTop] it gives a
+// host the full row band [RowTop(i), RowTop(i)+RowHeight(i)) without re-deriving
+// the metrics.
+func (m *Menu) RowHeight(i int) int {
+	if i < 0 || i >= len(m.Items) {
+		return -1
+	}
+	if m.Items[i].Separator {
+		return m.sc(MenuSeparatorH)
+	}
+	return m.rowH()
 }
 
 // activate handles row idx's activation -- the single path a click and an
