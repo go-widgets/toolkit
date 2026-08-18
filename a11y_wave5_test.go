@@ -98,7 +98,7 @@ func TestA11yComboBoxTagFieldTimePicker(t *testing.T) {
 
 func TestA11yCycleButton(t *testing.T) {
 	cb := NewCycleButton("Low", "Medium", "High")
-	cb.Index = 2
+	cb.Index().Set(2)
 	if got := cb.A11y(); got != (A11yInfo{Role: RoleButton, Name: "High"}) {
 		t.Errorf("CycleButton in-range A11y() = %+v", got)
 	}

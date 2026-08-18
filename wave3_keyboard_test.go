@@ -224,23 +224,23 @@ func TestRadioGroupMoveCheckedEmptyMembers(t *testing.T) {
 func TestCycleButtonKeySteps(t *testing.T) {
 	c := NewCycleButton("List", "Grid", "Compact")
 	var idx int
-	c.OnChange = func(i int, v string) { idx = i }
+	c.Index().Subscribe(func(i int) { idx = i })
 	c.OnEvent(kd("ArrowRight")) // 0 -> 1
 	c.OnEvent(kd(" "))          // 1 -> 2
 	c.OnEvent(kd("Enter"))      // 2 -> 0 (wrap)
-	if c.Index != 0 || idx != 0 {
-		t.Fatalf("advance wrap: Index=%d cb=%d", c.Index, idx)
+	if c.Index().Get() != 0 || idx != 0 {
+		t.Fatalf("advance wrap: Index=%d sub=%d", c.Index().Get(), idx)
 	}
 	c.OnEvent(kd("ArrowLeft")) // 0 -> 2 (wrap back)
-	if c.Index != 2 || idx != 2 {
-		t.Fatalf("ArrowLeft wrap: Index=%d cb=%d", c.Index, idx)
+	if c.Index().Get() != 2 || idx != 2 {
+		t.Fatalf("ArrowLeft wrap: Index=%d sub=%d", c.Index().Get(), idx)
 	}
 	c.Disabled = true
 	c.OnEvent(kd("ArrowRight"))
-	if c.Index != 2 {
-		t.Fatalf("disabled cycle advanced (Index=%d)", c.Index)
+	if c.Index().Get() != 2 {
+		t.Fatalf("disabled cycle advanced (Index=%d)", c.Index().Get())
 	}
-	NewCycleButton("a", "b").OnEvent(kd("ArrowRight")) // nil OnChange safe
+	NewCycleButton("a", "b").OnEvent(kd("ArrowRight")) // no subscriber safe
 }
 
 // --- Scale ---------------------------------------------------------------
