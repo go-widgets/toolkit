@@ -65,6 +65,32 @@ func (s *Scale) SetValue(v float64) {
 	s.Value = v
 }
 
+// thumbRect returns the thumb's drawn rectangle for the current Value, computed
+// exactly as Draw places it (a scaled square centred across the track, its
+// travel offset by pos along the active axis). ThumbHitRect derives the finger
+// grab from it, so the grab always sits on the painted knob.
+func (s *Scale) thumbRect() Rect {
+	r := s.Bounds()
+	sz := scaled(scaleThumbSize)
+	var pos float64
+	if s.Max > s.Min {
+		pos = (s.Value - s.Min) / (s.Max - s.Min)
+	}
+	if s.Orientation == Vertical {
+		ty := r.Y + int((1-pos)*float64(r.H-sz))
+		return Rect{X: r.X + (r.W-sz)/2, Y: ty, W: sz, H: sz}
+	}
+	tx := r.X + int(pos*float64(r.W-sz))
+	return Rect{X: tx, Y: r.Y + (r.H-sz)/2, W: sz, H: sz}
+}
+
+// ThumbHitRect is the finger grab for the slider knob: the drawn thumb rectangle
+// clamped up to the touch minimum on each axis and centred over it. A knob only
+// scaleThumbSize (16 logical px) across otherwise offers a 24px target under
+// [DensityTouch]; this lifts it to the 44px floor without changing the painted
+// thumb. At [DensityCompact] it equals the drawn thumb byte-for-byte.
+func (s *Scale) ThumbHitRect() Rect { return hitRectFor(s.thumbRect()) }
+
 // Draw paints a macOS-style slider: a rounded track whose filled portion (up
 // to the thumb) is Accent and whose remainder is SurfaceAlt, with a circular
 // white thumb -- matching the Switch's pill track + circular knob.

@@ -60,6 +60,14 @@ func NewTagField(tags ...string) *TagField {
 	return &TagField{Tags: tags}
 }
 
+// HitRect is the TagField's field-level tap target: Bounds clamped up to the
+// touch minimum on each axis and centred, byte-identical to Bounds at
+// [DensityCompact]. The per-token close "x" slots are drawn and hit-tested by the
+// reused Chip (see OnEvent), so their own touch behaviour follows Chip's scaling
+// in lockstep rather than being re-derived here — keeping the token pills and
+// their hit rects consistent with a standalone Chip at every density.
+func (t *TagField) HitRect() Rect { return hitRectFor(t.Bounds()) }
+
 // chipWidth is the auto-sized width a closable Chip carrying tag would
 // take -- the same formula Chip.Draw uses (text + horizontal pads +
 // close gap + close slot), measured in this widget's effective font so

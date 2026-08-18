@@ -62,20 +62,24 @@ func NewSearchEntry(text string) *SearchEntry {
 // Text, and (when Text is non-empty) the trailing clear affordance.
 func (s *SearchEntry) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
+	// SearchEntryPadX / SearchEntryIconW are LOGICAL bases; routed through scaled
+	// so the prefix/clear slots grow with HiDPI and touch Density. At compact/1x
+	// scaled is identity, so the layout is byte-identical to before.
+	padX, iconW := scaled(SearchEntryPadX), scaled(SearchEntryIconW)
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	textY := r.Y + (r.H-s.glyphHeight())/2
 	// Left prefix slot: a host-supplied Icon (real magnifier) when set,
 	// otherwise the "?" bitmap-font stand-in.
 	if s.Icon != nil {
-		iconR := Rect{X: r.X + SearchEntryPadX, Y: r.Y, W: SearchEntryIconW, H: r.H}
+		iconR := Rect{X: r.X + padX, Y: r.Y, W: iconW, H: r.H}
 		s.Icon(p, iconR, theme.OnSurface)
 	} else {
-		prefixX := r.X + SearchEntryPadX + (SearchEntryIconW-s.glyphAdvance())/2
+		prefixX := r.X + padX + (iconW-s.glyphAdvance())/2
 		s.drawText(p, prefixX, textY, searchEntryPrefix, theme.OnSurface)
 	}
 	// Middle text.
-	textX := r.X + SearchEntryPadX + SearchEntryIconW
+	textX := r.X + padX + iconW
 	s.drawText(p, textX, textY, s.Text, theme.OnSurface)
 	// Caret at the end of the text when focused. Measured with the widget's own
 	// font so it always aligns with the text the widget just drew — a host must not
@@ -89,11 +93,32 @@ func (s *SearchEntry) Draw(p painter.Painter, theme *Theme) {
 	}
 	// Right clear slot only when there is text to clear.
 	if s.Text != "" {
-		clearX := r.X + r.W - SearchEntryPadX - SearchEntryIconW + (SearchEntryIconW-s.glyphAdvance())/2
+		clearX := r.X + r.W - padX - iconW + (iconW-s.glyphAdvance())/2
 		s.drawText(p, clearX, textY, searchEntryClear, theme.Border)
 	}
 	s.drawFocusRing(p, theme, r)
 }
+
+// clearSlot is the drawn rectangle of the trailing "clear" affordance in
+// absolute coordinates — the right-edge icon slot, iconW wide and the full field
+// height. Shared by ClearHitRect so the touch grab is derived from exactly the
+// slot Draw paints.
+func (s *SearchEntry) clearSlot() Rect {
+	r := s.Bounds()
+	padX, iconW := scaled(SearchEntryPadX), scaled(SearchEntryIconW)
+	return Rect{X: r.X + r.W - padX - iconW, Y: r.Y, W: iconW, H: r.H}
+}
+
+// HitRect is the SearchEntry's field-level tap target: Bounds clamped up to the
+// touch minimum on each axis and centred. Byte-identical to Bounds at
+// [DensityCompact].
+func (s *SearchEntry) HitRect() Rect { return hitRectFor(s.Bounds()) }
+
+// ClearHitRect is the finger target for the trailing "clear" affordance: the
+// drawn clear slot clamped up to the touch minimum on each axis and centred over
+// it, so the narrow 16-logical-pixel glyph still exposes a 44px grab under
+// [DensityTouch]. At [DensityCompact] it equals the drawn slot byte-for-byte.
+func (s *SearchEntry) ClearHitRect() Rect { return hitRectFor(s.clearSlot()) }
 
 // OnEvent handles character insertion (EventChar), Backspace deletion
 // (EventKeyDown / "Backspace"), and click-to-clear in the right icon
@@ -121,8 +146,9 @@ func (s *SearchEntry) OnEvent(ev Event) {
 			return
 		}
 		r := s.Bounds()
-		clearLeft := r.W - SearchEntryPadX - SearchEntryIconW
-		clearRight := r.W - SearchEntryPadX
+		padX, iconW := scaled(SearchEntryPadX), scaled(SearchEntryIconW)
+		clearLeft := r.W - padX - iconW
+		clearRight := r.W - padX
 		if ev.X >= clearLeft && ev.X < clearRight {
 			s.Text = ""
 			s.fireChange()

@@ -133,16 +133,35 @@ func (c *ComboBox) scrollHighlightIntoView() {
 	c.popScroll = c.clampedPopScroll()
 }
 
-// comboRowH is the pixel height of one option row in the popover, matching the
-// 18px row used by DropDown.PopoverBounds.
+// comboRowH is the LOGICAL height of one option row in the popover, matching the
+// 18px row used by DropDown.PopoverBounds. Consumed through [ComboBox.rowH] so
+// the picker cells scale with HiDPI and touch Density.
 const comboRowH = 18
+
+// rowH is the device-pixel height of one popover option row: comboRowH routed
+// through scaled, so PopoverBounds, Draw and the click hit-test all agree on one
+// scaled cell height. At compact/1x it is the literal comboRowH (byte-identical).
+func (c *ComboBox) rowH() int { return scaled(comboRowH) }
+
+// comboPadX is the left inset for the field text (and the placeholder/caret),
+// scaled at use; comboChevronInset is the chevron's distance from the right
+// edge. Both are LOGICAL bases, identity at compact/1x.
+const (
+	comboPadX         = 4
+	comboChevronInset = 10
+)
+
+// HitRect is the ComboBox field's tap/toggle target: Bounds clamped up to the
+// touch minimum on each axis and centred, byte-identical to Bounds at
+// [DensityCompact].
+func (c *ComboBox) HitRect() Rect { return hitRectFor(c.Bounds()) }
 
 // PopoverBounds returns the Rect the filtered list occupies below the field:
 // same X and W as the field, height proportional to the visible option count.
 // Mirrors DropDown.PopoverBounds / DatePicker.PopoverBounds.
 func (c *ComboBox) PopoverBounds() Rect {
 	r := c.Bounds()
-	return Rect{X: r.X, Y: r.Y + r.H, W: r.W, H: len(c.visible()) * comboRowH}
+	return Rect{X: r.X, Y: r.Y + r.H, W: r.W, H: len(c.visible()) * c.rowH()}
 }
 
 // Draw paints the field (rounded border, Text or muted Placeholder, an
@@ -163,17 +182,18 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
 	textY := r.Y + (r.H-c.glyphHeight())/2
+	pad := scaled(comboPadX)
 	if c.Text == "" && c.Placeholder != "" {
-		c.drawText(p, r.X+4, textY, c.Placeholder, placeholderInk)
+		c.drawText(p, r.X+pad, textY, c.Placeholder, placeholderInk)
 	} else {
-		c.drawText(p, r.X+4, textY, c.Text, ink)
+		c.drawText(p, r.X+pad, textY, c.Text, ink)
 	}
 	// Caret at the end of the typed text, measured through the effective font so
 	// it lands correctly under a proportional / CJK face (mirrors Entry).
-	cx := r.X + 4 + c.textWidth(c.Text)
+	cx := r.X + pad + c.textWidth(c.Text)
 	fillRect(p, cx, textY-1, 1, c.glyphHeight()+2, ink)
 	// ▼ chevron on the right edge, drawn exactly like DropDown's.
-	cvx := r.X + r.W - 10
+	cvx := r.X + r.W - scaled(comboChevronInset)
 	cvy := r.Y + r.H/2
 	for t := 0; t < 4; t++ {
 		fillRect(p, cvx-t, cvy+2-t, 1+2*t, 1, ink)
@@ -183,15 +203,16 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Surface)
 		hi := c.highlightRow()
 		start := c.clampedPopScroll()
+		rowH := c.rowH()
 		for i, opt := range c.visible() {
-			rowY := pb.Y + i*comboRowH
+			rowY := pb.Y + i*rowH
 			if start+i == hi {
 				// Highlighted row gets a SurfaceAlt band; the border is stroked
 				// afterwards so the popover outline stays crisp over it.
-				fillRect(p, pb.X, rowY, pb.W, comboRowH, theme.SurfaceAlt)
+				fillRect(p, pb.X, rowY, pb.W, rowH, theme.SurfaceAlt)
 			}
-			oy := rowY + (comboRowH-c.glyphHeight())/2
-			c.drawText(p, pb.X+4, oy, opt, theme.OnSurface)
+			oy := rowY + (rowH-c.glyphHeight())/2
+			c.drawText(p, pb.X+scaled(comboPadX), oy, opt, theme.OnSurface)
 		}
 		strokeRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Border)
 	}
@@ -214,9 +235,9 @@ func (c *ComboBox) OnEvent(ev Event) {
 			lx := ev.X - (pb.X - r.X)
 			ly := ev.Y - (pb.Y - r.Y)
 			if lx >= 0 && lx < pb.W && ly >= 0 && ly < pb.H {
-				// ly < pb.H == len(visible)*comboRowH guarantees the row index
+				// ly < pb.H == len(visible)*rowH guarantees the row index
 				// is in range, so no extra bounds check is needed.
-				c.selectOption(c.visible()[ly/comboRowH])
+				c.selectOption(c.visible()[ly/c.rowH()])
 				return
 			}
 		}

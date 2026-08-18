@@ -35,6 +35,29 @@ const (
 	ColorChooserChannelPadY = 4
 )
 
+// Interior sizing bases in LOGICAL pixels, routed through scaled at use so the
+// track, knob, swatch and captions grow with HiDPI and touch Density; identity
+// at compact/1x. colorChooserLabelGutter is consumed by BOTH Draw and the click
+// hit-test (setChannelFromX) so a scrub lands on the same value it paints.
+const (
+	colorChooserLabelGutter = 12 // gap between the R/G/B label and its track
+	colorChooserTrackThick  = 4  // slider groove thickness
+	colorChooserKnobW       = 3  // channel knob width
+	colorChooserKnobH       = 10 // channel knob height
+	colorChooserKnobRise    = 3  // knob overhang above the groove
+	colorChooserSwatchW     = 40 // preview swatch width
+	colorChooserSwatchInset = 48 // swatch distance from the right edge
+	colorChooserSwatchPadY  = 8  // swatch top inset
+	colorChooserLabelPadX   = 2  // R/G/B label left inset
+	colorChooserHexPad      = 4  // hex caption right inset
+	colorChooserHexGap      = 2  // gap under the swatch before the hex caption
+)
+
+// HitRect is the ColorChooser field's tap target: Bounds clamped up to the touch
+// minimum on each axis and centred. Byte-identical to Bounds at
+// [DensityCompact].
+func (c *ColorChooser) HitRect() Rect { return hitRectFor(c.Bounds()) }
+
 // NewColorChooser builds a chooser starting at initial. Alpha is
 // forced to 0xFF so a freshly-constructed chooser always reads as
 // fully-opaque.
@@ -53,33 +76,37 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 
 	// 3 channel tracks.
 	channelW := r.W - 2*scaled(ColorChooserPadX)
+	gutter := scaled(colorChooserLabelGutter)
+	trackThick := scaled(colorChooserTrackThick)
+	knobW, knobH, knobRise := scaled(colorChooserKnobW), scaled(colorChooserKnobH), scaled(colorChooserKnobRise)
 	for i, ch := range [3]string{"R", "G", "B"} {
 		y := r.Y + scaled(ColorChooserChannelPadY) + i*scaled(ColorChooserChannelH)
-		labelX := r.X + 2
+		labelX := r.X + scaled(colorChooserLabelPadX)
 		c.drawText(p, labelX, y+(scaled(ColorChooserChannelH)-c.glyphHeight())/2, ch, theme.OnSurface)
-		trackX := r.X + scaled(ColorChooserPadX) + 12
-		trackY := y + scaled(ColorChooserChannelH)/2 - 2
-		trackW := channelW - 12
-		fillRect(p, trackX, trackY, trackW, 4, theme.SurfaceAlt)
-		strokeRect(p, trackX, trackY, trackW, 4, theme.Border)
+		trackX := r.X + scaled(ColorChooserPadX) + gutter
+		trackY := y + scaled(ColorChooserChannelH)/2 - trackThick/2
+		trackW := channelW - gutter
+		fillRect(p, trackX, trackY, trackW, trackThick, theme.SurfaceAlt)
+		strokeRect(p, trackX, trackY, trackW, trackThick, theme.Border)
 		v := int(c.channel(i))
 		knobX := trackX + v*trackW/255
-		fillRect(p, knobX-1, trackY-3, 3, 10, theme.Accent)
+		fillRect(p, knobX-knobW/2, trackY-knobRise, knobW, knobH, theme.Accent)
 	}
 	// Preview swatch in the right margin (centred on the chooser body).
-	previewX := r.X + r.W - 48
-	previewY := r.Y + 8
-	fillRect(p, previewX, previewY, 40, scaled(ColorChooserPreviewH), c.Color)
-	strokeRect(p, previewX, previewY, 40, scaled(ColorChooserPreviewH), theme.Border)
+	swatchW := scaled(colorChooserSwatchW)
+	previewX := r.X + r.W - scaled(colorChooserSwatchInset)
+	previewY := r.Y + scaled(colorChooserSwatchPadY)
+	fillRect(p, previewX, previewY, swatchW, scaled(ColorChooserPreviewH), c.Color)
+	strokeRect(p, previewX, previewY, swatchW, scaled(ColorChooserPreviewH), theme.Border)
 	// Hex string under the swatch, right-aligned to the widget's edge so a
 	// 7-char "#RRGGBB" — wider than the 40px swatch — never spills past the
 	// right border (clamped so it also never runs off the left).
 	hex := c.Hex()
-	hexX := r.X + r.W - c.textWidth(hex) - 4
-	if hexX < r.X+2 {
-		hexX = r.X + 2
+	hexX := r.X + r.W - c.textWidth(hex) - scaled(colorChooserHexPad)
+	if hexX < r.X+scaled(colorChooserLabelPadX) {
+		hexX = r.X + scaled(colorChooserLabelPadX)
 	}
-	c.drawText(p, hexX, previewY+scaled(ColorChooserPreviewH)+2, hex, theme.OnSurface)
+	c.drawText(p, hexX, previewY+scaled(ColorChooserPreviewH)+scaled(colorChooserHexGap), hex, theme.OnSurface)
 }
 
 // OnEvent moves a channel knob by press + drag. An EventClick on a track grabs
@@ -131,9 +158,10 @@ func (c *ColorChooser) channelAt(y int, r Rect) int {
 // fires OnChange. Shared by the click and drag arms so a press and a scrub land
 // on identical values for the same x.
 func (c *ColorChooser) setChannelFromX(i, x int, r Rect) {
-	trackX := scaled(ColorChooserPadX) + 12
+	gutter := scaled(colorChooserLabelGutter)
+	trackX := scaled(ColorChooserPadX) + gutter
 	channelW := r.W - 2*scaled(ColorChooserPadX)
-	trackW := channelW - 12
+	trackW := channelW - gutter
 	switch {
 	case x < trackX:
 		c.setChannel(i, 0)

@@ -23,8 +23,26 @@ type DatePicker struct {
 	OnChange func(y, m, d int)
 }
 
-// DatePickerFieldH is the pixel height of the closed field.
-func DatePickerFieldH() int { return GlyphHeight() + 10 }
+// datePicker layout bases in LOGICAL pixels, routed through scaled at use so the
+// field and its grid-icon grow with HiDPI and touch Density; identity at
+// compact/1x.
+const (
+	datePickerFieldPadY = 10 // total vertical padding around the field's glyph row
+	datePickerPadX      = 6  // left inset for the date text
+	datePickerGridGap   = 4  // gap rows inside the popover (below weekday row / grid)
+	datePickerIconInset = 14 // grid icon's distance from the right edge
+	datePickerIconW     = 10 // grid icon body width
+	datePickerIconH     = 8  // grid icon body height
+)
+
+// DatePickerFieldH is the pixel height of the closed field: a glyph row plus a
+// scaled vertical padding, so the field grows with HiDPI and touch density.
+func DatePickerFieldH() int { return GlyphHeight() + scaled(datePickerFieldPadY) }
+
+// HitRect is the DatePicker field's tap/toggle target: Bounds clamped up to the
+// touch minimum on each axis and centred. Byte-identical to Bounds at
+// [DensityCompact].
+func (dp *DatePicker) HitRect() Rect { return hitRectFor(dp.Bounds()) }
 
 // NewDatePicker builds a DatePicker initialised to (year, month, day).
 func NewDatePicker(year, month, day int) *DatePicker {
@@ -55,8 +73,12 @@ func (dp *DatePicker) Text() string {
 // calendar width below the field. Six week-rows is the worst case.
 func (dp *DatePicker) PopoverBounds() Rect {
 	r := dp.Bounds()
-	h := CalendarHeaderH + dp.glyphHeight() + 4 + 6*CalendarCellH + 4
-	return Rect{X: r.X, Y: r.Y + r.H, W: 7 * CalendarCellW, H: h}
+	// The calendar cell/header sizes belong to Calendar (calendar.go); routed
+	// through scaled here so the popover the DatePicker sizes matches the scaled
+	// month grid Calendar draws into it. Identity at compact/1x.
+	gap := scaled(datePickerGridGap)
+	h := scaled(CalendarHeaderH) + dp.glyphHeight() + gap + 6*scaled(CalendarCellH) + gap
+	return Rect{X: r.X, Y: r.Y + r.H, W: 7 * scaled(CalendarCellW), H: h}
 }
 
 // Draw paints the field (border + date text + a grid icon) and, when Open, the
@@ -66,7 +88,7 @@ func (dp *DatePicker) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	textY := r.Y + (r.H-dp.glyphHeight())/2
-	dp.drawText(p, r.X+6, textY, dp.Text(), theme.OnSurface)
+	dp.drawText(p, r.X+scaled(datePickerPadX), textY, dp.Text(), theme.OnSurface)
 	dp.drawIcon(p, r, theme)
 	if dp.Open {
 		dp.Cal.SetBounds(dp.PopoverBounds())
@@ -76,14 +98,16 @@ func (dp *DatePicker) Draw(p painter.Painter, theme *Theme) {
 
 // drawIcon paints a tiny 2x2 calendar-grid glyph at the field's right edge.
 func (dp *DatePicker) drawIcon(p painter.Painter, r Rect, theme *Theme) {
-	ix := r.X + r.W - 14
-	iy := r.Y + (r.H-8)/2
-	strokeRect(p, ix, iy, 10, 8, theme.OnSurface)
-	fillRect(p, ix, iy, 10, 2, theme.Accent) // header band
+	iconW, iconH := scaled(datePickerIconW), scaled(datePickerIconH)
+	unit := scaled(2)
+	ix := r.X + r.W - scaled(datePickerIconInset)
+	iy := r.Y + (r.H-iconH)/2
+	strokeRect(p, ix, iy, iconW, iconH, theme.OnSurface)
+	fillRect(p, ix, iy, iconW, unit, theme.Accent) // header band
 	// two-column grid of day dots below the band
 	for row := 0; row < 2; row++ {
 		for col := 0; col < 2; col++ {
-			fillRect(p, ix+2+col*4, iy+4+row*2, 2, 1, theme.OnSurface)
+			fillRect(p, ix+unit+col*scaled(4), iy+scaled(4)+row*unit, unit, scaled(1), theme.OnSurface)
 		}
 	}
 }

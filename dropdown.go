@@ -75,18 +75,36 @@ func (d *DropDown) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
 	strokeRect(p, r.X, r.Y, r.W, r.H, border)
 	textY := r.Y + (r.H-d.glyphHeight())/2
-	d.drawText(p, r.X+6, textY, d.Current(), ink)
+	d.drawText(p, r.X+scaled(dropdownPadX), textY, d.Current(), ink)
 	// ▼ chevron on the right edge to signal a drop-down. The wide base
 	// sits on the top row and rows narrow moving down to the point,
 	// so at t=0 the 1-pixel-wide tip lands at cy+2 and at t=3 the 7-
 	// pixel-wide base lands at cy-1.
-	cx := r.X + r.W - 10
+	cx := r.X + r.W - scaled(dropdownChevronInset)
 	cy := r.Y + r.H/2
 	for t := 0; t < 4; t++ {
 		fillRect(p, cx-t, cy+2-t, 1+2*t, 1, ink)
 	}
 	d.drawFocusRing(p, theme, r)
 }
+
+// dropdownPadX is the field-text left inset and dropdownChevronInset the
+// chevron's distance from the right edge — LOGICAL bases routed through scaled,
+// identity at compact/1x.
+const (
+	dropdownPadX         = 6
+	dropdownChevronInset = 10
+)
+
+// rowH is the device-pixel height of one popover option row: PopoverRowH routed
+// through scaled, so PopoverBounds and PopoverClick agree on one scaled cell
+// height. Identity at compact/1x.
+func (d *DropDown) rowH() int { return scaled(PopoverRowH) }
+
+// HitRect is the DropDown's tap/toggle target: Bounds clamped up to the touch
+// minimum on each axis and centred. Byte-identical to Bounds at
+// [DensityCompact].
+func (d *DropDown) HitRect() Rect { return hitRectFor(d.Bounds()) }
 
 // OnEvent toggles Open on click. Selection happens via Select() which
 // the host wires to its popover ListBox's OnActivate. A Disabled dropdown
@@ -170,7 +188,7 @@ func (d *DropDown) PopoverBounds() Rect {
 		rows = PopoverMaxRows
 	}
 	r := d.Bounds()
-	h := rows * PopoverRowH
+	h := rows * d.rowH()
 	y := r.Y + r.H
 	if d.OpenUp {
 		y = r.Y - h
@@ -264,7 +282,7 @@ func (d *DropDown) PopoverClick(x, y int) bool {
 		// Map the click's row within the visible window back to an absolute
 		// option index through the scroll offset, so a click after scrolling
 		// selects the right option. Select clamps an out-of-range index.
-		d.Select(d.clampedPopScroll() + (y-pb.Y)/PopoverRowH)
+		d.Select(d.clampedPopScroll() + (y-pb.Y)/d.rowH())
 	} else {
 		d.Open = false
 	}

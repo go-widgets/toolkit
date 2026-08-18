@@ -6,11 +6,15 @@ package toolkit
 
 import "github.com/go-widgets/painter"
 
+// formFieldLabelPad is the LOGICAL breathing space under the label glyph row,
+// scaled at use; identity at compact/1x.
+const formFieldLabelPad = 2
+
 // FormFieldLabelH is the height in pixels of the label row drawn at
-// the top of a FormField. One glyph row plus 2px of breathing space
+// the top of a FormField. One glyph row plus a scaled 2px of breathing space
 // keeps the label snug against the input beneath it without touching
-// the glyph's descender pixels.
-func FormFieldLabelH() int { return GlyphHeight() + 2 }
+// the glyph's descender pixels, and grows with HiDPI / touch density.
+func FormFieldLabelH() int { return GlyphHeight() + scaled(formFieldLabelPad) }
 
 // FormFieldChildGap is the vertical gap in pixels between the bottom
 // of the label row and the top of the composed Child widget.
@@ -77,20 +81,22 @@ func NewFormField(label string, child Widget) *FormField {
 // constants. Extracted so Draw and OnEvent agree on the same layout.
 func (f *FormField) childRect() Rect {
 	r := f.Bounds()
+	padY := scaled(FormFieldPadY)
+	padX := scaled(FormFieldPadX)
 	captionH := 0
 	if f.Error != "" || f.Help != "" {
-		captionH = f.glyphHeight() + FormFieldHelpGap
+		captionH = f.glyphHeight() + scaled(FormFieldHelpGap)
 	}
-	top := r.Y + FormFieldPadY + FormFieldLabelH() + FormFieldChildGap
-	bottom := r.Y + r.H - FormFieldPadY - captionH
+	top := r.Y + padY + FormFieldLabelH() + scaled(FormFieldChildGap)
+	bottom := r.Y + r.H - padY - captionH
 	h := bottom - top
 	if h < 0 {
 		h = 0
 	}
 	return Rect{
-		X: r.X + FormFieldPadX,
+		X: r.X + padX,
 		Y: top,
-		W: r.W - 2*FormFieldPadX,
+		W: r.W - 2*padX,
 		H: h,
 	}
 }
@@ -99,8 +105,9 @@ func (f *FormField) childRect() Rect {
 // nil), and paints the caption row (Error > Help > nothing).
 func (f *FormField) Draw(p painter.Painter, theme *Theme) {
 	r := f.Bounds()
+	padX := scaled(FormFieldPadX)
 	// Label at the top in OnBackground (form sits on Background).
-	f.drawText(p, r.X+FormFieldPadX, r.Y+FormFieldPadY, f.Label, theme.OnBackground)
+	f.drawText(p, r.X+padX, r.Y+scaled(FormFieldPadY), f.Label, theme.OnBackground)
 	// Child in the middle strip.
 	cr := f.childRect()
 	if f.Child != nil {
@@ -108,13 +115,13 @@ func (f *FormField) Draw(p painter.Painter, theme *Theme) {
 		f.Child.Draw(p, theme)
 	}
 	// Caption row: Error > Help > nothing.
-	captionY := cr.Y + cr.H + FormFieldHelpGap
+	captionY := cr.Y + cr.H + scaled(FormFieldHelpGap)
 	if f.Error != "" {
-		f.drawText(p, r.X+FormFieldPadX, captionY, f.Error, formFieldErrorInk)
+		f.drawText(p, r.X+padX, captionY, f.Error, formFieldErrorInk)
 		return
 	}
 	if f.Help != "" {
-		f.drawText(p, r.X+FormFieldPadX, captionY, f.Help, theme.Border)
+		f.drawText(p, r.X+padX, captionY, f.Help, theme.Border)
 	}
 }
 

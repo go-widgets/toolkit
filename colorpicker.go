@@ -198,10 +198,27 @@ func (c *ColorPicker) hueRectLocal() Rect {
 	return Rect{X: scaled(ColorPickerSquareSize) + scaled(ColorPickerGap), Y: 0, W: scaled(ColorPickerHueStripW), H: scaled(ColorPickerSquareSize)}
 }
 
-// alphaRectLocal is the horizontal alpha slider beneath the square + strip.
+// alphaRectLocal is the horizontal alpha slider beneath the square + strip. Its
+// width is the combined SCALED span of the square, gap and hue strip so its right
+// edge lines up with the hue strip at every scale — the raw ColorPickerWidth
+// constant used here before stayed 146 device pixels while everything above it
+// doubled, leaving the slider short on HiDPI / touch. At compact/1x the scaled
+// sum is exactly ColorPickerWidth, so the layout is byte-identical.
 func (c *ColorPicker) alphaRectLocal() Rect {
-	return Rect{X: 0, Y: scaled(ColorPickerSquareSize) + scaled(ColorPickerGap), W: ColorPickerWidth, H: scaled(ColorPickerAlphaH)}
+	return Rect{
+		X: 0,
+		Y: scaled(ColorPickerSquareSize) + scaled(ColorPickerGap),
+		W: scaled(ColorPickerSquareSize) + scaled(ColorPickerGap) + scaled(ColorPickerHueStripW),
+		H: scaled(ColorPickerAlphaH),
+	}
 }
+
+// EyedropHitRect is the finger target for the eyedropper button, in the same
+// widget-local frame OnEvent hit-tests: the drawn button clamped up to the touch
+// minimum on each axis and centred over it, so the 20-logical-pixel chip reaches
+// the 44px floor under [DensityTouch]. At [DensityCompact] it equals the drawn
+// button byte-for-byte.
+func (c *ColorPicker) EyedropHitRect() Rect { return hitRectFor(c.eyedropRectLocal()) }
 
 // swatchRectLocal is the solid preview swatch, bottom-left.
 func (c *ColorPicker) swatchRectLocal() Rect {
@@ -280,7 +297,7 @@ func (c *ColorPicker) drawHueStrip(p painter.Painter, r Rect) {
 // exactly as it would over any other content.
 func (c *ColorPicker) drawAlphaSlider(p painter.Painter, r Rect, theme *Theme) {
 	ar := c.alphaRectLocal()
-	const cell = 6
+	cell := scaled(6)
 	light := RGB(0xFF, 0xFF, 0xFF)
 	dark := RGB(0xC0, 0xC0, 0xC0)
 	for y := 0; y < ar.H; y++ {
@@ -317,16 +334,17 @@ func (c *ColorPicker) drawSwatch(p painter.Painter, r Rect, theme *Theme) {
 // "pipette" glyph.
 func (c *ColorPicker) drawEyedrop(p painter.Painter, r Rect, theme *Theme) {
 	ed := c.eyedropRectLocal()
-	fillRoundRect(p, r.X+ed.X, r.Y+ed.Y, ed.W, ed.H, 4, theme.SurfaceAlt)
-	strokeRoundRect(p, r.X+ed.X, r.Y+ed.Y, ed.W, ed.H, 4, theme.Border)
-	drawLine(p, r.X+ed.X+4, r.Y+ed.Y+ed.H-4, r.X+ed.X+ed.W-4, r.Y+ed.Y+4, theme.OnSurface)
+	rad := scaled(4)
+	fillRoundRect(p, r.X+ed.X, r.Y+ed.Y, ed.W, ed.H, rad, theme.SurfaceAlt)
+	strokeRoundRect(p, r.X+ed.X, r.Y+ed.Y, ed.W, ed.H, rad, theme.Border)
+	drawLine(p, r.X+ed.X+rad, r.Y+ed.Y+ed.H-rad, r.X+ed.X+ed.W-rad, r.Y+ed.Y+rad, theme.OnSurface)
 }
 
 // drawPickerMarker paints a small white ring with a black halo centred at
 // (cx, cy) -- readable against any hue/value the SV square or hue strip can
 // show.
 func drawPickerMarker(p painter.Painter, cx, cy int) {
-	const rad = 4
+	rad := scaled(4)
 	strokeRoundRect(p, cx-rad-1, cy-rad-1, rad*2+2, rad*2+2, rad+1, RGB(0, 0, 0))
 	strokeRoundRect(p, cx-rad, cy-rad, rad*2, rad*2, rad, RGB(255, 255, 255))
 }
