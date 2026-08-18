@@ -4,20 +4,21 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // ColorChooser is a 3-channel R/G/B picker with a live preview. Each
 // channel is rendered as a horizontal track with a 1-pixel knob the
-// user drags to change the value. The OnChange callback fires with
-// the new RGBA whenever any channel moves.
+// user drags to change the value.
 //
-// The widget owns the RGBA value; the host reads .Color() to get the
-// current pick + may also stash a hex string via SetHex if there is
-// a sibling Entry the user can type into.
+// The reactive colour is MVVM-only: it lives in an unexported [mvvm.Observable]
+// exposed via [ColorChooser.Color] — a host binds it (Set / Subscribe / two-way)
+// rather than reading a plain field or registering a change callback. A swatch
+// scrub or a SetHex edit Sets the Observable, notifying subscribers.
 type ColorChooser struct {
 	Base
-	Color    RGBA
-	OnChange func(c RGBA)
 
 	// active is the channel grabbed by the current press/drag as a 1-based
 	// index (0 = none, 1 = R, 2 = G, 3 = B). Set on the EventClick that lands
@@ -25,6 +26,19 @@ type ColorChooser struct {
 	// its channel even after the pointer leaves the row, and cleared on
 	// EventMouseUp -- mirroring ColorPicker.active.
 	active int
+
+	color *mvvm.Observable[RGBA]
+}
+
+// Color is the current pick as a shared [mvvm.Observable]: a host binds it
+// (Set / Subscribe / two-way) — there is no settable Color field. A channel
+// scrub or a SetHex edit Sets it, notifying subscribers. A bare &ColorChooser{}
+// lazily initialises the Observable to the zero RGBA on first access.
+func (c *ColorChooser) Color() *mvvm.Observable[RGBA] {
+	if c.color == nil {
+		c.color = mvvm.NewObservable(RGBA{})
+	}
+	return c.color
 }
 
 // Sizing.
@@ -65,7 +79,9 @@ func NewColorChooser(initial RGBA) *ColorChooser {
 	if initial.A == 0 {
 		initial.A = 0xFF
 	}
-	return &ColorChooser{Color: initial}
+	c := &ColorChooser{}
+	c.color = mvvm.NewObservable(initial)
+	return c
 }
 
 // Draw paints the 3 sliders + preview swatch + hex label.
@@ -96,7 +112,7 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 	swatchW := scaled(colorChooserSwatchW)
 	previewX := r.X + r.W - scaled(colorChooserSwatchInset)
 	previewY := r.Y + scaled(colorChooserSwatchPadY)
-	fillRect(p, previewX, previewY, swatchW, scaled(ColorChooserPreviewH), c.Color)
+	fillRect(p, previewX, previewY, swatchW, scaled(ColorChooserPreviewH), c.Color().Get())
 	strokeRect(p, previewX, previewY, swatchW, scaled(ColorChooserPreviewH), theme.Border)
 	// Hex string under the swatch, right-aligned to the widget's edge so a
 	// 7-char "#RRGGBB" — wider than the 40px swatch — never spills past the
@@ -155,8 +171,8 @@ func (c *ColorChooser) channelAt(y int, r Rect) int {
 
 // setChannelFromX maps a widget-local x to channel i's value (clamped to the
 // track's ends, mirroring Draw's knobX = trackX + v*trackW/255 placement) and
-// fires OnChange. Shared by the click and drag arms so a press and a scrub land
-// on identical values for the same x.
+// Sets the Color Observable. Shared by the click and drag arms so a press and a
+// scrub land on identical values for the same x.
 func (c *ColorChooser) setChannelFromX(i, x int, r Rect) {
 	gutter := scaled(colorChooserLabelGutter)
 	trackX := scaled(ColorChooserPadX) + gutter
@@ -170,45 +186,48 @@ func (c *ColorChooser) setChannelFromX(i, x int, r Rect) {
 	default:
 		c.setChannel(i, uint8((x-trackX)*255/trackW))
 	}
-	if c.OnChange != nil {
-		c.OnChange(c.Color)
-	}
 }
 
 // channel returns channel i (0=R, 1=G, 2=B).
 func (c *ColorChooser) channel(i int) uint8 {
+	col := c.Color().Get()
 	switch i {
 	case 0:
-		return c.Color.R
+		return col.R
 	case 1:
-		return c.Color.G
+		return col.G
 	case 2:
-		return c.Color.B
+		return col.B
 	}
 	return 0
 }
 
+// setChannel rewrites channel i of the current colour and Sets the Observable,
+// notifying subscribers on change.
 func (c *ColorChooser) setChannel(i int, v uint8) {
+	col := c.Color().Get()
 	switch i {
 	case 0:
-		c.Color.R = v
+		col.R = v
 	case 1:
-		c.Color.G = v
+		col.G = v
 	case 2:
-		c.Color.B = v
+		col.B = v
 	}
+	c.Color().Set(col)
 }
 
 // Hex returns the color as "#RRGGBB".
 func (c *ColorChooser) Hex() string {
+	col := c.Color().Get()
 	digits := "0123456789ABCDEF"
 	b := []byte{'#', 0, 0, 0, 0, 0, 0}
-	b[1] = digits[c.Color.R>>4]
-	b[2] = digits[c.Color.R&0x0F]
-	b[3] = digits[c.Color.G>>4]
-	b[4] = digits[c.Color.G&0x0F]
-	b[5] = digits[c.Color.B>>4]
-	b[6] = digits[c.Color.B&0x0F]
+	b[1] = digits[col.R>>4]
+	b[2] = digits[col.R&0x0F]
+	b[3] = digits[col.G>>4]
+	b[4] = digits[col.G&0x0F]
+	b[5] = digits[col.B>>4]
+	b[6] = digits[col.B&0x0F]
 	return string(b)
 }
 
@@ -228,10 +247,7 @@ func (c *ColorChooser) SetHex(s string) {
 	if !ok1 || !ok2 || !ok3 {
 		return
 	}
-	c.Color = RGBA{R: r, G: g, B: b, A: 0xFF}
-	if c.OnChange != nil {
-		c.OnChange(c.Color)
-	}
+	c.Color().Set(RGBA{R: r, G: g, B: b, A: 0xFF})
 }
 
 func hex2(hi, lo byte) (uint8, bool) {

@@ -444,15 +444,33 @@ func TestColorChooserDraw(t *testing.T) {
 
 func TestColorChooserNewForcesAlpha(t *testing.T) {
 	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0})
-	if cc.Color.A != 0xFF {
-		t.Fatalf("alpha must be forced to 0xFF, got %d", cc.Color.A)
+	if cc.Color().Get().A != 0xFF {
+		t.Fatalf("alpha must be forced to 0xFF, got %d", cc.Color().Get().A)
+	}
+}
+
+// TestColorChooserZeroValueAccessor covers the lazy-init arm of the Color
+// accessor: a bare &ColorChooser{} has a nil observable until Color() is called,
+// which initialises it to the zero RGBA, and a host may bind it before any pick.
+func TestColorChooserZeroValueAccessor(t *testing.T) {
+	cc := &ColorChooser{}
+	if got := cc.Color().Get(); got != (RGBA{}) {
+		t.Fatalf("bare ColorChooser Color must be zero RGBA, got %v", got)
+	}
+	var bound RGBA
+	cc.Color().Subscribe(func(c RGBA) { bound = c })
+	cc.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
+	// A scrub on the R track pushes to the bound host through the Observable.
+	cc.OnEvent(Event{Kind: EventClick, X: 999, Y: ColorChooserChannelPadY + 2})
+	if bound.R != 255 {
+		t.Fatalf("host bind must see R=255 after right-click, got %d", bound.R)
 	}
 }
 
 func TestColorChooserClick(t *testing.T) {
 	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	got := uint8(0)
-	cc.OnChange = func(c RGBA) { got = c.R }
+	cc.Color().Subscribe(func(c RGBA) { got = c.R })
 	cc.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
 	// Click the R track far right.
 	cc.OnEvent(Event{Kind: EventClick, X: 999, Y: ColorChooserChannelPadY + 2})
@@ -462,17 +480,17 @@ func TestColorChooserClick(t *testing.T) {
 	// Click the R track far left.
 	cc.OnEvent(Event{Kind: EventClick, X: -10, Y: ColorChooserChannelPadY + 2})
 	// Out-of-bounds horizontal still inside the channel row: clamps to 0.
-	if cc.Color.R != 255 && cc.Color.R != 0 {
-		t.Fatalf("R after left-click should be 0 or 255 (clamped), got %d", cc.Color.R)
+	if r := cc.Color().Get().R; r != 255 && r != 0 {
+		t.Fatalf("R after left-click should be 0 or 255 (clamped), got %d", r)
 	}
 	// Click middle of G track.
 	cc.OnEvent(Event{Kind: EventClick, X: 100, Y: ColorChooserChannelPadY + ColorChooserChannelH + 2})
-	if cc.Color.G == 0 {
+	if cc.Color().Get().G == 0 {
 		t.Fatal("G should change after middle click")
 	}
 	// Click middle of B track.
 	cc.OnEvent(Event{Kind: EventClick, X: 100, Y: ColorChooserChannelPadY + 2*ColorChooserChannelH + 2})
-	if cc.Color.B == 0 {
+	if cc.Color().Get().B == 0 {
 		t.Fatal("B should change after middle click")
 	}
 }
@@ -487,16 +505,10 @@ func TestColorChooserClickOutsideBounds(t *testing.T) {
 	cc.OnEvent(Event{Kind: EventClick, X: 50, Y: ColorChooserChannelPadY + 3*ColorChooserChannelH + 5})
 }
 
-func TestColorChooserNilOnChange(t *testing.T) {
-	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
-	cc.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	cc.OnEvent(Event{Kind: EventClick, X: 100, Y: ColorChooserChannelPadY + 2})
-}
-
 func TestColorChooserChannelGetterDefault(t *testing.T) {
 	cc := NewColorChooser(RGBA{R: 0x12, G: 0x34, B: 0x56, A: 0xFF})
 	if cc.channel(0) != 0x12 || cc.channel(1) != 0x34 || cc.channel(2) != 0x56 {
-		t.Fatalf("channel getter wrong: %v", cc.Color)
+		t.Fatalf("channel getter wrong: %v", cc.Color().Get())
 	}
 	if cc.channel(99) != 0 {
 		t.Fatal("channel(99) default branch")
@@ -514,16 +526,16 @@ func TestColorChooserHex(t *testing.T) {
 func TestColorChooserSetHex(t *testing.T) {
 	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	got := RGBA{}
-	cc.OnChange = func(c RGBA) { got = c }
+	cc.Color().Subscribe(func(c RGBA) { got = c })
 	cc.SetHex("#102030")
-	if cc.Color.R != 0x10 || cc.Color.G != 0x20 || cc.Color.B != 0x30 {
-		t.Fatalf("SetHex(#102030) failed: %v", cc.Color)
+	if col := cc.Color().Get(); col.R != 0x10 || col.G != 0x20 || col.B != 0x30 {
+		t.Fatalf("SetHex(#102030) failed: %v", col)
 	}
 	if got.R != 0x10 {
-		t.Fatal("OnChange must fire from SetHex")
+		t.Fatal("Subscribe must fire from SetHex")
 	}
 	cc.SetHex("ABCDEF") // no leading hash
-	if cc.Color.R != 0xAB {
+	if cc.Color().Get().R != 0xAB {
 		t.Fatal("SetHex without # failed")
 	}
 	cc.SetHex("zzzzzz")  // invalid -> ignored
@@ -532,14 +544,9 @@ func TestColorChooserSetHex(t *testing.T) {
 	cc.SetHex("11xx33")  // mid pair invalid
 	cc.SetHex("1122xx")  // last pair invalid
 	cc.SetHex("#aabbcc") // lower-case
-	if cc.Color.R != 0xAA {
+	if cc.Color().Get().R != 0xAA {
 		t.Fatal("SetHex lowercase failed")
 	}
-}
-
-func TestColorChooserSetHexNilOnChange(t *testing.T) {
-	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
-	cc.SetHex("#FF0000")
 }
 
 func TestHexNib(t *testing.T) {
@@ -710,7 +717,7 @@ func TestCalendarTodayPillNonSelected(t *testing.T) {
 func TestColorChooserSetHexLengthMismatch(t *testing.T) {
 	cc := NewColorChooser(RGBA{R: 0, G: 0, B: 0, A: 0xFF})
 	cc.SetHex("ABCDE") // len 5 -> rejected
-	if cc.Color.R != 0 {
+	if cc.Color().Get().R != 0 {
 		t.Fatal("malformed SetHex must not mutate")
 	}
 }
