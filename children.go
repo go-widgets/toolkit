@@ -139,9 +139,17 @@ func (p *Popover) Children() []Widget { return nonNil(p.Child) }
 // Children yields the scrolled content.
 func (s *ScrollView) Children() []Widget { return nonNil(s.Child) }
 
-// ChildOffset reports how far the scrolled content is painted from where its
+// ChildOffset reports how far the scrolled content is PAINTED from where its
 // bounds say it is — see childOffsetter for why that difference exists at all.
-func (s *ScrollView) ChildOffset() (int, int) { return -s.OffsetX, -s.OffsetY }
+//
+// The rubber band counts. Draw shifts the content by the offset PLUS the
+// overscroll, so during a bounce a reader given the offset alone would be told
+// the content sits at the bound while it is visibly past it. Accessibility
+// bridges read this between frames, and the whole reason this method exists is
+// that they must not be lied to about where a control is.
+func (s *ScrollView) ChildOffset() (int, int) {
+	return -(s.OffsetX + s.overscrollX), -(s.OffsetY + s.overscrollY)
+}
 
 // Children yields the window's body.
 func (w *Window) Children() []Widget { return nonNil(w.Body) }
