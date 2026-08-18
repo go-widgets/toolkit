@@ -704,6 +704,19 @@ func (t *TextView) caretAt(x, y int) (line, col int) {
 	return line, col
 }
 
+// CaretPixel returns the top-left device pixel of the caret cell for a 0-based
+// (line, col) position, using the SAME layout Draw and caretAt share
+// (textLeftInset + the gutter, and the line pitch) — so a host or a test harness
+// can place/probe the caret without duplicating the gutter/advance math (which
+// drifts the moment the gutter padding or font changes). It is the inverse of
+// caretAt: caretAt(CaretPixel(l,c)) == (l,c) for an in-range cell.
+func (t *TextView) CaretPixel(line, col int) (x, y int) {
+	r := t.Bounds()
+	x = r.X + t.textLeftInset() + col*t.glyphAdvance()
+	y = r.Y + 4 + (line-t.clampedScrollLine())*(t.glyphHeight()+4)
+	return x, y
+}
+
 // clampCol clamps CursorCol to the current line's rune length, used
 // after ArrowUp / ArrowDown lands on a shorter line.
 func (t *TextView) clampCol() {
