@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // ToastKind selects the semantic colour of a Toast pill. ToastInfo
 // reuses the theme's Accent (the same tint used by focus rings + the
@@ -37,8 +40,9 @@ const (
 //     letting a host post a persistent pill without a matching
 //     Life-budget assignment.
 //  3. Toast is designed to STACK: several Toast values can share the
-//     same host, each Bounds()'d to its own row; the host mutates
-//     Visible + Life directly and iterates Tick over the collection.
+//     same host, each Bounds()'d to its own row; the host drives each
+//     toast's Visible + Life observables and iterates Tick over the
+//     collection.
 //
 // The host drives Life via Tick() from its own animation loop
 // (typically a rAF tick).
@@ -61,16 +65,8 @@ const (
 //     single ActionLabel/Action pair.
 type Toast struct {
 	Base
-	Text    string
-	Kind    ToastKind
-	Visible bool
-
-	// Life is the number of Tick() calls remaining before the toast
-	// auto-hides. The zero value is a sentinel meaning "sticky": Tick
-	// is a no-op until the host assigns a positive Life. When Life is
-	// positive, each Tick decrements it; when the countdown reaches
-	// zero Visible is cleared.
-	Life int
+	Text string
+	Kind ToastKind
 
 	// ActionLabel, when non-empty, arms a small action button rendered
 	// right-aligned inside the pill (e.g. "Undo") and makes OnEvent
@@ -102,6 +98,35 @@ type Toast struct {
 	// dimensions.
 	Pixels []byte
 	IW, IH int
+
+	// visible is the reactive show/hide state; life is the auto-dismiss
+	// countdown. Both are MVVM-only (no settable field) — see [Toast.Visible]
+	// and [Toast.Life].
+	visible *mvvm.Observable[bool]
+	life    *mvvm.Observable[int]
+}
+
+// Visible is the toast's show/hide state as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Visible field.
+// Draw paints the pill exactly while it is true. The zero value is false, so a
+// bare &Toast{} starts hidden.
+func (t *Toast) Visible() *mvvm.Observable[bool] {
+	if t.visible == nil {
+		t.visible = mvvm.NewObservable(false)
+	}
+	return t.visible
+}
+
+// Life is the number of Tick() calls remaining before the toast auto-hides, as
+// a shared [mvvm.Observable] — there is no settable Life field. The zero value
+// is a sentinel meaning "sticky": Tick is a no-op until the host Sets a positive
+// Life. When Life is positive, each Tick decrements it; when the countdown
+// reaches zero Visible is cleared.
+func (t *Toast) Life() *mvvm.Observable[int] {
+	if t.life == nil {
+		t.life = mvvm.NewObservable(0)
+	}
+	return t.life
 }
 
 // ToastAction is one button in a multi-action Toast: a Label the user clicks
@@ -128,10 +153,15 @@ const (
 )
 
 // NewToast builds a hidden Toast with the given text + kind. The host
-// sets Visible=true (typically via a Show helper it wraps around the
-// widget) + assigns Life to arm the auto-dismiss countdown.
+// Sets Visible().Set(true) (typically via a Show helper it wraps around
+// the widget) + Sets Life to arm the auto-dismiss countdown.
 func NewToast(text string, kind ToastKind) *Toast {
-	return &Toast{Text: text, Kind: kind}
+	return &Toast{
+		Text:    text,
+		Kind:    kind,
+		visible: mvvm.NewObservable(false),
+		life:    mvvm.NewObservable(0),
+	}
 }
 
 // toastFace maps a Kind to a background colour. ToastInfo defers to
@@ -253,7 +283,7 @@ func (t *Toast) AnchorIn(host Rect, corner Corner, index int) {
 // action button is a 1-px Border divider plus its label, laid out along the
 // right edge in Actions order. Nothing drawn when hidden.
 func (t *Toast) Draw(p painter.Painter, theme *Theme) {
-	if !t.Visible {
+	if !t.Visible().Get() {
 		return
 	}
 	r := t.Bounds()
@@ -339,7 +369,7 @@ func (t *Toast) OnEvent(ev Event) {
 			if a[i].Callback != nil {
 				a[i].Callback()
 			}
-			t.Visible = false
+			t.Visible().Set(false)
 			return
 		}
 	}
@@ -350,11 +380,11 @@ func (t *Toast) OnEvent(ev Event) {
 // leaves Visible untouched, so a host may post a persistent toast by
 // leaving Life at its zero value.
 func (t *Toast) Tick() {
-	if t.Life <= 0 {
+	if t.Life().Get() <= 0 {
 		return
 	}
-	t.Life--
-	if t.Life == 0 {
-		t.Visible = false
+	t.Life().Set(t.Life().Get() - 1)
+	if t.Life().Get() == 0 {
+		t.Visible().Set(false)
 	}
 }

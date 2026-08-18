@@ -20,11 +20,51 @@ func TestNewToastDefaults(t *testing.T) {
 	if tt.Kind != ToastInfo {
 		t.Fatalf("Kind = %d, want ToastInfo", tt.Kind)
 	}
-	if tt.Visible {
+	if tt.Visible().Get() {
 		t.Fatal("fresh Toast must be hidden")
 	}
-	if tt.Life != 0 {
-		t.Fatalf("Life = %d, want 0", tt.Life)
+	if tt.Life().Get() != 0 {
+		t.Fatalf("Life = %d, want 0", tt.Life().Get())
+	}
+}
+
+// --- Bare &Toast{}: lazy Observable init + host binding ------------------
+
+// TestToastBareObservablesLazyInit proves a zero-value &Toast{} (no
+// constructor) lazily initialises its MVVM state on first access — Visible()
+// starts false, Life() starts 0 (the sticky sentinel) — and that a host can
+// bind either observable and drive it, the widget reading the bound value back.
+func TestToastBareObservablesLazyInit(t *testing.T) {
+	tt := &Toast{}
+	if tt.Visible().Get() {
+		t.Fatal("bare &Toast{} Visible() must lazy-init to false")
+	}
+	if tt.Life().Get() != 0 {
+		t.Fatalf("bare &Toast{} Life() = %d, want 0", tt.Life().Get())
+	}
+
+	// The accessor returns the SAME observable across calls (no re-init).
+	if tt.Visible() != tt.Visible() || tt.Life() != tt.Life() {
+		t.Fatal("accessor must return the same Observable on repeat calls")
+	}
+
+	// Host binds Visible: a Set from the host is observed by the widget, and a
+	// Subscribe sees the change (the two-way host-binding contract).
+	seen := false
+	tt.Visible().Subscribe(func(v bool) { seen = v })
+	tt.Visible().Set(true)
+	if !tt.Visible().Get() || !seen {
+		t.Fatal("host Set on Visible() not observed by widget/subscriber")
+	}
+
+	// Host arms Life: Tick then decrements the host-owned budget.
+	tt.Life().Set(2)
+	tt.Tick()
+	if tt.Life().Get() != 1 {
+		t.Fatalf("Life after Tick = %d, want 1", tt.Life().Get())
+	}
+	if !tt.Visible().Get() {
+		t.Fatal("Toast should stay visible while Life > 0")
 	}
 }
 
@@ -52,7 +92,7 @@ func TestToastDrawZeroWidthBoundsSkipsFill(t *testing.T) {
 	// guard is the only pixel-writing path exercised, which we assert
 	// leaves the buffer untouched.
 	tt := NewToast("x", ToastInfo)
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: -30, W: 0, H: 20}) // zero W -> fillRect guard
 	surf := makeSurface(20, 20)
 	before := make([]byte, len(surf))
@@ -90,7 +130,7 @@ func TestToastDrawKindColours(t *testing.T) {
 	}
 	for _, c := range cases {
 		tt := NewToast("!", c.kind)
-		tt.Visible = true
+		tt.Visible().Set(true)
 		tt.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 		buf := makeSurface(60, 20)
 		tt.Draw(newP(buf, 60), theme)
@@ -106,7 +146,7 @@ func TestToastDrawKindColours(t *testing.T) {
 
 func TestToastDrawUsesOnAccentFromExtra(t *testing.T) {
 	tt := NewToast("XYZ", ToastInfo)
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 20})
 	theme := DefaultDark()
 	custom := RGB(0xAB, 0xCD, 0xEF)
@@ -133,7 +173,7 @@ func TestToastDrawUsesOnAccentFromExtra(t *testing.T) {
 
 func TestToastDrawAccentInkFallbackWithNilExtra(t *testing.T) {
 	tt := NewToast("q", ToastInfo)
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	theme := DefaultLight()
 	theme.Extra = nil
@@ -149,7 +189,7 @@ func TestToastDrawAccentInkFallbackWithNilExtra(t *testing.T) {
 
 func TestToastDrawAccentInkFallbackWithExtraNoKey(t *testing.T) {
 	tt := NewToast("q", ToastInfo)
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	theme := DefaultLight()
 	theme.Extra = map[string]RGBA{} // present but empty -> ok=false path
@@ -164,13 +204,13 @@ func TestToastDrawAccentInkFallbackWithExtraNoKey(t *testing.T) {
 
 func TestToastTickWithLifeAboveZeroDecrements(t *testing.T) {
 	tt := NewToast("hi", ToastInfo)
-	tt.Visible = true
-	tt.Life = 5
+	tt.Visible().Set(true)
+	tt.Life().Set(5)
 	tt.Tick()
-	if tt.Life != 4 {
-		t.Fatalf("Life after Tick = %d, want 4", tt.Life)
+	if tt.Life().Get() != 4 {
+		t.Fatalf("Life after Tick = %d, want 4", tt.Life().Get())
 	}
-	if !tt.Visible {
+	if !tt.Visible().Get() {
 		t.Fatal("Toast should stay Visible while Life > 0")
 	}
 }
@@ -179,13 +219,13 @@ func TestToastTickWithLifeAboveZeroDecrements(t *testing.T) {
 
 func TestToastTickWithLifeZeroNoOp(t *testing.T) {
 	tt := NewToast("hi", ToastInfo)
-	tt.Visible = true
-	tt.Life = 0 // sticky
+	tt.Visible().Set(true)
+	tt.Life().Set(0) // sticky
 	tt.Tick()
-	if tt.Life != 0 {
-		t.Fatalf("Life on sticky Toast = %d, want 0", tt.Life)
+	if tt.Life().Get() != 0 {
+		t.Fatalf("Life on sticky Toast = %d, want 0", tt.Life().Get())
 	}
-	if !tt.Visible {
+	if !tt.Visible().Get() {
 		t.Fatal("sticky Toast should stay Visible on Tick")
 	}
 }
@@ -194,13 +234,13 @@ func TestToastTickWithLifeZeroNoOp(t *testing.T) {
 
 func TestToastTickReachingZeroHides(t *testing.T) {
 	tt := NewToast("hi", ToastInfo)
-	tt.Visible = true
-	tt.Life = 1
+	tt.Visible().Set(true)
+	tt.Life().Set(1)
 	tt.Tick()
-	if tt.Life != 0 {
-		t.Fatalf("Life = %d, want 0", tt.Life)
+	if tt.Life().Get() != 0 {
+		t.Fatalf("Life = %d, want 0", tt.Life().Get())
 	}
-	if tt.Visible {
+	if tt.Visible().Get() {
 		t.Fatal("Tick that reaches 0 must clear Visible")
 	}
 }
@@ -209,13 +249,13 @@ func TestToastTickReachingZeroHides(t *testing.T) {
 
 func TestToastTickWithNegativeLifeNoOp(t *testing.T) {
 	tt := NewToast("hi", ToastInfo)
-	tt.Visible = true
-	tt.Life = -3 // pathological input; guard treats it as sticky
+	tt.Visible().Set(true)
+	tt.Life().Set(-3) // pathological input; guard treats it as sticky
 	tt.Tick()
-	if tt.Life != -3 {
-		t.Fatalf("Life = %d, want -3", tt.Life)
+	if tt.Life().Get() != -3 {
+		t.Fatalf("Life = %d, want -3", tt.Life().Get())
 	}
-	if !tt.Visible {
+	if !tt.Visible().Get() {
 		t.Fatal("negative-Life Toast should stay Visible on Tick")
 	}
 }
@@ -295,7 +335,7 @@ func TestToastDrawActionButtonOnlyWhenLabelSet(t *testing.T) {
 	const w, h = 110, 19
 
 	plain := NewToast("Copied", ToastInfo)
-	plain.Visible = true
+	plain.Visible().Set(true)
 	plain.SetBounds(Rect{X: 0, Y: 0, W: 101, H: 19})
 	pBuf := makeSurface(w, h)
 	plain.Draw(newP(pBuf, w), theme)
@@ -305,7 +345,7 @@ func TestToastDrawActionButtonOnlyWhenLabelSet(t *testing.T) {
 
 	withAction := NewToast("Copied", ToastInfo)
 	withAction.ActionLabel = "Undo"
-	withAction.Visible = true
+	withAction.Visible().Set(true)
 	withAction.SetBounds(Rect{X: 0, Y: 0, W: 101, H: 19})
 	aBuf := makeSurface(w, h)
 	withAction.Draw(newP(aBuf, w), theme)
@@ -332,7 +372,7 @@ func TestToastDrawActionLabelPaintsInk(t *testing.T) {
 
 	tt := NewToast("Copied", ToastInfo)
 	tt.ActionLabel = "Undo"
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 101, H: 19})
 	buf := makeSurface(w, h)
 	tt.Draw(newP(buf, w), theme)
@@ -358,7 +398,7 @@ func TestToastDrawActionLabelPaintsInk(t *testing.T) {
 func TestToastDrawNoActionByteForByteUnchanged(t *testing.T) {
 	theme := DefaultLight()
 	tt := NewToast("!", ToastInfo)
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(60, 20)
 	tt.Draw(newP(buf, 60), theme)
@@ -377,7 +417,7 @@ func TestToastActionClickRunsActionAndHides(t *testing.T) {
 	tt := NewToast("Copied", ToastInfo)
 	tt.ActionLabel = "Undo"
 	tt.Action = func() { called = true }
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 101, H: 19})
 
 	tt.OnEvent(Event{Kind: EventClick, X: 56, Y: 9})
@@ -385,7 +425,7 @@ func TestToastActionClickRunsActionAndHides(t *testing.T) {
 	if !called {
 		t.Fatal("clicking the action button did not run Action")
 	}
-	if tt.Visible {
+	if tt.Visible().Get() {
 		t.Fatal("clicking the action button should hide the toast")
 	}
 }
@@ -398,7 +438,7 @@ func TestToastActionClickJustOutsideBoundaryNoOp(t *testing.T) {
 	tt := NewToast("Copied", ToastInfo)
 	tt.ActionLabel = "Undo"
 	tt.Action = func() { called = true }
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 101, H: 19})
 
 	tt.OnEvent(Event{Kind: EventClick, X: 55, Y: 9})
@@ -406,7 +446,7 @@ func TestToastActionClickJustOutsideBoundaryNoOp(t *testing.T) {
 	if called {
 		t.Fatal("click in the message zone must not run Action")
 	}
-	if !tt.Visible {
+	if !tt.Visible().Get() {
 		t.Fatal("click in the message zone must not hide the toast")
 	}
 }
@@ -416,12 +456,12 @@ func TestToastActionClickJustOutsideBoundaryNoOp(t *testing.T) {
 func TestToastActionClickNilActionStillHides(t *testing.T) {
 	tt := NewToast("Copied", ToastInfo)
 	tt.ActionLabel = "Undo"
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 101, H: 19})
 
 	tt.OnEvent(Event{Kind: EventClick, X: 90, Y: 9}) // must not panic
 
-	if tt.Visible {
+	if tt.Visible().Get() {
 		t.Fatal("nil-Action button click should still hide the toast")
 	}
 }
@@ -434,7 +474,7 @@ func TestToastOnEventIgnoresNonClickEvents(t *testing.T) {
 	tt := NewToast("Copied", ToastInfo)
 	tt.ActionLabel = "Undo"
 	tt.Action = func() { called = true }
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 101, H: 19})
 
 	tt.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
@@ -442,7 +482,7 @@ func TestToastOnEventIgnoresNonClickEvents(t *testing.T) {
 	if called {
 		t.Fatal("non-click event must not run Action")
 	}
-	if !tt.Visible {
+	if !tt.Visible().Get() {
 		t.Fatal("non-click event must not hide the toast")
 	}
 }
@@ -453,12 +493,12 @@ func TestToastOnEventIgnoresNonClickEvents(t *testing.T) {
 // pre-action-button default behaviour (Base's no-op OnEvent).
 func TestToastOnEventNoopWhenNoActionLabel(t *testing.T) {
 	tt := NewToast("hi", ToastInfo)
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 
 	tt.OnEvent(Event{Kind: EventClick, X: 5, Y: 5}) // must not panic
 
-	if !tt.Visible {
+	if !tt.Visible().Get() {
 		t.Fatal("click on a no-action toast must not hide it")
 	}
 }
@@ -493,7 +533,7 @@ func TestToastVectorIconShiftsTextAndPaints(t *testing.T) {
 	}
 
 	withIcon.SetBounds(Rect{X: 0, Y: 0, W: withIcon.Bounds().W, H: withIcon.Bounds().H})
-	withIcon.Visible = true
+	withIcon.Visible().Set(true)
 	buf := makeSurface(withIcon.Bounds().W, withIcon.Bounds().H)
 	withIcon.Draw(newP(buf, withIcon.Bounds().W), theme)
 	if iconCalls != 1 {
@@ -530,7 +570,7 @@ func TestToastImageIconBeatsVector(t *testing.T) {
 	if !tt.hasImage() || !tt.hasIcon() {
 		t.Fatal("hasImage/hasIcon should be true for a valid image")
 	}
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(60, 20)
 	tt.Draw(newP(buf, 60), theme)
@@ -549,7 +589,7 @@ func TestToastInvalidImageFallsToVector(t *testing.T) {
 	}
 	called := false
 	tt.Icon = func(painter.Painter, Rect, RGBA) { called = true }
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	tt.Draw(newP(make([]byte, 60*20*4), 60), DefaultLight())
 	if !called {
@@ -586,7 +626,7 @@ func TestToastMultiLineGrowsHeightAndPaintsBoth(t *testing.T) {
 	}
 
 	multi.SetBounds(Rect{X: 0, Y: 0, W: multi.Bounds().W, H: multi.Bounds().H})
-	multi.Visible = true
+	multi.Visible().Set(true)
 	theme := DefaultLight()
 	ink := accentInk(theme)
 	buf := makeSurface(multi.Bounds().W, multi.Bounds().H)
@@ -651,7 +691,7 @@ func TestToastMultiActionLayoutAndClicks(t *testing.T) {
 	}
 
 	tt.SetBounds(Rect{X: 0, Y: 0, W: tt.Bounds().W, H: tt.Bounds().H})
-	tt.Visible = true
+	tt.Visible().Set(true)
 	theme := DefaultLight()
 	buf := makeSurface(tt.Bounds().W, tt.Bounds().H)
 	tt.Draw(newP(buf, tt.Bounds().W), theme)
@@ -673,12 +713,12 @@ func TestToastMultiActionLayoutAndClicks(t *testing.T) {
 	if len(log) != 1 || log[0] != "undo" {
 		t.Fatalf("first-button click log = %v, want [undo]", log)
 	}
-	if tt.Visible {
+	if tt.Visible().Get() {
 		t.Fatal("action click should hide the toast")
 	}
 
 	// Reset and click the second button.
-	tt.Visible = true
+	tt.Visible().Set(true)
 	log = nil
 	seg0 := 1 + 2*ToastPadX + tt.textWidth("Undo")
 	tt.OnEvent(Event{Kind: EventClick, X: bx + seg0 + 2, Y: tt.Bounds().H / 2})
@@ -695,9 +735,9 @@ func TestToastMultiActionClickOutsideNoOp(t *testing.T) {
 	tt.Actions = []ToastAction{{Label: "Undo", Callback: func() { fired = true }}}
 	tt.AnchorIn(Rect{X: 0, Y: 0, W: 400, H: 300}, TopRight, 0)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: tt.Bounds().W, H: tt.Bounds().H})
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.OnEvent(Event{Kind: EventClick, X: 0, Y: tt.Bounds().H / 2}) // message zone
-	if fired || !tt.Visible {
+	if fired || !tt.Visible().Get() {
 		t.Fatal("click outside the action zone must be a no-op")
 	}
 }
@@ -793,24 +833,24 @@ func TestToastButtonRectsAgreeWithOnEvent(t *testing.T) {
 
 	for i, r := range rects {
 		log = nil
-		tt.Visible = true
+		tt.Visible().Set(true)
 		cx := r.X + r.W/2
 		cy := r.Y + r.H/2
 		tt.OnEvent(Event{Kind: EventClick, X: cx, Y: cy})
 		if len(log) != 1 || log[0] != names[i] {
 			t.Fatalf("click centre of button %d fired %v, want [%s]", i, log, names[i])
 		}
-		if tt.Visible {
+		if tt.Visible().Get() {
 			t.Fatalf("click on button %d should hide the toast", i)
 		}
 	}
 
 	// One pixel left of the first button: outside every rect -> no fire.
 	log = nil
-	tt.Visible = true
+	tt.Visible().Set(true)
 	tt.OnEvent(Event{Kind: EventClick, X: rects[0].X - 1, Y: rects[0].H / 2})
-	if len(log) != 0 || !tt.Visible {
+	if len(log) != 0 || !tt.Visible().Get() {
 		t.Fatalf("click just left of the first button fired %v (visible=%v), want none",
-			log, tt.Visible)
+			log, tt.Visible().Get())
 	}
 }
