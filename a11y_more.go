@@ -107,11 +107,11 @@ func (s *SpinButton) A11y() A11yInfo {
 func (s *RangeSlider) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleGroup,
-		Value:    formatFloat(s.Low) + ".." + formatFloat(s.High),
+		Value:    formatFloat(s.Low().Get()) + ".." + formatFloat(s.High().Get()),
 		HasRange: true,
 		Min:      s.Min,
 		Max:      s.Max,
-		Now:      s.Low,
+		Now:      s.Low().Get(),
 	}
 }
 

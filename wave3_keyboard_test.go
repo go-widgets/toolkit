@@ -305,29 +305,30 @@ func TestRangeSliderKeyMovesHandles(t *testing.T) {
 	var lo, hi float64
 	s := NewRangeSlider(0, 100, 20, 80)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 20})
-	s.OnChange = func(l, h float64) { lo, hi = l, h }
+	s.Low().Subscribe(func(v float64) { lo = v })
+	s.High().Subscribe(func(v float64) { hi = v })
 	// Default focus is the low handle; ArrowRight nudges it +1% (=+1).
 	s.OnEvent(kd("ArrowRight"))
-	if s.Low != 21 || lo != 21 {
-		t.Fatalf("low ArrowRight: Low=%v cb=%v", s.Low, lo)
+	if s.Low().Get() != 21 || lo != 21 {
+		t.Fatalf("low ArrowRight: Low=%v sub=%v", s.Low().Get(), lo)
 	}
 	s.OnEvent(kd("ArrowLeft"))
-	if s.Low != 20 {
-		t.Fatalf("low ArrowLeft: Low=%v", s.Low)
+	if s.Low().Get() != 20 {
+		t.Fatalf("low ArrowLeft: Low=%v", s.Low().Get())
 	}
 	// End selects the high handle; ArrowRight nudges High.
 	s.OnEvent(kd("End"))
 	s.OnEvent(kd("ArrowUp")) // +1
-	if s.High != 81 || hi != 81 {
-		t.Fatalf("high ArrowUp: High=%v cb=%v", s.High, hi)
+	if s.High().Get() != 81 || hi != 81 {
+		t.Fatalf("high ArrowUp: High=%v sub=%v", s.High().Get(), hi)
 	}
 	// Home reselects the low handle.
 	s.OnEvent(kd("Home"))
 	// Cross-clamp: a big Step can't push Low past High.
 	s.Step = 1000
 	s.OnEvent(kd("ArrowRight"))
-	if s.Low != s.High {
-		t.Fatalf("low crossed high: Low=%v High=%v", s.Low, s.High)
+	if s.Low().Get() != s.High().Get() {
+		t.Fatalf("low crossed high: Low=%v High=%v", s.Low().Get(), s.High().Get())
 	}
 	// Symmetric cross-clamp on the high handle.
 	s2 := NewRangeSlider(0, 100, 40, 60)
@@ -335,17 +336,17 @@ func TestRangeSliderKeyMovesHandles(t *testing.T) {
 	s2.Step = 1000
 	s2.OnEvent(kd("End"))       // focus high
 	s2.OnEvent(kd("ArrowDown")) // -1000, clamped to Low
-	if s2.High != s2.Low {
-		t.Fatalf("high crossed low: Low=%v High=%v", s2.Low, s2.High)
+	if s2.High().Get() != s2.Low().Get() {
+		t.Fatalf("high crossed low: Low=%v High=%v", s2.Low().Get(), s2.High().Get())
 	}
 	// Disabled ignores keys.
 	s2.Disabled = true
-	before := s2.Low
+	before := s2.Low().Get()
 	s2.OnEvent(kd("ArrowRight"))
-	if s2.Low != before {
-		t.Fatalf("disabled range slider moved (Low=%v)", s2.Low)
+	if s2.Low().Get() != before {
+		t.Fatalf("disabled range slider moved (Low=%v)", s2.Low().Get())
 	}
-	// Nil OnChange is safe (covers nudgeHandle's nil-callback branch).
+	// No subscriber is safe (covers nudgeHandle's Set with no observers).
 	sn := NewRangeSlider(0, 10, 2, 8)
 	sn.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 20})
 	sn.OnEvent(kd("ArrowRight"))

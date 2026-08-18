@@ -19,8 +19,32 @@ func newTestRangeSlider() *RangeSlider {
 func TestRangeSliderNewOrdersAndClamps(t *testing.T) {
 	// low > high is swapped, and both are clamped into range.
 	s := NewRangeSlider(0, 100, 140, -30)
-	if s.Low != 0 || s.High != 100 {
-		t.Errorf("SetRange(140,-30) = (%v,%v), want (0,100)", s.Low, s.High)
+	if s.Low().Get() != 0 || s.High().Get() != 100 {
+		t.Errorf("SetRange(140,-30) = (%v,%v), want (0,100)", s.Low().Get(), s.High().Get())
+	}
+}
+
+// TestRangeSliderZeroValueLazyInit checks a bare &RangeSlider{} lazily inits
+// both handle Observables to 0 on first access, and that a host can bind them.
+func TestRangeSliderZeroValueLazyInit(t *testing.T) {
+	s := &RangeSlider{}
+	if got := s.Low().Get(); got != 0 {
+		t.Errorf("bare Low().Get() = %v, want 0", got)
+	}
+	if got := s.High().Get(); got != 0 {
+		t.Errorf("bare High().Get() = %v, want 0", got)
+	}
+	// Host-bind: subscribers on both handles fire when the slider Sets them.
+	var seenLow, seenHigh float64
+	s.Low().Subscribe(func(v float64) { seenLow = v })
+	s.High().Subscribe(func(v float64) { seenHigh = v })
+	s.Min, s.Max = 0, 100
+	s.SetRange(10, 90)
+	if seenLow != 10 {
+		t.Errorf("Low subscriber saw %v, want 10", seenLow)
+	}
+	if seenHigh != 90 {
+		t.Errorf("High subscriber saw %v, want 90", seenHigh)
 	}
 }
 
@@ -67,18 +91,23 @@ func TestRangeSliderDrawZeroBand(t *testing.T) {
 func TestRangeSliderClickGrabsNearestHandle(t *testing.T) {
 	s := newTestRangeSlider()
 	var gotLow, gotHigh float64
-	s.OnChange = func(lo, hi float64) { gotLow, gotHigh = lo, hi }
+	s.Low().Subscribe(func(v float64) { gotLow = v })
+	s.High().Subscribe(func(v float64) { gotHigh = v })
 
 	// Click near the left third → grabs Low and drags it toward the cursor.
 	s.OnEvent(Event{Kind: EventClick, X: 30})
 	if s.active != 1 {
 		t.Fatalf("active = %d, want 1 (Low)", s.active)
 	}
-	if s.Low >= 20 {
-		t.Errorf("Low did not move down: %v", s.Low)
+	if s.Low().Get() >= 20 {
+		t.Errorf("Low did not move down: %v", s.Low().Get())
 	}
-	if gotLow != s.Low || gotHigh != s.High {
-		t.Errorf("OnChange saw (%v,%v), want (%v,%v)", gotLow, gotHigh, s.Low, s.High)
+	// The Low subscriber saw the new position; High is unchanged from init (80).
+	if gotLow != s.Low().Get() {
+		t.Errorf("Low subscriber saw %v, want %v", gotLow, s.Low().Get())
+	}
+	if gotHigh != 0 && gotHigh != s.High().Get() {
+		t.Errorf("High subscriber saw %v, want %v (or unchanged)", gotHigh, s.High().Get())
 	}
 
 	// Click near the right edge → grabs High.
@@ -100,11 +129,11 @@ func TestRangeSliderHandlePickIsLocalAtNonZeroBounds(t *testing.T) {
 		t.Fatalf("active = %d, want 2 (High) — handle-pick used absolute coords", s.active)
 	}
 	// High grabbed → Low is untouched; the buggy path would have snapped Low up.
-	if s.Low != 20 {
-		t.Errorf("Low moved to %v (wrong handle grabbed), want 20", s.Low)
+	if s.Low().Get() != 20 {
+		t.Errorf("Low moved to %v (wrong handle grabbed), want 20", s.Low().Get())
 	}
-	if s.High >= 80 || s.High < 70 {
-		t.Errorf("High = %v, want it dragged near the click (~77)", s.High)
+	if s.High().Get() >= 80 || s.High().Get() < 70 {
+		t.Errorf("High = %v, want it dragged near the click (~77)", s.High().Get())
 	}
 }
 
@@ -118,11 +147,11 @@ func TestRangeSliderVertical(t *testing.T) {
 	if s.active != 2 {
 		t.Fatalf("top click active=%d, want 2 (High)", s.active)
 	}
-	if s.Low != 20 {
-		t.Errorf("Low moved to %v, want 20 (untouched)", s.Low)
+	if s.Low().Get() != 20 {
+		t.Errorf("Low moved to %v, want 20 (untouched)", s.Low().Get())
 	}
-	if s.High <= 80 {
-		t.Errorf("High=%v, want dragged up past 80", s.High)
+	if s.High().Get() <= 80 {
+		t.Errorf("High=%v, want dragged up past 80", s.High().Get())
 	}
 
 	s2 := NewRangeSlider(0, 100, 20, 80)
@@ -157,26 +186,26 @@ func TestRangeSliderHandlesDoNotCross(t *testing.T) {
 	s.OnEvent(Event{Kind: EventClick, X: 40}) // near Low
 	s.active = 1
 	s.OnEvent(Event{Kind: EventMouseDrag, X: 195}) // way past High
-	if s.Low != s.High {
-		t.Errorf("Low crossed High: Low=%v High=%v", s.Low, s.High)
+	if s.Low().Get() != s.High().Get() {
+		t.Errorf("Low crossed High: Low=%v High=%v", s.Low().Get(), s.High().Get())
 	}
 
 	// Grab High, drag it below Low → clamps at Low.
 	s2 := newTestRangeSlider()
 	s2.active = 2
 	s2.OnEvent(Event{Kind: EventMouseDrag, X: 5}) // below Low
-	if s2.High != s2.Low {
-		t.Errorf("High crossed Low: Low=%v High=%v", s2.Low, s2.High)
+	if s2.High().Get() != s2.Low().Get() {
+		t.Errorf("High crossed Low: Low=%v High=%v", s2.Low().Get(), s2.High().Get())
 	}
 }
 
 func TestRangeSliderDragWithoutGrabIsNoop(t *testing.T) {
 	s := newTestRangeSlider()
-	lo, hi := s.Low, s.High
+	lo, hi := s.Low().Get(), s.High().Get()
 	// active == 0 → a stray drag changes nothing.
 	s.OnEvent(Event{Kind: EventMouseDrag, X: 100})
-	if s.Low != lo || s.High != hi {
-		t.Errorf("ungrabbed drag moved band to (%v,%v)", s.Low, s.High)
+	if s.Low().Get() != lo || s.High().Get() != hi {
+		t.Errorf("ungrabbed drag moved band to (%v,%v)", s.Low().Get(), s.High().Get())
 	}
 }
 
@@ -220,11 +249,14 @@ func TestRangeSliderValueAtClamps(t *testing.T) {
 }
 
 func TestRangeSliderMoveActiveNoneIsNoop(t *testing.T) {
-	// moveActive with active==0 hits neither case; only OnChange (nil here) —
-	// exercises the default path without a handler.
+	// moveActive with active==0 hits neither case — exercises the default path.
 	s := newTestRangeSlider()
 	s.active = 0
-	s.moveActive(100) // no panic, no OnChange (nil)
+	lo, hi := s.Low().Get(), s.High().Get()
+	s.moveActive(100) // no panic, no mutation
+	if s.Low().Get() != lo || s.High().Get() != hi {
+		t.Errorf("moveActive with no active handle mutated band to (%v,%v)", s.Low().Get(), s.High().Get())
+	}
 }
 
 func TestAbs(t *testing.T) {

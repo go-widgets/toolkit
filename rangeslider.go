@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // RangeSlider is a two-handle slider selecting a sub-interval [Low, High]
 // within a continuous Min..Max range -- a price band, a date window, a volume
@@ -14,17 +17,23 @@ import "github.com/go-widgets/painter"
 //
 // A click grabs whichever handle is nearest the cursor and jumps it there; a
 // subsequent drag moves that same handle, clamped so Low never crosses High.
+//
+// The two reactive handle positions are MVVM-only: each lives in an unexported
+// [mvvm.Observable] exposed via [RangeSlider.Low] and [RangeSlider.High]. There
+// are no settable Low/High fields and no OnChange callback -- a host binds
+// Low()/High() (Set / Subscribe / two-way) and a click, drag or key adjustment
+// Sets them (clamped so Low <= High), notifying subscribers on change.
 type RangeSlider struct {
 	Base
 	focusState
 	Min, Max    float64
-	Low, High   float64
 	Orientation Orientation
-	OnChange    func(low, high float64)
 	// Step is the increment an arrow key applies to the keyboard-focused handle.
 	// When it is <= 0 the slider falls back to 1% of the range, so a caller that
 	// never sets Step still gets sensible keyboard nudges.
 	Step float64
+
+	low, high *mvvm.Observable[float64]
 
 	// active is the handle grabbed by the current click/drag: 0 = none,
 	// 1 = Low, 2 = High. It is set on EventClick and cleared on EventMouseUp.
@@ -33,6 +42,28 @@ type RangeSlider struct {
 	// 1 = High. Home selects Low, End selects High. Kept separate from active so
 	// a keyboard selection survives across key presses without a drag.
 	keyHandle int
+}
+
+// Low is the lower handle's position as a shared [mvvm.Observable]: a host binds
+// it (Set / Subscribe / two-way) -- there is no settable Low field. A click,
+// drag or key adjustment Sets it (clamped so Low <= High); subscribers are
+// notified on change.
+func (s *RangeSlider) Low() *mvvm.Observable[float64] {
+	if s.low == nil {
+		s.low = mvvm.NewObservable(0.0)
+	}
+	return s.low
+}
+
+// High is the upper handle's position as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) -- there is no settable High field. A
+// click, drag or key adjustment Sets it (clamped so Low <= High); subscribers
+// are notified on change.
+func (s *RangeSlider) High() *mvvm.Observable[float64] {
+	if s.high == nil {
+		s.high = mvvm.NewObservable(0.0)
+	}
+	return s.high
 }
 
 // NewRangeSlider builds a RangeSlider spanning [min, max] with the given
@@ -44,13 +75,13 @@ func NewRangeSlider(min, max, low, high float64) *RangeSlider {
 }
 
 // SetRange clamps both bounds to [Min, Max] and swaps them if low > high, so
-// the invariant Low <= High always holds.
+// the invariant Low <= High always holds, then Sets both Observables.
 func (s *RangeSlider) SetRange(low, high float64) {
 	if low > high {
 		low, high = high, low
 	}
-	s.Low = s.clamp(low)
-	s.High = s.clamp(high)
+	s.Low().Set(s.clamp(low))
+	s.High().Set(s.clamp(high))
 }
 
 // clamp confines v to [Min, Max].
@@ -127,10 +158,10 @@ func (s *RangeSlider) thumbRect(v float64) Rect {
 // each drawn thumb clamped up to the touch minimum on both axes and centred over
 // the knob, so a 16-logical-pixel handle exposes a 44px target under
 // [DensityTouch]. At [DensityCompact] each equals its drawn thumb byte-for-byte.
-func (s *RangeSlider) LowThumbHitRect() Rect { return touchHitRect(s.thumbRect(s.Low)) }
+func (s *RangeSlider) LowThumbHitRect() Rect { return touchHitRect(s.thumbRect(s.Low().Get())) }
 
 // HighThumbHitRect is the finger grab for the High handle; see LowThumbHitRect.
-func (s *RangeSlider) HighThumbHitRect() Rect { return touchHitRect(s.thumbRect(s.High)) }
+func (s *RangeSlider) HighThumbHitRect() Rect { return touchHitRect(s.thumbRect(s.High().Get())) }
 
 // Draw paints the rounded track, the Accent band between the two handles, and
 // a circular white thumb at each handle -- matching Scale's macOS styling.
@@ -138,8 +169,8 @@ func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	trackThick := scaled(scaleTrackThickness)
 	trackR := trackThick / 2
-	lowP := s.thumbPos(s.Low)
-	highP := s.thumbPos(s.High)
+	lowP := s.thumbPos(s.Low().Get())
+	highP := s.thumbPos(s.High().Get())
 	// Track / band / thumb / border colours. A disabled slider mutes them all so
 	// it reads as inert, exactly as Scale does; the enabled draw is unchanged.
 	trackC, bandC, thumbC, borderC := theme.SurfaceAlt, theme.Accent, theme.Surface, theme.Border
@@ -180,7 +211,7 @@ func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 
 // OnEvent: a click grabs the nearer handle and jumps it to the cursor; a drag
 // moves the grabbed handle; a mouse-up releases it. Each move re-clamps so the
-// handles never cross, and fires OnChange.
+// handles never cross, and notifies the handle's Observable.
 func (s *RangeSlider) OnEvent(ev Event) {
 	start, length := s.axis()
 	if length <= 0 || s.Max <= s.Min {
@@ -197,8 +228,8 @@ func (s *RangeSlider) OnEvent(ev Event) {
 		// the same widget-local frame as coord (thumbPos returns an absolute
 		// coordinate, so subtract the axis start). Without this, clicking one
 		// thumb grabs the other when the slider is not at the origin.
-		lowC := s.thumbPos(s.Low) - start + scaled(scaleThumbSize)/2
-		highC := s.thumbPos(s.High) - start + scaled(scaleThumbSize)/2
+		lowC := s.thumbPos(s.Low().Get()) - start + scaled(scaleThumbSize)/2
+		highC := s.thumbPos(s.High().Get()) - start + scaled(scaleThumbSize)/2
 		dl, dh := abs(coord-lowC), abs(coord-highC)
 		switch {
 		case dl < dh:
@@ -229,7 +260,7 @@ func (s *RangeSlider) OnEvent(ev Event) {
 		}
 		// Home/End pick which handle the arrows move (Low / High); the arrows
 		// nudge the picked handle by Step, clamped so the handles never cross
-		// (reusing the same cross-clamp + OnChange as a drag).
+		// (reusing the same cross-clamp + Observable Set as a drag).
 		switch ev.Code {
 		case "Home":
 			s.keyHandle = 0
@@ -253,45 +284,39 @@ func (s *RangeSlider) keyStep() float64 {
 }
 
 // nudgeHandle moves the keyboard-focused handle (keyHandle) by delta, clamped to
-// range and so it never crosses the other handle, then fires OnChange -- the
-// same mutate+callback path a drag uses.
+// range and so it never crosses the other handle, then Sets that handle's
+// Observable -- the same mutate path a drag uses.
 func (s *RangeSlider) nudgeHandle(delta float64) {
 	if s.keyHandle == 1 {
-		v := s.clamp(s.High + delta)
-		if v < s.Low {
-			v = s.Low
+		v := s.clamp(s.High().Get() + delta)
+		if v < s.Low().Get() {
+			v = s.Low().Get()
 		}
-		s.High = v
+		s.High().Set(v)
 	} else {
-		v := s.clamp(s.Low + delta)
-		if v > s.High {
-			v = s.High
+		v := s.clamp(s.Low().Get() + delta)
+		if v > s.High().Get() {
+			v = s.High().Get()
 		}
-		s.Low = v
-	}
-	if s.OnChange != nil {
-		s.OnChange(s.Low, s.High)
+		s.Low().Set(v)
 	}
 }
 
 // moveActive sets the grabbed handle to the value under x, clamped so Low never
-// crosses High, then fires OnChange.
+// crosses High, then Sets that handle's Observable.
 func (s *RangeSlider) moveActive(x int) {
 	v := s.valueAt(x)
 	switch s.active {
 	case 1:
-		if v > s.High {
-			v = s.High
+		if v > s.High().Get() {
+			v = s.High().Get()
 		}
-		s.Low = v
+		s.Low().Set(v)
 	case 2:
-		if v < s.Low {
-			v = s.Low
+		if v < s.Low().Get() {
+			v = s.Low().Get()
 		}
-		s.High = v
-	}
-	if s.OnChange != nil {
-		s.OnChange(s.Low, s.High)
+		s.High().Set(v)
 	}
 }
 

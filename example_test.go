@@ -60,7 +60,7 @@ func ExampleDatePicker() {
 func ExampleRangeSlider() {
 	rs := toolkit.NewRangeSlider(0, 100, 20, 80)
 	rs.SetRange(90, 10) // passed out of order → normalised to Low <= High
-	fmt.Printf("%.0f-%.0f\n", rs.Low, rs.High)
+	fmt.Printf("%.0f-%.0f\n", rs.Low().Get(), rs.High().Get())
 	// Output: 10-90
 }
 

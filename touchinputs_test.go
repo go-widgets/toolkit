@@ -242,10 +242,10 @@ func TestRangeSliderThumbHitRects(t *testing.T) {
 	// Compact: sz=16, span=184. Low pos .25 -> x=46; High pos .75 -> x=138.
 	wantLow := Rect{X: 46, Y: 12, W: 16, H: 16}
 	wantHigh := Rect{X: 138, Y: 12, W: 16, H: 16}
-	if got := s.thumbRect(s.Low); got != wantLow {
+	if got := s.thumbRect(s.Low().Get()); got != wantLow {
 		t.Fatalf("compact low thumbRect = %+v, want %+v", got, wantLow)
 	}
-	if got := s.thumbRect(s.High); got != wantHigh {
+	if got := s.thumbRect(s.High().Get()); got != wantHigh {
 		t.Fatalf("compact high thumbRect = %+v, want %+v", got, wantHigh)
 	}
 	if got := s.LowThumbHitRect(); got != wantLow {
@@ -294,10 +294,10 @@ func TestVerticalSliderThumbRects(t *testing.T) {
 	rs.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 200})
 	wantLow := Rect{X: 12, Y: 138, W: 16, H: 16}
 	wantHigh := Rect{X: 12, Y: 46, W: 16, H: 16}
-	if got := rs.thumbRect(rs.Low); got != wantLow {
+	if got := rs.thumbRect(rs.Low().Get()); got != wantLow {
 		t.Fatalf("compact vertical RangeSlider low thumbRect = %+v, want %+v", got, wantLow)
 	}
-	if got := rs.thumbRect(rs.High); got != wantHigh {
+	if got := rs.thumbRect(rs.High().Get()); got != wantHigh {
 		t.Fatalf("compact vertical RangeSlider high thumbRect = %+v, want %+v", got, wantHigh)
 	}
 
