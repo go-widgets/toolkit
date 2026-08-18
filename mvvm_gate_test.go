@@ -49,6 +49,16 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"ToggleButton":   {"Label": true},
 	"Switch":         {},
 	"Expander":       {"Label": true, "Content": true},
+	// Batch 3 (index/selection widgets): the current index / open / collapsed
+	// state is unexported behind accessors; the slices + flags below are config.
+	"Frame":        {"Padding": true, "Title": true, "Collapsible": true},
+	"ViewSwitcher": {"Views": true},
+	"CycleButton":  {"Options": true},
+	"Pagination":   {"Total": true},
+	"Steps":        {"Labels": true, "Orientation": true},
+	"Notebook":     {"Tabs": true, "TabSide": true},
+	"DropDown":     {"Options": true, "OpenUp": true},
+	"Accordion":    {"Sections": true, "Multiple": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
