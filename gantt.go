@@ -8,6 +8,7 @@ import (
 	"math"
 	"strconv"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -30,22 +31,25 @@ type GanttTask struct {
 // that spans its [Start, End) columns across the shared axis. Units is the total
 // number of columns on that axis; when it is <= 0 it is derived from the largest
 // task End so a caller can leave it unset. Progress paints a darker overlay on
-// each bar, and Selected (when it indexes a task) tints that row and fires
-// OnSelect on a click.
+// each bar, and the selected task (when it indexes a task) tints that row.
+//
+// Tasks and Units are config. The reactive selection is MVVM-only: the selected
+// task index lives in an unexported Observable exposed via [Gantt.Selected] — a
+// click Sets it and a host binds it, there is no settable Selected field.
 //
 // Gantt renders through painter.Painter, so the same schedule draws as pixels
 // (WUI/GUI) or promoted cells (TUI). An empty task slice draws just the gutter
 // separator, header band and axis ticks.
 type Gantt struct {
 	Base
-	Tasks    []GanttTask
-	Units    int
-	OnSelect func(i int)
-	Selected int
+	Tasks []GanttTask
+	Units int
 	// OnTaskChange fires when a drag edits a task's span, with the task index
 	// and its new [start, end) columns. Nil is safe -- Tasks is still mutated
 	// in place, so the chart reflects the edit whether or not a host listens.
 	OnTaskChange func(i, start, end int)
+
+	selected *mvvm.Observable[int]
 
 	// Edit/drag state, following the toolkit's grab-on-EventClick / track-on-
 	// EventMouseDrag / release-on-EventMouseUp convention. editMode records
@@ -66,6 +70,19 @@ type Gantt struct {
 	// is harmless; at scroll == 0 rendering + hit-testing are byte-identical to
 	// before scrolling existed.
 	scroll int
+}
+
+// Selected is the selected task index as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Selected field. A
+// bar click Sets it; subscribers are notified. A value that does not index a
+// task (the -1 constructor default, or an out-of-range index) simply tints no
+// row. Accessed on a bare Gantt (no constructor) it lazily initialises to 0,
+// the field's former zero value.
+func (g *Gantt) Selected() *mvvm.Observable[int] {
+	if g.selected == nil {
+		g.selected = mvvm.NewObservable(0)
+	}
+	return g.selected
 }
 
 // ganttDragMode is how an in-flight bar drag edits its task: shift the whole
@@ -99,14 +116,17 @@ const (
 // bar, so successive bars have a thin gap and never touch the row separator.
 const ganttBarPadY = 4
 
-// NewGantt builds a Gantt over the given tasks with no selection (Selected =
-// -1) and an auto-derived axis (Units = 0). A nil slice is normalised to a
-// non-nil empty slice so range loops and len() checks never special-case nil.
+// NewGantt builds a Gantt over the given tasks with no selection (the Selected
+// Observable starts at -1) and an auto-derived axis (Units = 0). A nil slice is
+// normalised to a non-nil empty slice so range loops and len() checks never
+// special-case nil.
 func NewGantt(tasks []GanttTask) *Gantt {
 	if tasks == nil {
 		tasks = []GanttTask{}
 	}
-	return &Gantt{Tasks: tasks, Selected: -1}
+	g := &Gantt{Tasks: tasks}
+	g.selected = mvvm.NewObservable(-1)
+	return g
 }
 
 // axisUnits returns the effective column count of the time axis: the explicit
@@ -184,7 +204,7 @@ func (g *Gantt) Draw(p painter.Painter, theme *Theme) {
 	withClip(p, bodyClip, func() {
 		for i, tk := range g.Tasks {
 			rowY := r.Y + scaled(GanttHeaderH) + (i-scroll)*scaled(GanttRowH)
-			if g.Selected == i {
+			if g.Selected().Get() == i {
 				fillRect(p, r.X, rowY, r.W, scaled(GanttRowH), ganttSelectInk(theme))
 			}
 			labelY := rowY + (scaled(GanttRowH)-g.glyphHeight())/2
@@ -297,11 +317,11 @@ func (g *Gantt) TaskAt(x, y int) int {
 }
 
 // OnEvent drives selection and bar editing. On EventClick it selects the task
-// row (firing OnSelect) and, from where in the bar the press landed, arms a
-// drag: near the left/right edge resizes Start/End, inside the bar moves the
-// whole span, and elsewhere in the row is a plain select. EventMouseDrag
-// applies the edit live; EventMouseUp commits it and fires OnTaskChange. All
-// callbacks are nil-safe.
+// row (Setting the Selected Observable) and, from where in the bar the press
+// landed, arms a drag: near the left/right edge resizes Start/End, inside the
+// bar moves the whole span, and elsewhere in the row is a plain select.
+// EventMouseDrag applies the edit live; EventMouseUp commits it and fires
+// OnTaskChange (nil-safe).
 func (g *Gantt) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventScroll:
@@ -314,10 +334,7 @@ func (g *Gantt) OnEvent(ev Event) {
 		if row < 0 {
 			return
 		}
-		g.Selected = row
-		if g.OnSelect != nil {
-			g.OnSelect(row)
-		}
+		g.Selected().Set(row)
 		tk := g.Tasks[row]
 		g.edited = false
 		startX, endX := g.barXLocal(tk.Start), g.barXLocal(tk.End)
