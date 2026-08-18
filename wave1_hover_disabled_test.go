@@ -272,7 +272,7 @@ func TestCheckButtonDisabled(t *testing.T) {
 	c.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	c.Disabled = true
 	c.OnEvent(Event{Kind: EventClick})
-	if c.Checked {
+	if c.Checked().Get() {
 		t.Fatal("disabled checkbox should not toggle")
 	}
 	buf := makeSurface(60, 20)
@@ -281,7 +281,7 @@ func TestCheckButtonDisabled(t *testing.T) {
 		t.Fatalf("disabled check box = %+v, want mutedFace", px)
 	}
 	// Disabled + checked exercises the muted checkmark path (Sized + fixed).
-	c.Checked = true
+	c.Checked().Set(true)
 	c.Draw(newP(makeSurface(60, 20), 60), th)
 	c.Size = 16
 	c.Draw(newP(makeSurface(60, 20), 60), th)
