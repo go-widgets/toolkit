@@ -25,9 +25,9 @@ func TestFrameTitledInsetsChildBelowBar(t *testing.T) {
 	}
 }
 
-// TestFrameCollapsibleTogglesOnHeaderClick: a header click flips Collapsed and
-// fires OnCollapse; while collapsed the child is hidden (empty bounds) and not
-// drawn, and only the title bar paints.
+// TestFrameCollapsibleTogglesOnHeaderClick: a header click flips the Collapsed
+// Observable and notifies its subscribers; while collapsed the child is hidden
+// (empty bounds) and not drawn, and only the title bar paints.
 func TestFrameCollapsibleTogglesOnHeaderClick(t *testing.T) {
 	const w, h = 120, 120
 	child := &spyWidget{}
@@ -35,12 +35,12 @@ func TestFrameCollapsibleTogglesOnHeaderClick(t *testing.T) {
 	f.Title = "Advanced"
 	f.Collapsible = true
 	var got []bool
-	f.OnCollapse = func(c bool) { got = append(got, c) }
+	f.Collapsed().Subscribe(func(c bool) { got = append(got, c) })
 	f.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 
 	// Click the title bar → collapse.
 	f.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if !f.Collapsed {
+	if !f.Collapsed().Get() {
 		t.Fatal("header click should collapse the frame")
 	}
 	f.SetBounds(Rect{X: 0, Y: 0, W: w, H: h}) // relayout while collapsed
@@ -59,7 +59,7 @@ func TestFrameCollapsibleTogglesOnHeaderClick(t *testing.T) {
 
 	// Click again → expand; child draws and lays out again.
 	f.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if f.Collapsed {
+	if f.Collapsed().Get() {
 		t.Fatal("second header click should expand the frame")
 	}
 	f.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
@@ -69,7 +69,35 @@ func TestFrameCollapsibleTogglesOnHeaderClick(t *testing.T) {
 		t.Fatalf("expanded child should draw once, count = %d", child.drawCount)
 	}
 	if len(got) != 2 || got[0] != true || got[1] != false {
-		t.Fatalf("OnCollapse calls = %v, want [true false]", got)
+		t.Fatalf("Collapsed subscriber calls = %v, want [true false]", got)
+	}
+}
+
+// TestFrameCollapsedAccessorLazyInit: a bare &Frame{} (no constructor) still
+// yields a usable Collapsed Observable — the accessor lazily initialises it to
+// false rather than panicking on a nil handle.
+func TestFrameCollapsedAccessorLazyInit(t *testing.T) {
+	f := &Frame{}
+	if f.Collapsed().Get() {
+		t.Fatalf("zero-value Frame Collapsed = true, want false")
+	}
+}
+
+// TestFrameCollapsedHostBinding: a host binds the Collapsed Observable
+// (Subscribe + Set) and drives the collapse state through it, with no imperative
+// state field in sight.
+func TestFrameCollapsedHostBinding(t *testing.T) {
+	f := NewFrame(&spyWidget{})
+	f.Collapsible = true
+	f.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 80})
+	var seen bool
+	f.Collapsed().Subscribe(func(c bool) { seen = c })
+	f.Collapsed().Set(true)
+	if !seen {
+		t.Fatal("host Subscribe not notified on Set(true)")
+	}
+	if !f.Collapsed().Get() {
+		t.Fatal("Collapsed().Get() should reflect the host Set(true)")
 	}
 }
 
@@ -85,7 +113,7 @@ func TestFrameCollapsibleForcesBarWithoutTitle(t *testing.T) {
 	buf := makeSurface(80, 80)
 	f.Draw(newP(buf, 80), DefaultLight()) // draws chevron + (empty) title
 	f.OnEvent(Event{Kind: EventClick, X: 5, Y: 3})
-	if !f.Collapsed {
+	if !f.Collapsed().Get() {
 		t.Fatal("Collapsible frame without a title must still toggle")
 	}
 }
@@ -100,7 +128,7 @@ func TestFrameTitleBarClickNotCollapsibleForwardsNothing(t *testing.T) {
 	f.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 
 	f.OnEvent(Event{Kind: EventClick, X: 10, Y: 5}) // in the title bar
-	if f.Collapsed {
+	if f.Collapsed().Get() {
 		t.Fatal("a non-collapsible titled frame must not collapse")
 	}
 	// A click in the body (below the bar, inside the child) reaches the child.
