@@ -1078,9 +1078,11 @@ func (b *Browser) drawTabStrip(p painter.Painter, theme *Theme) {
 		if i == b.active {
 			fill, ring = theme.Surface, theme.Accent
 		}
-		rad := b.sc(6)
-		fillRoundRect(p, pill.X, pill.Y, pill.W, pill.H, rad, fill)
-		strokeRoundRect(p, pill.X, pill.Y, pill.W, pill.H, rad, ring)
+		// Each tab is a composed rounded Backdrop (fill + border), byte-identical to
+		// the former hand-drawn fillRoundRect/strokeRoundRect pair.
+		pillBg := Backdrop{Fill: fill, Radius: b.sc(6), Stroke: ring, StrokeWidth: strokeWidth()}
+		pillBg.SetBounds(pill)
+		pillBg.Draw(p, theme)
 		ty := pill.Y + (pill.H-b.glyphHeight())/2
 		title := tabDisplayTitle(t)
 		avail := pill.W - 2*b.btnPad() - b.tabCloseW()
@@ -1133,13 +1135,17 @@ func (b *Browser) addrZones(r Rect) (lead, text, star Rect) {
 }
 
 func (b *Browser) drawAddress(p painter.Painter, theme *Theme, r Rect) {
-	rad := b.sc(4)
-	fillRoundRect(p, r.X, r.Y, r.W, r.H, rad, theme.Surface)
 	ring := theme.Border
 	if b.addrFocused {
 		ring = theme.Accent
 	}
-	strokeRoundRect(p, r.X, r.Y, r.W, r.H, rad, ring)
+	// The field's ground is a composed rounded Backdrop (fill + border), not a
+	// hand-drawn fillRoundRect/strokeRoundRect pair — the same canonical ground the
+	// rest of the toolkit's pills and fields use. Byte-identical: Backdrop fills the
+	// rounded rect then strokes it at the same radius and one-pixel width.
+	ground := Backdrop{Fill: theme.Surface, Radius: b.sc(4), Stroke: ring, StrokeWidth: strokeWidth()}
+	ground.SetBounds(r)
+	ground.Draw(p, theme)
 	lead, tz, star := b.addrZones(r)
 	if b.LeadingIcon != nil {
 		b.LeadingIcon(p, lead, theme.OnSurface)
