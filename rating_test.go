@@ -4,7 +4,12 @@
 
 package toolkit
 
-import "testing"
+import (
+	"math"
+	"testing"
+
+	"github.com/go-widgets/painter"
+)
 
 // TestRatingNewDefaultMax covers the max <= 0 -> 5 branch of NewRating.
 func TestRatingNewDefaultMax(t *testing.T) {
@@ -52,105 +57,316 @@ func TestRatingNewKeepsInRangeValue(t *testing.T) {
 	}
 }
 
-// TestRatingDrawFilledAndEmpty verifies filled cells land in Accent
-// and empty cells land in SurfaceAlt.
-func TestRatingDrawFilledAndEmpty(t *testing.T) {
+// --- Star geometry -------------------------------------------------------
+
+// cellCentre returns the drawn centre pixel of star cell i for a strip whose
+// Bounds origin is (0,0) at the default (compact, 1x) scale, mirroring Draw's
+// own arithmetic so a pixel probe lands on the star's interior.
+func cellCentre(i int) (int, int) {
+	pitch := RatingStarW + RatingStarGap
+	return i*pitch + RatingStarW/2, RatingStarW / 2
+}
+
+// TestStarPolygonExactVertices pins the star geometry to exact coordinates for a
+// known cell/size: a point-up five-pointed star, outer radius 6, inner radius
+// 6*0.42, centred on (7,7) — the centre of cell 0 at the compact 14px cell. This
+// is the control on the shape: a regression in the angle sweep, the inner ratio,
+// or the top-point orientation moves these numbers.
+func TestStarPolygonExactVertices(t *testing.T) {
+	const cx, cy, outer = 7.0, 7.0, 6.0
+	inner := outer * ratingStarInnerRatio // 2.52
+	wantF := [10][2]float64{
+		{7.000000, 1.000000},
+		{8.481219, 4.961277},
+		{12.706339, 5.145898},
+		{9.396662, 7.778723},
+		{10.526712, 11.854102},
+		{7.000000, 9.520000},
+		{3.473288, 11.854102},
+		{4.603338, 7.778723},
+		{1.293661, 5.145898},
+		{5.518781, 4.961277},
+	}
+	got := starPolygon(cx, cy, outer, inner)
+	if len(got) != 10 {
+		t.Fatalf("starPolygon returned %d vertices, want 10", len(got))
+	}
+	for k := range wantF {
+		if math.Abs(got[k][0]-wantF[k][0]) > 1e-6 || math.Abs(got[k][1]-wantF[k][1]) > 1e-6 {
+			t.Errorf("vertex %d = %.6f, want %.6f", k, got[k], wantF[k])
+		}
+	}
+	// The top point must sit straight above the centre (x == cx, y minimal).
+	if got[0][0] != cx || got[0][1] != cy-outer {
+		t.Errorf("top point = %.3f, want {%.3f, %.3f}", got[0], cx, cy-outer)
+	}
+
+	// The integer-rounded polygon the cell-grid fallback fills.
+	wantI := [10][2]int{
+		{7, 1}, {8, 5}, {13, 5}, {9, 8}, {11, 12},
+		{7, 10}, {3, 12}, {5, 8}, {1, 5}, {6, 5},
+	}
+	gi := starPointsInt(cx, cy, outer, inner)
+	for k := range wantI {
+		if gi[k] != wantI[k] {
+			t.Errorf("int vertex %d = %v, want %v", k, gi[k], wantI[k])
+		}
+	}
+}
+
+// TestStarPathClosed verifies starPath builds a non-empty closed path (10 line
+// legs + a closing segment) that the pixel back-end can rasterise.
+func TestStarPathClosed(t *testing.T) {
+	p := starPath(7, 7, 6, 2.52)
+	if p == nil {
+		t.Fatal("starPath returned nil")
+	}
+	// Fill it into a buffer and confirm the centre is painted (non-empty area).
+	surf := makeSurface(16, 16)
+	pp := newP(surf, 16)
+	pp.FillPath(p, RGB(0x11, 0x22, 0x33), painter.NonZero)
+	if got := pixelAt(surf, 16, 7, 7); got != (RGB(0x11, 0x22, 0x33)) {
+		t.Fatalf("star centre = %+v, want the fill colour (path enclosed no area?)", got)
+	}
+}
+
+// --- Star rendering (pixel back-end, anti-aliased) -----------------------
+
+// TestRatingDrawFilledCentreYellow probes the interior centre pixel of a filled
+// star: it must be exactly the theme's gold StarFilled tone (an interior pixel
+// has full path coverage, so AA does not dilute it).
+func TestRatingDrawFilledCentreYellow(t *testing.T) {
 	theme := DefaultLight()
-	r := NewRating(2, 5)
-	r.SetBounds(Rect{X: 0, Y: 0, W: 5 * (RatingStarW + RatingStarGap), H: RatingStarW})
+	r := NewRating(2, 5) // cells 0,1 filled; 2,3,4 empty
 	surfW := 5*(RatingStarW+RatingStarGap) + 4
-	surf := makeSurface(surfW, RatingStarW+4)
-	r.Draw(newP(surf, surfW), theme)
-
-	// Cell 0 (index < Value) filled in Accent. Sample near cell centre,
-	// away from the "*" glyph which occupies the middle rows.
-	if got := pixelAt(surf, surfW, 1, 1); got != theme.Accent {
-		t.Fatalf("cell 0 fill = %+v, want Accent", got)
-	}
-	// Cell 3 (index >= Value) filled in SurfaceAlt.
-	x3 := 3*(RatingStarW+RatingStarGap) + 1
-	if got := pixelAt(surf, surfW, x3, 1); got != theme.SurfaceAlt {
-		t.Fatalf("cell 3 fill = %+v, want SurfaceAlt", got)
-	}
-}
-
-// TestRatingDrawGlyphsFilledUsesAccentInk verifies that a filled cell's
-// glyph ink honours accentInk (OnAccent override present in Extra).
-func TestRatingDrawGlyphsFilledUsesAccentInk(t *testing.T) {
-	theme := DefaultLight()
-	custom := RGB(0xAB, 0xCD, 0xEF)
-	theme.Extra = map[string]RGBA{"OnAccent": custom}
-	r := NewRating(1, 3)
-	r.SetBounds(Rect{X: 0, Y: 0, W: 3 * (RatingStarW + RatingStarGap), H: RatingStarW})
-	surfW := 3 * (RatingStarW + RatingStarGap)
+	r.SetBounds(Rect{X: 0, Y: 0, W: surfW, H: RatingStarW})
 	surf := makeSurface(surfW, RatingStarW)
 	r.Draw(newP(surf, surfW), theme)
-	found := false
-	for y := 0; y < RatingStarW && !found; y++ {
-		for x := 0; x < RatingStarW; x++ {
-			if pixelAt(surf, surfW, x, y) == custom {
-				found = true
-				break
-			}
-		}
+
+	cx0, cy0 := cellCentre(0)
+	if got := pixelAt(surf, surfW, cx0, cy0); got != theme.StarFilled {
+		t.Fatalf("filled star centre = %+v, want StarFilled %+v", got, theme.StarFilled)
 	}
-	if !found {
-		t.Fatal("no OnAccent-coloured glyph pixel found in filled cell 0")
+	cx3, cy3 := cellCentre(3)
+	if got := pixelAt(surf, surfW, cx3, cy3); got != theme.StarEmpty {
+		t.Fatalf("empty star centre = %+v, want StarEmpty %+v", got, theme.StarEmpty)
 	}
 }
 
-// TestRatingDrawGlyphsEmptyUsesOnSurface verifies that an empty cell's
-// glyph ink is Theme.OnSurface (independent of any Extra override).
-func TestRatingDrawGlyphsEmptyUsesOnSurface(t *testing.T) {
-	theme := DefaultLight()
-	r := NewRating(0, 2)
-	r.SetBounds(Rect{X: 0, Y: 0, W: 2 * (RatingStarW + RatingStarGap), H: RatingStarW})
-	surfW := 2 * (RatingStarW + RatingStarGap)
-	surf := makeSurface(surfW, RatingStarW)
-	r.Draw(newP(surf, surfW), theme)
-	found := false
-	for y := 0; y < RatingStarW && !found; y++ {
-		for x := 0; x < surfW; x++ {
-			if pixelAt(surf, surfW, x, y) == theme.OnSurface {
-				found = true
-				break
-			}
-		}
-	}
-	if !found {
-		t.Fatal("no OnSurface-coloured glyph pixel found in empty cell")
-	}
-}
-
-// TestRatingDrawValueEqualsMax covers the "all filled" edge — every
-// cell is a filled cell.
-func TestRatingDrawValueEqualsMax(t *testing.T) {
-	theme := DefaultLight()
-	r := NewRating(5, 5)
-	r.SetBounds(Rect{X: 0, Y: 0, W: 5 * (RatingStarW + RatingStarGap), H: RatingStarW})
-	surfW := 5 * (RatingStarW + RatingStarGap)
-	surf := makeSurface(surfW, RatingStarW)
-	r.Draw(newP(surf, surfW), theme)
-	// Last cell centre pixel outside the glyph must be Accent.
-	xLast := 4*(RatingStarW+RatingStarGap) + 1
-	if got := pixelAt(surf, surfW, xLast, 1); got != theme.Accent {
-		t.Fatalf("last cell fill = %+v, want Accent", got)
-	}
-}
-
-// TestRatingDrawValueZero covers the "all empty" edge.
-func TestRatingDrawValueZero(t *testing.T) {
+// TestRatingDrawAllEmpty covers the value-0 edge: every star centre is grey.
+func TestRatingDrawAllEmpty(t *testing.T) {
 	theme := DefaultLight()
 	r := NewRating(0, 5)
-	r.SetBounds(Rect{X: 0, Y: 0, W: 5 * (RatingStarW + RatingStarGap), H: RatingStarW})
 	surfW := 5 * (RatingStarW + RatingStarGap)
+	r.SetBounds(Rect{X: 0, Y: 0, W: surfW, H: RatingStarW})
 	surf := makeSurface(surfW, RatingStarW)
 	r.Draw(newP(surf, surfW), theme)
-	// First cell fill = SurfaceAlt (no filled cells).
-	if got := pixelAt(surf, surfW, 1, 1); got != theme.SurfaceAlt {
-		t.Fatalf("cell 0 fill = %+v, want SurfaceAlt", got)
+	for i := 0; i < 5; i++ {
+		cx, cy := cellCentre(i)
+		if got := pixelAt(surf, surfW, cx, cy); got != theme.StarEmpty {
+			t.Fatalf("cell %d centre = %+v, want StarEmpty %+v", i, got, theme.StarEmpty)
+		}
 	}
 }
+
+// TestRatingDrawAllFilled covers the value==Max edge: every star centre is gold.
+func TestRatingDrawAllFilled(t *testing.T) {
+	theme := DefaultLight()
+	r := NewRating(5, 5)
+	surfW := 5 * (RatingStarW + RatingStarGap)
+	r.SetBounds(Rect{X: 0, Y: 0, W: surfW, H: RatingStarW})
+	surf := makeSurface(surfW, RatingStarW)
+	r.Draw(newP(surf, surfW), theme)
+	for i := 0; i < 5; i++ {
+		cx, cy := cellCentre(i)
+		if got := pixelAt(surf, surfW, cx, cy); got != theme.StarFilled {
+			t.Fatalf("cell %d centre = %+v, want StarFilled %+v", i, got, theme.StarFilled)
+		}
+	}
+}
+
+// TestRatingDrawDarkTheme proves the stars re-tint with the palette: under the
+// dark theme a filled star is the dark gold and an empty star the dark grey.
+func TestRatingDrawDarkTheme(t *testing.T) {
+	theme := DefaultDark()
+	r := NewRating(1, 3)
+	surfW := 3 * (RatingStarW + RatingStarGap)
+	r.SetBounds(Rect{X: 0, Y: 0, W: surfW, H: RatingStarW})
+	surf := makeSurface(surfW, RatingStarW)
+	r.Draw(newP(surf, surfW), theme)
+	cx0, cy0 := cellCentre(0)
+	if got := pixelAt(surf, surfW, cx0, cy0); got != theme.StarFilled {
+		t.Fatalf("dark filled centre = %+v, want StarFilled %+v", got, theme.StarFilled)
+	}
+	cx1, cy1 := cellCentre(1)
+	if got := pixelAt(surf, surfW, cx1, cy1); got != theme.StarEmpty {
+		t.Fatalf("dark empty centre = %+v, want StarEmpty %+v", got, theme.StarEmpty)
+	}
+}
+
+// TestRatingDrawPerWidgetOverride covers the FilledColor/EmptyColor override
+// branches: an opaque per-widget colour wins over the theme.
+func TestRatingDrawPerWidgetOverride(t *testing.T) {
+	theme := DefaultLight()
+	fill := RGB(0x12, 0x34, 0x56)
+	empty := RGB(0x65, 0x43, 0x21)
+	r := NewRating(1, 2)
+	r.FilledColor = fill
+	r.EmptyColor = empty
+	surfW := 2 * (RatingStarW + RatingStarGap)
+	r.SetBounds(Rect{X: 0, Y: 0, W: surfW, H: RatingStarW})
+	surf := makeSurface(surfW, RatingStarW)
+	r.Draw(newP(surf, surfW), theme)
+	cx0, cy0 := cellCentre(0)
+	if got := pixelAt(surf, surfW, cx0, cy0); got != fill {
+		t.Fatalf("override filled centre = %+v, want %+v", got, fill)
+	}
+	cx1, cy1 := cellCentre(1)
+	if got := pixelAt(surf, surfW, cx1, cy1); got != empty {
+		t.Fatalf("override empty centre = %+v, want %+v", got, empty)
+	}
+}
+
+// TestRatingColorThemeFallback covers the "theme leaves the star fields zero"
+// branch: filledColor falls back to the built-in gold, emptyColor to the theme's
+// Border grey. A bare Theme (no StarFilled/StarEmpty) exercises both.
+func TestRatingColorThemeFallback(t *testing.T) {
+	theme := &Theme{Border: RGB(0x80, 0x82, 0x84), Accent: RGB(0, 0, 0)}
+	r := NewRating(1, 2)
+	if got := r.filledColor(theme); got != defaultStarFilled {
+		t.Fatalf("filled fallback = %+v, want defaultStarFilled %+v", got, defaultStarFilled)
+	}
+	if got := r.emptyColor(theme); got != theme.Border {
+		t.Fatalf("empty fallback = %+v, want Border %+v", got, theme.Border)
+	}
+	// And it renders that way.
+	surfW := 2 * (RatingStarW + RatingStarGap)
+	r.SetBounds(Rect{X: 0, Y: 0, W: surfW, H: RatingStarW})
+	surf := makeSurface(surfW, RatingStarW)
+	r.Draw(newP(surf, surfW), theme)
+	cx0, cy0 := cellCentre(0)
+	if got := pixelAt(surf, surfW, cx0, cy0); got != defaultStarFilled {
+		t.Fatalf("fallback filled centre = %+v, want %+v", got, defaultStarFilled)
+	}
+	cx1, cy1 := cellCentre(1)
+	if got := pixelAt(surf, surfW, cx1, cy1); got != theme.Border {
+		t.Fatalf("fallback empty centre = %+v, want Border %+v", got, theme.Border)
+	}
+}
+
+// TestRatingColorThemeSetWins covers the middle branch: when the widget sets no
+// override but the theme DOES carry StarFilled/StarEmpty, the theme values win
+// over the built-in fallbacks.
+func TestRatingColorThemeSetWins(t *testing.T) {
+	theme := DefaultLight()
+	r := NewRating(0, 5)
+	if got := r.filledColor(theme); got != theme.StarFilled {
+		t.Fatalf("filledColor = %+v, want theme StarFilled %+v", got, theme.StarFilled)
+	}
+	if got := r.emptyColor(theme); got != theme.StarEmpty {
+		t.Fatalf("emptyColor = %+v, want theme StarEmpty %+v", got, theme.StarEmpty)
+	}
+}
+
+// --- Cell-grid fallback (non-PathPainter back-end) -----------------------
+
+// nonPathPainter is a base-only Painter over an RGBA buffer: it implements the
+// fixed primitive set but NOT PathPainter, so drawStar takes its integer
+// scanline fallback (fillPolygon + drawPolygon). It lets a pixel probe verify
+// the fallback fills the star too.
+type nonPathPainter struct {
+	buf  []byte
+	w, h int
+}
+
+var _ painter.Painter = (*nonPathPainter)(nil)
+
+func (np *nonPathPainter) FillRect(r painter.Rect, c RGBA) {
+	for y := r.Y; y < r.Y+r.H; y++ {
+		for x := r.X; x < r.X+r.W; x++ {
+			np.PutPixel(x, y, c)
+		}
+	}
+}
+func (np *nonPathPainter) StrokeRect(r painter.Rect, c RGBA, lineW int)               {}
+func (np *nonPathPainter) FillRoundRect(r painter.Rect, radius int, c RGBA)           {}
+func (np *nonPathPainter) StrokeRoundRect(r painter.Rect, radius int, c RGBA, lw int) {}
+func (np *nonPathPainter) Text(x, y int, s string, ink RGBA)                          {}
+func (np *nonPathPainter) Size() (int, int)                                           { return np.w, np.h }
+func (np *nonPathPainter) PutPixel(x, y int, c RGBA) {
+	if x < 0 || y < 0 || x >= np.w || y >= np.h {
+		return
+	}
+	o := (y*np.w + x) * 4
+	np.buf[o], np.buf[o+1], np.buf[o+2], np.buf[o+3] = c.R, c.G, c.B, c.A
+}
+
+// TestPixelPainterIsPathPainter documents the capability split the fallback
+// hinges on: the pixel back-end rasterises paths, the base-only painter does not.
+func TestPixelPainterIsPathPainter(t *testing.T) {
+	if _, ok := any(newP(makeSurface(4, 4), 4)).(painter.PathPainter); !ok {
+		t.Fatal("PixelPainter must implement PathPainter")
+	}
+	if _, ok := any(&nonPathPainter{}).(painter.PathPainter); ok {
+		t.Fatal("nonPathPainter must NOT implement PathPainter")
+	}
+}
+
+// TestRatingDrawFallbackFillsStar exercises the non-PathPainter branch of
+// drawStar via a full Rating.Draw: the star centre still lands on the fill.
+func TestRatingDrawFallbackFillsStar(t *testing.T) {
+	theme := DefaultLight()
+	r := NewRating(1, 2)
+	surfW := 2 * (RatingStarW + RatingStarGap)
+	np := &nonPathPainter{buf: makeSurface(surfW, RatingStarW), w: surfW, h: RatingStarW}
+	r.SetBounds(Rect{X: 0, Y: 0, W: surfW, H: RatingStarW})
+	r.Draw(np, theme)
+	cx0, cy0 := cellCentre(0)
+	if got := pixelAt(np.buf, surfW, cx0, cy0); got != theme.StarFilled {
+		t.Fatalf("fallback filled centre = %+v, want StarFilled %+v", got, theme.StarFilled)
+	}
+	cx1, cy1 := cellCentre(1)
+	if got := pixelAt(np.buf, surfW, cx1, cy1); got != theme.StarEmpty {
+		t.Fatalf("fallback empty centre = %+v, want StarEmpty %+v", got, theme.StarEmpty)
+	}
+}
+
+// TestDrawStarOutlineToggle drives drawStar directly to cover both outline
+// branches (present / skipped) on both back-ends: a transparent outline (A==0)
+// and a zero stroke width skip the StrokePath / drawPolygon call.
+func TestDrawStarOutlineToggle(t *testing.T) {
+	fill := RGB(0x22, 0x44, 0x66)
+	// Pixel back-end, outline skipped (transparent).
+	surf := makeSurface(16, 16)
+	drawStar(newP(surf, 16), 8, 8, 6, 2.5, fill, RGBA{}, 1)
+	if got := pixelAt(surf, 16, 8, 8); got != fill {
+		t.Fatalf("no-outline pixel centre = %+v, want fill %+v", got, fill)
+	}
+	// Pixel back-end, outline skipped (zero width).
+	surf2 := makeSurface(16, 16)
+	drawStar(newP(surf2, 16), 8, 8, 6, 2.5, fill, RGB(0, 0, 0), 0)
+	if got := pixelAt(surf2, 16, 8, 8); got != fill {
+		t.Fatalf("zero-width pixel centre = %+v, want fill %+v", got, fill)
+	}
+	// Fallback back-end, outline skipped (transparent) — drawPolygon not called.
+	np := &nonPathPainter{buf: makeSurface(16, 16), w: 16, h: 16}
+	drawStar(np, 8, 8, 6, 2.5, fill, RGBA{}, 1)
+	if got := pixelAt(np.buf, 16, 8, 8); got != fill {
+		t.Fatalf("fallback no-outline centre = %+v, want fill %+v", got, fill)
+	}
+	// Fallback back-end, outline present — drawPolygon paints the rim.
+	np2 := &nonPathPainter{buf: makeSurface(16, 16), w: 16, h: 16}
+	outline := RGB(0x01, 0x02, 0x03)
+	drawStar(np2, 8, 8, 6, 2.5, fill, outline, 1)
+	if got := pixelAt(np2.buf, 16, 8, 8); got != fill {
+		t.Fatalf("fallback outlined centre = %+v, want fill %+v", got, fill)
+	}
+	if got := pixelAt(np2.buf, 16, 8, 2); got != outline { // top point (8,2)
+		t.Fatalf("fallback outline top = %+v, want outline %+v", got, outline)
+	}
+}
+
+// --- Value / MVVM --------------------------------------------------------
 
 // TestRatingValueObservable covers the zero-value lazy-init of the Value
 // accessor and the host binding path: a Rating built as a bare struct (no
@@ -214,13 +430,9 @@ func TestRatingClickOutsideStripIgnored(t *testing.T) {
 	}
 }
 
-// TestRatingClickNegativeXIgnored covers the idx < 0 guard. Craft an X
-// small enough that integer division wraps into a negative -- Go
-// truncates toward zero so a negative X yields idx <= 0; but idx == 0
-// is still a valid cell, so the branch is guarded specifically for
-// negative X values that produce a negative index. A single-pixel
-// negative X yields idx = 0 (0/(RatingStarW+RatingStarGap) == 0) —
-// so we need X <= -(RatingStarW+RatingStarGap) to reach idx == -1.
+// TestRatingClickNegativeXIgnored covers the idx < 0 guard. A single-pixel
+// negative X yields idx = 0 (0/pitch == 0) — so we need X <= -pitch to reach
+// idx == -1 and exercise the guard.
 func TestRatingClickNegativeXIgnored(t *testing.T) {
 	r := NewRating(2, 5)
 	r.OnEvent(Event{Kind: EventClick, X: -(RatingStarW + RatingStarGap + 1), Y: 0})
@@ -230,12 +442,12 @@ func TestRatingClickNegativeXIgnored(t *testing.T) {
 }
 
 // TestRatingIgnoresNonClick guards the early-return in OnEvent: any
-// non-click event must leave Value unchanged.
+// non-click, non-key event must leave Value unchanged.
 func TestRatingIgnoresNonClick(t *testing.T) {
 	r := NewRating(2, 5)
-	r.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	r.OnEvent(Event{Kind: EventChar, Code: "a"})
 	if r.Value().Get() != 2 {
-		t.Fatalf("KeyDown should not change Value: got %d, want 2", r.Value().Get())
+		t.Fatalf("Char should not change Value: got %d, want 2", r.Value().Get())
 	}
 }
 

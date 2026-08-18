@@ -5,30 +5,41 @@
 package toolkit
 
 import (
+	"math"
+
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
-// Rating is a horizontal star-rating strip: Max square cells drawn
-// left-to-right, each carrying an ASCII asterisk overlay. Cells with
-// index < Value fill in Theme.Accent (the "filled" state); cells with
-// index >= Value fill in Theme.SurfaceAlt (the "empty" state). The
-// star glyph itself is drawn as the ASCII "*" character because the
-// toolkit's 5x7 bitmap font only covers ASCII — a Unicode "★" would
-// render blank via DrawText's font5x7 lookup fall-through.
+// Rating is a horizontal star-rating strip: Max cells drawn left-to-right, each
+// carrying a real five-pointed star. Cells with index < Value paint the filled
+// (gold) star; cells with index >= Value paint the empty (grey) star. The star
+// is a proper concave 10-vertex polygon, anti-aliased through the painter's
+// path-fill capability on pixel back-ends and scanline-filled on a cell grid, so
+// the row reads as stars — not squares, not an ASCII "*".
 //
-// A click on cell index i sets Value to i+1 (so the leftmost cell
-// yields 1, the rightmost Max), notifying the Value Observable's subscribers.
-// Clicks outside the strip (Y outside the cell row, X to the right of
-// the last cell) are ignored — the parent container already routes only
-// hits inside Bounds() but a stray x >= Max*(RatingStarW+RatingStarGap)
-// would otherwise resolve to an out-of-range index.
+// The two tones come from the [Theme] (StarFilled / StarEmpty) so a rating
+// re-tints with the rest of the palette in light and dark; a host may override
+// either per-widget via [Rating.FilledColor] / [Rating.EmptyColor].
+//
+// A click on cell index i sets Value to i+1 (so the leftmost cell yields 1, the
+// rightmost Max), notifying the Value Observable's subscribers. Clicks outside
+// the strip (X to the right of the last cell) are ignored — the parent container
+// already routes only hits inside Bounds() but a stray x >= Max*pitch would
+// otherwise resolve to an out-of-range index.
 type Rating struct {
 	Base
 	focusState
 	// Max is the number of cells (config). The reactive rating is MVVM-only: the
 	// current value lives in an unexported Observable exposed via [Rating.Value].
 	Max int
+
+	// FilledColor / EmptyColor override the themed star tones for this widget
+	// only. Each is honoured when opaque (A != 0); a zero value (the default)
+	// inherits Theme.StarFilled / Theme.StarEmpty (or their fallbacks). They are
+	// set-once appearance config, not reactive state.
+	FilledColor RGBA
+	EmptyColor  RGBA
 
 	value *mvvm.Observable[int]
 }
@@ -43,20 +54,23 @@ func (r *Rating) Value() *mvvm.Observable[int] {
 	return r.value
 }
 
-// Rating sizing constants. Cells are square so the strip reads as a
-// row of tiles; the small gap keeps them visually distinct without
-// eating layout width.
+// Rating sizing constants. Each star occupies a square cell so the strip reads
+// as an evenly spaced row; the small gap keeps successive stars visually
+// distinct without eating layout width.
 const (
 	// RatingStarW is the per-cell edge in pixels.
 	RatingStarW = 14
 	// RatingStarGap is the horizontal spacing between two successive
 	// cells (pixels of surface visible between them).
 	RatingStarGap = 2
+	// RatingStarPad is the inset (logical px) between a cell's edge and the
+	// star's outer points, so stars don't touch across the gap.
+	RatingStarPad = 1
 )
 
 // NewRating constructs a Rating with the given value and max. Max
 // defaults to 5 when non-positive; Value is clamped to the [0, Max]
-// interval so a bogus caller input can never render more filled cells
+// interval so a bogus caller input can never render more filled stars
 // than Max.
 func NewRating(value, max int) *Rating {
 	if max <= 0 {
@@ -73,31 +87,130 @@ func NewRating(value, max int) *Rating {
 	return r
 }
 
-// Draw paints Max cells left-to-right. Filled cells use Theme.Accent +
-// the accent-inverted ink; empty cells use Theme.SurfaceAlt +
-// Theme.OnSurface. Every cell carries an ASCII "*" overlay so the row
-// reads as stars even when the palette is monochrome.
+// ratingStarInnerRatio is the inner/outer radius ratio of the star's concave
+// vertices. 0.42 gives a slightly chunkier star than a true pentagram (~0.382),
+// which reads more clearly at the ~14px cell size.
+const ratingStarInnerRatio = 0.42
+
+// defaultStarFilled is the built-in gold used when neither the widget nor the
+// theme supplies a filled tone. It reads as "scored" on light and dark grounds
+// alike; the empty fallback is the theme's own Border grey (see emptyColor).
+var defaultStarFilled = RGB(0xF5, 0xB8, 0x00)
+
+// filledColor resolves the scored-star tone: the per-widget FilledColor when
+// opaque, else Theme.StarFilled when the theme sets it, else the built-in gold.
+func (r *Rating) filledColor(theme *Theme) RGBA {
+	if r.FilledColor.A != 0 {
+		return r.FilledColor
+	}
+	if theme.StarFilled.A != 0 {
+		return theme.StarFilled
+	}
+	return defaultStarFilled
+}
+
+// emptyColor resolves the un-scored-star tone: the per-widget EmptyColor when
+// opaque, else Theme.StarEmpty when the theme sets it, else the theme's Border
+// grey (present in every palette).
+func (r *Rating) emptyColor(theme *Theme) RGBA {
+	if r.EmptyColor.A != 0 {
+		return r.EmptyColor
+	}
+	if theme.StarEmpty.A != 0 {
+		return theme.StarEmpty
+	}
+	return theme.Border
+}
+
+// starPolygon returns the 10 vertices of a point-up five-pointed star inscribed
+// in a circle of radius outer about (cx, cy), with the concave vertices at
+// radius inner. Vertices alternate outer/inner starting at the top point (angle
+// -90°) and step 36° clockwise, so tracing them yields the classic simple
+// (non-self-intersecting) concave star; a non-zero OR even-odd fill paints it
+// identically. Coordinates are float64 pixels for the anti-aliased path builder.
+func starPolygon(cx, cy, outer, inner float64) [][2]float64 {
+	pts := make([][2]float64, 10)
+	for k := 0; k < 10; k++ {
+		ang := -math.Pi/2 + float64(k)*math.Pi/5
+		rad := outer
+		if k%2 == 1 {
+			rad = inner
+		}
+		pts[k] = [2]float64{cx + rad*math.Cos(ang), cy + rad*math.Sin(ang)}
+	}
+	return pts
+}
+
+// starPath builds a closed painter.Path from starPolygon's vertices for the
+// anti-aliased FillPath / StrokePath route.
+func starPath(cx, cy, outer, inner float64) *painter.Path {
+	pts := starPolygon(cx, cy, outer, inner)
+	path := painter.NewPath().MoveTo(pts[0][0], pts[0][1])
+	for _, pt := range pts[1:] {
+		path.LineTo(pt[0], pt[1])
+	}
+	return path.Close()
+}
+
+// starPointsInt rounds starPolygon's vertices to integer pixels for the
+// cell-grid fallback (fillPolygon / drawPolygon operate on [][2]int).
+func starPointsInt(cx, cy, outer, inner float64) [][2]int {
+	fp := starPolygon(cx, cy, outer, inner)
+	pts := make([][2]int, len(fp))
+	for i, pt := range fp {
+		pts[i] = [2]int{int(math.Round(pt[0])), int(math.Round(pt[1]))}
+	}
+	return pts
+}
+
+// drawStar paints one star centred at (cx, cy) with the given radii: fill under
+// an optional thin outline. On a pixel back-end (PathPainter) it fills the star
+// polygon anti-aliased; on a cell grid it falls back to the shared integer
+// scanline fill + polygon outline. The outline is skipped when transparent
+// (outline.A == 0) or when strokeW <= 0.
+func drawStar(p painter.Painter, cx, cy, outer, inner float64, fill, outline RGBA, strokeW float64) {
+	if pp, ok := p.(painter.PathPainter); ok {
+		path := starPath(cx, cy, outer, inner)
+		pp.FillPath(path, fill, painter.NonZero)
+		if outline.A != 0 && strokeW > 0 {
+			pp.StrokePath(path, outline, strokeW)
+		}
+		return
+	}
+	pts := starPointsInt(cx, cy, outer, inner)
+	fillPolygon(p, pts, fill)
+	if outline.A != 0 {
+		drawPolygon(p, pts, outline)
+	}
+}
+
+// Draw paints Max stars left-to-right. Stars at index < Value use the filled
+// (gold) tone; the rest use the empty (grey) tone. A thin outline — a darkened
+// blend of each star's own fill — defines the shape against the surface,
+// especially the grey empty stars. The cell edge and pitch route through scaled
+// so the strip grows with HiDPI and touch density; Draw and OnEvent derive the
+// pitch from the same constants, so the drawn stars and the click-to-index
+// mapping can never drift.
 func (r *Rating) Draw(p painter.Painter, theme *Theme) {
 	b := r.Bounds()
-	ink := accentInk(theme)
-	// Cell edge and gap route through scaled so the strip grows with HiDPI and
-	// touch density; each equals its constant at compact/1x (byte-identical). Draw
-	// and OnEvent both derive the cell pitch from these, so the drawn cells and the
-	// click-to-index mapping can never drift.
 	starW, pitch := scaled(RatingStarW), scaled(RatingStarW)+scaled(RatingStarGap)
+	outer := float64(starW)/2 - float64(scaled(RatingStarPad))
+	inner := outer * ratingStarInnerRatio
+	strokeW := float64(strokeWidth())
+	filled, empty := r.filledColor(theme), r.emptyColor(theme)
+	val := r.Value().Get()
 	for i := 0; i < r.Max; i++ {
 		x := b.X + i*pitch
-		fill := theme.SurfaceAlt
-		glyphInk := theme.OnSurface
-		if i < r.Value().Get() {
-			fill = theme.Accent
-			glyphInk = ink
+		cx := float64(x) + float64(starW)/2
+		cy := float64(b.Y) + float64(starW)/2
+		fill := empty
+		if i < val {
+			fill = filled
 		}
-		fillRect(p, x, b.Y, starW, starW, fill)
-		tw := r.textWidth("*")
-		tx := x + (starW-tw)/2
-		ty := b.Y + (starW-r.glyphHeight())/2
-		r.drawText(p, tx, ty, "*", glyphInk)
+		// Outline = 75% fill + 25% black: a darker sibling of the tone itself,
+		// so it stays themed (no raw RGBA) and defines grey stars on any ground.
+		outline := blendRGBA(fill, RGB(0, 0, 0), 0.75)
+		drawStar(p, cx, cy, outer, inner, fill, outline, strokeW)
 	}
 	r.drawFocusRing(p, theme, b)
 }
