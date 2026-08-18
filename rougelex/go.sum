@@ -1,3 +1,5 @@
+github.com/go-crdt/crdt v0.18.1-0.20260818153105-a01949ede47a h1:Sh1vlHv3pSXeOcoJLbd1jNOgiIuu6CzlRljV1J5D4kc=
+github.com/go-crdt/crdt v0.18.1-0.20260818153105-a01949ede47a/go.mod h1:vbfvns9B9FUaMi2sPKzMYttKmbxfgO7EK3Yu82SrlYw=
 github.com/go-gfx/gfx v0.6.0 h1:sQkGEmB9YLouHxrscwvS4OW6oELsTtrKtQqsNdJ8L8Q=
 github.com/go-gfx/gfx v0.6.0/go.mod h1:bFt/MWyYWRU3Ic9IaB8XOC9KLMMHRRmahMk4FaIGK7g=
 github.com/go-iconoir/iconoir v0.2.0 h1:2ANqG6gkvHMoCtpNgNhSeOsuGMnlWQ+Sl43EndujIC0=
