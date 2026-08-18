@@ -61,7 +61,7 @@ func TestRoundedThumbDoubles(t *testing.T) {
 		w, h  int
 		build func() Widget
 	}{
-		{"Scale", 160, 24, func() Widget { return &Scale{Min: 0, Max: 1, Value: 0.5} }},
+		{"Scale", 160, 24, func() Widget { s := &Scale{Min: 0, Max: 1}; s.Value().Set(0.5); return s }},
 		{"RangeSlider", 220, 28, func() Widget { return &RangeSlider{} }},
 	} {
 		extent := func(scale int) int {

@@ -15,22 +15,22 @@ import "testing"
 func TestScaleDragScrubsValue(t *testing.T) {
 	got := []float64{}
 	s := NewScale(0, 100, 0)
-	s.OnChange = func(v float64) { got = append(got, v) }
+	s.Value().Subscribe(func(v float64) { got = append(got, v) })
 	// Track the thumb centre travels is W-scaleThumbSize == 100.
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100 + scaleThumbSize, H: 20})
 
 	// A drag whose x maps to pos 0.5 sets Value 50 (ev.X = thumbHalf + 50).
 	s.OnEvent(Event{Kind: EventMouseDrag, X: scaleThumbSize/2 + 50, Y: 10})
-	if s.Value != 50 {
-		t.Fatalf("drag value = %v, want 50", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("drag value = %v, want 50", s.Value().Get())
 	}
 	// A second drag further right keeps scrubbing the same thumb.
 	s.OnEvent(Event{Kind: EventMouseDrag, X: scaleThumbSize/2 + 80, Y: 10})
-	if s.Value != 80 {
-		t.Fatalf("second drag value = %v, want 80", s.Value)
+	if s.Value().Get() != 80 {
+		t.Fatalf("second drag value = %v, want 80", s.Value().Get())
 	}
 	if len(got) != 2 {
-		t.Fatalf("OnChange fired %d times, want 2", len(got))
+		t.Fatalf("Value subscriber fired %d times, want 2", len(got))
 	}
 }
 
@@ -40,8 +40,8 @@ func TestScaleVerticalDragScrubsValue(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 100 + scaleThumbSize})
 	// Vertical is flipped (top = Max): pos = 1 - (y-half)/span. y = half+50 → 0.5.
 	s.OnEvent(Event{Kind: EventMouseDrag, X: 10, Y: scaleThumbSize/2 + 50})
-	if s.Value != 50 {
-		t.Fatalf("vertical drag value = %v, want 50", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("vertical drag value = %v, want 50", s.Value().Get())
 	}
 }
 
