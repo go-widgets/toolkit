@@ -122,7 +122,7 @@ func (f *FileChooser) OnEvent(ev Event) {
 	r := f.Bounds()
 	sx, sy := ev.X+r.X, ev.Y+r.Y
 	for _, c := range []Widget{f.tree, f.list, f.pathEntry, f.openButton, f.cancelButton} {
-		if c.Bounds().Contains(sx, sy) {
+		if c.HitTest(sx, sy) {
 			c.OnEvent(translateEvent(ev, r, c.Bounds()))
 			return
 		}

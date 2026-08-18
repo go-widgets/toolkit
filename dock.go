@@ -117,12 +117,12 @@ func (d *Dock) OnEvent(ev Event) {
 	pr := d.Bounds()
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	for _, it := range d.docked {
-		if it.w.Bounds().Contains(sx, sy) {
+		if it.w.HitTest(sx, sy) {
 			it.w.OnEvent(translateEvent(ev, pr, it.w.Bounds()))
 			return
 		}
 	}
-	if d.body != nil && d.body.Bounds().Contains(sx, sy) {
+	if d.body != nil && d.body.HitTest(sx, sy) {
 		d.body.OnEvent(translateEvent(ev, pr, d.body.Bounds()))
 	}
 }

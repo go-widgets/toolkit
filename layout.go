@@ -318,7 +318,7 @@ func (h *HBox) OnEvent(ev Event) {
 		focusClick(h, sx, sy)
 	}
 	for _, c := range h.children {
-		if c.w.Bounds().Contains(sx, sy) {
+		if c.w.HitTest(sx, sy) {
 			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
 			return
 		}
@@ -434,7 +434,7 @@ func (v *VBox) OnEvent(ev Event) {
 		focusClick(v, sx, sy)
 	}
 	for _, c := range v.children {
-		if c.w.Bounds().Contains(sx, sy) {
+		if c.w.HitTest(sx, sy) {
 			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
 			return
 		}
@@ -626,7 +626,7 @@ func (g *Grid) OnEvent(ev Event) {
 		focusClick(g, sx, sy)
 	}
 	for _, c := range g.children {
-		if c.w.Bounds().Contains(sx, sy) {
+		if c.w.HitTest(sx, sy) {
 			c.w.OnEvent(translateEvent(ev, pr, c.w.Bounds()))
 			return
 		}
@@ -789,7 +789,7 @@ func (f *Frame) OnEvent(ev Event) {
 	if ev.Kind == EventClick {
 		focusClick(f, sx, sy)
 	}
-	if f.child.Bounds().Contains(sx, sy) {
+	if f.child.HitTest(sx, sy) {
 		f.child.OnEvent(translateEvent(ev, pr, f.child.Bounds()))
 	}
 }
