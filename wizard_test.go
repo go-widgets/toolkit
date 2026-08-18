@@ -11,8 +11,26 @@ import "testing"
 func TestNewWizardStoresSteps(t *testing.T) {
 	steps := []WizardStep{{Title: "One"}, {Title: "Two"}}
 	w := NewWizard(steps)
-	if len(w.Steps) != 2 || w.Current != 0 {
-		t.Fatalf("NewWizard round-trip broken: %+v", w)
+	if len(w.Steps) != 2 || w.Current().Get() != 0 {
+		t.Fatalf("NewWizard round-trip broken: steps=%d current=%d", len(w.Steps), w.Current().Get())
+	}
+}
+
+// TestWizardCurrentAccessorLazyInit covers the accessor on a bare zero-value
+// widget: Current() must lazy-init the Observable to 0 (no nil panic), and a
+// host that binds it via Subscribe must observe a Next()-driven move.
+func TestWizardCurrentAccessorLazyInit(t *testing.T) {
+	w := &Wizard{Steps: []WizardStep{{Title: "A"}, {Title: "B"}}}
+	// Accessor initialises the Observable to 0 on first read.
+	if got := w.Current().Get(); got != 0 {
+		t.Fatalf("bare accessor Get() = %d, want 0", got)
+	}
+	// Host binds Current(): an advance notifies the subscriber.
+	seen := -1
+	w.Current().Subscribe(func(i int) { seen = i })
+	w.Next() // 0 -> 1
+	if w.Current().Get() != 1 || seen != 1 {
+		t.Fatalf("host bind: Current=%d seen=%d, want 1/1", w.Current().Get(), seen)
 	}
 }
 
@@ -24,8 +42,8 @@ func TestWizardNextBlockedByCanAdvanceFalse(t *testing.T) {
 		{Title: "B"},
 	})
 	w.Next()
-	if w.Current != 0 {
-		t.Fatalf("Current = %d, want 0 (blocked by CanAdvance)", w.Current)
+	if w.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0 (blocked by CanAdvance)", w.Current().Get())
 	}
 }
 
@@ -35,8 +53,8 @@ func TestWizardNextAllowedWhenCanAdvanceTrue(t *testing.T) {
 		{Title: "B"},
 	})
 	w.Next()
-	if w.Current != 1 {
-		t.Fatalf("Current = %d, want 1", w.Current)
+	if w.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want 1", w.Current().Get())
 	}
 }
 
@@ -46,30 +64,30 @@ func TestWizardNextAllowedWhenCanAdvanceNil(t *testing.T) {
 		{Title: "B"},
 	})
 	w.Next()
-	if w.Current != 1 {
-		t.Fatalf("Current = %d, want 1 (nil CanAdvance == always allowed)", w.Current)
+	if w.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want 1 (nil CanAdvance == always allowed)", w.Current().Get())
 	}
 }
 
 func TestWizardNextOnLastStepInvokesOnFinish(t *testing.T) {
 	finished := 0
 	w := NewWizard([]WizardStep{{Title: "A"}, {Title: "B"}})
-	w.Current = 1 // last step
+	w.Current().Set(1) // last step
 	w.OnFinish = func() { finished++ }
 	w.Next()
 	if finished != 1 {
 		t.Fatalf("OnFinish called %d times, want 1", finished)
 	}
-	if w.Current != 1 {
-		t.Fatalf("Current = %d, want unchanged 1 (Next() must not push out of range)", w.Current)
+	if w.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want unchanged 1 (Next() must not push out of range)", w.Current().Get())
 	}
 }
 
 func TestWizardNextOnLastStepWithNilOnFinishNoPanic(t *testing.T) {
 	w := NewWizard([]WizardStep{{Title: "A"}})
 	w.Next() // must not panic; OnFinish is nil
-	if w.Current != 0 {
-		t.Fatalf("Current = %d, want 0", w.Current)
+	if w.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0", w.Current().Get())
 	}
 }
 
@@ -82,7 +100,7 @@ func TestWizardNextOnLastStepIgnoresCanAdvance(t *testing.T) {
 		{Title: "A"},
 		{Title: "B", CanAdvance: func() bool { return false }},
 	})
-	w.Current = 1
+	w.Current().Set(1)
 	w.OnFinish = func() { finished++ }
 	w.Next()
 	if finished != 1 {
@@ -94,10 +112,10 @@ func TestWizardNextOnLastStepIgnoresCanAdvance(t *testing.T) {
 
 func TestWizardBackDecrements(t *testing.T) {
 	w := NewWizard([]WizardStep{{Title: "A"}, {Title: "B"}})
-	w.Current = 1
+	w.Current().Set(1)
 	w.Back()
-	if w.Current != 0 {
-		t.Fatalf("Current = %d, want 0", w.Current)
+	if w.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0", w.Current().Get())
 	}
 }
 
@@ -106,8 +124,8 @@ func TestWizardBackClampsAtZero(t *testing.T) {
 	w.Back()
 	w.Back()
 	w.Back()
-	if w.Current != 0 {
-		t.Fatalf("Current = %d, want 0 (clamped, never negative)", w.Current)
+	if w.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0 (clamped, never negative)", w.Current().Get())
 	}
 }
 
@@ -118,7 +136,7 @@ func TestWizardNextButtonLabelSwitchesToFinishOnLastStep(t *testing.T) {
 	if got := w.nextButtonLabel(); got != "Next" {
 		t.Fatalf("label at step 0 = %q, want Next", got)
 	}
-	w.Current = 1
+	w.Current().Set(1)
 	if got := w.nextButtonLabel(); got != "Finish" {
 		t.Fatalf("label at last step = %q, want Finish", got)
 	}
@@ -126,11 +144,11 @@ func TestWizardNextButtonLabelSwitchesToFinishOnLastStep(t *testing.T) {
 
 func TestWizardCurrentCanAdvanceOutOfRangeDefaultsTrue(t *testing.T) {
 	w := NewWizard([]WizardStep{{Title: "A"}})
-	w.Current = 5 // out of range on the high side
+	w.Current().Set(5) // out of range on the high side
 	if !w.currentCanAdvance() {
 		t.Fatal("currentCanAdvance() with Current out of range should default true")
 	}
-	w.Current = -1 // out of range on the low side
+	w.Current().Set(-1) // out of range on the low side
 	if !w.currentCanAdvance() {
 		t.Fatal("currentCanAdvance() with negative Current should default true")
 	}
@@ -196,7 +214,7 @@ func TestWizardDrawSkipsBodyWhenCurrentOutOfRange(t *testing.T) {
 	body := &spyWidget{}
 	w := NewWizard([]WizardStep{{Title: "One", Body: body}})
 	w.SetBounds(Rect{X: 0, Y: 0, W: wpx, H: hpx})
-	w.Current = 7 // out of range
+	w.Current().Set(7) // out of range
 	buf := makeSurface(wpx, hpx)
 	w.Draw(newP(buf, wpx), theme)
 	if body.drawCount != 0 {
@@ -223,7 +241,7 @@ func TestWizardDrawBackButtonDimmedOnFirstStep(t *testing.T) {
 	}
 
 	// Current == 1: Back is enabled (ButtonDefault -> Surface fill).
-	w.Current = 1
+	w.Current().Set(1)
 	buf2 := makeSurface(wpx, hpx)
 	w.Draw(newP(buf2, wpx), theme)
 	if pixelAt(buf2, wpx, cx, cy) != theme.Surface {
@@ -270,12 +288,12 @@ func TestWizardOnEventEmptyStepsNoop(t *testing.T) {
 func TestWizardBackButtonClickCallsBack(t *testing.T) {
 	w := NewWizard([]WizardStep{{Title: "A"}, {Title: "B"}})
 	w.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 240})
-	w.Current = 1
+	w.Current().Set(1)
 	br := w.backRect()
 	// Bounds().X/Y is 0, so widget-local == surface here.
 	w.OnEvent(Event{Kind: EventClick, X: br.X + br.W/2, Y: br.Y + br.H/2})
-	if w.Current != 0 {
-		t.Fatalf("Current = %d, want 0 after Back click", w.Current)
+	if w.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0 after Back click", w.Current().Get())
 	}
 }
 
@@ -284,8 +302,8 @@ func TestWizardBackButtonDisabledClickNoop(t *testing.T) {
 	w.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 240})
 	br := w.backRect()
 	w.OnEvent(Event{Kind: EventClick, X: br.X + br.W/2, Y: br.Y + br.H/2})
-	if w.Current != 0 {
-		t.Fatalf("Current = %d, want unchanged 0 (Back disabled on first step)", w.Current)
+	if w.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want unchanged 0 (Back disabled on first step)", w.Current().Get())
 	}
 }
 
@@ -294,8 +312,8 @@ func TestWizardNextButtonClickCallsNext(t *testing.T) {
 	w.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 240})
 	nr := w.nextRect()
 	w.OnEvent(Event{Kind: EventClick, X: nr.X + nr.W/2, Y: nr.Y + nr.H/2})
-	if w.Current != 1 {
-		t.Fatalf("Current = %d, want 1 after Next click", w.Current)
+	if w.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want 1 after Next click", w.Current().Get())
 	}
 }
 
@@ -307,8 +325,8 @@ func TestWizardNextButtonDisabledClickNoop(t *testing.T) {
 	w.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 240})
 	nr := w.nextRect()
 	w.OnEvent(Event{Kind: EventClick, X: nr.X + nr.W/2, Y: nr.Y + nr.H/2})
-	if w.Current != 0 {
-		t.Fatalf("Current = %d, want unchanged 0 (Next disabled by CanAdvance)", w.Current)
+	if w.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want unchanged 0 (Next disabled by CanAdvance)", w.Current().Get())
 	}
 }
 
@@ -316,7 +334,7 @@ func TestWizardFinishButtonClickInvokesOnFinish(t *testing.T) {
 	finished := 0
 	w := NewWizard([]WizardStep{{Title: "A"}, {Title: "B"}})
 	w.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 240})
-	w.Current = 1 // last step: Next button reads "Finish"
+	w.Current().Set(1) // last step: Next button reads "Finish"
 	w.OnFinish = func() { finished++ }
 	nr := w.nextRect()
 	w.OnEvent(Event{Kind: EventClick, X: nr.X + nr.W/2, Y: nr.Y + nr.H/2})
@@ -382,7 +400,7 @@ func TestWizardOnEventSkipsForwardWhenCurrentOutOfRange(t *testing.T) {
 	body := &spyWidget{}
 	w := NewWizard([]WizardStep{{Title: "A", Body: body}})
 	w.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 240})
-	w.Current = 9 // out of range
+	w.Current().Set(9) // out of range
 	w.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if body.evCount != 0 {
 		t.Fatalf("Body.OnEvent called %d times, want 0 (Current out of range)", body.evCount)
@@ -399,7 +417,7 @@ func TestWizardOnEventNilBodyNoPanic(t *testing.T) {
 // on that button, which EventMouseUp clears; PressFeedback=false opts out.
 func TestWizardButtonPressFeedback(t *testing.T) {
 	w := NewWizard([]WizardStep{{Title: "A"}, {Title: "B"}, {Title: "C"}})
-	w.Current = 1 // on step B: Back enabled, Next enabled
+	w.Current().Set(1) // on step B: Back enabled, Next enabled
 	w.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
 
 	// Click Next → armed + advanced.
@@ -408,8 +426,8 @@ func TestWizardButtonPressFeedback(t *testing.T) {
 	if w.pressedBtn != wizBtnNext {
 		t.Fatalf("Next click: pressedBtn=%d, want wizBtnNext", w.pressedBtn)
 	}
-	if w.Current != 2 {
-		t.Fatalf("Next did not advance: Current=%d", w.Current)
+	if w.Current().Get() != 2 {
+		t.Fatalf("Next did not advance: Current=%d", w.Current().Get())
 	}
 	// Draw renders the pressed Next button (covers the SetPressed branch).
 	w.Draw(newP(makeSurface(300, 200), 300), DefaultLight())
@@ -420,17 +438,18 @@ func TestWizardButtonPressFeedback(t *testing.T) {
 	}
 
 	// Click Back (now on step C) → armed + moved back; Draw pressed.
-	w.Current = 1
+	w.Current().Set(1)
 	br := w.backRect()
 	w.OnEvent(Event{Kind: EventClick, X: br.X + br.W/2, Y: br.Y + br.H/2})
-	if w.pressedBtn != wizBtnBack || w.Current != 0 {
-		t.Fatalf("Back click: pressedBtn=%d Current=%d", w.pressedBtn, w.Current)
+	if w.pressedBtn != wizBtnBack || w.Current().Get() != 0 {
+		t.Fatalf("Back click: pressedBtn=%d Current=%d", w.pressedBtn, w.Current().Get())
 	}
 	w.Draw(newP(makeSurface(300, 200), 300), DefaultLight())
 
 	// PressFeedback=false opts out.
 	w2 := NewWizard([]WizardStep{{Title: "A"}, {Title: "B"}})
-	w2.Current, w2.PressFeedback = 1, false
+	w2.Current().Set(1)
+	w2.PressFeedback = false
 	w2.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
 	br2 := w2.backRect()
 	w2.OnEvent(Event{Kind: EventClick, X: br2.X + br2.W/2, Y: br2.Y + br2.H/2})

@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // WizardStep is one page of a Wizard: a Title shown in the top Steps
 // strip, a Body widget shown in the content area while the step is
@@ -44,8 +47,10 @@ const (
 // invokes OnFinish instead of moving further.
 type Wizard struct {
 	Base
+	// Steps is the ordered step list (config). The reactive step index is
+	// MVVM-only: the current step lives in an unexported Observable exposed via
+	// [Wizard.Current].
 	Steps    []WizardStep
-	Current  int
 	OnFinish func()
 
 	// PressFeedback shows the pressed face on the Back / Next button while it is
@@ -53,7 +58,18 @@ type Wizard struct {
 	// out.
 	PressFeedback bool
 
+	current    *mvvm.Observable[int]
 	pressedBtn int // wizBtnNone / wizBtnBack / wizBtnNext
+}
+
+// Current is the active step index as a shared [mvvm.Observable]: a host binds
+// it (Set / Subscribe / two-way) — there is no settable Current field. Back /
+// Next Set it (clamped to [0, len(Steps)-1]); subscribers are notified.
+func (w *Wizard) Current() *mvvm.Observable[int] {
+	if w.current == nil {
+		w.current = mvvm.NewObservable(0)
+	}
+	return w.current
 }
 
 const (
@@ -65,14 +81,16 @@ const (
 // NewWizard constructs a Wizard over the given steps, starting on the
 // first one (Current == 0).
 func NewWizard(steps []WizardStep) *Wizard {
-	return &Wizard{Steps: steps, PressFeedback: true}
+	w := &Wizard{Steps: steps, PressFeedback: true}
+	w.current = mvvm.NewObservable(0)
+	return w
 }
 
 // onLastStep reports whether Current is at (or past) the final step
 // index — the point at which Next() means "finish" rather than
 // "advance".
 func (w *Wizard) onLastStep() bool {
-	return w.Current >= len(w.Steps)-1
+	return w.Current().Get() >= len(w.Steps)-1
 }
 
 // currentCanAdvance reports whether the active step permits moving
@@ -80,10 +98,11 @@ func (w *Wizard) onLastStep() bool {
 // is treated as unrestricted; a nil CanAdvance on the active step
 // means "always allowed" per WizardStep's doc.
 func (w *Wizard) currentCanAdvance() bool {
-	if w.Current < 0 || w.Current >= len(w.Steps) {
+	cur := w.Current().Get()
+	if cur < 0 || cur >= len(w.Steps) {
 		return true
 	}
-	gate := w.Steps[w.Current].CanAdvance
+	gate := w.Steps[cur].CanAdvance
 	if gate == nil {
 		return true
 	}
@@ -113,14 +132,14 @@ func (w *Wizard) Next() {
 	if !w.currentCanAdvance() {
 		return
 	}
-	w.Current++
+	w.Current().Set(w.Current().Get() + 1)
 }
 
 // Back moves to the previous step, clamped at 0 (a no-op on the
 // first step).
 func (w *Wizard) Back() {
-	if w.Current > 0 {
-		w.Current--
+	if cur := w.Current().Get(); cur > 0 {
+		w.Current().Set(cur - 1)
 	}
 }
 
@@ -178,12 +197,13 @@ func (w *Wizard) Draw(p painter.Painter, theme *Theme) {
 	if len(w.Steps) == 0 {
 		return
 	}
-	strip := NewSteps(w.stepTitles(), w.Current)
+	cur := w.Current().Get()
+	strip := NewSteps(w.stepTitles(), cur)
 	strip.SetBounds(w.stripRect())
 	strip.Draw(p, theme)
 
-	if w.Current >= 0 && w.Current < len(w.Steps) {
-		body := w.Steps[w.Current].Body
+	if cur >= 0 && cur < len(w.Steps) {
+		body := w.Steps[cur].Body
 		if body != nil {
 			bodyR := w.bodyRect()
 			body.SetBounds(bodyR)
@@ -193,7 +213,7 @@ func (w *Wizard) Draw(p painter.Painter, theme *Theme) {
 
 	back := NewButton("Back", nil)
 	back.SetBounds(w.backRect())
-	if w.Current == 0 {
+	if cur == 0 {
 		back.Style = ButtonSecondary
 	}
 	if w.pressedBtn == wizBtnBack {
@@ -233,7 +253,7 @@ func (w *Wizard) OnEvent(ev Event) {
 		// ev is widget-local; hit-test the buttons in surface coordinates.
 		ax, ay := ev.X+r.X, ev.Y+r.Y
 		if w.backRect().Contains(ax, ay) {
-			if w.Current > 0 {
+			if w.Current().Get() > 0 {
 				if w.PressFeedback {
 					w.pressedBtn = wizBtnBack
 				}
@@ -254,10 +274,11 @@ func (w *Wizard) OnEvent(ev Event) {
 			return
 		}
 	}
-	if w.Current < 0 || w.Current >= len(w.Steps) {
+	cur := w.Current().Get()
+	if cur < 0 || cur >= len(w.Steps) {
 		return
 	}
-	body := w.Steps[w.Current].Body
+	body := w.Steps[cur].Body
 	if body == nil {
 		return
 	}
