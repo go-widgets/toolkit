@@ -675,46 +675,46 @@ func TestPaginationKeyNavigates(t *testing.T) {
 	changes := 0
 	p := NewPagination(3, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	p.OnEvent(kd("ArrowRight")) // 3 -> 4
-	if p.Current != 4 || changes != 1 {
-		t.Fatalf("ArrowRight: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 4 || changes != 1 {
+		t.Fatalf("ArrowRight: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 	p.OnEvent(kd("ArrowLeft")) // 4 -> 3
-	if p.Current != 3 {
-		t.Fatalf("ArrowLeft: Current=%d", p.Current)
+	if p.Current().Get() != 3 {
+		t.Fatalf("ArrowLeft: Current=%d", p.Current().Get())
 	}
 	p.OnEvent(kd("End")) // -> 5
-	if p.Current != 5 {
-		t.Fatalf("End: Current=%d", p.Current)
+	if p.Current().Get() != 5 {
+		t.Fatalf("End: Current=%d", p.Current().Get())
 	}
 	p.OnEvent(kd("ArrowRight")) // clamp at Total (no change, no fire)
-	if p.Current != 5 {
-		t.Fatalf("clamp at Total: Current=%d", p.Current)
+	if p.Current().Get() != 5 {
+		t.Fatalf("clamp at Total: Current=%d", p.Current().Get())
 	}
 	p.OnEvent(kd("Home")) // -> 1
-	if p.Current != 1 {
-		t.Fatalf("Home: Current=%d", p.Current)
+	if p.Current().Get() != 1 {
+		t.Fatalf("Home: Current=%d", p.Current().Get())
 	}
 	before := changes
 	p.OnEvent(kd("Home")) // already at 1: no change, no extra fire
-	if p.Current != 1 || changes != before {
+	if p.Current().Get() != 1 || changes != before {
 		t.Fatalf("Home no-op fired (changes=%d)", changes)
 	}
 	p.OnEvent(kd("ArrowLeft")) // goTo(0) clamps up to 1: no change
-	if p.Current != 1 || changes != before {
-		t.Fatalf("ArrowLeft below 1 fired (Current=%d changes=%d)", p.Current, changes)
+	if p.Current().Get() != 1 || changes != before {
+		t.Fatalf("ArrowLeft below 1 fired (Current=%d changes=%d)", p.Current().Get(), changes)
 	}
 	p.Disabled = true
 	p.OnEvent(kd("End"))
-	if p.Current != 1 {
-		t.Fatalf("disabled pagination moved (Current=%d)", p.Current)
+	if p.Current().Get() != 1 {
+		t.Fatalf("disabled pagination moved (Current=%d)", p.Current().Get())
 	}
 	// Total<=0 ignores keys.
-	empty := &Pagination{Current: 1, Total: 0}
+	empty := &Pagination{Total: 0}
 	empty.OnEvent(kd("ArrowRight"))
-	if empty.Current != 1 {
-		t.Fatalf("empty pagination moved (Current=%d)", empty.Current)
+	if empty.Current().Get() != 0 {
+		t.Fatalf("empty pagination moved (Current=%d)", empty.Current().Get())
 	}
 	// Nil OnChange is safe.
 	pn := NewPagination(1, 3)

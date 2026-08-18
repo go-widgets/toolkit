@@ -7,12 +7,13 @@ package toolkit
 import (
 	"strconv"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
 // Pagination is a page-navigator strip: a "<" prev button, a series
 // of page-number buttons, and a ">" next button. Clicking a page
-// number jumps Current to that page and fires OnChange; clicking prev
+// number Sets the Current Observable to that page; clicking prev
 // or next steps by one (clamped). When Current is at either extreme
 // the corresponding step button renders in a disabled tone and
 // swallows clicks.
@@ -24,9 +25,23 @@ import (
 type Pagination struct {
 	Base
 	focusState
-	Current  int
-	Total    int
-	OnChange func(page int)
+	// Total is the page count (config). The reactive current page is MVVM-only:
+	// it lives in an unexported Observable exposed via [Pagination.Current].
+	Total int
+
+	current *mvvm.Observable[int]
+}
+
+// Current is the active page as a shared [mvvm.Observable]: a host binds it
+// (Set / Subscribe / two-way) — there is no settable Current field. A click on
+// prev / next / a page number, or an arrow / Home / End key, Sets it (clamped to
+// [1, Total]); subscribers are notified on change. A bare &Pagination{} lazily
+// initialises the Observable to 0 on first access.
+func (pg *Pagination) Current() *mvvm.Observable[int] {
+	if pg.current == nil {
+		pg.current = mvvm.NewObservable(0)
+	}
+	return pg.current
 }
 
 // PaginationBtnW is the pixel width of each button (prev, next, and
@@ -65,7 +80,7 @@ const paginationEllipsis = "..."
 // events).
 func NewPagination(current, total int) *Pagination {
 	if total <= 0 {
-		return &Pagination{Current: 1, Total: total}
+		return &Pagination{Total: total, current: mvvm.NewObservable(1)}
 	}
 	if current < 1 {
 		current = 1
@@ -73,7 +88,7 @@ func NewPagination(current, total int) *Pagination {
 	if current > total {
 		current = total
 	}
-	return &Pagination{Current: current, Total: total}
+	return &Pagination{Total: total, current: mvvm.NewObservable(current)}
 }
 
 // Draw paints the widget body, each button in its correct tint, and
@@ -90,10 +105,11 @@ func (pg *Pagination) Draw(p painter.Painter, theme *Theme) {
 	// count) that a narrow box can't hold; clip it to Bounds() so it truncates
 	// on the right instead of spilling past the edge.
 	withClip(p, r, func() {
+		cur := pg.Current().Get()
 		slots := pg.slots()
 		x := r.X
 		// Prev button.
-		pg.drawStep(p, theme, x, r.Y, "<", pg.Current > 1)
+		pg.drawStep(p, theme, x, r.Y, "<", cur > 1)
 		x += pg.btnW() + pg.gap()
 		// Numeric / ellipsis buttons.
 		for _, slot := range slots {
@@ -101,7 +117,7 @@ func (pg *Pagination) Draw(p painter.Painter, theme *Theme) {
 			x += pg.btnW() + pg.gap()
 		}
 		// Next button.
-		pg.drawStep(p, theme, x, r.Y, ">", pg.Current < pg.Total)
+		pg.drawStep(p, theme, x, r.Y, ">", cur < pg.Total)
 	})
 	pg.drawFocusRing(p, theme, r)
 }
@@ -128,7 +144,7 @@ func (pg *Pagination) drawSlot(p painter.Painter, theme *Theme, x, y int, slot p
 	label := slot.label
 	fill := theme.Surface
 	ink := theme.OnSurface
-	if slot.page > 0 && slot.page == pg.Current {
+	if slot.page > 0 && slot.page == pg.Current().Get() {
 		fill = theme.Accent
 		ink = accentInk(theme)
 	} else if slot.page == 0 {
@@ -153,11 +169,12 @@ func (pg *Pagination) OnEvent(ev Event) {
 		}
 		// Left/Right step one page (like the prev/next buttons); Home/End jump to
 		// the first/last page. Each reuses the same clamp+fireChange path.
+		cur := pg.Current().Get()
 		switch ev.Code {
 		case "ArrowLeft", "ArrowUp":
-			pg.goTo(pg.Current - 1)
+			pg.goTo(cur - 1)
 		case "ArrowRight", "ArrowDown":
-			pg.goTo(pg.Current + 1)
+			pg.goTo(cur + 1)
 		case "Home":
 			pg.goTo(1)
 		case "End":
@@ -181,39 +198,31 @@ func (pg *Pagination) OnEvent(ev Event) {
 	if xOff >= pg.btnW() {
 		return // gap between buttons
 	}
+	cur := pg.Current().Get()
 	slots := pg.slots()
 	// Slot 0 is prev, slots [1..len(slots)] are numeric/ellipsis,
 	// slot len(slots)+1 is next.
 	switch {
 	case idx == 0:
-		if pg.Current > 1 {
-			pg.Current--
-			pg.fireChange()
+		if cur > 1 {
+			pg.Current().Set(cur - 1)
 		}
 	case idx == len(slots)+1:
-		if pg.Current < pg.Total {
-			pg.Current++
-			pg.fireChange()
+		if cur < pg.Total {
+			pg.Current().Set(cur + 1)
 		}
 	case idx >= 1 && idx <= len(slots):
 		slot := slots[idx-1]
-		if slot.page > 0 && slot.page != pg.Current {
-			pg.Current = slot.page
-			pg.fireChange()
+		if slot.page > 0 && slot.page != cur {
+			pg.Current().Set(slot.page)
 		}
 	}
 }
 
-// fireChange invokes OnChange when set.
-func (pg *Pagination) fireChange() {
-	if pg.OnChange != nil {
-		pg.OnChange(pg.Current)
-	}
-}
-
-// goTo clamps page to [1, Total] and, when it actually changes Current, assigns
-// it and fires OnChange -- the shared mutate+callback path the arrow / Home /
-// End keys reuse, matching a prev/next/number click.
+// goTo clamps page to [1, Total] and Sets the Current Observable -- the shared
+// mutate path the arrow / Home / End keys reuse, matching a prev/next/number
+// click. Subscribers are notified on change; an unchanged page is a no-op (per
+// mvvm.Observable), so a clamped or repeat key does not re-fire.
 func (pg *Pagination) goTo(page int) {
 	if page < 1 {
 		page = 1
@@ -221,10 +230,7 @@ func (pg *Pagination) goTo(page int) {
 	if page > pg.Total {
 		page = pg.Total
 	}
-	if page != pg.Current {
-		pg.Current = page
-		pg.fireChange()
-	}
+	pg.Current().Set(page)
 }
 
 // paginationSlot is one drawable/hit-testable slot in the numeric
@@ -250,16 +256,17 @@ func (pg *Pagination) slots() []paginationSlot {
 		}
 		return out
 	}
+	cur := pg.Current().Get()
 	out := make([]paginationSlot, 0, paginationMaxButtons)
 	switch {
-	case pg.Current <= 4:
+	case cur <= 4:
 		// Near-start: show 1..5, then "...", then Total.
 		for i := 1; i <= 5; i++ {
 			out = append(out, paginationSlot{label: strconv.Itoa(i), page: i})
 		}
 		out = append(out, paginationSlot{label: paginationEllipsis, page: 0})
 		out = append(out, paginationSlot{label: strconv.Itoa(pg.Total), page: pg.Total})
-	case pg.Current >= pg.Total-3:
+	case cur >= pg.Total-3:
 		// Near-end: show 1, "...", then Total-4..Total.
 		out = append(out, paginationSlot{label: "1", page: 1})
 		out = append(out, paginationSlot{label: paginationEllipsis, page: 0})
@@ -270,7 +277,7 @@ func (pg *Pagination) slots() []paginationSlot {
 		// Middle: 1, "...", k-1, k, k+1, "...", Total.
 		out = append(out, paginationSlot{label: "1", page: 1})
 		out = append(out, paginationSlot{label: paginationEllipsis, page: 0})
-		for i := pg.Current - 1; i <= pg.Current+1; i++ {
+		for i := cur - 1; i <= cur+1; i++ {
 			out = append(out, paginationSlot{label: strconv.Itoa(i), page: i})
 		}
 		out = append(out, paginationSlot{label: paginationEllipsis, page: 0})

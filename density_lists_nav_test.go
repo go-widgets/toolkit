@@ -394,7 +394,7 @@ func TestPaginationHitTouch(t *testing.T) {
 	pg := NewPagination(1, 5)
 	pg.SetBounds(Rect{X: 0, Y: 0, W: 600, H: 60})
 	got := -1
-	pg.OnChange = func(page int) { got = page }
+	pg.Current().Subscribe(func(page int) { got = page })
 	// stride = 44 + 3 = 47. Slot 0 is prev, slots 1.. are pages: page "1" is
 	// idx 1 (already current), page "2" is idx 2 at x in [94, 138).
 	pg.OnEvent(Event{Kind: EventClick, X: 94, Y: 10})
