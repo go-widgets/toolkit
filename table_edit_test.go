@@ -94,8 +94,8 @@ func TestTableCellEditNonEditableColumnSelects(t *testing.T) {
 	if tb.editRow != -1 || tb.editor != nil {
 		t.Fatal("a non-editable cell must not open an editor")
 	}
-	if tb.Selected != 0 {
-		t.Fatalf("Selected=%d, want row 0 selected", tb.Selected)
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("Selected=%d, want row 0 selected", tb.Selected().Get())
 	}
 }
 

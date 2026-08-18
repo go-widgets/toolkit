@@ -194,8 +194,8 @@ func TestTableExpandDetailClickInert(t *testing.T) {
 	tb.toggleExpand(0)
 	// Detail line is visual line 1; click well past the gutter.
 	tb.OnEvent(Event{Kind: EventClick, X: 60, Y: TableHeaderHeight + TableRowHeight + 2})
-	if len(tb.SelectedRows()) != 0 || tb.Selected != -1 {
-		t.Fatalf("detail click changed selection: rows=%v sel=%d", tb.SelectedRows(), tb.Selected)
+	if len(tb.SelectedRows()) != 0 || tb.Selected().Get() != -1 {
+		t.Fatalf("detail click changed selection: rows=%v sel=%d", tb.SelectedRows(), tb.Selected().Get())
 	}
 	if !tb.rowExpanded(0) {
 		t.Fatal("detail click must not collapse the row")

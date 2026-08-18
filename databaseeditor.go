@@ -266,8 +266,8 @@ func (d *DatabaseEditor) fillGrid(cols []string, rows [][]string) {
 	}
 	d.grid.Columns = tcols
 	d.grid.Rows = rows
-	d.grid.Selected = -1
-	d.grid.ScrollRow = 0
+	d.grid.Selected().Set(-1)
+	d.grid.ScrollRow().Set(0)
 }
 
 // buildSchemaTree turns a Schema into the TreeNode hierarchy the left pane

@@ -12,61 +12,63 @@ import "testing"
 // when the value actually changes (so a two-way binding stays loop-free), and be
 // nil-safe.
 
-// --- Table.OnSelect -----------------------------------------------------------
+// --- Table.Selected (MVVM) ----------------------------------------------------
 
-func TestTableOnSelectFiresOnKeyboardMove(t *testing.T) {
+func TestTableSelectedObservableFiresOnKeyboardMove(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}, {"r2"}})
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
 	var got, calls int
 	got = -99
-	tb.OnSelect = func(row int) { got, calls = row, calls+1 }
+	// A host binds the highlighted row via the Selected Observable; there is no
+	// OnSelect callback anymore.
+	tb.Selected().Subscribe(func(row int) { got, calls = row, calls+1 })
 
 	// ArrowDown from the -1 default lands on row 0 and reports it.
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if tb.Selected != 0 || got != 0 || calls != 1 {
-		t.Fatalf("after ArrowDown: Selected=%d got=%d calls=%d, want 0/0/1", tb.Selected, got, calls)
+	if tb.Selected().Get() != 0 || got != 0 || calls != 1 {
+		t.Fatalf("after ArrowDown: Selected=%d got=%d calls=%d, want 0/0/1", tb.Selected().Get(), got, calls)
 	}
 	// End jumps to the last row and reports it.
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
-	if tb.Selected != 2 || got != 2 || calls != 2 {
-		t.Fatalf("after End: Selected=%d got=%d calls=%d, want 2/2/2", tb.Selected, got, calls)
+	if tb.Selected().Get() != 2 || got != 2 || calls != 2 {
+		t.Fatalf("after End: Selected=%d got=%d calls=%d, want 2/2/2", tb.Selected().Get(), got, calls)
 	}
 	// ArrowDown at the last row is a no-op move -- Selected is unchanged, so
-	// OnSelect must NOT fire again (the loop-free guard).
+	// subscribers must NOT fire again (the loop-free guard).
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if tb.Selected != 2 || calls != 2 {
-		t.Fatalf("no-op move fired OnSelect: Selected=%d calls=%d, want 2/2", tb.Selected, calls)
+	if tb.Selected().Get() != 2 || calls != 2 {
+		t.Fatalf("no-op move notified subscribers: Selected=%d calls=%d, want 2/2", tb.Selected().Get(), calls)
 	}
 }
 
-func TestTableOnSelectFiresOnMultiSelectClick(t *testing.T) {
+func TestTableSelectedObservableFiresOnMultiSelectClick(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}, {"r2"}})
 	tb.MultiSelect = true
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
 	var got, calls int
-	tb.OnSelect = func(row int) { got, calls = row, calls+1 }
+	tb.Selected().Subscribe(func(row int) { got, calls = row, calls+1 })
 
 	// A plain body-row click moves the anchor (Selected) to row 1 and reports it.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + TableRowHeight + 1})
-	if tb.Selected != 1 || got != 1 || calls != 1 {
-		t.Fatalf("after click row1: Selected=%d got=%d calls=%d, want 1/1/1", tb.Selected, got, calls)
+	if tb.Selected().Get() != 1 || got != 1 || calls != 1 {
+		t.Fatalf("after click row1: Selected=%d got=%d calls=%d, want 1/1/1", tb.Selected().Get(), got, calls)
 	}
-	// Re-clicking the same row does not change Selected, so OnSelect stays silent.
+	// Re-clicking the same row does not change Selected, so subscribers stay silent.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + TableRowHeight + 1})
 	if calls != 1 {
-		t.Fatalf("re-click same row fired OnSelect: calls=%d, want 1", calls)
+		t.Fatalf("re-click same row notified subscribers: calls=%d, want 1", calls)
 	}
 }
 
-func TestTableOnSelectNilSafe(t *testing.T) {
+func TestTableSelectedObservableBindSafe(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, [][]string{{"r0"}, {"r1"}})
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
-	// No OnSelect assigned: the keyboard move must not panic.
+	// No subscriber bound: the keyboard move must not panic.
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if tb.Selected != 0 {
-		t.Fatalf("nil-callback move: Selected=%d, want 0", tb.Selected)
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("unbound move: Selected=%d, want 0", tb.Selected().Get())
 	}
 }
 

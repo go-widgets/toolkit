@@ -33,8 +33,8 @@ func TestNewTableDefaults(t *testing.T) {
 	cols := []TableColumn{{Title: "A"}, {Title: "B"}}
 	rows := [][]string{{"1", "2"}}
 	tb := NewTable(cols, rows)
-	if tb.Selected != -1 {
-		t.Fatalf("Selected default = %d, want -1", tb.Selected)
+	if tb.Selected().Get() != -1 {
+		t.Fatalf("Selected default = %d, want -1", tb.Selected().Get())
 	}
 	if len(tb.Columns) != 2 || len(tb.Rows) != 1 {
 		t.Fatalf("columns/rows lost through constructor: %+v / %+v", tb.Columns, tb.Rows)
@@ -241,7 +241,7 @@ func TestTableDrawSingleColumnHasNoSeparator(t *testing.T) {
 func TestTableDrawSelectedRowUsesAccent(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}, {"r2"}})
-	tb.Selected = 1
+	tb.Selected().Set(1)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
 	buf := makeTableSurface(100, 200)
 	theme := DefaultLight()
@@ -270,7 +270,7 @@ func TestTableDrawSelectedOutOfRangeIgnored(t *testing.T) {
 	theme := DefaultLight()
 
 	// Positive out-of-range.
-	tb.Selected = 99
+	tb.Selected().Set(99)
 	tb.Draw(newP(buf, 100), theme)
 	if px := tableRowCentrePixel(buf, 100, 50, 0, 0); px != theme.Surface {
 		t.Fatalf("row 0 fill w/ Selected=99 = %+v, want Surface", px)
@@ -281,7 +281,7 @@ func TestTableDrawSelectedOutOfRangeIgnored(t *testing.T) {
 
 	// Negative (other than -1) -- must also be a no-op.
 	buf2 := makeTableSurface(100, 100)
-	tb.Selected = -42
+	tb.Selected().Set(-42)
 	tb.Draw(newP(buf2, 100), theme)
 	if px := tableRowCentrePixel(buf2, 100, 50, 0, 0); px != theme.Surface {
 		t.Fatalf("row 0 fill w/ Selected=-42 = %+v, want Surface", px)
@@ -297,7 +297,7 @@ func TestTableDrawSelectedMinusOneNoHighlight(t *testing.T) {
 	buf := makeTableSurface(100, 100)
 	theme := DefaultLight()
 	// Selected is -1 by construction; explicit for readability.
-	tb.Selected = -1
+	tb.Selected().Set(-1)
 	tb.Draw(newP(buf, 100), theme)
 	// Neither row should carry the Accent colour anywhere in its band.
 	for row := 0; row < 2; row++ {
@@ -318,7 +318,7 @@ func TestTableDrawSelectedMinusOneNoHighlight(t *testing.T) {
 func TestTableDrawUsesOnAccentFromExtra(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"XYZ"}})
-	tb.Selected = 0
+	tb.Selected().Set(0)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	theme := DefaultLight()
 	custom := RGB(0xAB, 0xCD, 0xEF)
@@ -386,7 +386,7 @@ func TestTableDrawCellTextWiderThanColumn(t *testing.T) {
 func TestTableDrawAccentInkFallbackWithNilExtra(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}})
-	tb.Selected = 0
+	tb.Selected().Set(0)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	theme := DefaultLight()
 	theme.Extra = nil
@@ -405,7 +405,7 @@ func TestTableDrawAccentInkFallbackWithNilExtra(t *testing.T) {
 func TestTableDrawAccentInkFallbackWithExtraNoKey(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}})
-	tb.Selected = 0
+	tb.Selected().Set(0)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	theme := DefaultLight()
 	// Non-nil map without an OnAccent entry -- exercises the ok==false
@@ -473,8 +473,8 @@ func TestTableDrawAligned(t *testing.T) {
 
 func TestNewTableSortColumnDefaultsToNone(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A"}}, nil)
-	if tb.SortColumn != -1 {
-		t.Fatalf("SortColumn default = %d, want -1", tb.SortColumn)
+	if tb.SortColumn().Get() != -1 {
+		t.Fatalf("SortColumn default = %d, want -1", tb.SortColumn().Get())
 	}
 }
 
@@ -496,8 +496,8 @@ func TestTableHeaderClickSortsAndFiresOnSort(t *testing.T) {
 	if gotCol != 0 || !gotAsc {
 		t.Fatalf("first click = (col %d, asc %v), want (0, true)", gotCol, gotAsc)
 	}
-	if tb.SortColumn != 0 || !tb.SortAsc {
-		t.Fatalf("state after first click = (col %d, asc %v), want (0, true)", tb.SortColumn, tb.SortAsc)
+	if tb.SortColumn().Get() != 0 || !tb.SortAsc().Get() {
+		t.Fatalf("state after first click = (col %d, asc %v), want (0, true)", tb.SortColumn().Get(), tb.SortAsc().Get())
 	}
 
 	// Clicking the SAME column toggles the direction.
@@ -522,8 +522,8 @@ func TestTableHeaderClickNonSortableColumnIgnored(t *testing.T) {
 	if called {
 		t.Fatal("OnSort fired for a non-Sortable column")
 	}
-	if tb.SortColumn != -1 {
-		t.Fatalf("SortColumn = %d, want -1 (unchanged)", tb.SortColumn)
+	if tb.SortColumn().Get() != -1 {
+		t.Fatalf("SortColumn = %d, want -1 (unchanged)", tb.SortColumn().Get())
 	}
 }
 
@@ -544,8 +544,8 @@ func TestTableHeaderClickNilOnSortNoPanic(t *testing.T) {
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	// OnSort left nil -- must not panic.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if tb.SortColumn != 0 || !tb.SortAsc {
-		t.Fatalf("state = (col %d, asc %v), want (0, true)", tb.SortColumn, tb.SortAsc)
+	if tb.SortColumn().Get() != 0 || !tb.SortAsc().Get() {
+		t.Fatalf("state = (col %d, asc %v), want (0, true)", tb.SortColumn().Get(), tb.SortAsc().Get())
 	}
 }
 
@@ -563,8 +563,8 @@ func TestTableOnEventIgnoresNonClickWhenNotResizing(t *testing.T) {
 
 func TestTableDrawSortIndicatorAscending(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, [][]string{{"x"}})
-	tb.SortColumn = 0
-	tb.SortAsc = true
+	tb.SortColumn().Set(0)
+	tb.SortAsc().Set(true)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	theme := DefaultLight()
 	buf := makeTableSurface(100, 100)
@@ -585,8 +585,8 @@ func TestTableDrawSortIndicatorAscending(t *testing.T) {
 
 func TestTableDrawSortIndicatorDescending(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, [][]string{{"x"}})
-	tb.SortColumn = 0
-	tb.SortAsc = false
+	tb.SortColumn().Set(0)
+	tb.SortAsc().Set(false)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	theme := DefaultLight()
 	buf := makeTableSurface(100, 100)
@@ -609,7 +609,7 @@ func TestTableDrawSortColumnOutOfRangeNoIndicator(t *testing.T) {
 	// SortColumn positive-out-of-range must collapse to "no indicator",
 	// same defensive pattern as Selected.
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, [][]string{{"x"}})
-	tb.SortColumn = 99
+	tb.SortColumn().Set(99)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	tb.Draw(newP(makeTableSurface(100, 100), 100), DefaultLight())
 }
@@ -921,10 +921,10 @@ func TestMultiSelectDisabledBodyClickIsNoOp(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}})
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
-	tb.Selected = -1
+	tb.Selected().Set(-1)
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 5})
-	if tb.Selected != -1 {
-		t.Fatalf("Selected mutated by body click w/o MultiSelect: %d", tb.Selected)
+	if tb.Selected().Get() != -1 {
+		t.Fatalf("Selected mutated by body click w/o MultiSelect: %d", tb.Selected().Get())
 	}
 	if got := tb.SelectedRows(); got != nil {
 		t.Fatalf("SelectedRows mutated by body click w/o MultiSelect: %v", got)
@@ -939,8 +939,8 @@ func TestMultiSelectPlainClickSelectsOnlyThatRowAndMovesAnchor(t *testing.T) {
 	tb.SetRowSelection(0, 2) // pre-seed a selection to prove it gets cleared
 
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + TableRowHeight + 1}) // row 1
-	if tb.Selected != 1 {
-		t.Fatalf("Selected = %d, want 1 (anchor moved to plain-clicked row)", tb.Selected)
+	if tb.Selected().Get() != 1 {
+		t.Fatalf("Selected = %d, want 1 (anchor moved to plain-clicked row)", tb.Selected().Get())
 	}
 	got := tb.SelectedRows()
 	if len(got) != 1 || got[0] != 1 {
@@ -953,13 +953,13 @@ func TestMultiSelectCtrlClickTogglesWithoutMovingAnchor(t *testing.T) {
 		[][]string{{"r0"}, {"r1"}, {"r2"}})
 	tb.MultiSelect = true
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
-	tb.Selected = 0
+	tb.Selected().Set(0)
 	tb.SetRowSelection(0)
 
 	// Ctrl-click row 2 adds it without disturbing the anchor.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 2*TableRowHeight + 1, Ctrl: true})
-	if tb.Selected != 0 {
-		t.Fatalf("Selected = %d, want 0 (anchor unmoved by Ctrl-click)", tb.Selected)
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("Selected = %d, want 0 (anchor unmoved by Ctrl-click)", tb.Selected().Get())
 	}
 	got := tb.SelectedRows()
 	if len(got) != 2 || got[0] != 0 || got[1] != 2 {
@@ -982,13 +982,13 @@ func TestMultiSelectShiftClickRangeBothDirections(t *testing.T) {
 
 	// Plain click sets the anchor at row 1.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + TableRowHeight + 1})
-	if tb.Selected != 1 {
-		t.Fatalf("anchor after plain click = %d, want 1", tb.Selected)
+	if tb.Selected().Get() != 1 {
+		t.Fatalf("anchor after plain click = %d, want 1", tb.Selected().Get())
 	}
 	// Shift-click row 3 -- range extends DOWNWARD from the anchor.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 3*TableRowHeight + 1, Shift: true})
-	if tb.Selected != 1 {
-		t.Fatalf("anchor moved by Shift-click: %d, want unchanged 1", tb.Selected)
+	if tb.Selected().Get() != 1 {
+		t.Fatalf("anchor moved by Shift-click: %d, want unchanged 1", tb.Selected().Get())
 	}
 	got := tb.SelectedRows()
 	if len(got) != 3 || got[0] != 1 || got[2] != 3 {
@@ -1028,8 +1028,8 @@ func TestMultiSelectBodyClickPastLastRowIgnored(t *testing.T) {
 	if got := tb.SelectedRows(); got != nil {
 		t.Fatalf("SelectedRows after past-last-row click = %v, want nil", got)
 	}
-	if tb.Selected != -1 {
-		t.Fatalf("Selected mutated by past-last-row click: %d", tb.Selected)
+	if tb.Selected().Get() != -1 {
+		t.Fatalf("Selected mutated by past-last-row click: %d", tb.Selected().Get())
 	}
 }
 
@@ -1104,8 +1104,8 @@ func TestTableOnEventClickNegativeYIgnored(t *testing.T) {
 	if called {
 		t.Fatal("OnSort fired for a negative-Y click")
 	}
-	if tb.Selected != -1 || tb.SelectedRows() != nil {
-		t.Fatalf("selection mutated by negative-Y click: Selected=%d rows=%v", tb.Selected, tb.SelectedRows())
+	if tb.Selected().Get() != -1 || tb.SelectedRows() != nil {
+		t.Fatalf("selection mutated by negative-Y click: Selected=%d rows=%v", tb.Selected().Get(), tb.SelectedRows())
 	}
 }
 
@@ -1132,7 +1132,7 @@ func TestTableDrawMultiSelectHighlightsEverySelectedRow(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}, {"r2"}})
 	tb.MultiSelect = true
-	tb.Selected = -1
+	tb.Selected().Set(-1)
 	tb.SetRowSelection(0, 2)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
 	theme := DefaultLight()
@@ -1160,7 +1160,7 @@ func TestTableDrawMultiSelectFalseIgnoresSelectedRowsSet(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}, {"r2"}})
 	tb.SetRowSelection(0, 2)
-	tb.Selected = 1
+	tb.Selected().Set(1)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
 	theme := DefaultLight()
 	buf := makeTableSurface(100, 200)
@@ -1250,8 +1250,8 @@ func TestTableScrollSmallTableUnchangedAndRegressionsStillWork(t *testing.T) {
 	var gotAsc bool
 	tb.OnSort = func(col int, asc bool) { gotCol, gotAsc = col, asc }
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if gotCol != 0 || !gotAsc || tb.SortColumn != 0 {
-		t.Fatalf("sort broken: gotCol=%d gotAsc=%v SortColumn=%d", gotCol, gotAsc, tb.SortColumn)
+	if gotCol != 0 || !gotAsc || tb.SortColumn().Get() != 0 {
+		t.Fatalf("sort broken: gotCol=%d gotAsc=%v SortColumn=%d", gotCol, gotAsc, tb.SortColumn().Get())
 	}
 
 	// Separator-drag resize still works.
@@ -1264,8 +1264,8 @@ func TestTableScrollSmallTableUnchangedAndRegressionsStillWork(t *testing.T) {
 
 	// Multi-select still works.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 1})
-	if tb.Selected != 0 {
-		t.Fatalf("multi-select broken: Selected = %d, want 0", tb.Selected)
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("multi-select broken: Selected = %d, want 0", tb.Selected().Get())
 	}
 	if got := tb.SelectedRows(); len(got) != 1 || got[0] != 0 {
 		t.Fatalf("multi-select broken: SelectedRows() = %v, want [0]", got)
@@ -1323,7 +1323,7 @@ func TestTableScrollWindowsLargeTable(t *testing.T) {
 func TestTableScrollZebraParityPreservedByAbsoluteIndex(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows
-	tb.ScrollRow = 11                              // odd absolute index lands at screen position 0
+	tb.ScrollRow().Set(11)                         // odd absolute index lands at screen position 0
 	theme := DefaultLight()
 	buf := makeTableSurface(120, 200)
 	tb.Draw(newP(buf, 120), theme)
@@ -1376,13 +1376,11 @@ func TestTableScrollClickWithNonZeroScrollRowSelectsCorrectRow(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
 	tb.MultiSelect = true
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows
-	tb.ScrollRow = 10
-
-	// Click at screen row 2 (3rd visible band) -- must resolve to
+	tb.ScrollRow().Set(10)                         // Click at screen row 2 (3rd visible band) -- must resolve to
 	// ABSOLUTE row 12 (10+2), not row 2.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 2*TableRowHeight + 1})
-	if tb.Selected != 12 {
-		t.Fatalf("Selected = %d, want 12 (ScrollRow 10 + screen row 2)", tb.Selected)
+	if tb.Selected().Get() != 12 {
+		t.Fatalf("Selected = %d, want 12 (ScrollRow 10 + screen row 2)", tb.Selected().Get())
 	}
 }
 
@@ -1394,16 +1392,16 @@ func TestTableScrollRowClampBothEnds(t *testing.T) {
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows -> maxScrollRow == 15
 
 	tb.ScrollTo(-5)
-	if tb.ScrollRow != 0 {
-		t.Fatalf("ScrollTo(-5) = %d, want clamp to 0", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollTo(-5) = %d, want clamp to 0", tb.ScrollRow().Get())
 	}
 	tb.ScrollTo(999)
-	if tb.ScrollRow != 15 {
-		t.Fatalf("ScrollTo(999) = %d, want clamp to 15 (maxScrollRow)", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 15 {
+		t.Fatalf("ScrollTo(999) = %d, want clamp to 15 (maxScrollRow)", tb.ScrollRow().Get())
 	}
 	tb.ScrollTo(7)
-	if tb.ScrollRow != 7 {
-		t.Fatalf("ScrollTo(7) = %d, want 7 (within range, unclamped)", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 7 {
+		t.Fatalf("ScrollTo(7) = %d, want 7 (within range, unclamped)", tb.ScrollRow().Get())
 	}
 }
 
@@ -1412,16 +1410,16 @@ func TestTableScrollByAdjustsAndClamps(t *testing.T) {
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // maxScrollRow == 15
 
 	tb.ScrollBy(5)
-	if tb.ScrollRow != 5 {
-		t.Fatalf("ScrollBy(5) = %d, want 5", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 5 {
+		t.Fatalf("ScrollBy(5) = %d, want 5", tb.ScrollRow().Get())
 	}
 	tb.ScrollBy(-100)
-	if tb.ScrollRow != 0 {
-		t.Fatalf("ScrollBy(-100) = %d, want clamp to 0", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollBy(-100) = %d, want clamp to 0", tb.ScrollRow().Get())
 	}
 	tb.ScrollBy(1000)
-	if tb.ScrollRow != 15 {
-		t.Fatalf("ScrollBy(1000) = %d, want clamp to 15", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 15 {
+		t.Fatalf("ScrollBy(1000) = %d, want clamp to 15", tb.ScrollRow().Get())
 	}
 }
 
@@ -1468,21 +1466,21 @@ func TestTableScrollContentWidthNegativeClamp(t *testing.T) {
 func TestTableScrollToSelectedNoopWhenSelectedNegative(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"r0"}, {"r1"}})
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
-	tb.Selected = -1
-	tb.ScrollRow = 3
+	tb.Selected().Set(-1)
+	tb.ScrollRow().Set(3)
 	tb.scrollToSelected()
-	if tb.ScrollRow != 3 {
-		t.Fatalf("ScrollRow mutated by scrollToSelected with Selected=-1: %d, want unchanged 3", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 3 {
+		t.Fatalf("ScrollRow mutated by scrollToSelected with Selected=-1: %d, want unchanged 3", tb.ScrollRow().Get())
 	}
 }
 
 func TestTableScrollToSelectedNoopWhenNoVisibleCapacity(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A"}}, [][]string{{"r0"}, {"r1"}})
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: TableHeaderHeight}) // 0 visible rows
-	tb.Selected = 1
+	tb.Selected().Set(1)
 	tb.scrollToSelected()
-	if tb.ScrollRow != 0 {
-		t.Fatalf("ScrollRow = %d, want unchanged 0 when body has no visible capacity", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollRow = %d, want unchanged 0 when body has no visible capacity", tb.ScrollRow().Get())
 	}
 }
 
@@ -1553,8 +1551,8 @@ func TestTableReorderableFalseIsByteIdentical(t *testing.T) {
 
 	// Multi-select still works.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(0)})
-	if tb.Selected != 0 {
-		t.Fatalf("multi-select broken: Selected = %d, want 0", tb.Selected)
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("multi-select broken: Selected = %d, want 0", tb.Selected().Get())
 	}
 
 	// Draw must not paint any indicator line -- sample every row boundary
@@ -1743,8 +1741,8 @@ func TestTableReorderDropMovesRowDownSelectionFollowsAndFiresOnReorder(t *testin
 	if gotFrom != 0 || gotTo != 2 {
 		t.Fatalf("OnReorder = (%d,%d), want (0,2)", gotFrom, gotTo)
 	}
-	if tb.Selected != 2 {
-		t.Fatalf("Selected after move = %d, want 2 (followed the moved row)", tb.Selected)
+	if tb.Selected().Get() != 2 {
+		t.Fatalf("Selected after move = %d, want 2 (followed the moved row)", tb.Selected().Get())
 	}
 	got := tb.SelectedRows()
 	if len(got) != 3 || got[0] != 1 || got[1] != 2 || got[2] != 4 {
@@ -1763,7 +1761,7 @@ func TestTableReorderDropMovesRowUpAndShiftsIntermediateSelection(t *testing.T) 
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}, {"r2"}, {"r3"}, {"r4"}})
 	tb.Reorderable = true
-	tb.Selected = 2 // an intermediate row, in the shifted range [to, from)
+	tb.Selected().Set(2) // an intermediate row, in the shifted range [to, from)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 5*TableRowHeight + TableHeaderHeight})
 
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(4)})
@@ -1782,8 +1780,8 @@ func TestTableReorderDropMovesRowUpAndShiftsIntermediateSelection(t *testing.T) 
 	if gotFrom != 4 || gotTo != 1 {
 		t.Fatalf("OnReorder = (%d,%d), want (4,1)", gotFrom, gotTo)
 	}
-	if tb.Selected != 3 {
-		t.Fatalf("Selected after up-move = %d, want 3 (shifted +1 out of the way)", tb.Selected)
+	if tb.Selected().Get() != 3 {
+		t.Fatalf("Selected after up-move = %d, want 3 (shifted +1 out of the way)", tb.Selected().Get())
 	}
 }
 
@@ -1819,9 +1817,7 @@ func TestTableReorderDropWhileScrolledTargetsAbsoluteRow(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
 	tb.Reorderable = true
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 134}) // 5 visible rows
-	tb.ScrollRow = 10
-
-	// Press absolute row 12 (screen position 2) to arm the drag.
+	tb.ScrollRow().Set(10)                         // Press absolute row 12 (screen position 2) to arm the drag.
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(2)})
 	if got := tb.DragData(); got != "tablerow:12" {
 		t.Fatalf("DragData() while scrolled = %q, want %q", got, "tablerow:12")
@@ -1949,27 +1945,27 @@ func TestTableScrollToSelectedScrollsUpAndDown(t *testing.T) {
 
 	// Selected below the window -> scrolls DOWN just enough that
 	// Selected lands on the last visible row.
-	tb.ScrollRow = 0
-	tb.Selected = 8
+	tb.ScrollRow().Set(0)
+	tb.Selected().Set(8)
 	tb.scrollToSelected()
-	if tb.ScrollRow != 4 { // 8 - 5 + 1
-		t.Fatalf("ScrollRow after downward scrollToSelected = %d, want 4", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 4 { // 8 - 5 + 1
+		t.Fatalf("ScrollRow after downward scrollToSelected = %d, want 4", tb.ScrollRow().Get())
 	}
 
 	// Selected above the window -> scrolls UP to put Selected at top.
-	tb.ScrollRow = 10
-	tb.Selected = 3
+	tb.ScrollRow().Set(10)
+	tb.Selected().Set(3)
 	tb.scrollToSelected()
-	if tb.ScrollRow != 3 {
-		t.Fatalf("ScrollRow after upward scrollToSelected = %d, want 3", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 3 {
+		t.Fatalf("ScrollRow after upward scrollToSelected = %d, want 3", tb.ScrollRow().Get())
 	}
 
 	// Selected already inside the window -> no change.
-	tb.ScrollRow = 2
-	tb.Selected = 4 // window is [2,7)
+	tb.ScrollRow().Set(2)
+	tb.Selected().Set(4) // window is [2,7)
 	tb.scrollToSelected()
-	if tb.ScrollRow != 2 {
-		t.Fatalf("ScrollRow after in-window scrollToSelected = %d, want unchanged 2", tb.ScrollRow)
+	if tb.ScrollRow().Get() != 2 {
+		t.Fatalf("ScrollRow after in-window scrollToSelected = %d, want unchanged 2", tb.ScrollRow().Get())
 	}
 }
 
@@ -2125,7 +2121,7 @@ func TestTableDrawRowIconMixed(t *testing.T) {
 func TestTableDrawRowIconSelectedInk(t *testing.T) {
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}})
-	tb.Selected = 1
+	tb.Selected().Set(1)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
 	theme := DefaultLight()
 	var gotInk RGBA
@@ -2173,7 +2169,7 @@ func TestTableDrawNoIconByteIdentical(t *testing.T) {
 			{Title: "Name", Width: 90},
 			{Title: "Size", Width: 40, Align: AlignRight},
 		}, [][]string{{"a", "1"}, {"b", "2"}, {"c", "3"}})
-		tb.Selected = 1
+		tb.Selected().Set(1)
 		tb.SetBounds(Rect{X: 0, Y: 0, W: 130, H: 120})
 		return tb
 	}
@@ -2238,5 +2234,81 @@ func TestTableDrawRowIconWithScroll(t *testing.T) {
 	sepPx := pixelAt(buf, 160, 100, TableHeaderHeight+TableRowHeight/2)
 	if sepPx != theme.Border {
 		t.Fatalf("column separator w/ icons = %+v, want Border %+v", sepPx, theme.Border)
+	}
+}
+
+// TestTableBareAccessorsLazyInit proves each reactive-state accessor on a
+// directly-constructed Table{} (nil observable) lazily initialises to the
+// field's historical zero value and then returns a stable handle -- the
+// nil-init branch NewTable never exercises.
+func TestTableBareAccessorsLazyInit(t *testing.T) {
+	tb := &Table{}
+	if got := tb.Selected().Get(); got != 0 {
+		t.Fatalf("bare Selected() = %d, want 0", got)
+	}
+	if got := tb.ScrollRow().Get(); got != 0 {
+		t.Fatalf("bare ScrollRow() = %d, want 0", got)
+	}
+	if got := tb.ScrollX().Get(); got != 0 {
+		t.Fatalf("bare ScrollX() = %d, want 0", got)
+	}
+	if got := tb.SortColumn().Get(); got != 0 {
+		t.Fatalf("bare SortColumn() = %d, want 0", got)
+	}
+	if tb.SortAsc().Get() {
+		t.Fatalf("bare SortAsc() = true, want false")
+	}
+	// A second call returns the SAME observable rather than a fresh one.
+	if tb.Selected() != tb.Selected() || tb.ScrollRow() != tb.ScrollRow() ||
+		tb.ScrollX() != tb.ScrollX() || tb.SortColumn() != tb.SortColumn() ||
+		tb.SortAsc() != tb.SortAsc() {
+		t.Fatal("an accessor returned a fresh observable on the second call")
+	}
+}
+
+// TestTableStateObservablesBindToInteractions proves a host that Subscribes each
+// state observable is notified on the very interaction paths that mutate it: a
+// keyboard move (Selected), a header sort click (SortColumn + SortAsc), a wheel
+// scroll (ScrollRow) and a horizontal scroll (ScrollX).
+func TestTableStateObservablesBindToInteractions(t *testing.T) {
+	rows := make([][]string, 30)
+	for i := range rows {
+		rows[i] = []string{fmt.Sprintf("r%d", i), "x"}
+	}
+	tb := NewTable(
+		[]TableColumn{{Title: "A", Width: 60, Sortable: true}, {Title: "B", Width: 60}},
+		rows,
+	)
+	// Narrow + short bounds: two fixed 60px columns overflow the width
+	// (hScrollable) and 30 rows overflow the height (vertical scroll).
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+
+	var selN, scN, saN, srN, sxN int
+	tb.Selected().Subscribe(func(int) { selN++ })
+	tb.SortColumn().Subscribe(func(int) { scN++ })
+	tb.SortAsc().Subscribe(func(bool) { saN++ })
+	tb.ScrollRow().Subscribe(func(int) { srN++ })
+	tb.ScrollX().Subscribe(func(int) { sxN++ })
+
+	// Keyboard ArrowDown moves Selected -1 -> 0.
+	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
+	if selN != 1 {
+		t.Fatalf("Selected subscriber calls = %d, want 1", selN)
+	}
+	// Header click on the Sortable column 0 Sets SortColumn (-1 -> 0) and
+	// SortAsc (false -> true).
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	if scN != 1 || saN != 1 {
+		t.Fatalf("sort subscriber calls = col %d asc %d, want 1/1", scN, saN)
+	}
+	// A wheel scroll shifts ScrollRow.
+	tb.OnEvent(Event{Kind: EventScroll, Delta: 2})
+	if srN != 1 {
+		t.Fatalf("ScrollRow subscriber calls = %d, want 1", srN)
+	}
+	// A horizontal scroll shifts ScrollX.
+	tb.ScrollXBy(30)
+	if sxN != 1 {
+		t.Fatalf("ScrollX subscriber calls = %d, want 1", sxN)
 	}
 }

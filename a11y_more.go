@@ -191,8 +191,8 @@ func (t *Table) A11y() A11yInfo {
 		if n := len(t.SelectedRows()); n > 0 {
 			v = strconv.Itoa(n) + " rows selected"
 		}
-	} else if t.Selected >= 0 && t.Selected < len(t.Rows) {
-		v = "row " + strconv.Itoa(t.Selected+1) + " selected"
+	} else if sel := t.Selected().Get(); sel >= 0 && sel < len(t.Rows) {
+		v = "row " + strconv.Itoa(sel+1) + " selected"
 	}
 	return A11yInfo{Role: RoleGrid, Value: v}
 }

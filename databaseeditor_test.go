@@ -336,8 +336,8 @@ func TestDBEditorRunFillsGrid(t *testing.T) {
 		g.Rows[1][0] != "2" || g.Rows[1][1] != "Bob" {
 		t.Fatalf("grid cells = %+v, want the canned 2x2", g.Rows)
 	}
-	if g.Selected != -1 || g.ScrollRow != 0 {
-		t.Fatalf("grid not reset after fill: Selected=%d ScrollRow=%d", g.Selected, g.ScrollRow)
+	if g.Selected().Get() != -1 || g.ScrollRow().Get() != 0 {
+		t.Fatalf("grid not reset after fill: Selected=%d ScrollRow=%d", g.Selected().Get(), g.ScrollRow().Get())
 	}
 	// OnQuery observed the same result set.
 	if !reflect.DeepEqual(qCols, []string{"id", "name"}) || len(qRows) != 2 {
@@ -520,9 +520,9 @@ func TestDBEditorEventOnErrorStripIsNoOp(t *testing.T) {
 	d.SetBounds(Rect{X: 0, Y: 0, W: 600, H: 400})
 	// errRect (default metrics, origin at 0,0) is {200,148,390,18}: a click there
 	// lands on no child, exercising OnEvent's fall-through path.
-	before := d.Grid().Selected
+	before := d.Grid().Selected().Get()
 	d.OnEvent(Event{Kind: EventClick, X: 250, Y: 155})
-	if d.Grid().Selected != before {
+	if d.Grid().Selected().Get() != before {
 		t.Fatal("a click on the (non-interactive) error strip changed grid state")
 	}
 }
