@@ -333,7 +333,9 @@ func (s *Spinner) A11y() A11yInfo {
 
 // A11y reports the Stat as a group named by its title, carrying its
 // headline value.
-func (s *Stat) A11y() A11yInfo { return A11yInfo{Role: RoleGroup, Name: s.Title, Value: s.Value} }
+func (s *Stat) A11y() A11yInfo {
+	return A11yInfo{Role: RoleGroup, Name: s.Title, Value: s.Value().Get()}
+}
 
 // A11y reports the SegmentedBar as a group. The individual segments carry
 // no independent accessible identity (BarSegment is a plain data struct,

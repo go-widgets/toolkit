@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // StatTrend selects the semantic direction of a Stat's optional Change
 // indicator. StatFlat renders the change text in the theme's dim
@@ -38,12 +41,51 @@ const (
 // Stat is passive display only — the parent view supplies any
 // interaction (a click-through link, a tooltip) as a separate widget
 // on top. HitTest / OnEvent stay as Base defaults.
+//
+// The reactive metric is MVVM-only: the current Value, Change and Trend
+// each live in an unexported [mvvm.Observable] exposed via the
+// like-named accessor. A host updates the tile at runtime with
+// s.Value().Set("…") / s.Change().Set("…") / s.Trend().Set(StatUp);
+// subscribers are notified. Only the static Title stays a plain config
+// field.
 type Stat struct {
 	Base
-	Title  string
-	Value  string
-	Change string
-	Trend  StatTrend
+	// Title is the static caption drawn above the metric (config).
+	Title string
+
+	value  *mvvm.Observable[string]
+	change *mvvm.Observable[string]
+	trend  *mvvm.Observable[StatTrend]
+}
+
+// Value is the headline metric as a shared [mvvm.Observable]: a host binds it
+// (Set / Subscribe / two-way) — there is no settable Value field. Draw and A11y
+// read it via Get.
+func (s *Stat) Value() *mvvm.Observable[string] {
+	if s.value == nil {
+		s.value = mvvm.NewObservable("")
+	}
+	return s.value
+}
+
+// Change is the optional bottom-row indicator ("+12%", "-4%") as a shared
+// [mvvm.Observable]. An empty string paints no change row; a host mutates it via
+// Set.
+func (s *Stat) Change() *mvvm.Observable[string] {
+	if s.change == nil {
+		s.change = mvvm.NewObservable("")
+	}
+	return s.change
+}
+
+// Trend selects the Change row's semantic direction (StatFlat / StatUp /
+// StatDown) as a shared [mvvm.Observable]. A host mutates it via Set; Draw reads
+// it via Get to colour the change ink.
+func (s *Stat) Trend() *mvvm.Observable[StatTrend] {
+	if s.trend == nil {
+		s.trend = mvvm.NewObservable(StatFlat)
+	}
+	return s.trend
 }
 
 // Stat sizing constants. Padding matches Alert (12, 8) so a Stat
@@ -68,10 +110,15 @@ const (
 
 // NewStat constructs a Stat with the given title + value. Change
 // defaults to "" (no change row painted) and Trend defaults to
-// StatFlat; the caller assigns those fields directly to enable the
-// bottom row.
+// StatFlat; a host enables the bottom row via s.Change().Set(…) and
+// s.Trend().Set(…).
 func NewStat(title, value string) *Stat {
-	return &Stat{Title: title, Value: value}
+	return &Stat{
+		Title:  title,
+		value:  mvvm.NewObservable(value),
+		change: mvvm.NewObservable(""),
+		trend:  mvvm.NewObservable(StatFlat),
+	}
 }
 
 // statChangeInk maps a Trend to the ink used for the Change row.
@@ -108,13 +155,14 @@ func (s *Stat) Draw(p painter.Painter, theme *Theme) {
 	titleY := r.Y + StatPadY
 	s.drawText(p, titleX, titleY, s.Title, dimInk(theme))
 
+	value := s.Value().Get()
 	valueY := titleY + s.glyphHeight() + StatTitleGap
-	s.drawText(p, titleX, valueY, s.Value, theme.OnSurface)
-	s.drawText(p, titleX+1, valueY, s.Value, theme.OnSurface)
+	s.drawText(p, titleX, valueY, value, theme.OnSurface)
+	s.drawText(p, titleX+1, valueY, value, theme.OnSurface)
 
-	if s.Change != "" {
+	if change := s.Change().Get(); change != "" {
 		changeY := valueY + s.glyphHeight() + StatValueGap
-		s.drawText(p, titleX, changeY, s.Change, statChangeInk(s.Trend, theme))
+		s.drawText(p, titleX, changeY, change, statChangeInk(s.Trend().Get(), theme))
 	}
 
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)

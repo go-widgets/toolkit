@@ -100,7 +100,12 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"timeline", func() Widget {
 			return NewTimeline([]TimelineEvent{{Title: "Open"}, {Title: "Merge", Kind: TimelineSuccess}})
 		}},
-		{"stat", func() Widget { s := NewStat("Reqs", "12,845"); s.Change = "+8%"; s.Trend = StatUp; return s }},
+		{"stat", func() Widget {
+			s := NewStat("Reqs", "12,845")
+			s.Change().Set("+8%")
+			s.Trend().Set(StatUp)
+			return s
+		}},
 		{"steps", func() Widget { return NewSteps([]string{"Plan", "Build", "Ship"}, 1) }},
 		{"pagination", func() Widget { return NewPagination(3, 12) }},
 		{"pagingtoolbar", func() Widget { pt := NewPagingToolbar(6, 12); pt.ShowRefresh = true; return pt }},

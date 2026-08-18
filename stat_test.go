@@ -12,14 +12,58 @@ import "testing"
 // Trend defaults to StatFlat (the zero value of StatTrend).
 func TestNewStatDefaults(t *testing.T) {
 	s := NewStat("Users", "1,234")
-	if s.Title != "Users" || s.Value != "1,234" {
-		t.Fatalf("NewStat round-trip broken: %+v", s)
+	if s.Title != "Users" || s.Value().Get() != "1,234" {
+		t.Fatalf("NewStat round-trip broken: Title=%q Value=%q", s.Title, s.Value().Get())
 	}
-	if s.Change != "" {
-		t.Fatalf("Change default = %q, want empty", s.Change)
+	if got := s.Change().Get(); got != "" {
+		t.Fatalf("Change default = %q, want empty", got)
 	}
-	if s.Trend != StatFlat {
-		t.Fatalf("Trend default = %d, want StatFlat (%d)", s.Trend, StatFlat)
+	if got := s.Trend().Get(); got != StatFlat {
+		t.Fatalf("Trend default = %d, want StatFlat (%d)", got, StatFlat)
+	}
+}
+
+// A bare &Stat{} lazily initialises each observable on first access to the
+// zero value ("", "", StatFlat), and a host binds the metric through the
+// accessors — proving Value / Change / Trend are MVVM-only, with no settable
+// field, and that Draw / A11y read whatever the host has Set.
+func TestStatZeroValueAccessorsAndHostBind(t *testing.T) {
+	s := &Stat{}
+	if got := s.Value().Get(); got != "" {
+		t.Fatalf("zero Value = %q, want empty", got)
+	}
+	if got := s.Change().Get(); got != "" {
+		t.Fatalf("zero Change = %q, want empty", got)
+	}
+	if got := s.Trend().Get(); got != StatFlat {
+		t.Fatalf("zero Trend = %d, want StatFlat (%d)", got, StatFlat)
+	}
+
+	// Host binds the metric through the shared observables.
+	s.Value().Set("42k")
+	s.Change().Set("+8%")
+	s.Trend().Set(StatUp)
+	if got := s.Value().Get(); got != "42k" {
+		t.Fatalf("bound Value = %q, want 42k", got)
+	}
+	if got := s.Change().Get(); got != "+8%" {
+		t.Fatalf("bound Change = %q, want +8%%", got)
+	}
+	if got := s.Trend().Get(); got != StatUp {
+		t.Fatalf("bound Trend = %d, want StatUp (%d)", got, StatUp)
+	}
+
+	// A11y reflects the host-set headline value.
+	if got := s.A11y().Value; got != "42k" {
+		t.Fatalf("A11y Value = %q, want 42k", got)
+	}
+
+	// A subscriber on the Value observable is notified on the next Set.
+	seen := ""
+	s.Value().Subscribe(func(v string) { seen = v })
+	s.Value().Set("50k")
+	if seen != "50k" {
+		t.Fatalf("subscriber saw %q, want 50k", seen)
 	}
 }
 
@@ -81,7 +125,9 @@ func TestStatChangeInkDefaultBranch(t *testing.T) {
 func TestStatDrawAllFieldsUp(t *testing.T) {
 	const w, h = 120, 60
 	theme := DefaultLight()
-	s := &Stat{Title: "Users", Value: "10", Change: "+2", Trend: StatUp}
+	s := NewStat("Users", "10")
+	s.Change().Set("+2")
+	s.Trend().Set(StatUp)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
@@ -131,7 +177,9 @@ func TestStatDrawAllFieldsUp(t *testing.T) {
 func TestStatDrawChangeDownRed(t *testing.T) {
 	const w, h = 120, 60
 	theme := DefaultLight()
-	s := &Stat{Title: "T", Value: "V", Change: "-1", Trend: StatDown}
+	s := NewStat("T", "V")
+	s.Change().Set("-1")
+	s.Trend().Set(StatDown)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
@@ -149,7 +197,9 @@ func TestStatDrawChangeDownRed(t *testing.T) {
 func TestStatDrawChangeFlatDim(t *testing.T) {
 	const w, h = 120, 60
 	theme := DefaultLight()
-	s := &Stat{Title: "T", Value: "V", Change: "-1", Trend: StatFlat}
+	s := NewStat("T", "V")
+	s.Change().Set("-1")
+	s.Trend().Set(StatFlat)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
@@ -221,7 +271,8 @@ func TestStatDrawValueBoldDoubleDraw(t *testing.T) {
 func TestStatDrawDarkTheme(t *testing.T) {
 	const w, h = 120, 60
 	theme := DefaultDark()
-	s := &Stat{Title: "T", Value: "V", Change: "flat"}
+	s := NewStat("T", "V")
+	s.Change().Set("flat")
 	s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
@@ -246,7 +297,8 @@ func TestStatDrawDarkTheme(t *testing.T) {
 func TestStatDrawZeroWidthBoundsNoPanic(t *testing.T) {
 	const w, h = 20, 20
 	theme := DefaultLight()
-	s := &Stat{Title: "T", Value: "V", Change: "+"}
+	s := NewStat("T", "V")
+	s.Change().Set("+")
 	s.SetBounds(Rect{X: 5, Y: 5, W: 0, H: 0})
 	buf := makeSurface(w, h)
 	s.Draw(newP(buf, w), theme)
@@ -273,7 +325,9 @@ func TestStatDrawIgnoresExtraOnAccent(t *testing.T) {
 		OnSurface: base.OnSurface, Accent: base.Accent, Border: base.Border,
 		Extra: map[string]RGBA{"OnAccent": RGB(0xFF, 0x00, 0xFF)}, // magenta sentinel
 	}
-	s := &Stat{Title: "T", Value: "V", Change: "+", Trend: StatUp}
+	s := NewStat("T", "V")
+	s.Change().Set("+")
+	s.Trend().Set(StatUp)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	bufA := makeSurface(w, h)
 	bufB := makeSurface(w, h)
