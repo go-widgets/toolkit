@@ -359,41 +359,41 @@ func TestRangeSliderKeyMovesHandles(t *testing.T) {
 func TestSpinButtonKeySteps(t *testing.T) {
 	var got int
 	s := NewSpinButton(0, 100, 50, 2)
-	s.OnChange = func(v int) { got = v }
+	s.Value().Subscribe(func(v int) { got = v })
 	s.OnEvent(kd("ArrowUp"))
-	if s.Value != 52 || got != 52 {
-		t.Fatalf("ArrowUp: Value=%d cb=%d", s.Value, got)
+	if s.Value().Get() != 52 || got != 52 {
+		t.Fatalf("ArrowUp: Value=%d cb=%d", s.Value().Get(), got)
 	}
 	s.OnEvent(kd("ArrowDown"))
-	if s.Value != 50 {
-		t.Fatalf("ArrowDown: Value=%d", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("ArrowDown: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("PageUp")) // +10*Step = +20
-	if s.Value != 70 {
-		t.Fatalf("PageUp: Value=%d", s.Value)
+	if s.Value().Get() != 70 {
+		t.Fatalf("PageUp: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("PageDown")) // -20
-	if s.Value != 50 {
-		t.Fatalf("PageDown: Value=%d", s.Value)
+	if s.Value().Get() != 50 {
+		t.Fatalf("PageDown: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("End"))
-	if s.Value != 100 {
-		t.Fatalf("End: Value=%d", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("End: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("ArrowUp")) // clamp at Max
-	if s.Value != 100 {
-		t.Fatalf("clamp at Max: Value=%d", s.Value)
+	if s.Value().Get() != 100 {
+		t.Fatalf("clamp at Max: Value=%d", s.Value().Get())
 	}
 	s.OnEvent(kd("Home"))
-	if s.Value != 0 {
-		t.Fatalf("Home: Value=%d", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("Home: Value=%d", s.Value().Get())
 	}
 	s.Disabled = true
 	s.OnEvent(kd("End"))
-	if s.Value != 0 {
-		t.Fatalf("disabled spinbutton moved (Value=%d)", s.Value)
+	if s.Value().Get() != 0 {
+		t.Fatalf("disabled spinbutton moved (Value=%d)", s.Value().Get())
 	}
-	NewSpinButton(0, 10, 5, 1).OnEvent(kd("ArrowUp")) // nil OnChange safe
+	NewSpinButton(0, 10, 5, 1).OnEvent(kd("ArrowUp")) // no subscriber: safe
 	// A non-click, non-keydown event is ignored.
 	NewSpinButton(0, 10, 5, 1).OnEvent(Event{Kind: EventChar, Code: "a"})
 }

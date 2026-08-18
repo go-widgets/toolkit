@@ -308,7 +308,7 @@ func TestSpinButtonStepperHitWidensAtTouch(t *testing.T) {
 		s := NewSpinButton(0, 100, 50, 1)
 		s.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 24})
 		s.OnEvent(Event{Kind: EventClick, X: x, Y: 5}) // Y<12 -> increment half
-		return s.Value
+		return s.Value().Get()
 	}
 
 	// Compact button column is [120-16,120) = [104,120): X=103 body (no-op), X=104

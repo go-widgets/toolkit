@@ -90,11 +90,11 @@ func (t *TextView) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: t
 func (s *SpinButton) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleSpinbutton,
-		Value:    strconv.Itoa(s.Value),
+		Value:    strconv.Itoa(s.Value().Get()),
 		HasRange: true,
 		Min:      float64(s.Min),
 		Max:      float64(s.Max),
-		Now:      float64(s.Value),
+		Now:      float64(s.Value().Get()),
 	}
 }
 

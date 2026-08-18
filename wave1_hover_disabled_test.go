@@ -349,8 +349,8 @@ func TestSpinButtonDisabled(t *testing.T) {
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	s.Disabled = true
 	s.OnEvent(Event{Kind: EventClick, X: 55, Y: 5}) // upper button
-	if s.Value != 5 {
-		t.Fatalf("disabled spin changed to %d", s.Value)
+	if s.Value().Get() != 5 {
+		t.Fatalf("disabled spin changed to %d", s.Value().Get())
 	}
 	buf := makeSurface(60, 20)
 	s.Draw(newP(buf, 60), th)
