@@ -23,6 +23,25 @@ func (s Selection) IsEmpty() bool {
 	return s.StartLine == s.EndLine && s.StartCol == s.EndCol
 }
 
+// Decoration is a remote co-editor's presence in a shared buffer: their caret
+// and (optional) selection, painted in the co-editor's own colour with a small
+// name tag, so a collaborative editorview shows who is editing where. The host
+// (e.g. a CRDT-backed editor like loom) supplies one Decoration per active
+// co-editor via TextView.Decorations; the same list feeds a "co-editors" combo.
+// It is pure data — the TextView only paints it, never mutates it.
+type Decoration struct {
+	// Label is the co-editor's name, shown as a tag beside their caret.
+	Label string
+	// Color is the co-editor's colour: caret, name tag, and (tinted) the
+	// selection band. Alpha is applied to the band automatically.
+	Color RGBA
+	// CursorLine, CursorCol place the co-editor's caret (rune coordinates).
+	CursorLine, CursorCol int
+	// Selection is the co-editor's highlighted range; an empty Selection
+	// (Start == End) paints just the caret with no band.
+	Selection Selection
+}
+
 // SelectionRange returns a canonical Selection from an anchor + a
 // cursor: whichever pair is "earlier" in document order becomes the
 // start.

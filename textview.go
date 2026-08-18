@@ -54,8 +54,16 @@ type TextView struct {
 	// + range-deletes via DeleteSelection / cut+paste via
 	// CopySelection / CutSelection / Paste. An empty selection (Start
 	// == End) means "no selection"; HasSelection() is the convenience
-	// predicate.
+	// predicate. Draw paints the selected range with a translucent accent
+	// band, so a keyboard- or mouse-made selection is visible.
 	Selection Selection
+
+	// Decorations are remote co-editors' carets + selections in a shared
+	// buffer, each painted in its own colour with a name tag (see the
+	// Decoration type). Empty for a solo editor; the host keeps it in sync
+	// with the collaboration session. Painted on top of the local selection
+	// so a co-editor's presence is always visible.
+	Decorations []Decoration
 
 	// Composition holds the in-progress IME preview string (dead-key
 	// output, CJK candidate, …). Non-empty while an IME composition
@@ -255,6 +263,13 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 					fillRect(p, r.X+1, y-2, r.W-2, lineH, bg)
 				}
 			}
+			// Selection bands, painted under the text so the glyphs stay
+			// legible: the local selection first (accent tint), then each
+			// remote co-editor's selection in its own tint on top.
+			t.paintSelectionBand(p, i, textX, y, lineH, r, t.Selection, tintBand(theme.Accent))
+			for _, d := range t.Decorations {
+				t.paintSelectionBand(p, i, textX, y, lineH, r, d.Selection, tintBand(d.Color))
+			}
 			if t.ShowLineNumbers {
 				num := strconv.Itoa(i + 1)
 				// Right-align the number against the text's left margin.
@@ -282,6 +297,64 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 			fillRect(p, cx, cy+t.glyphHeight(), cw, 1, theme.SurfaceAlt)
 		}
 	}
+	// Remote co-editor carets + name tags, on top of everything, each in the
+	// co-editor's colour, so a collaborative session shows who is where.
+	for _, d := range t.Decorations {
+		if d.CursorLine < start || d.CursorLine >= len(t.Lines) {
+			continue
+		}
+		cx := textX + d.CursorCol*t.glyphAdvance()
+		cy := r.Y + 4 + (d.CursorLine-start)*lineH
+		if cx < r.X || cx > r.X+r.W {
+			continue
+		}
+		fillRect(p, cx, cy-1, 2, t.glyphHeight()+2, d.Color)
+		if d.Label != "" {
+			tagW := t.textWidth(d.Label) + 4
+			tagY := cy - t.glyphHeight() - 3
+			if tagY < r.Y {
+				tagY = cy // flip below the top edge
+			}
+			fillRect(p, cx, tagY, tagW, t.glyphHeight()+2, d.Color)
+			t.drawText(p, cx+2, tagY+1, d.Label, tagInk(d.Color))
+		}
+	}
+}
+
+// paintSelectionBand fills the highlight for selection sel on buffer line i, in
+// colour c, under the text. Nothing is painted when the line is outside sel or
+// sel is empty. A line that the selection spans through (not the last line)
+// extends to the right edge, so the selected newline reads as selected.
+func (t *TextView) paintSelectionBand(p painter.Painter, i, textX, y, lineH int, r Rect, sel Selection, c RGBA) {
+	if sel.IsEmpty() || i < sel.StartLine || i > sel.EndLine {
+		return
+	}
+	adv := t.glyphAdvance()
+	sc := 0
+	if i == sel.StartLine {
+		sc = sel.StartCol
+	}
+	x0 := textX + sc*adv
+	var x1 int
+	if i < sel.EndLine {
+		x1 = r.X + r.W - 1 // selection continues onto the next line
+	} else {
+		x1 = textX + sel.EndCol*adv
+	}
+	fillRect(p, x0, y-2, x1-x0, lineH, c)
+}
+
+// tintBand returns c at the selection-band alpha, so the highlight tints the
+// row without hiding the glyphs painted on top of it.
+func tintBand(c RGBA) RGBA { return RGBA{R: c.R, G: c.G, B: c.B, A: 0x55} }
+
+// tagInk returns a legible ink (black or white) for text on a co-editor tag of
+// colour c, chosen by c's perceived luminance.
+func tagInk(c RGBA) RGBA {
+	if int(c.R)*299+int(c.G)*587+int(c.B)*114 > 128*1000 {
+		return RGBA{A: 0xFF}
+	}
+	return RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 }
 
 // OnEvent dispatches the editing operations.
