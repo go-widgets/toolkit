@@ -44,15 +44,34 @@ func TestSearchEntryFocusedCaretTrueType(t *testing.T) {
 
 func TestNewSearchEntryStoresText(t *testing.T) {
 	s := NewSearchEntry("hi")
-	if s.Text != "hi" {
-		t.Fatalf("NewSearchEntry: Text = %q, want %q", s.Text, "hi")
+	if s.Text().Get() != "hi" {
+		t.Fatalf("NewSearchEntry: Text = %q, want %q", s.Text().Get(), "hi")
 	}
 }
 
 func TestNewSearchEntryEmpty(t *testing.T) {
 	s := NewSearchEntry("")
-	if s.Text != "" {
-		t.Fatalf("NewSearchEntry empty: Text = %q, want empty", s.Text)
+	if s.Text().Get() != "" {
+		t.Fatalf("NewSearchEntry empty: Text = %q, want empty", s.Text().Get())
+	}
+}
+
+// --- Text / MVVM ---------------------------------------------------------
+
+// TestSearchEntryTextObservable covers the zero-value lazy-init of the Text
+// accessor and the host binding path: a SearchEntry built as a bare struct (no
+// NewSearchEntry) still yields a usable Observable, and Setting it from outside
+// is reflected by the widget (there is no imperative Text field).
+func TestSearchEntryTextObservable(t *testing.T) {
+	s := &SearchEntry{} // no NewSearchEntry → text Observable is nil until accessed
+	if s.Text().Get() != "" {
+		t.Fatalf("zero-value SearchEntry Text = %q, want empty", s.Text().Get())
+	}
+	seen := "unseen"
+	s.Text().Subscribe(func(v string) { seen = v })
+	s.Text().Set("query") // a host drives the field through the Observable
+	if s.Text().Get() != "query" || seen != "query" {
+		t.Fatalf("host Set: text=%q subscriber=%q, want query/query", s.Text().Get(), seen)
 	}
 }
 
@@ -208,54 +227,54 @@ func TestSearchEntryDrawZeroBounds(t *testing.T) {
 
 // --- OnEvent branches ----------------------------------------------------
 
-func TestSearchEntryCharAppendsAndFiresOnChange(t *testing.T) {
+func TestSearchEntryCharAppendsAndNotifies(t *testing.T) {
 	changes := 0
 	last := ""
 	s := NewSearchEntry("ab")
-	s.OnChange = func(v string) { changes++; last = v }
+	s.Text().Subscribe(func(v string) { changes++; last = v })
 	s.OnEvent(Event{Kind: EventChar, Code: "c"})
-	if s.Text != "abc" || changes != 1 || last != "abc" {
-		t.Fatalf("Char append: Text=%q changes=%d last=%q", s.Text, changes, last)
+	if s.Text().Get() != "abc" || changes != 1 || last != "abc" {
+		t.Fatalf("Char append: Text=%q changes=%d last=%q", s.Text().Get(), changes, last)
 	}
 }
 
 func TestSearchEntryEmptyCharIsNoOp(t *testing.T) {
 	s := NewSearchEntry("ab")
 	changes := 0
-	s.OnChange = func(v string) { changes++ }
+	s.Text().Subscribe(func(v string) { changes++ })
 	s.OnEvent(Event{Kind: EventChar, Code: ""})
-	if s.Text != "ab" || changes != 0 {
-		t.Fatalf("empty Char: Text=%q changes=%d", s.Text, changes)
+	if s.Text().Get() != "ab" || changes != 0 {
+		t.Fatalf("empty Char: Text=%q changes=%d", s.Text().Get(), changes)
 	}
 }
 
 func TestSearchEntryBackspaceDropsLastRune(t *testing.T) {
 	changes := 0
 	s := NewSearchEntry("ab")
-	s.OnChange = func(v string) { changes++ }
+	s.Text().Subscribe(func(v string) { changes++ })
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if s.Text != "a" || changes != 1 {
-		t.Fatalf("Backspace: Text=%q changes=%d", s.Text, changes)
+	if s.Text().Get() != "a" || changes != 1 {
+		t.Fatalf("Backspace: Text=%q changes=%d", s.Text().Get(), changes)
 	}
 }
 
 func TestSearchEntryBackspaceOnEmptyIsNoOp(t *testing.T) {
 	s := NewSearchEntry("")
 	changes := 0
-	s.OnChange = func(v string) { changes++ }
+	s.Text().Subscribe(func(v string) { changes++ })
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if s.Text != "" || changes != 0 {
-		t.Fatalf("empty Backspace: Text=%q changes=%d", s.Text, changes)
+	if s.Text().Get() != "" || changes != 0 {
+		t.Fatalf("empty Backspace: Text=%q changes=%d", s.Text().Get(), changes)
 	}
 }
 
 func TestSearchEntryUnknownKeyIsNoOp(t *testing.T) {
 	s := NewSearchEntry("ab")
 	changes := 0
-	s.OnChange = func(v string) { changes++ }
+	s.Text().Subscribe(func(v string) { changes++ })
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if s.Text != "ab" || changes != 0 {
-		t.Fatalf("unknown key: Text=%q changes=%d", s.Text, changes)
+	if s.Text().Get() != "ab" || changes != 0 {
+		t.Fatalf("unknown key: Text=%q changes=%d", s.Text().Get(), changes)
 	}
 }
 
@@ -264,11 +283,11 @@ func TestSearchEntryClickInClearSlotClearsText(t *testing.T) {
 	last := "unchanged"
 	s := NewSearchEntry("ab")
 	s.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
-	s.OnChange = func(v string) { changes++; last = v }
+	s.Text().Subscribe(func(v string) { changes++; last = v })
 	// Right slot occupies [W-Pad-Icon, W-Pad) = [60, 76).
 	s.OnEvent(Event{Kind: EventClick, X: 65, Y: 12})
-	if s.Text != "" || changes != 1 || last != "" {
-		t.Fatalf("clear-click: Text=%q changes=%d last=%q", s.Text, changes, last)
+	if s.Text().Get() != "" || changes != 1 || last != "" {
+		t.Fatalf("clear-click: Text=%q changes=%d last=%q", s.Text().Get(), changes, last)
 	}
 }
 
@@ -276,10 +295,10 @@ func TestSearchEntryClickInClearSlotWhenEmptyIsNoOp(t *testing.T) {
 	s := NewSearchEntry("")
 	s.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
 	changes := 0
-	s.OnChange = func(v string) { changes++ }
+	s.Text().Subscribe(func(v string) { changes++ })
 	s.OnEvent(Event{Kind: EventClick, X: 65, Y: 12})
-	if s.Text != "" || changes != 0 {
-		t.Fatalf("empty clear-click: Text=%q changes=%d", s.Text, changes)
+	if s.Text().Get() != "" || changes != 0 {
+		t.Fatalf("empty clear-click: Text=%q changes=%d", s.Text().Get(), changes)
 	}
 }
 
@@ -287,26 +306,26 @@ func TestSearchEntryClickOutsideClearSlotIsNoOp(t *testing.T) {
 	s := NewSearchEntry("ab")
 	s.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
 	changes := 0
-	s.OnChange = func(v string) { changes++ }
+	s.Text().Subscribe(func(v string) { changes++ })
 	// Click in the middle of the entry (not in the right slot).
 	s.OnEvent(Event{Kind: EventClick, X: 40, Y: 12})
-	if s.Text != "ab" || changes != 0 {
-		t.Fatalf("middle click: Text=%q changes=%d", s.Text, changes)
+	if s.Text().Get() != "ab" || changes != 0 {
+		t.Fatalf("middle click: Text=%q changes=%d", s.Text().Get(), changes)
 	}
 }
 
 func TestSearchEntryIgnoresKeyUp(t *testing.T) {
 	s := NewSearchEntry("ab")
 	s.OnEvent(Event{Kind: EventKeyUp, Code: "a"})
-	if s.Text != "ab" {
+	if s.Text().Get() != "ab" {
 		t.Fatal("KeyUp should not mutate")
 	}
 }
 
-func TestSearchEntryNilOnChangeNoPanic(t *testing.T) {
+func TestSearchEntryNoSubscriberNoPanic(t *testing.T) {
 	s := NewSearchEntry("ab")
 	s.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
-	// Fire every mutation path; nil OnChange must be safe.
+	// Fire every mutation path; no subscriber must be safe.
 	s.OnEvent(Event{Kind: EventChar, Code: "c"})
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
 	s.OnEvent(Event{Kind: EventClick, X: 65, Y: 12})
