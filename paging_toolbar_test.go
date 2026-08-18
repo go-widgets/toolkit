@@ -22,72 +22,91 @@ func newBoundPagingToolbar(page, count int) *PagingToolbar {
 
 // TestPagingToolbarNewClamps covers the New clamps.
 func TestPagingToolbarNewClamps(t *testing.T) {
-	if got := NewPagingToolbar(9, 5).Page; got != 5 {
+	if got := NewPagingToolbar(9, 5).Page().Get(); got != 5 {
 		t.Fatalf("page over count clamps to %d, want 5", got)
 	}
-	if got := NewPagingToolbar(0, 5).Page; got != 1 {
+	if got := NewPagingToolbar(0, 5).Page().Get(); got != 1 {
 		t.Fatalf("page under 1 clamps to %d, want 1", got)
 	}
 	e := NewPagingToolbar(3, 0)
-	if e.PageCount != 1 || e.Page != 1 {
-		t.Fatalf("empty grid = Page %d of %d, want 1 of 1", e.Page, e.PageCount)
+	if e.PageCount != 1 || e.Page().Get() != 1 {
+		t.Fatalf("empty grid = Page %d of %d, want 1 of 1", e.Page().Get(), e.PageCount)
 	}
 	if e.info() != "Page 1 of 1" {
 		t.Fatalf("info = %q, want %q", e.info(), "Page 1 of 1")
 	}
 }
 
-// TestPagingToolbarNavigation covers First/Prev/Next/Last stepping + OnChange.
+// TestPagingToolbarPageObservable covers the Page accessor and the host
+// binding path: a toolbar built as a bare struct (no NewPagingToolbar) still
+// yields a usable Observable, and Setting it from outside is reflected by the
+// widget (there is no imperative Page field).
+func TestPagingToolbarPageObservable(t *testing.T) {
+	pt := &PagingToolbar{PageCount: 7} // no ctor → page Observable is nil until accessed
+	if pt.Page().Get() != 0 {
+		t.Fatalf("zero-value PagingToolbar Page = %d, want 0", pt.Page().Get())
+	}
+	seen := -1
+	pt.Page().Subscribe(func(v int) { seen = v })
+	pt.Page().Set(4) // a host drives the current page through the Observable
+	if pt.Page().Get() != 4 || seen != 4 {
+		t.Fatalf("host Set: page=%d subscriber=%d, want 4/4", pt.Page().Get(), seen)
+	}
+}
+
+// TestPagingToolbarNavigation covers First/Prev/Next/Last stepping and the
+// Page Observable's notifications.
 func TestPagingToolbarNavigation(t *testing.T) {
 	pt := newBoundPagingToolbar(3, 5)
 	var pages []int
-	pt.OnChange = func(p int) { pages = append(pages, p) }
+	pt.Page().Subscribe(func(p int) { pages = append(pages, p) })
 	l := pt.layout()
 
 	ptClick(pt, l.prev)  // 3 → 2
 	ptClick(pt, l.next)  // 2 → 3
 	ptClick(pt, l.first) // 3 → 1
 	ptClick(pt, l.last)  // 1 → 5
-	if pt.Page != 5 {
-		t.Fatalf("final Page = %d, want 5", pt.Page)
+	if pt.Page().Get() != 5 {
+		t.Fatalf("final Page = %d, want 5", pt.Page().Get())
 	}
 	want := []int{2, 3, 1, 5}
 	if len(pages) != len(want) {
-		t.Fatalf("OnChange pages = %v, want %v", pages, want)
+		t.Fatalf("Page notifications = %v, want %v", pages, want)
 	}
 	for i := range want {
 		if pages[i] != want[i] {
-			t.Fatalf("OnChange[%d] = %d, want %d", i, pages[i], want[i])
+			t.Fatalf("notify[%d] = %d, want %d", i, pages[i], want[i])
 		}
 	}
 }
 
 // TestPagingToolbarDisabledEnds: First/Prev at page 1 and Next/Last at the
-// last page are no-ops (no OnChange).
+// last page are no-ops (no notification).
 func TestPagingToolbarDisabledEnds(t *testing.T) {
 	fired := 0
 	// At page 1: First/Prev inert.
 	lo := newBoundPagingToolbar(1, 5)
-	lo.OnChange = func(int) { fired++ }
+	lo.Page().Subscribe(func(int) { fired++ })
 	l := lo.layout()
 	ptClick(lo, l.first)
 	ptClick(lo, l.prev)
-	if lo.Page != 1 || fired != 0 {
-		t.Fatalf("page-1 First/Prev changed state: Page %d, fired %d", lo.Page, fired)
+	if lo.Page().Get() != 1 || fired != 0 {
+		t.Fatalf("page-1 First/Prev changed state: Page %d, fired %d", lo.Page().Get(), fired)
 	}
 	// At last page: Next/Last inert.
 	hi := newBoundPagingToolbar(5, 5)
-	hi.OnChange = func(int) { fired++ }
+	hi.Page().Subscribe(func(int) { fired++ })
 	l = hi.layout()
 	ptClick(hi, l.next)
 	ptClick(hi, l.last)
-	if hi.Page != 5 || fired != 0 {
-		t.Fatalf("last-page Next/Last changed state: Page %d, fired %d", hi.Page, fired)
+	if hi.Page().Get() != 5 || fired != 0 {
+		t.Fatalf("last-page Next/Last changed state: Page %d, fired %d", hi.Page().Get(), fired)
 	}
 }
 
 // TestPagingToolbarRefresh covers the Refresh button (present, clicked; and
-// absent by default).
+// absent by default). OnRefresh is an action seam, not reactive state, so it
+// stays a func field.
 func TestPagingToolbarRefresh(t *testing.T) {
 	pt := newBoundPagingToolbar(2, 5)
 	pt.ShowRefresh = true
@@ -124,13 +143,13 @@ func TestPagingToolbarRefreshNilSafe(t *testing.T) {
 func TestPagingToolbarInertClicks(t *testing.T) {
 	pt := newBoundPagingToolbar(3, 5)
 	fired := false
-	pt.OnChange = func(int) { fired = true }
+	pt.Page().Subscribe(func(int) { fired = true })
 
 	pt.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})  // not a click
 	ptClick(pt, pt.layout().info)                         // indicator, inert
 	pt.OnEvent(Event{Kind: EventClick, X: 5000, Y: 5000}) // far outside
-	if fired || pt.Page != 3 {
-		t.Fatalf("inert clicks changed state: fired %v Page %d", fired, pt.Page)
+	if fired || pt.Page().Get() != 3 {
+		t.Fatalf("inert clicks changed state: fired %v Page %d", fired, pt.Page().Get())
 	}
 }
 

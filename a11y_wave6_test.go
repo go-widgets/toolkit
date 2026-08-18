@@ -155,7 +155,7 @@ func TestContentWidgetsDescribeThemselves(t *testing.T) {
 		{"Dock", &Dock{}, RoleToolbar, ""},
 		{"StatusArea", &StatusArea{}, RoleToolbar, ""},
 		{"StatusIcon", &StatusIcon{}, RoleStatus, ""},
-		{"PagingToolbar", &PagingToolbar{Page: 2, PageCount: 7}, RoleToolbar, ""},
+		{"PagingToolbar", NewPagingToolbar(2, 7), RoleToolbar, ""},
 	}
 	for _, c := range cases {
 		got := c.w.A11y()
@@ -167,7 +167,7 @@ func TestContentWidgetsDescribeThemselves(t *testing.T) {
 		}
 	}
 	// The paging toolbar's whole point is the position it reports.
-	if got := (&PagingToolbar{Page: 2, PageCount: 7}).A11y().Value; got != "page 2 of 7" {
+	if got := NewPagingToolbar(2, 7).A11y().Value; got != "page 2 of 7" {
 		t.Fatalf("PagingToolbar Value = %q", got)
 	}
 	// A LoadMask says it is busy only while it actually is.
