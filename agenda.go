@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // AgendaEvent is one appointment. In the week view (AgendaWeek) it draws as a
 // coloured block: Title labels it, Day is the weekday column — an index in
@@ -72,8 +75,9 @@ const (
 // [StartMin, EndMin) range clamped to the visible hours. StartHour and EndHour
 // bound that visible range; when they are unset (or EndHour <= StartHour) they
 // fall back to a 08:00..18:00 working day so a caller can leave them zero.
-// Selected (when it indexes an event) tints that block and draws an accent
-// border, and a click inside a block fires OnSelect with its index.
+// The Selected event (when its Observable indexes an event) tints that block
+// and draws an accent border, and a click inside a block Sets [Agenda.Selected]
+// to its index, notifying subscribers.
 //
 // Agenda renders through painter.Painter, so the same week draws as pixels
 // (WUI/GUI) or promoted cells (TUI). It is distinct from Calendar, which is a
@@ -84,8 +88,6 @@ type Agenda struct {
 	Events             []AgendaEvent
 	DayNames           []string
 	StartHour, EndHour int
-	OnSelect           func(i int)
-	Selected           int
 	// OnDayActivate fires when a month-view click lands on an in-month day cell
 	// that is not an event chip, carrying that cell's (year, month, day). A
 	// host uses it to add an event on the clicked day. Nil is safe.
@@ -110,13 +112,39 @@ type Agenda struct {
 	// here without any extra wiring.
 	Calendars []AgendaCalendar
 
-	// View selects the layout (week/month/quarter/year); zero = AgendaWeek.
-	View AgendaView
 	// Year and Month are the focused period for the calendar views. When a
 	// needed field is zero it is derived from the first dated event (see
 	// focusYM/focusYear); if none is available the calendar grid stays empty.
 	Year  int
 	Month int // 1..12
+
+	// Reactive state is MVVM-only: the selected event index and the current
+	// layout live in unexported Observables exposed via [Agenda.Selected] and
+	// [Agenda.View].
+	selected *mvvm.Observable[int]
+	view     *mvvm.Observable[AgendaView]
+}
+
+// Selected is the selected event index as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Selected field. A
+// click on an event Sets it (an index, or -1 for no selection); subscribers are
+// notified. On a zero-value Agenda it lazy-inits to 0; NewAgenda seeds it to -1.
+func (a *Agenda) Selected() *mvvm.Observable[int] {
+	if a.selected == nil {
+		a.selected = mvvm.NewObservable(0)
+	}
+	return a.selected
+}
+
+// View is the active layout (week/month/quarter/year) as a shared
+// [mvvm.Observable]: a host binds it (Set / Subscribe / two-way) — there is no
+// settable View field. It lazy-inits to the zero AgendaView (AgendaWeek), so a
+// zero-value Agenda still draws the week grid.
+func (a *Agenda) View() *mvvm.Observable[AgendaView] {
+	if a.view == nil {
+		a.view = mvvm.NewObservable(AgendaWeek)
+	}
+	return a.view
 }
 
 // Agenda sizing constants, exported like TableRowHeight / GanttHeaderH so a host
@@ -163,13 +191,15 @@ func NewAgenda(events []AgendaEvent) *Agenda {
 	if events == nil {
 		events = []AgendaEvent{}
 	}
-	return &Agenda{
+	a := &Agenda{
 		Events:    events,
 		DayNames:  []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"},
 		StartHour: 8,
 		EndHour:   18,
-		Selected:  -1,
 	}
+	a.selected = mvvm.NewObservable(-1)
+	a.view = mvvm.NewObservable(AgendaWeek)
+	return a
 }
 
 // hourRange returns the effective visible hour span [start, end): the explicit
@@ -285,7 +315,7 @@ func (a *Agenda) blockRect(ox, oy int, ev AgendaEvent) (Rect, bool) {
 // draws the original week grid unchanged; the calendar views draw a month,
 // quarter or year of dated events.
 func (a *Agenda) Draw(p painter.Painter, theme *Theme) {
-	switch a.View {
+	switch a.View().Get() {
 	case AgendaMonth:
 		a.drawMonth(p, theme)
 	case AgendaQuarter, AgendaYear:
@@ -354,6 +384,7 @@ func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 	})
 
 	// Event blocks, clipped to the grid so none bleed into header/gutter.
+	sel := a.Selected().Get()
 	withClip(p, gridRect, func() {
 		for i, ev := range a.Events {
 			if !a.eventVisible(ev) {
@@ -364,11 +395,11 @@ func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 				continue
 			}
 			fill := a.eventFill(ev, theme)
-			if a.Selected == i {
+			if sel == i {
 				fill = agendaSelectInk(fill, theme)
 			}
 			fillRoundRect(p, br.X, br.Y, br.W, br.H, agendaBlockRadius, fill)
-			if a.Selected == i {
+			if sel == i {
 				strokeRoundRect(p, br.X, br.Y, br.W, br.H, agendaBlockRadius, theme.Accent)
 			}
 			withClip(p, br, func() {
@@ -379,18 +410,19 @@ func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 }
 
 // OnEvent selects the event under an EventClick in whatever View is active and
-// fires OnSelect (nil-safe) with its index. Each view has a hit-test that shares
-// its paint geometry so the two can't drift: hitWeek walks the day/time blocks,
-// hitMonth the day-cell chips, hitMini the mini-month day cells. Clicks that
-// land on no event — headers, gutters, dead-space, "+N" markers — and any
-// non-click event are no-ops. Overlapping candidates resolve to the
-// visually-topmost (last-drawn) one.
+// Sets [Agenda.Selected] to its index (notifying subscribers). Each view has a
+// hit-test that shares its paint geometry so the two can't drift: hitWeek walks
+// the day/time blocks, hitMonth the day-cell chips, hitMini the mini-month day
+// cells. Clicks that land on no event — headers, gutters, dead-space, "+N"
+// markers — and any non-click event are no-ops. Overlapping candidates resolve
+// to the visually-topmost (last-drawn) one.
 func (a *Agenda) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
 	}
 	var i int
-	switch a.View {
+	view := a.View().Get()
+	switch view {
 	case AgendaMonth:
 		i = a.hitMonth(ev.X, ev.Y)
 	case AgendaQuarter, AgendaYear:
@@ -402,17 +434,14 @@ func (a *Agenda) OnEvent(ev Event) {
 		// A month-view click that hits no chip may still land on an in-month
 		// day cell: activate that day (a host adds an event there). Other
 		// views have no day-activate target.
-		if a.View == AgendaMonth && a.OnDayActivate != nil {
+		if view == AgendaMonth && a.OnDayActivate != nil {
 			if yy, m, d, ok := a.monthDayAt(ev.X, ev.Y); ok {
 				a.OnDayActivate(yy, m, d)
 			}
 		}
 		return
 	}
-	a.Selected = i
-	if a.OnSelect != nil {
-		a.OnSelect(i)
-	}
+	a.Selected().Set(i)
 }
 
 // DayAt maps widget-local (x, y) to the in-month day cell under it in the month
@@ -683,14 +712,15 @@ func (a *Agenda) drawMonth(p painter.Painter, theme *Theme) {
 			}
 		}
 		chips, overflows := a.monthChips(r.X, r.Y)
+		sel := a.Selected().Get()
 		for _, c := range chips {
 			ev := a.Events[c.idx]
 			fill := a.eventFill(ev, theme)
-			if a.Selected == c.idx {
+			if sel == c.idx {
 				fill = agendaSelectInk(fill, theme)
 			}
 			fillRoundRect(p, c.rect.X, c.rect.Y, c.rect.W, c.rect.H, agendaChipRadius, fill)
-			if a.Selected == c.idx {
+			if sel == c.idx {
 				strokeRoundRect(p, c.rect.X, c.rect.Y, c.rect.W, c.rect.H, agendaChipRadius, theme.Accent)
 			}
 			withClip(p, c.rect, func() {
@@ -729,7 +759,7 @@ type miniSpec struct {
 // 4×3 grid of the twelve months for the year view. It returns no specs when no
 // period is in focus.
 func (a *Agenda) miniLayout() (specs []miniSpec, cols, rows int) {
-	if a.View == AgendaYear {
+	if a.View().Get() == AgendaYear {
 		yy, ok := a.focusYear()
 		if !ok {
 			return nil, 4, 3

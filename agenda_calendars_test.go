@@ -101,7 +101,8 @@ func TestAgendaHiddenCalendarHidesEvents(t *testing.T) {
 		{"month", func(teal RGBA) (*Agenda, int, int) {
 			a := NewAgenda([]AgendaEvent{{Title: "Release", Y: 2026, M: 7, D: 10, Calendar: 0}})
 			a.Calendars = []AgendaCalendar{{Name: "Work", Color: teal}}
-			a.View, a.Year, a.Month = AgendaMonth, 2026, 7
+			a.Year, a.Month = 2026, 7
+			a.View().Set(AgendaMonth)
 			a.SetBounds(Rect{W: w, H: h})
 			chips, _ := a.monthChips(0, 0)
 			return a, chips[0].rect.X + 1, chips[0].rect.Y + chips[0].rect.H/2
@@ -109,7 +110,8 @@ func TestAgendaHiddenCalendarHidesEvents(t *testing.T) {
 		{"mini", func(teal RGBA) (*Agenda, int, int) {
 			a := NewAgenda([]AgendaEvent{{Title: "Trip", Y: 2026, M: 7, D: 10, Calendar: 0}})
 			a.Calendars = []AgendaCalendar{{Name: "Home", Color: teal}}
-			a.View, a.Year, a.Month = AgendaQuarter, 2026, 7
+			a.Year, a.Month = 2026, 7
+			a.View().Set(AgendaQuarter)
 			a.SetBounds(Rect{W: w, H: h})
 			// hit via hitMini by locating the event's cell through the widget itself
 			return a, -1, -1 // mini uses selection-based check below
@@ -127,16 +129,16 @@ func TestAgendaHiddenCalendarHidesEvents(t *testing.T) {
 				t.Fatal("visible calendar: expected coloured pixels, found none")
 			}
 			if c.name != "mini" {
-				a.Selected = -1
+				a.Selected().Set(-1)
 				a.OnEvent(Event{Kind: EventClick, X: hx, Y: hy})
-				if a.Selected != 0 {
-					t.Fatalf("visible calendar: click did not select event (Selected=%d)", a.Selected)
+				if a.Selected().Get() != 0 {
+					t.Fatalf("visible calendar: click did not select event (Selected=%d)", a.Selected().Get())
 				}
 			}
 
 			// Hidden: no coloured pixels + the event is unhittable.
 			a.Calendars[0].Hidden = true
-			a.Selected = -1
+			a.Selected().Set(-1)
 			surf2 := makeSurface(w, h)
 			a.Draw(newP(surf2, w), th)
 			if got := countColor(surf2, w, h, teal); got != 0 {
@@ -144,8 +146,8 @@ func TestAgendaHiddenCalendarHidesEvents(t *testing.T) {
 			}
 			if c.name != "mini" {
 				a.OnEvent(Event{Kind: EventClick, X: hx, Y: hy})
-				if a.Selected != -1 {
-					t.Fatalf("hidden calendar: click selected a hidden event (Selected=%d)", a.Selected)
+				if a.Selected().Get() != -1 {
+					t.Fatalf("hidden calendar: click selected a hidden event (Selected=%d)", a.Selected().Get())
 				}
 			}
 		})
@@ -158,7 +160,8 @@ func TestAgendaHitMiniSkipsHiddenAndDayEvent(t *testing.T) {
 	teal := RGB(0x0D, 0x94, 0x88)
 	a := NewAgenda([]AgendaEvent{{Title: "Trip", Y: 2026, M: 7, D: 10, Calendar: 0}})
 	a.Calendars = []AgendaCalendar{{Name: "Home", Color: teal}}
-	a.View, a.Year, a.Month = AgendaQuarter, 2026, 7
+	a.Year, a.Month = 2026, 7
+	a.View().Set(AgendaQuarter)
 	a.SetBounds(Rect{W: 360, H: 360})
 
 	// Find a hitMini coordinate by scanning the widget for the event cell.

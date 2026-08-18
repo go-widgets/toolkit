@@ -74,7 +74,8 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"calendar", func() Widget { c := NewCalendar(2026, 7, 2); c.SetToday(2026, 7, 2); return c }},
 		{"agenda-month", func() Widget {
 			a := NewAgenda([]AgendaEvent{{Title: "E", Y: 2026, M: 7, D: 3}})
-			a.View, a.Year, a.Month = AgendaMonth, 2026, 7
+			a.Year, a.Month = 2026, 7
+			a.View().Set(AgendaMonth)
 			return a
 		}},
 		{"linechart", func() Widget { return NewLineChart([]float64{3, 7, 2, 8, 5, 9}) }},

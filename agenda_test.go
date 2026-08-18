@@ -26,13 +26,44 @@ func TestNewAgendaSeedsDefaults(t *testing.T) {
 	if a.StartHour != 8 || a.EndHour != 18 {
 		t.Errorf("hour range = %d..%d, want 8..18", a.StartHour, a.EndHour)
 	}
-	if a.Selected != -1 {
-		t.Errorf("new Agenda Selected = %d, want -1", a.Selected)
+	if a.Selected().Get() != -1 {
+		t.Errorf("new Agenda Selected = %d, want -1", a.Selected().Get())
+	}
+	if a.View().Get() != AgendaWeek {
+		t.Errorf("new Agenda View = %d, want AgendaWeek", a.View().Get())
 	}
 	// A non-nil slice is retained verbatim.
 	evs := []AgendaEvent{{Title: "A", Day: 0, StartMin: 540, EndMin: 600}}
 	if a := NewAgenda(evs); len(a.Events) != 1 {
 		t.Errorf("NewAgenda kept %d events, want 1", len(a.Events))
+	}
+}
+
+// TestAgendaZeroValueObservables covers the accessors' nil-init path on a bare
+// &Agenda{} (never through NewAgenda): Selected lazy-inits to 0 and View to the
+// zero AgendaView (AgendaWeek), and both are live, host-bindable Observables.
+func TestAgendaZeroValueObservables(t *testing.T) {
+	a := &Agenda{}
+	if got := a.Selected().Get(); got != 0 {
+		t.Errorf("zero-value Agenda Selected = %d, want 0", got)
+	}
+	if got := a.View().Get(); got != AgendaWeek {
+		t.Errorf("zero-value Agenda View = %d, want AgendaWeek", got)
+	}
+
+	// A host binds both: a Set is observed by the subscriber and read back by Get.
+	gotSel := -99
+	a.Selected().Subscribe(func(i int) { gotSel = i })
+	a.Selected().Set(3)
+	if gotSel != 3 || a.Selected().Get() != 3 {
+		t.Errorf("Selected bind: subscriber=%d get=%d, want 3/3", gotSel, a.Selected().Get())
+	}
+
+	gotView := AgendaWeek
+	a.View().Subscribe(func(v AgendaView) { gotView = v })
+	a.View().Set(AgendaYear)
+	if gotView != AgendaYear || a.View().Get() != AgendaYear {
+		t.Errorf("View bind: subscriber=%d get=%d, want AgendaYear", gotView, a.View().Get())
 	}
 }
 
@@ -163,7 +194,7 @@ func TestAgendaDrawSelectionTintAndBorder(t *testing.T) {
 		{Title: "A", Day: 0, StartMin: 9 * 60, EndMin: 10 * 60, Fill: teal},
 		{Title: "B", Day: 1, StartMin: 11 * 60, EndMin: 12 * 60, Fill: teal},
 	})
-	a.Selected = 1
+	a.Selected().Set(1)
 	w, h := 500, AgendaHeaderH+10*AgendaHourH
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	surf := makeSurface(w, h)
@@ -195,42 +226,42 @@ func TestAgendaOnEventSelectsBlock(t *testing.T) {
 		{Title: "A", Day: 1, StartMin: 9 * 60, EndMin: 10 * 60},
 		{Title: "B", Day: 3, StartMin: 13 * 60, EndMin: 14 * 60},
 	})
-	a.OnSelect = func(i int) { fired = i }
+	a.Selected().Subscribe(func(i int) { fired = i })
 	a.SetBounds(Rect{X: 0, Y: 0, W: 700, H: AgendaHeaderH + 10*AgendaHourH})
 
 	// Click inside the first block (day 1, 09:00-10:00).
 	br0, _ := a.blockRect(0, 0, a.Events[0])
 	a.OnEvent(Event{Kind: EventClick, X: br0.X + br0.W/2, Y: br0.Y + br0.H/2})
-	if a.Selected != 0 {
-		t.Errorf("after block click Selected = %d, want 0", a.Selected)
+	if a.Selected().Get() != 0 {
+		t.Errorf("after block click Selected = %d, want 0", a.Selected().Get())
 	}
 	if fired != 0 {
-		t.Errorf("OnSelect fired with %d, want 0", fired)
+		t.Errorf("Selected subscriber fired with %d, want 0", fired)
 	}
 
 	// A non-click event is ignored.
-	a.Selected = 1
+	a.Selected().Set(1)
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if a.Selected != 1 {
-		t.Errorf("non-click event changed Selected to %d, want 1", a.Selected)
+	if a.Selected().Get() != 1 {
+		t.Errorf("non-click event changed Selected to %d, want 1", a.Selected().Get())
 	}
 
 	// A click on grid dead-space (no block there) is a no-op.
 	a.OnEvent(Event{Kind: EventClick, X: AgendaGutterW + 5, Y: AgendaHeaderH + 5})
-	if a.Selected != 1 {
-		t.Errorf("dead-space click changed Selected to %d, want 1", a.Selected)
+	if a.Selected().Get() != 1 {
+		t.Errorf("dead-space click changed Selected to %d, want 1", a.Selected().Get())
 	}
 
 	// A click in the header band hits no block.
 	a.OnEvent(Event{Kind: EventClick, X: 200, Y: 2})
-	if a.Selected != 1 {
-		t.Errorf("header click changed Selected to %d, want 1", a.Selected)
+	if a.Selected().Get() != 1 {
+		t.Errorf("header click changed Selected to %d, want 1", a.Selected().Get())
 	}
 }
 
 func TestAgendaOnEventTopmostAndNilSafe(t *testing.T) {
 	// Two overlapping blocks in the same day/time: the later-drawn (index 1)
-	// wins the hit. OnSelect is nil, so the click must not panic.
+	// wins the hit. No subscriber is bound, so the click must not panic.
 	a := NewAgenda([]AgendaEvent{
 		{Title: "under", Day: 2, StartMin: 9 * 60, EndMin: 11 * 60},
 		{Title: "over", Day: 2, StartMin: 9 * 60, EndMin: 11 * 60},
@@ -238,8 +269,8 @@ func TestAgendaOnEventTopmostAndNilSafe(t *testing.T) {
 	a.SetBounds(Rect{X: 0, Y: 0, W: 700, H: AgendaHeaderH + 10*AgendaHourH})
 	br, _ := a.blockRect(0, 0, a.Events[1])
 	a.OnEvent(Event{Kind: EventClick, X: br.X + br.W/2, Y: br.Y + br.H/2})
-	if a.Selected != 1 {
-		t.Errorf("overlap click selected %d, want topmost 1", a.Selected)
+	if a.Selected().Get() != 1 {
+		t.Errorf("overlap click selected %d, want topmost 1", a.Selected().Get())
 	}
 }
 
@@ -256,7 +287,7 @@ func TestAgendaRenderPNGDemo(t *testing.T) {
 		{Title: "Interview", Day: 3, StartMin: 9 * 60, EndMin: 10*60 + 30, Fill: RGB(0xC0, 0x30, 0x30)},
 		{Title: "Focus", Day: 4, StartMin: 14 * 60, EndMin: 17 * 60, Fill: RGB(0x63, 0x4A, 0xB0)},
 	})
-	a.Selected = 4
+	a.Selected().Set(4)
 	w, h := 720, AgendaHeaderH+10*AgendaHourH
 	png, err := RenderPNG(a, w, h, DefaultLight())
 	if err != nil {
@@ -274,7 +305,8 @@ func TestAgendaRenderPNGDemo(t *testing.T) {
 // single event on the 3rd, sized so all six week rows fit.
 func agendaMonthFixture() *Agenda {
 	a := NewAgenda([]AgendaEvent{{Title: "E", Y: 2026, M: 7, D: 3}})
-	a.View, a.Year, a.Month = AgendaMonth, 2026, 7
+	a.View().Set(AgendaMonth)
+	a.Year, a.Month = 2026, 7
 	a.DayNames = []string{"Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"}
 	a.SetBounds(Rect{X: 0, Y: 0, W: 700, H: 500})
 	return a
@@ -316,7 +348,7 @@ func TestAgendaMonthDayActivateNilAndNonMonth(t *testing.T) {
 
 	fired := false
 	a.OnDayActivate = func(int, int, int) { fired = true }
-	a.View = AgendaWeek // a week-view miss must not activate a day
+	a.View().Set(AgendaWeek) // a week-view miss must not activate a day
 	a.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
 	if fired {
 		t.Fatalf("OnDayActivate fired outside month view")
@@ -330,7 +362,7 @@ func TestAgendaMonthDayAtBranches(t *testing.T) {
 
 	// No focus period -> ok=false.
 	noFocus := NewAgenda(nil)
-	noFocus.View = AgendaMonth
+	noFocus.View().Set(AgendaMonth)
 	noFocus.SetBounds(Rect{X: 0, Y: 0, W: 700, H: 500})
 	if _, _, _, ok := noFocus.monthDayAt(100, 100); ok {
 		t.Fatalf("monthDayAt with no focus returned ok")

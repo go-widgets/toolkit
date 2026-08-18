@@ -14,7 +14,8 @@ func editorAgenda() *Agenda {
 		{Name: "Work", Color: RGB(0x0D, 0x94, 0x88)},
 		{Name: "Home", Color: RGB(0xC0, 0x30, 0x30)},
 	}
-	a.View, a.Year, a.Month = AgendaMonth, 2026, 7
+	a.Year, a.Month = 2026, 7
+	a.View().Set(AgendaMonth)
 	a.SetBounds(Rect{X: 0, Y: 0, W: 360, H: 360})
 	return a
 }
@@ -82,7 +83,8 @@ func TestAgendaDrawEditorNoCalendars(t *testing.T) {
 	th := DefaultLight()
 	const w, h = 300, 300
 	a := NewAgenda([]AgendaEvent{{Title: "Solo", Y: 2026, M: 7, D: 6}})
-	a.View, a.Year, a.Month = AgendaMonth, 2026, 7
+	a.Year, a.Month = 2026, 7
+	a.View().Set(AgendaMonth)
 	a.SetBounds(Rect{W: w, H: h})
 	a.EditEvent(0)
 	buf := makeSurface(w, h)
