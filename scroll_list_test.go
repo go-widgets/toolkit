@@ -584,7 +584,7 @@ func TestListBoxWindowedDrawOnlyPaintsVisibleRows(t *testing.T) {
 	l := NewListBox(items)
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // exactly 5 rows visible
-	l.ScrollRow = 3                              // window = rows [3,8)
+	l.ScrollRow().Set(3)                         // window = rows [3,8)
 	l.Selected().Set(5)                          // in-window
 	buf := makeSurface(w, h)
 	l.Draw(newP(buf, w), theme)
@@ -686,11 +686,11 @@ func TestListBoxScrollRowClampBothEnds(t *testing.T) {
 	l := NewListBox(make([]string, 20))
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // 5 visible -> maxScrollRow = 15
-	l.ScrollRow = -5
+	l.ScrollRow().Set(-5)
 	if got := l.clampedScrollRow(); got != 0 {
 		t.Fatalf("negative ScrollRow should clamp to 0; got %d", got)
 	}
-	l.ScrollRow = 1000
+	l.ScrollRow().Set(1000)
 	if got := l.clampedScrollRow(); got != 15 {
 		t.Fatalf("ScrollRow should clamp to maxScrollRow=15; got %d", got)
 	}
@@ -702,7 +702,7 @@ func TestListBoxClickWithScrollRowSelectsCorrectRow(t *testing.T) {
 	l.OnActivate = func(i int) { got = i }
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
-	l.ScrollRow = 3
+	l.ScrollRow().Set(3)
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 25}) // local slot 1 -> abs row 4
 	if l.Selected().Get() != 4 {
 		t.Fatalf("Selected = %d, want 4", l.Selected().Get())
@@ -718,21 +718,21 @@ func TestListBoxScrollToAndScrollByClamp(t *testing.T) {
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // maxScrollRow = 15
 
 	l.ScrollTo(1000)
-	if l.ScrollRow != 15 {
-		t.Fatalf("ScrollTo(1000) = %d, want 15", l.ScrollRow)
+	if l.ScrollRow().Get() != 15 {
+		t.Fatalf("ScrollTo(1000) = %d, want 15", l.ScrollRow().Get())
 	}
 	l.ScrollTo(-1000)
-	if l.ScrollRow != 0 {
-		t.Fatalf("ScrollTo(-1000) = %d, want 0", l.ScrollRow)
+	if l.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollTo(-1000) = %d, want 0", l.ScrollRow().Get())
 	}
 	l.ScrollTo(5)
 	l.ScrollBy(3)
-	if l.ScrollRow != 8 {
-		t.Fatalf("ScrollBy(3) from 5 = %d, want 8", l.ScrollRow)
+	if l.ScrollRow().Get() != 8 {
+		t.Fatalf("ScrollBy(3) from 5 = %d, want 8", l.ScrollRow().Get())
 	}
 	l.ScrollBy(-100)
-	if l.ScrollRow != 0 {
-		t.Fatalf("ScrollBy(-100) should clamp to 0; got %d", l.ScrollRow)
+	if l.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollBy(-100) should clamp to 0; got %d", l.ScrollRow().Get())
 	}
 }
 
@@ -740,11 +740,11 @@ func TestListBoxScrollToSelectedNoSelectionIsNoOp(t *testing.T) {
 	l := NewListBox(make([]string, 20))
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
-	l.ScrollRow = 3
+	l.ScrollRow().Set(3)
 	// Selected stays at -1 (NewListBox default).
 	l.scrollToSelected()
-	if l.ScrollRow != 3 {
-		t.Fatalf("scrollToSelected with Selected=-1 must be a no-op; ScrollRow=%d, want 3", l.ScrollRow)
+	if l.ScrollRow().Get() != 3 {
+		t.Fatalf("scrollToSelected with Selected=-1 must be a no-op; ScrollRow=%d, want 3", l.ScrollRow().Get())
 	}
 }
 
@@ -752,11 +752,11 @@ func TestListBoxScrollToSelectedScrollsUp(t *testing.T) {
 	l := NewListBox(make([]string, 20))
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // 5 visible
-	l.ScrollRow = 10
+	l.ScrollRow().Set(10)
 	l.Selected().Set(2) // above the window
 	l.scrollToSelected()
-	if l.ScrollRow != 2 {
-		t.Fatalf("ScrollRow = %d, want 2 (scrolled up to Selected)", l.ScrollRow)
+	if l.ScrollRow().Get() != 2 {
+		t.Fatalf("ScrollRow = %d, want 2 (scrolled up to Selected)", l.ScrollRow().Get())
 	}
 }
 
@@ -766,8 +766,8 @@ func TestListBoxScrollToSelectedScrollsDown(t *testing.T) {
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100}) // 5 visible, window starts [0,5)
 	l.Selected().Set(9)                          // below the window
 	l.scrollToSelected()
-	if l.ScrollRow != 5 { // Selected - vr + 1 = 9-5+1
-		t.Fatalf("ScrollRow = %d, want 5", l.ScrollRow)
+	if l.ScrollRow().Get() != 5 { // Selected - vr + 1 = 9-5+1
+		t.Fatalf("ScrollRow = %d, want 5", l.ScrollRow().Get())
 	}
 }
 
@@ -775,10 +775,10 @@ func TestListBoxScrollToSelectedZeroVisibleRowsIsNoOp(t *testing.T) {
 	l := NewListBox(make([]string, 5))
 	l.RowHeight = 0 // -> visibleRows() == 0
 	l.Selected().Set(2)
-	l.ScrollRow = 0
+	l.ScrollRow().Set(0)
 	l.scrollToSelected()
-	if l.ScrollRow != 0 {
-		t.Fatalf("vr<=0 branch must be a no-op; ScrollRow=%d, want 0", l.ScrollRow)
+	if l.ScrollRow().Get() != 0 {
+		t.Fatalf("vr<=0 branch must be a no-op; ScrollRow=%d, want 0", l.ScrollRow().Get())
 	}
 }
 

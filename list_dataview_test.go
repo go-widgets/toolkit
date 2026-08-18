@@ -65,7 +65,7 @@ func TestListBoxItemRendererOnlyVisibleRows(t *testing.T) {
 	items := []string{"0", "1", "2", "3", "4", "5", "6", "7", "8", "9"}
 	lb := NewListBox(items)
 	lb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 2 * 18}) // 2 rows visible
-	lb.ScrollRow = 3
+	lb.ScrollRow().Set(3)
 
 	var indices []int
 	lb.ItemRenderer = func(p painter.Painter, _ *Theme, _ Rect, index int, _ string, _ bool, _ RGBA) {
@@ -97,14 +97,18 @@ func TestListBoxItemRendererActuallyPaints(t *testing.T) {
 }
 
 // TestListBoxSelectedObservable covers the zero-value lazy-init of the Selected
-// accessor and the host binding path: a ListBox built as a bare struct (no
-// NewListBox) still yields a usable Observable that lazy-inits to 0, Setting it
-// from outside is reflected by the widget + notifies subscribers (there is no
-// imperative Selected field), and NewListBox seeds the anchor to -1.
+// and ScrollRow accessors and the host binding path: a ListBox built as a bare
+// struct (no NewListBox) still yields usable Observables that lazy-init to 0,
+// Setting them from outside is reflected by the widget + notifies subscribers
+// (there is no imperative Selected/ScrollRow field), and NewListBox seeds the
+// anchor to -1 (scroll to 0).
 func TestListBoxSelectedObservable(t *testing.T) {
-	lb := &ListBox{} // no NewListBox -> selectedRow Observable is nil until accessed
+	lb := &ListBox{} // no NewListBox -> Observables are nil until accessed
 	if lb.Selected().Get() != 0 {
 		t.Fatalf("bare &ListBox{} Selected = %d, want 0 (lazy-init)", lb.Selected().Get())
+	}
+	if lb.ScrollRow().Get() != 0 {
+		t.Fatalf("bare &ListBox{} ScrollRow = %d, want 0 (lazy-init)", lb.ScrollRow().Get())
 	}
 	seen := -99
 	lb.Selected().Subscribe(func(v int) { seen = v })
@@ -112,9 +116,18 @@ func TestListBoxSelectedObservable(t *testing.T) {
 	if lb.Selected().Get() != 3 || seen != 3 {
 		t.Fatalf("host Set: Selected=%d subscriber=%d, want 3/3", lb.Selected().Get(), seen)
 	}
+	scrolled := -99
+	lb.ScrollRow().Subscribe(func(v int) { scrolled = v })
+	lb.ScrollRow().Set(2) // a host drives the scroll offset through the Observable
+	if lb.ScrollRow().Get() != 2 || scrolled != 2 {
+		t.Fatalf("host Set: ScrollRow=%d subscriber=%d, want 2/2", lb.ScrollRow().Get(), scrolled)
+	}
 
 	nb := NewListBox([]string{"a", "b"})
 	if nb.Selected().Get() != -1 {
 		t.Fatalf("NewListBox Selected = %d, want -1 (no selection)", nb.Selected().Get())
+	}
+	if nb.ScrollRow().Get() != 0 {
+		t.Fatalf("NewListBox ScrollRow = %d, want 0", nb.ScrollRow().Get())
 	}
 }

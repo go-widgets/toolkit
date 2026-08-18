@@ -38,8 +38,8 @@ func newCursorListBox() *ListBox {
 func lbVisible(t *testing.T, lb *ListBox) {
 	t.Helper()
 	vr := lb.visibleRows()
-	if lb.Selected().Get() < lb.ScrollRow || lb.Selected().Get() >= lb.ScrollRow+vr {
-		t.Fatalf("cursor %d outside window [%d,%d)", lb.Selected().Get(), lb.ScrollRow, lb.ScrollRow+vr)
+	if lb.Selected().Get() < lb.ScrollRow().Get() || lb.Selected().Get() >= lb.ScrollRow().Get()+vr {
+		t.Fatalf("cursor %d outside window [%d,%d)", lb.Selected().Get(), lb.ScrollRow().Get(), lb.ScrollRow().Get()+vr)
 	}
 }
 
@@ -50,15 +50,15 @@ func TestListBoxKeyCursorAndActivate(t *testing.T) {
 
 	// First ArrowDown with no selection lands on row 0 (stays visible).
 	lb.OnEvent(kd3b("ArrowDown"))
-	if lb.Selected().Get() != 0 || lb.ScrollRow != 0 {
-		t.Fatalf("ArrowDown from none: Selected=%d ScrollRow=%d", lb.Selected().Get(), lb.ScrollRow)
+	if lb.Selected().Get() != 0 || lb.ScrollRow().Get() != 0 {
+		t.Fatalf("ArrowDown from none: Selected=%d ScrollRow=%d", lb.Selected().Get(), lb.ScrollRow().Get())
 	}
 	lbVisible(t, lb)
 
 	// End jumps to the last row and auto-scrolls so it is visible.
 	lb.OnEvent(kd3b("End"))
-	if lb.Selected().Get() != 19 || lb.ScrollRow != 17 {
-		t.Fatalf("End: Selected=%d ScrollRow=%d, want 19/17", lb.Selected().Get(), lb.ScrollRow)
+	if lb.Selected().Get() != 19 || lb.ScrollRow().Get() != 17 {
+		t.Fatalf("End: Selected=%d ScrollRow=%d, want 19/17", lb.Selected().Get(), lb.ScrollRow().Get())
 	}
 	lbVisible(t, lb)
 
@@ -70,15 +70,15 @@ func TestListBoxKeyCursorAndActivate(t *testing.T) {
 
 	// Home jumps back to the first row and scrolls up to it.
 	lb.OnEvent(kd3b("Home"))
-	if lb.Selected().Get() != 0 || lb.ScrollRow != 0 {
-		t.Fatalf("Home: Selected=%d ScrollRow=%d", lb.Selected().Get(), lb.ScrollRow)
+	if lb.Selected().Get() != 0 || lb.ScrollRow().Get() != 0 {
+		t.Fatalf("Home: Selected=%d ScrollRow=%d", lb.Selected().Get(), lb.ScrollRow().Get())
 	}
 	lbVisible(t, lb)
 
 	// PageDown moves one page and keeps the cursor visible.
 	lb.OnEvent(kd3b("PageDown")) // 0 -> 3
-	if lb.Selected().Get() != 3 || lb.ScrollRow != 1 {
-		t.Fatalf("PageDown: Selected=%d ScrollRow=%d, want 3/1", lb.Selected().Get(), lb.ScrollRow)
+	if lb.Selected().Get() != 3 || lb.ScrollRow().Get() != 1 {
+		t.Fatalf("PageDown: Selected=%d ScrollRow=%d, want 3/1", lb.Selected().Get(), lb.ScrollRow().Get())
 	}
 	lbVisible(t, lb)
 

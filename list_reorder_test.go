@@ -320,7 +320,7 @@ func TestListBoxDragReorderRespectsScrollRow(t *testing.T) {
 	l.Reorderable = true
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 60}) // 3 visible rows -> overflow
-	l.ScrollRow = 5                             // window = rows [5,8)
+	l.ScrollRow().Set(5)                        // window = rows [5,8)
 
 	// Local Y=5 is in the top half of local slot 0 -> absolute row 5, not
 	// row 0 -- proves rowInsertionIndex reads through ScrollRow.
