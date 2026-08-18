@@ -434,8 +434,8 @@ func (c *Carousel) A11y() A11yInfo {
 // A11y reports the Wizard as a group carrying its current step's title.
 func (w *Wizard) A11y() A11yInfo {
 	v := ""
-	if w.Current >= 0 && w.Current < len(w.Steps) {
-		v = w.Steps[w.Current].Title
+	if cur := w.Current().Get(); cur >= 0 && cur < len(w.Steps) {
+		v = w.Steps[cur].Title
 	}
 	return A11yInfo{Role: RoleGroup, Value: v}
 }

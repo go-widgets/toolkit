@@ -331,11 +331,11 @@ func TestA11yCarouselAndWizard(t *testing.T) {
 	}
 
 	w := NewWizard([]WizardStep{{Title: "Account"}, {Title: "Payment"}})
-	w.Current = 1
+	w.Current().Set(1)
 	if got := w.A11y(); got != (A11yInfo{Role: RoleGroup, Value: "Payment"}) {
 		t.Errorf("Wizard in-range A11y() = %+v", got)
 	}
-	w.Current = 9
+	w.Current().Set(9)
 	if got := w.A11y(); got != (A11yInfo{Role: RoleGroup, Value: ""}) {
 		t.Errorf("Wizard out-of-range A11y() = %+v", got)
 	}
