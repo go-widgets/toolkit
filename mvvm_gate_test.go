@@ -38,6 +38,17 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// unexported behind Observable accessors.
 	"AddressBar": {"Radius": true, "TextPad": true},
 	"Rating":     {"Max": true},
+	// Batch 2 (leaf widgets): reactive state is unexported behind accessors
+	// (Fraction/Active/Value/Checked/Pressed/On/Expanded); the values below are
+	// set-once appearance/layout config that legitimately stays a plain field.
+	"ProgressCircle": {},
+	"Spinner":        {"Phase": true, "Style": true},
+	"Scale":          {"Min": true, "Max": true, "Orientation": true, "Step": true},
+	"SpinButton":     {"Min": true, "Max": true, "Step": true},
+	"CheckButton":    {"Label": true, "Size": true},
+	"ToggleButton":   {"Label": true},
+	"Switch":         {},
+	"Expander":       {"Label": true, "Content": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
