@@ -10,8 +10,24 @@ import "testing"
 
 func TestNewStepsStoresFields(t *testing.T) {
 	s := NewSteps([]string{"a", "b"}, 1)
-	if len(s.Labels) != 2 || s.Current != 1 {
+	if len(s.Labels) != 2 || s.Current().Get() != 1 {
 		t.Fatalf("NewSteps round-trip broken: %+v", s)
+	}
+}
+
+// TestStepsCurrentObservable covers the zero-value lazy-init of the Current
+// Observable and host-binding: a bare &Steps{} yields a usable Observable
+// defaulting to 0, and a host drives the cursor through Set / Subscribe.
+func TestStepsCurrentObservable(t *testing.T) {
+	s := &Steps{} // no NewSteps → current Observable is nil until accessed
+	if s.Current().Get() != 0 {
+		t.Fatalf("zero-value Steps Current = %d, want 0", s.Current().Get())
+	}
+	seen := -1
+	s.Current().Subscribe(func(v int) { seen = v })
+	s.Current().Set(2) // a host drives the cursor through the Observable
+	if s.Current().Get() != 2 || seen != 2 {
+		t.Fatalf("host Set: current=%d subscriber=%d, want 2/2", s.Current().Get(), seen)
 	}
 }
 

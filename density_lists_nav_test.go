@@ -410,10 +410,12 @@ func TestStepsBadgeHitDensity(t *testing.T) {
 	defer restoreDensity()
 	// Compact: the hit box equals the drawn 16x16 badge byte-for-byte, so a
 	// click at x=15 (inside) hits and x=16 (outside) misses.
-	s := NewSteps([]string{"a", "b"}, 0)
+	// Start at -1 so a jump to badge 0 is a real change the subscriber sees;
+	// a miss leaves Current untouched so hit stays at the sentinel.
+	s := NewSteps([]string{"a", "b"}, -1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 40})
 	hit := -1
-	s.OnSelect = func(i int) { hit = i }
+	s.Current().Subscribe(func(i int) { hit = i })
 	yMid := (40 - scaled(StepBoxH)) / 2 // vertical centre offset used by Draw/OnEvent
 	s.OnEvent(Event{Kind: EventClick, X: 15, Y: yMid})
 	if hit != 0 {
@@ -428,10 +430,10 @@ func TestStepsBadgeHitDensity(t *testing.T) {
 	// Touch: badge drawn 24x24, hit box clamped to 44 centred over it, so the
 	// first badge's tap box spans x in [-10, 34) and y in [yc-10, yc+34).
 	SetDensity(DensityTouch)
-	st := NewSteps([]string{"a", "b"}, 0)
+	st := NewSteps([]string{"a", "b"}, -1)
 	st.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 60})
 	sthit := -1
-	st.OnSelect = func(i int) { sthit = i }
+	st.Current().Subscribe(func(i int) { sthit = i })
 	yc := (60 - scaled(StepBoxH)) / 2
 	// x=33 is inside the 44-wide hit box but well past the 24-wide drawn badge.
 	st.OnEvent(Event{Kind: EventClick, X: 33, Y: yc})

@@ -245,8 +245,9 @@ func (p *Pagination) A11y() A11yInfo {
 // A11y reports the Steps strip as a group carrying its current step's label.
 func (s *Steps) A11y() A11yInfo {
 	v := ""
-	if s.Current >= 0 && s.Current < len(s.Labels) {
-		v = s.Labels[s.Current]
+	c := s.Current().Get()
+	if c >= 0 && c < len(s.Labels) {
+		v = s.Labels[c]
 	}
 	return A11yInfo{Role: RoleGroup, Value: v}
 }
