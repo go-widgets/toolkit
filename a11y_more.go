@@ -408,7 +408,7 @@ func (t *Tooltip) A11y() A11yInfo { return A11yInfo{Role: RoleTooltip, Name: t.T
 // A11y reports the Expander as a group named by its label, carrying its
 // expanded/collapsed state.
 func (e *Expander) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: e.Label, Value: stateValue(e.Expanded, "expanded")}
+	return A11yInfo{Role: RoleGroup, Name: e.Label, Value: stateValue(e.Expanded().Get(), "expanded")}
 }
 
 // A11y reports the Accordion as a group carrying the titles of every

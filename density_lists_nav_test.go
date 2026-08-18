@@ -343,11 +343,11 @@ func TestExpanderHeaderDensity(t *testing.T) {
 	// A click at y=40 (inside the 44px header, past the old 24px one) toggles.
 	e := NewExpander("x", nil)
 	got := false
-	e.OnExpand = func(b bool) { got = b }
+	e.Expanded().Subscribe(func(b bool) { got = b })
 	e.SetBounds(Rect{X: 0, Y: 0, W: 160, H: 100})
 	e.OnEvent(Event{Kind: EventClick, X: 5, Y: 40})
-	if !e.Expanded || !got {
-		t.Fatalf("touch header click at y=40 did not toggle (Expanded=%v)", e.Expanded)
+	if !e.Expanded().Get() || !got {
+		t.Fatalf("touch header click at y=40 did not toggle (Expanded=%v)", e.Expanded().Get())
 	}
 }
 
