@@ -100,6 +100,11 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Stat":      {"Title": true},
 	"Sparkline": {"Values": true, "Kind": true, "Fill": true, "ShowLast": true},
 	"Tooltip":   {"Text": true, "Placement": true},
+	// LogView: the scrollback history is internal (unexported entries/rows,
+	// mutated only through Append/Clear); the embedded viewport + its content
+	// child are unexported. MaxEntries is set-once bounding config, not reactive
+	// state, so it is the sole allowlisted field.
+	"LogView": {"MaxEntries": true},
 	// CodeMinimap is draw-only chrome: its buffer/spans/top/visible are per-paint
 	// snapshots fed through Update (not settable widget state), so it holds no
 	// reactive state at all. Its only exported field, OnScrollToLine, is a func
