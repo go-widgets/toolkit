@@ -223,8 +223,8 @@ func (v *ViewSwitcher) A11y() A11yInfo {
 // A11y reports the Notebook as a tablist named by its active tab.
 func (n *Notebook) A11y() A11yInfo {
 	name := ""
-	if n.Active >= 0 && n.Active < len(n.Tabs) {
-		name = n.Tabs[n.Active].Label
+	if active := n.Active().Get(); active >= 0 && active < len(n.Tabs) {
+		name = n.Tabs[active].Label
 	}
 	return A11yInfo{Role: RoleTablist, Name: name}
 }

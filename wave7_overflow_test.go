@@ -379,13 +379,13 @@ func TestNotebookVerticalKeyboardScrollsActiveIntoView(t *testing.T) {
 	// From tab 0, ArrowUp wraps to the last tab (7): reveal-below pulls
 	// tabScroll to 7 - 3 + 1 = 5.
 	n.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
-	if n.Active != 7 || n.tabScroll != 5 {
-		t.Fatalf("wrap up: Active=%d tabScroll=%d, want 7/5", n.Active, n.tabScroll)
+	if n.Active().Get() != 7 || n.tabScroll != 5 {
+		t.Fatalf("wrap up: Active=%d tabScroll=%d, want 7/5", n.Active().Get(), n.tabScroll)
 	}
 	// ArrowDown wraps back to tab 0: reveal-above pulls tabScroll to 0.
 	n.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if n.Active != 0 || n.tabScroll != 0 {
-		t.Fatalf("wrap down: Active=%d tabScroll=%d, want 0/0", n.Active, n.tabScroll)
+	if n.Active().Get() != 0 || n.tabScroll != 0 {
+		t.Fatalf("wrap down: Active=%d tabScroll=%d, want 0/0", n.Active().Get(), n.tabScroll)
 	}
 
 	// A setActive to a tab below the window scrolls it into view from below.
@@ -405,11 +405,11 @@ func TestNotebookVerticalKeyboardScrollsActiveIntoView(t *testing.T) {
 func TestNotebookVerticalClickWithOffset(t *testing.T) {
 	n := notebookVerticalFixture()
 	activated := -1
-	n.OnTabChanged = func(i int) { activated = i }
+	n.Active().Subscribe(func(i int) { activated = i })
 
 	n.ScrollTabsBy(5) // tab 5 now sits in the top slot (i-scroll == 0)
 	n.OnEvent(Event{Kind: EventClick, X: 2, Y: 2})
-	if n.Active != 5 || activated != 5 {
-		t.Fatalf("scrolled click: Active=%d activated=%d, want 5/5", n.Active, activated)
+	if n.Active().Get() != 5 || activated != 5 {
+		t.Fatalf("scrolled click: Active=%d activated=%d, want 5/5", n.Active().Get(), activated)
 	}
 }

@@ -154,11 +154,11 @@ func TestA11yNotebook(t *testing.T) {
 	nb := NewNotebook()
 	nb.AddTab("Home", nil)
 	nb.AddTab("Settings", nil)
-	nb.Active = 1
+	nb.Active().Set(1)
 	if got := nb.A11y(); got != (A11yInfo{Role: RoleTablist, Name: "Settings"}) {
 		t.Errorf("Notebook in-range A11y() = %+v", got)
 	}
-	nb.Active = -1
+	nb.Active().Set(-1)
 	if got := nb.A11y(); got != (A11yInfo{Role: RoleTablist, Name: ""}) {
 		t.Errorf("Notebook out-of-range A11y() = %+v", got)
 	}
