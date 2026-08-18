@@ -201,7 +201,7 @@ func TestDrawStripsBothEdges(t *testing.T) {
 	th := cardTheme()
 	c.Draw(p, th)
 
-	if !c.topSpin.Active || !c.botSpin.Active {
+	if !c.topSpin.Active().Get() || !c.botSpin.Active().Get() {
 		t.Fatal("strip spinners not activated by Fetching flags")
 	}
 	// Two Surface bands: top at y=0, bottom at y=300-28=272, both full width.

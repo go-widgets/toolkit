@@ -327,7 +327,7 @@ func (p *ProgressCircle) A11y() A11yInfo {
 
 // A11y reports the Spinner as a status region carrying "busy" while active.
 func (s *Spinner) A11y() A11yInfo {
-	return A11yInfo{Role: RoleStatus, Value: stateValue(s.Active, "busy")}
+	return A11yInfo{Role: RoleStatus, Value: stateValue(s.Active().Get(), "busy")}
 }
 
 // A11y reports the Stat as a group named by its title, carrying its

@@ -53,7 +53,7 @@ func TestRootAnimatorItself(t *testing.T) {
 	if TreeAnimating(s) {
 		t.Fatal("inactive spinner root: TreeAnimating = true, want false")
 	}
-	s.Active = true
+	s.Active().Set(true)
 	if !TreeAnimating(s) {
 		t.Fatal("active spinner root: TreeAnimating = false, want true")
 	}
@@ -75,7 +75,7 @@ func TestTreeAnimatingNested(t *testing.T) {
 	if TreeAnimating(box) {
 		t.Fatal("nested inactive spinner: TreeAnimating = true, want false")
 	}
-	s.Active = true
+	s.Active().Set(true)
 	if !TreeAnimating(box) {
 		t.Fatal("nested active spinner: TreeAnimating = false, want true")
 	}
@@ -86,7 +86,7 @@ func TestTreeAnimatingNested(t *testing.T) {
 // tree without perturbing widgets that declare no animation.
 func TestTickTreeAdvancesExactlyAndSpares(t *testing.T) {
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	det := NewProgressBar() // determinate: Tick is a no-op, Phase must stay 0
 
 	box := NewVBox()
@@ -113,7 +113,7 @@ func TestTickTreeAdvancesExactlyAndSpares(t *testing.T) {
 // ordered after the active spinner, must never be consulted.
 func TestTreeAnimatingShortCircuits(t *testing.T) {
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	p := &poison{}
 
 	box := NewContainer(nil)
@@ -134,7 +134,7 @@ func TestSpinnerAnimating(t *testing.T) {
 	if s.Animating() {
 		t.Fatal("fresh spinner Animating = true, want false")
 	}
-	s.Active = true
+	s.Active().Set(true)
 	if !s.Animating() {
 		t.Fatal("active spinner Animating = false, want true")
 	}

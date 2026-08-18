@@ -40,7 +40,7 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"progressbar", func() Widget { p := NewProgressBar(); p.Fraction = 0.6; return p }},
 		{"levelbar", func() Widget { l := NewLevelBar(10); l.Value = 7; return l }},
 		{"progresscircle", func() Widget { pc := NewProgressCircle(); pc.Fraction = 0.6; return pc }},
-		{"spinner", func() Widget { s := NewSpinner(); s.Active = true; return s }},
+		{"spinner", func() Widget { s := NewSpinner(); s.Active().Set(true); return s }},
 		{"listbox", func() Widget { return NewListBox([]string{"a", "b", "c", "d", "e", "f", "g", "h"}) }},
 		{"treeview", func() Widget {
 			return NewTreeView(&TreeNode{Label: "/", Expanded: true, Children: []*TreeNode{{Label: "src"}, {Label: "docs"}}})
