@@ -28,10 +28,11 @@ func (d *IsoDiagram) SelectedTextObservable() *mvvm.Observable[string] { return 
 // selection when id is ""). Selecting a text clears any node, connector or zone
 // selection so only one entity ever highlights at once.
 func (d *IsoDiagram) SelectText(id string) {
-	if id != "" {
-		d.clearOtherSelections(isoSelText)
+	if id == "" {
+		d.selRemoveKind(IsoEntityText)
+		return
 	}
-	d.selText.Set(id)
+	d.selReplace(IsoEntityRef{Kind: IsoEntityText, ID: id})
 }
 
 // --- geometry -----------------------------------------------------------
@@ -78,13 +79,15 @@ func (d *IsoDiagram) textBox(t IsoText) Rect {
 // painter space, reusing the toolkit's own text rendering rather than
 // hand-rolling glyphs.
 func (d *IsoDiagram) drawTexts(p painter.Painter, b Rect, theme *Theme) {
-	sel := d.selText.Get()
 	for _, t := range d.doc.Texts() {
+		if !d.layerVisible(t.Layer) {
+			continue
+		}
 		box := d.textBox(t)
 		if t.Text != "" {
 			d.textFont(t).Draw(p, b.X+box.X, b.Y+box.Y, t.Text, d.textInk(t, theme))
 		}
-		if t.ID == sel {
+		if d.IsSelected(IsoEntityRef{Kind: IsoEntityText, ID: t.ID}) {
 			strokeRect(p, b.X+box.X, b.Y+box.Y, box.W, box.H, theme.Accent)
 		}
 	}
@@ -98,6 +101,9 @@ func (d *IsoDiagram) drawTexts(p painter.Painter, b Rect, theme *Theme) {
 func (d *IsoDiagram) textAtLocal(x, y int) (string, bool) {
 	texts := d.doc.Texts()
 	for i := len(texts) - 1; i >= 0; i-- {
+		if !d.pickable(texts[i].Layer) {
+			continue
+		}
 		box := d.textBox(texts[i])
 		if x >= box.X && y >= box.Y && x < box.X+box.W && y < box.Y+box.H {
 			return texts[i].ID, true
@@ -170,9 +176,7 @@ func (d *IsoDiagram) commitDeleteText(id string) {
 	}
 	d.beginEdit()
 	d.doc.RemoveText(id)
-	if d.selText.Get() == id {
-		d.selText.Set("")
-	}
+	d.pruneSelection()
 	d.invalidate()
 }
 

@@ -48,10 +48,11 @@ func (d *IsoDiagram) SelectedZoneObservable() *mvvm.Observable[string] { return 
 // when id is ""). Selecting a zone clears any node, connector or text selection
 // so only one entity ever highlights at once.
 func (d *IsoDiagram) SelectZone(id string) {
-	if id != "" {
-		d.clearOtherSelections(isoSelZone)
+	if id == "" {
+		d.selRemoveKind(IsoEntityZone)
+		return
 	}
-	d.selZone.Set(id)
+	d.selReplace(IsoEntityRef{Kind: IsoEntityZone, ID: id})
 }
 
 // --- geometry -----------------------------------------------------------
@@ -124,8 +125,18 @@ func (d *IsoDiagram) handleSize() int { return scaled(isoHandleSize) }
 // the iso solids use) keeps zones strictly behind every node and connector, so
 // the scene's own depth-sort never has to account for them.
 func (d *IsoDiagram) drawZones(img *raster.Image, theme *Theme) {
+	d.drawZonesWhere(img, theme, func(IsoZone) bool { return true })
+}
+
+// drawZonesWhere paints every zone the predicate keep accepts (see
+// [IsoDiagram.drawZones]); the layered render path passes a per-layer-order
+// predicate so each layer's zones composite in their own pass.
+func (d *IsoDiagram) drawZonesWhere(img *raster.Image, theme *Theme, keep func(IsoZone) bool) {
 	rz := &vector.Rasterizer{}
 	for _, z := range d.doc.Zones() {
+		if !keep(z) {
+			continue
+		}
 		corners := d.zoneCorners(z)
 		fill := d.zoneFill(z, theme)
 		zoneFillPoly(img, rz, corners, fill)
@@ -181,7 +192,7 @@ func (d *IsoDiagram) drawZonePreview(p painter.Painter, b Rect, theme *Theme) {
 // space so they stay grabbable above any node drawn on the zone.
 func (d *IsoDiagram) drawZoneOverlays(p painter.Painter, b Rect, theme *Theme) {
 	for _, z := range d.doc.Zones() {
-		if z.Label == "" {
+		if z.Label == "" || !d.layerVisible(z.Layer) {
 			continue
 		}
 		c := d.proj.Project(iso.V(float64(z.X), float64(z.Y), 0))
@@ -189,15 +200,41 @@ func (d *IsoDiagram) drawZoneOverlays(p painter.Painter, b Rect, theme *Theme) {
 		ly := b.Y + iround(c.Y)
 		d.drawText(p, lx, ly, z.Label, zoneBorderRGBA(d.zoneFill(z, theme)))
 	}
-	sel, ok := d.doc.Zone(d.selZone.Get())
-	if !ok {
-		return
+	// Outline every selected zone.
+	for _, r := range d.selSet.Slice() {
+		if r.Kind != IsoEntityZone {
+			continue
+		}
+		z, ok := d.doc.Zone(r.ID)
+		if !ok || !d.layerVisible(z.Layer) {
+			continue
+		}
+		strokeScreenPoly(p, b, d.zoneCorners(z), theme.Accent)
 	}
-	corners := d.zoneCorners(sel)
-	strokeScreenPoly(p, b, corners, theme.Accent)
-	for _, c := range corners {
-		d.drawHandle(p, b.X+iround(c.X), b.Y+iround(c.Y), theme.Accent)
+	// Resize handles are drawn only when a single zone is the sole selection —
+	// resizing is a one-zone gesture.
+	if sel, ok := d.soleSelectedZone(); ok {
+		for _, c := range d.zoneCorners(sel) {
+			d.drawHandle(p, b.X+iround(c.X), b.Y+iround(c.Y), theme.Accent)
+		}
 	}
+}
+
+// soleSelectedZone returns the selected zone when it is the ONLY selected
+// entity (and its layer is visible), and whether it is.
+func (d *IsoDiagram) soleSelectedZone() (IsoZone, bool) {
+	if d.selSet.Len() != 1 {
+		return IsoZone{}, false
+	}
+	r := d.selSet.At(0)
+	if r.Kind != IsoEntityZone {
+		return IsoZone{}, false
+	}
+	z, ok := d.doc.Zone(r.ID)
+	if !ok || !d.layerVisible(z.Layer) {
+		return IsoZone{}, false
+	}
+	return z, true
 }
 
 // strokeScreenPoly strokes a closed buffer-local polygon (offset into the widget
@@ -224,6 +261,9 @@ func (d *IsoDiagram) zoneAtLocal(x, y int) (string, bool) {
 	fx, fy := float64(x), float64(y)
 	zones := d.doc.Zones()
 	for i := len(zones) - 1; i >= 0; i-- {
+		if !d.pickable(zones[i].Layer) {
+			continue
+		}
 		if pointInPoly(fx, fy, d.zoneCorners(zones[i])) {
 			return zones[i].ID, true
 		}
@@ -346,9 +386,7 @@ func (d *IsoDiagram) commitDeleteZone(id string) {
 	}
 	d.beginEdit()
 	d.doc.RemoveZone(id)
-	if d.selZone.Get() == id {
-		d.selZone.Set("")
-	}
+	d.pruneSelection()
 	d.invalidate()
 }
 

@@ -46,6 +46,14 @@ type IsoNode struct {
 	// Color is the node's base colour; a zero value (A==0) inherits the theme
 	// accent at draw time so a node placed without a colour is still visible.
 	Color RGBA
+	// Layer names the [IsoLayer] this node belongs to (see the type doc on
+	// IsoLayer for the ordering / visibility / lock semantics). The zero value
+	// (the empty string) is the implicit default layer — order 0, visible,
+	// unlocked — so a node placed without ever touching layers renders and
+	// selects exactly as it did before layers existed. The field is a plain
+	// string on the value node, so it snapshots for undo and mirrors into a
+	// CRDT like every other field.
+	Layer string
 }
 
 // IsoConnectorStyle selects the stroke pattern of an [IsoConnector].
@@ -110,6 +118,10 @@ type IsoConnector struct {
 	// anchor-to-anchor segment. The zero value (false) is the legacy straight
 	// line. The route is COMPUTED from the endpoints at draw time, never stored.
 	Routed bool
+	// Layer names the [IsoLayer] this connector belongs to; the zero value (the
+	// empty string) is the implicit default layer, so an unlayered connector
+	// behaves exactly as before. See [IsoLayer].
+	Layer string
 }
 
 // IsoZone is a rectangular coloured region on the ground plane (z=0) that groups
@@ -135,6 +147,10 @@ type IsoZone struct {
 	// Label is an optional caption drawn in a corner of the zone and announced to
 	// a screen reader.
 	Label string
+	// Layer names the [IsoLayer] this zone belongs to; the zero value (the empty
+	// string) is the implicit default layer, so an unlayered zone behaves exactly
+	// as before. See [IsoLayer].
+	Layer string
 }
 
 // IsoText is a standalone text annotation anchored at a tile position on the
@@ -158,6 +174,46 @@ type IsoText struct {
 	// widget's effective font, so an annotation placed without a size matches the
 	// rest of the chrome.
 	Size int
+	// Layer names the [IsoLayer] this annotation belongs to; the zero value (the
+	// empty string) is the implicit default layer, so an unlayered annotation
+	// behaves exactly as before. See [IsoLayer].
+	Layer string
+}
+
+// IsoLayer is a named drawing plane that groups entities for z-ordering,
+// visibility and locking — the "layers" of a drawing editor. Every
+// [IsoNode], [IsoConnector], [IsoZone] and [IsoText] carries a Layer id
+// naming the layer it lives on; the empty id is the implicit default layer
+// (order 0, visible, unlocked), so a document that never creates a layer
+// renders and edits byte-for-byte as it did before layers existed.
+//
+// Layers compose back-to-front by Order: a lower Order draws first (further
+// back), a higher Order draws later (in front), and WITHIN one layer the
+// existing isometric depth-sort is untouched — so an entity on a
+// higher-Order layer always draws over one on a lower-Order layer, whatever
+// their isometric depth. A layer whose Visible is false is not rendered at
+// all; a layer whose Locked is true is rendered but cannot be selected or
+// edited. Like the other entities it is a plain value, so the layer set
+// snapshots cheaply for undo and mirrors into a CRDT OR-map keyed by ID.
+type IsoLayer struct {
+	// ID is the layer's stable identity — the id an entity's Layer field
+	// references and the OR-map key. A document must not hold two layers with
+	// the same ID; [IsoDoc.PutLayer] upserts on it. The empty ID is reserved
+	// for the implicit default layer.
+	ID string
+	// Name is a human-readable caption for a layers panel; it never affects
+	// rendering.
+	Name string
+	// Visible reports whether the layer's entities draw. A non-visible layer is
+	// skipped entirely at draw time.
+	Visible bool
+	// Locked reports whether the layer's entities are frozen: a locked layer
+	// still draws but its entities cannot be picked, moved, recoloured or
+	// deleted through the widget.
+	Locked bool
+	// Order is the layer's back-to-front rank: lower draws further back, higher
+	// draws in front. Ties (two layers sharing an Order) keep document order.
+	Order int
 }
 
 // IsoDocument is the backing store an [IsoDiagram] edits. It is deliberately a
@@ -200,6 +256,15 @@ type IsoDocument interface {
 	PutText(t IsoText)
 	// RemoveText deletes a text annotation by ID; a missing ID is a no-op.
 	RemoveText(id string)
+	// Layers returns a snapshot copy of every layer, in insertion order.
+	Layers() []IsoLayer
+	// Layer returns the layer with the given ID and whether it was found.
+	Layer(id string) (IsoLayer, bool)
+	// PutLayer inserts or replaces a layer by ID.
+	PutLayer(l IsoLayer)
+	// RemoveLayer deletes the layer with the given ID; a missing ID is a no-op.
+	// Entities still naming a removed layer fall back to the implicit default.
+	RemoveLayer(id string)
 	// Subscribe registers fn to run after every mutation and returns a function
 	// that unsubscribes it.
 	Subscribe(fn func()) (unsubscribe func())
@@ -213,19 +278,21 @@ type IsoDocument interface {
 // own view models. Swapping this for a CRDT-backed store means implementing
 // [IsoDocument] elsewhere; nothing else changes.
 type IsoDoc struct {
-	nodes *mvvm.ObservableList[IsoNode]
-	conns *mvvm.ObservableList[IsoConnector]
-	zones *mvvm.ObservableList[IsoZone]
-	texts *mvvm.ObservableList[IsoText]
+	nodes  *mvvm.ObservableList[IsoNode]
+	conns  *mvvm.ObservableList[IsoConnector]
+	zones  *mvvm.ObservableList[IsoZone]
+	texts  *mvvm.ObservableList[IsoText]
+	layers *mvvm.ObservableList[IsoLayer]
 }
 
 // NewIsoDoc returns an empty document.
 func NewIsoDoc() *IsoDoc {
 	return &IsoDoc{
-		nodes: mvvm.NewObservableList[IsoNode](),
-		conns: mvvm.NewObservableList[IsoConnector](),
-		zones: mvvm.NewObservableList[IsoZone](),
-		texts: mvvm.NewObservableList[IsoText](),
+		nodes:  mvvm.NewObservableList[IsoNode](),
+		conns:  mvvm.NewObservableList[IsoConnector](),
+		zones:  mvvm.NewObservableList[IsoZone](),
+		texts:  mvvm.NewObservableList[IsoText](),
+		layers: mvvm.NewObservableList[IsoLayer](),
 	}
 }
 
@@ -247,6 +314,10 @@ func (d *IsoDoc) ZoneList() *mvvm.ObservableList[IsoZone] { return d.zones }
 // [IsoDoc.NodeList]).
 func (d *IsoDoc) TextList() *mvvm.ObservableList[IsoText] { return d.texts }
 
+// LayerList exposes the underlying observable layer collection (see
+// [IsoDoc.NodeList]).
+func (d *IsoDoc) LayerList() *mvvm.ObservableList[IsoLayer] { return d.layers }
+
 // Nodes returns a snapshot copy of every node.
 func (d *IsoDoc) Nodes() []IsoNode { return d.nodes.Slice() }
 
@@ -258,6 +329,9 @@ func (d *IsoDoc) Zones() []IsoZone { return d.zones.Slice() }
 
 // Texts returns a snapshot copy of every text annotation.
 func (d *IsoDoc) Texts() []IsoText { return d.texts.Slice() }
+
+// Layers returns a snapshot copy of every layer.
+func (d *IsoDoc) Layers() []IsoLayer { return d.layers.Slice() }
 
 // nodeIndex returns the position of the node with the given ID, or -1.
 func (d *IsoDoc) nodeIndex(id string) int {
@@ -395,6 +469,41 @@ func (d *IsoDoc) RemoveText(id string) {
 	}
 }
 
+// layerIndex returns the position of the layer with the given ID, or -1.
+func (d *IsoDoc) layerIndex(id string) int {
+	for i := 0; i < d.layers.Len(); i++ {
+		if d.layers.At(i).ID == id {
+			return i
+		}
+	}
+	return -1
+}
+
+// Layer returns the layer with the given ID and whether it exists.
+func (d *IsoDoc) Layer(id string) (IsoLayer, bool) {
+	if i := d.layerIndex(id); i >= 0 {
+		return d.layers.At(i), true
+	}
+	return IsoLayer{}, false
+}
+
+// PutLayer upserts l by its ID.
+func (d *IsoDoc) PutLayer(l IsoLayer) {
+	if i := d.layerIndex(l.ID); i >= 0 {
+		d.layers.Set(i, l)
+		return
+	}
+	d.layers.Append(l)
+}
+
+// RemoveLayer deletes the layer with id. Entities still naming it are left
+// untouched and fall back to the implicit default layer at draw time.
+func (d *IsoDoc) RemoveLayer(id string) {
+	if i := d.layerIndex(id); i >= 0 {
+		d.layers.RemoveAt(i)
+	}
+}
+
 // Subscribe runs fn after any node, connector, zone or text edit and returns an
 // unsubscribe function. It fans out to every observable list so a single
 // subscription covers the whole document.
@@ -403,10 +512,12 @@ func (d *IsoDoc) Subscribe(fn func()) (unsubscribe func()) {
 	uc := d.conns.SubscribeChanged(fn)
 	uz := d.zones.SubscribeChanged(fn)
 	ut := d.texts.SubscribeChanged(fn)
+	ul := d.layers.SubscribeChanged(fn)
 	return func() {
 		un()
 		uc()
 		uz()
 		ut()
+		ul()
 	}
 }

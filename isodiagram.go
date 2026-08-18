@@ -60,6 +60,13 @@ const (
 	// isoGestureTextAdd drops a new text annotation on release (a ground tap in
 	// [IsoModeText]).
 	isoGestureTextAdd
+	// isoGestureMarquee is a rubber-band selection rectangle on empty ground
+	// (a Shift-drag): every entity whose projected box intersects the rectangle
+	// is selected on release.
+	isoGestureMarquee
+	// isoGestureGroupMove drags the whole multi-selection (its nodes, zones and
+	// texts) by one cell delta, as a single undoable move.
+	isoGestureGroupMove
 )
 
 // isoSnapshot is a whole-document copy for the undo/redo stacks. The document is
@@ -67,10 +74,11 @@ const (
 // replace — a scheme that works against any [IsoDocument], the bundled one or a
 // future CRDT store.
 type isoSnapshot struct {
-	nodes []IsoNode
-	conns []IsoConnector
-	zones []IsoZone
-	texts []IsoText
+	nodes  []IsoNode
+	conns  []IsoConnector
+	zones  []IsoZone
+	texts  []IsoText
+	layers []IsoLayer
 }
 
 // IsoZoomStep is the multiplicative zoom applied per wheel notch.
@@ -143,7 +151,19 @@ type IsoDiagram struct {
 	// crosses the widget/host boundary the MVVM way. "" means nothing selected.
 	selZone *mvvm.Observable[string]
 	selText *mvvm.Observable[string]
-	seq     int // monotonic id source for placed nodes/connectors/zones/texts
+	// selSet is the authoritative multi-selection: an observable ordered set of
+	// entity references (nodes, connectors, zones and texts, mixed). The four
+	// single-selection channels above are DERIVED reflections of it — each holds
+	// the id of the last-selected entity of its kind — kept in sync by
+	// [IsoDiagram.refreshMono], so the Vague-B/C mono-selection API keeps working
+	// unchanged while the set drives multi-selection, group edits and the
+	// clipboard. A host binds [IsoDiagram.SelectionList] to observe it the MVVM
+	// way instead of polling.
+	selSet *mvvm.ObservableList[IsoEntityRef]
+	// clip is the widget-internal clipboard populated by Copy/Cut and consumed by
+	// Paste/Duplicate — a private model, not the system clipboard.
+	clip isoClip
+	seq  int // monotonic id source for placed nodes/connectors/zones/texts
 
 	// interaction state
 	gesture     isoGesture
@@ -178,6 +198,11 @@ type IsoDiagram struct {
 	resizeFixX int
 	resizeFixY int
 
+	// groupGrab records, for a group move, each moved entity's base cell at grab
+	// time, so the whole selection follows the pointer by one cell delta from
+	// grabCellX/grabCellY.
+	groupGrab []isoGrabItem
+
 	userMoved bool // set once the user pans/zooms so auto-centre stops
 
 	undo []isoSnapshot
@@ -202,7 +227,12 @@ func NewIsoDiagram(doc IsoDocument) *IsoDiagram {
 		selConn: mvvm.NewObservable(""),
 		selZone: mvvm.NewObservable(""),
 		selText: mvvm.NewObservable(""),
+		selSet:  mvvm.NewObservableList[IsoEntityRef](),
 	}
+	// Any change to the multi-selection repaints, so a purely additive selection
+	// (one that does not move the last-of-kind the mono channels reflect) still
+	// invalidates.
+	d.selSet.SubscribeChanged(func() { d.invalidate() })
 	// A connector-selection change repaints (highlight) and notifies the host,
 	// exactly as a node selection does.
 	d.selConn.Subscribe(func(id string) {
@@ -256,10 +286,11 @@ func (d *IsoDiagram) SelectedConnectorObservable() *mvvm.Observable[string] { re
 // connector selection when id is ""). Selecting a connector clears any node,
 // zone or text selection so only one entity ever highlights at once.
 func (d *IsoDiagram) SelectConnector(id string) {
-	if id != "" {
-		d.clearOtherSelections(isoSelConn)
+	if id == "" {
+		d.selRemoveKind(IsoEntityConnector)
+		return
 	}
-	d.selConn.Set(id)
+	d.selReplace(IsoEntityRef{Kind: IsoEntityConnector, ID: id})
 }
 
 // Close unsubscribes the widget from its document. It is optional: a diagram
@@ -421,6 +452,9 @@ func (d *IsoDiagram) nodeAtLocal(x, y int) (string, bool) {
 	})
 	fx, fy := float64(x), float64(y)
 	for _, n := range nodes {
+		if !d.pickable(n.Layer) {
+			continue
+		}
 		for _, poly := range d.pickPolys(n) {
 			if pointInPoly(fx, fy, poly) {
 				return n.ID, true
@@ -660,6 +694,18 @@ var isoArrowSpread = 30.0 * math.Pi / 180
 // solid per node, then a line per connector whose endpoints both exist.
 func (d *IsoDiagram) scene(theme *Theme) *iso.Scene {
 	sc := iso.NewScene(d.proj)
+	d.addGrid(sc, theme)
+	for _, n := range d.doc.Nodes() {
+		d.addNodeShapes(sc, theme, n)
+	}
+	for _, c := range d.doc.Connectors() {
+		d.addConnectorShapes(sc, theme, c)
+	}
+	return sc
+}
+
+// addGrid adds the ground grid's lines to sc in the theme's border colour.
+func (d *IsoDiagram) addGrid(sc *iso.Scene, theme *Theme) {
 	grid := stdColor(theme.Border)
 	for i := 0; i <= d.Cols; i++ {
 		sc.Add(iso.Line{From: iso.V(float64(i), 0, 0), To: iso.V(float64(i), float64(d.Rows), 0), Color: grid, Width: 1})
@@ -667,32 +713,34 @@ func (d *IsoDiagram) scene(theme *Theme) *iso.Scene {
 	for j := 0; j <= d.Rows; j++ {
 		sc.Add(iso.Line{From: iso.V(0, float64(j), 0), To: iso.V(float64(d.Cols), float64(j), 0), Color: grid, Width: 1})
 	}
-	for _, n := range d.doc.Nodes() {
-		base := d.resolveColor(n, theme)
-		if n.Icon == "" {
-			// No icon: draw the bare shape solid (cube / box / pyramid), exactly as
-			// before — the icon system is purely additive.
-			sc.Add(d.nodeSolid(n, base))
-			continue
-		}
-		// An icon id (known, or an unknown one that resolves to the cube fallback)
-		// contributes its depth-sortable solids to the same scene. A sprite icon
-		// adds no shapes here and is blitted after the scene renders (drawSprites).
-		icon, _ := d.iconRegistry().Resolve(n.Icon)
-		sc.Add(icon.Render(n.X, n.Y, base).Shapes...)
+}
+
+// addNodeShapes adds a node's depth-sortable solids to sc: the bare shape solid
+// when the node has no icon (the icon system is purely additive), otherwise the
+// resolved icon's primitives. A sprite icon adds no shapes here and is blitted
+// after the scene renders (see drawSprites).
+func (d *IsoDiagram) addNodeShapes(sc *iso.Scene, theme *Theme, n IsoNode) {
+	base := d.resolveColor(n, theme)
+	if n.Icon == "" {
+		sc.Add(d.nodeSolid(n, base))
+		return
 	}
-	for _, c := range d.doc.Connectors() {
-		pts, ok := d.connectorPath(c)
-		if !ok {
-			continue
-		}
-		col := d.resolveConnColor(c, theme)
-		w := d.connWidth(c)
-		for i := 1; i < len(pts); i++ {
-			d.addConnectorSegment(sc, pts[i-1], pts[i], col, w, c.Style)
-		}
+	icon, _ := d.iconRegistry().Resolve(n.Icon)
+	sc.Add(icon.Render(n.X, n.Y, base).Shapes...)
+}
+
+// addConnectorShapes adds a connector's stroked path segments to sc, or nothing
+// when an endpoint is missing.
+func (d *IsoDiagram) addConnectorShapes(sc *iso.Scene, theme *Theme, c IsoConnector) {
+	pts, ok := d.connectorPath(c)
+	if !ok {
+		return
 	}
-	return sc
+	col := d.resolveConnColor(c, theme)
+	w := d.connWidth(c)
+	for i := 1; i < len(pts); i++ {
+		d.addConnectorSegment(sc, pts[i-1], pts[i], col, w, c.Style)
+	}
 }
 
 // spriteRect is the widget-local pixel rectangle a billboarded sprite icon fills
@@ -709,8 +757,15 @@ func (d *IsoDiagram) spriteRect(n IsoNode) Rect {
 // over the already-rendered scene (into the same buffer, so it is captured by
 // the single blit). Primitive-only icons contribute no sprite and are skipped.
 func (d *IsoDiagram) drawSprites(img *raster.Image, theme *Theme) {
+	d.drawSpritesWhere(img, theme, func(IsoNode) bool { return true })
+}
+
+// drawSpritesWhere blits the sprite of every icon node the predicate keep
+// accepts (see [IsoDiagram.drawSprites]); the layered render path passes a
+// per-layer-order predicate.
+func (d *IsoDiagram) drawSpritesWhere(img *raster.Image, theme *Theme, keep func(IsoNode) bool) {
 	for _, n := range d.doc.Nodes() {
-		if n.Icon == "" {
+		if !keep(n) || n.Icon == "" {
 			continue
 		}
 		icon, _ := d.iconRegistry().Resolve(n.Icon)
@@ -738,12 +793,11 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 	}
 	img := raster.New(b.W, b.H)
 	fillRaster(img, theme.Surface)
-	// Floor layer: zones are painted at the very back — BEFORE the depth-sorted
-	// node/connector scene — so a zone can never mask a node standing on it. The
-	// scene's own depth-sort is left completely untouched.
-	d.drawZones(img, theme)
-	d.scene(theme).Render(img)
-	d.drawSprites(img, theme)
+	// The blit pipeline (zone floor, depth-sorted node/connector scene, sprite
+	// overlay) is composited by layer order: see drawContent. With a single
+	// visible layer — every pre-layers document — this is one legacy pass and is
+	// byte-identical.
+	d.drawContent(img, theme)
 	blitImage(p, b, b, img.Pix, b.W, b.H)
 
 	// rubber-band preview while connecting
@@ -759,9 +813,15 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 		d.drawZonePreview(p, b, theme)
 	}
 
+	// rubber-band preview while sweeping a marquee selection rectangle
+	if d.gesture == isoGestureMarquee && d.moved {
+		strokeRect(p, b.X+min(d.pressX, d.curX), b.Y+min(d.pressY, d.curY),
+			iabs(d.curX-d.pressX), iabs(d.curY-d.pressY), theme.Accent)
+	}
+
 	// labels
 	for _, n := range d.doc.Nodes() {
-		if n.Label == "" {
+		if n.Label == "" || !d.layerVisible(n.Layer) {
 			continue
 		}
 		pt := d.proj.Project(d.nodeAnchor(n))
@@ -779,8 +839,15 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 	// in painter space so it stays grabbable over any node drawn on the zone.
 	d.drawZoneOverlays(p, b, theme)
 
-	// selection outline (top face of the selected node)
-	if n, ok := d.doc.Node(d.selected); ok {
+	// selection outline (top face of every selected node)
+	for _, r := range d.selSet.Slice() {
+		if r.Kind != IsoEntityNode {
+			continue
+		}
+		n, ok := d.doc.Node(r.ID)
+		if !ok || !d.layerVisible(n.Layer) {
+			continue
+		}
 		poly := d.topFacePoly(n)
 		for i := 0; i < len(poly); i++ {
 			a, c := poly[i], poly[(i+1)%len(poly)]
@@ -802,15 +869,17 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 // painter space. The stroked path itself is part of the depth-sorted scene; only
 // these overlays live here, alongside the node labels and node outline.
 func (d *IsoDiagram) drawConnectors(p painter.Painter, b Rect, theme *Theme) {
-	sel := d.selConn.Get()
 	for _, c := range d.doc.Connectors() {
+		if !d.layerVisible(c.Layer) {
+			continue
+		}
 		pts, ok := d.connectorPath(c)
 		if !ok {
 			continue
 		}
 		scr := d.projPath(pts)
 		ink := d.connInk(c, theme)
-		if c.ID == sel {
+		if d.IsSelected(IsoEntityRef{Kind: IsoEntityConnector, ID: c.ID}) {
 			d.strokePath(p, b, scr, theme.Accent)
 		}
 		d.drawArrowHeads(p, b, scr, c.Arrow, ink)
@@ -871,10 +940,11 @@ func iabs(v int) int {
 // snapshot copies the whole document.
 func (d *IsoDiagram) snapshot() isoSnapshot {
 	return isoSnapshot{
-		nodes: d.doc.Nodes(),
-		conns: d.doc.Connectors(),
-		zones: d.doc.Zones(),
-		texts: d.doc.Texts(),
+		nodes:  d.doc.Nodes(),
+		conns:  d.doc.Connectors(),
+		zones:  d.doc.Zones(),
+		texts:  d.doc.Texts(),
+		layers: d.doc.Layers(),
 	}
 }
 
@@ -895,6 +965,9 @@ func (d *IsoDiagram) restore(s isoSnapshot) {
 	for _, t := range d.doc.Texts() {
 		d.doc.RemoveText(t.ID)
 	}
+	for _, l := range d.doc.Layers() {
+		d.doc.RemoveLayer(l.ID)
+	}
 	for _, n := range s.nodes {
 		d.doc.PutNode(n)
 	}
@@ -907,18 +980,10 @@ func (d *IsoDiagram) restore(s isoSnapshot) {
 	for _, t := range s.texts {
 		d.doc.PutText(t)
 	}
-	if _, ok := d.doc.Node(d.selected); !ok {
-		d.setSelected("")
+	for _, l := range s.layers {
+		d.doc.PutLayer(l)
 	}
-	if _, ok := d.connectorByID(d.selConn.Get()); !ok {
-		d.selConn.Set("")
-	}
-	if _, ok := d.doc.Zone(d.selZone.Get()); !ok {
-		d.selZone.Set("")
-	}
-	if _, ok := d.doc.Text(d.selText.Get()); !ok {
-		d.selText.Set("")
-	}
+	d.pruneSelection()
 }
 
 // beginEdit records the pre-edit state for undo and drops the redo stack. Every
@@ -960,56 +1025,20 @@ func (d *IsoDiagram) Redo() {
 	d.invalidate()
 }
 
-// isoSelKind names one of the four mutually exclusive selection channels.
-type isoSelKind int
-
-const (
-	isoSelNode isoSelKind = iota
-	isoSelConn
-	isoSelZone
-	isoSelText
-)
-
-// clearOtherSelections clears every selection channel except keep, so at most
-// one of node / connector / zone / text is ever selected. Each clear is a Set to
-// "" which is a no-op (and fires nothing) when that channel is already empty.
-func (d *IsoDiagram) clearOtherSelections(keep isoSelKind) {
-	if keep != isoSelNode {
-		d.setSelected("")
-	}
-	if keep != isoSelConn {
-		d.selConn.Set("")
-	}
-	if keep != isoSelZone {
-		d.selZone.Set("")
-	}
-	if keep != isoSelText {
-		d.selText.Set("")
-	}
-}
-
 // clearAllSelections drops every selection (a press on empty ground).
-func (d *IsoDiagram) clearAllSelections() {
-	d.setSelected("")
-	d.selConn.Set("")
-	d.selZone.Set("")
-	d.selText.Set("")
-}
+func (d *IsoDiagram) clearAllSelections() { d.selClear() }
 
-// setSelected updates the node selection and fires OnSelect when it changed.
-// Selecting a node clears any connector / zone / text selection so only one of
-// the four is ever highlighted.
+// setSelected makes the node with id the sole selection, or — when id is "" —
+// clears the node selection channel (leaving any other-kind selection alone,
+// exactly as the pre-multi-selection channel did). It is the node analogue of
+// [IsoDiagram.SelectConnector]; the OnSelect callback fires (through
+// [IsoDiagram.refreshMono]) only when the reflected node id actually changes.
 func (d *IsoDiagram) setSelected(id string) {
-	if id != "" {
-		d.clearOtherSelections(isoSelNode)
-	}
-	if d.selected == id {
+	if id == "" {
+		d.selRemoveKind(IsoEntityNode)
 		return
 	}
-	d.selected = id
-	if d.OnSelect != nil {
-		d.OnSelect(id)
-	}
+	d.selReplace(IsoEntityRef{Kind: IsoEntityNode, ID: id})
 }
 
 // nextID returns a document-unique id with the given prefix.
@@ -1049,9 +1078,7 @@ func (d *IsoDiagram) commitDelete(id string) {
 	}
 	d.beginEdit()
 	d.doc.RemoveNode(id)
-	if d.selected == id {
-		d.setSelected("")
-	}
+	d.pruneSelection()
 	d.invalidate()
 }
 
@@ -1173,6 +1200,9 @@ func (d *IsoDiagram) connectorAtLocal(x, y int) (string, bool) {
 	px, py := float64(x), float64(y)
 	best, bestID := math.MaxFloat64, ""
 	for _, c := range d.doc.Connectors() {
+		if !d.pickable(c.Layer) {
+			continue
+		}
 		pts, ok := d.connectorPath(c)
 		if !ok {
 			continue
@@ -1340,14 +1370,39 @@ func (d *IsoDiagram) onPress(ev Event) {
 		d.invalidate()
 		return
 	}
+	// A Ctrl/Shift-click extends the multi-selection instead of replacing it.
+	additive := ev.Ctrl || ev.Shift
+
 	// Text annotations are the topmost content layer, so they pick first.
 	if id, ok := d.textAtLocal(ev.X, ev.Y); ok {
+		ref := IsoEntityRef{Kind: IsoEntityText, ID: id}
+		if additive {
+			d.selToggle(ref)
+			d.gesture = isoGestureNone
+			d.invalidate()
+			return
+		}
+		if d.groupPress(ref, ev.X, ev.Y) {
+			d.invalidate()
+			return
+		}
 		d.SelectText(id)
 		d.beginTextMove(id, ev.X, ev.Y)
 		d.invalidate()
 		return
 	}
 	if id, ok := d.nodeAtLocal(ev.X, ev.Y); ok {
+		ref := IsoEntityRef{Kind: IsoEntityNode, ID: id}
+		if additive {
+			d.selToggle(ref)
+			d.gesture = isoGestureNone
+			d.invalidate()
+			return
+		}
+		if d.Mode != IsoModeConnect && d.groupPress(ref, ev.X, ev.Y) {
+			d.invalidate()
+			return
+		}
 		d.setSelected(id)
 		if d.Mode == IsoModeConnect {
 			d.gesture = isoGestureConnect
@@ -1365,22 +1420,55 @@ func (d *IsoDiagram) onPress(ev Event) {
 	// no node under the pointer: a connector there selects it, without starting a
 	// drag or a pan.
 	if id, ok := d.connectorAtLocal(ev.X, ev.Y); ok {
+		ref := IsoEntityRef{Kind: IsoEntityConnector, ID: id}
+		if additive {
+			d.selToggle(ref)
+		} else {
+			d.SelectConnector(id)
+		}
 		d.gesture = isoGestureNone
-		d.SelectConnector(id)
 		d.invalidate()
 		return
 	}
 	// a zone body (the floor layer) selects it and starts a move.
 	if id, ok := d.zoneAtLocal(ev.X, ev.Y); ok {
+		ref := IsoEntityRef{Kind: IsoEntityZone, ID: id}
+		if additive {
+			d.selToggle(ref)
+			d.gesture = isoGestureNone
+			d.invalidate()
+			return
+		}
+		if d.groupPress(ref, ev.X, ev.Y) {
+			d.invalidate()
+			return
+		}
 		d.SelectZone(id)
 		d.beginZoneMove(id, ev.X, ev.Y)
 		d.invalidate()
 		return
 	}
-	// empty ground: could become a pan (drag) or a place (tap on release)
+	// empty ground: a Shift/Ctrl-drag sweeps a marquee selection; a plain drag
+	// pans (and a plain tap places a node / clears the selection on release).
+	if additive {
+		d.gesture = isoGestureMarquee
+		d.invalidate()
+		return
+	}
 	d.gesture = isoGesturePan
 	d.clearAllSelections()
 	d.invalidate()
+}
+
+// groupPress starts a whole-selection move when the plain-pressed ref is part of
+// a multi-selection, so dragging any member drags the group. It reports whether
+// it took over the gesture.
+func (d *IsoDiagram) groupPress(ref IsoEntityRef, x, y int) bool {
+	if d.selSet.Len() > 1 && d.selIndexOf(ref) >= 0 {
+		d.beginGroupMove(x, y)
+		return true
+	}
+	return false
 }
 
 // onDrag advances the in-flight gesture.
@@ -1399,8 +1487,14 @@ func (d *IsoDiagram) onDrag(ev Event) {
 		d.lastX, d.lastY = ev.X, ev.Y
 	case isoGestureConnect:
 		d.moved = true
-	case isoGestureZoneCreate, isoGestureTextAdd:
+	case isoGestureZoneCreate, isoGestureTextAdd, isoGestureMarquee:
 		d.moved = true
+	case isoGestureGroupMove:
+		if !d.moved {
+			d.beginEdit()
+			d.moved = true
+		}
+		d.moveGroupTo(ev.X, ev.Y)
 	case isoGestureZoneMove:
 		if !d.moved {
 			d.beginEdit()
@@ -1460,12 +1554,19 @@ func (d *IsoDiagram) onRelease(ev Event) {
 			gx, gy := d.cellAtLocal(d.pressX, d.pressY)
 			d.commitPlaceText(gx, gy)
 		}
+	case isoGestureMarquee:
+		d.selReplace(d.marqueeRefs(d.pressX, d.pressY, ev.X, ev.Y)...)
+	case isoGestureGroupMove:
+		if d.moved {
+			d.moveGroupTo(ev.X, ev.Y)
+		}
 	}
 	d.gesture = isoGestureNone
 	d.dragNode = ""
 	d.connectFrom = ""
 	d.dragZone = ""
 	d.dragText = ""
+	d.groupGrab = d.groupGrab[:0]
 	d.moved = false
 	d.invalidate()
 }
@@ -1475,13 +1576,26 @@ func (d *IsoDiagram) onRelease(ev Event) {
 func (d *IsoDiagram) onKey(ev Event) {
 	switch ev.Code {
 	case "Delete", "Backspace":
-		switch {
-		case d.selected != "":
-			d.commitDelete(d.selected)
-		case d.selZone.Get() != "":
-			d.commitDeleteZone(d.selZone.Get())
-		case d.selText.Get() != "":
-			d.commitDeleteText(d.selText.Get())
+		d.DeleteSelection()
+	case "a", "A":
+		if ev.Ctrl {
+			d.SelectAll()
+		}
+	case "c", "C":
+		if ev.Ctrl {
+			d.Copy()
+		}
+	case "x", "X":
+		if ev.Ctrl {
+			d.Cut()
+		}
+	case "v", "V":
+		if ev.Ctrl {
+			d.Paste()
+		}
+	case "d", "D":
+		if ev.Ctrl {
+			d.Duplicate()
 		}
 	case "z", "Z":
 		if ev.Ctrl {
@@ -1522,7 +1636,7 @@ func (d *IsoDiagram) Children() []Widget {
 		sx := b.X + iround(pt.X)
 		sy := b.Y + iround(pt.Y)
 		tile := iround(d.proj.TileW)
-		pr := &isoProxy{info: A11yInfo{Role: RoleImg, Name: name, Value: stateValue(n.ID == d.selected, "selected")}}
+		pr := &isoProxy{info: A11yInfo{Role: RoleImg, Name: name, Value: stateValue(d.IsSelected(IsoEntityRef{Kind: IsoEntityNode, ID: n.ID}), "selected")}}
 		pr.SetBounds(Rect{X: sx - tile/2, Y: sy - tile/2, W: tile, H: tile})
 		out = append(out, pr)
 	}
@@ -1533,25 +1647,23 @@ func (d *IsoDiagram) Children() []Widget {
 		}
 		out = append(out, &isoProxy{info: A11yInfo{Role: RoleImg, Name: name}})
 	}
-	selZone := d.selZone.Get()
 	for _, z := range d.doc.Zones() {
 		name := z.Label
 		if name == "" {
 			name = z.ID
 		}
-		pr := &isoProxy{info: A11yInfo{Role: RoleGroup, Name: name, Value: stateValue(z.ID == selZone, "selected")}}
+		pr := &isoProxy{info: A11yInfo{Role: RoleGroup, Name: name, Value: stateValue(d.IsSelected(IsoEntityRef{Kind: IsoEntityZone, ID: z.ID}), "selected")}}
 		corners := d.zoneCorners(z)
 		pr.SetBounds(zoneBoundsRect(b, corners))
 		out = append(out, pr)
 	}
-	selText := d.selText.Get()
 	for _, t := range d.doc.Texts() {
 		name := t.Text
 		if name == "" {
 			name = t.ID
 		}
 		box := d.textBox(t)
-		pr := &isoProxy{info: A11yInfo{Role: RoleImg, Name: name, Value: stateValue(t.ID == selText, "selected")}}
+		pr := &isoProxy{info: A11yInfo{Role: RoleImg, Name: name, Value: stateValue(d.IsSelected(IsoEntityRef{Kind: IsoEntityText, ID: t.ID}), "selected")}}
 		pr.SetBounds(Rect{X: b.X + box.X, Y: b.Y + box.Y, W: box.W, H: box.H})
 		out = append(out, pr)
 	}
