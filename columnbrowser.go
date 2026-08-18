@@ -167,7 +167,7 @@ func (cv *ColumnBrowser) onPick(ci, row int) {
 	node := col.nodes[row]
 	repick := col.selected == row
 	col.selected = row
-	col.list.Selected = row
+	col.list.Selected().Set(row)
 	cv.cols = cv.cols[:ci+1]
 
 	if node.Container {

@@ -72,7 +72,7 @@ func TestA11yFileChooser(t *testing.T) {
 
 func TestA11yListBox(t *testing.T) {
 	l := NewListBox([]string{"one", "two", "three"})
-	l.Selected = 1
+	l.Selected().Set(1)
 	if got := l.A11y(); got != (A11yInfo{Role: RoleListbox, Value: "two"}) {
 		t.Errorf("ListBox single-select A11y() = %+v", got)
 	}
@@ -85,7 +85,7 @@ func TestA11yListBox(t *testing.T) {
 	}
 
 	empty := NewListBox(nil)
-	empty.Selected = -1
+	empty.Selected().Set(-1)
 	if got := empty.A11y(); got != (A11yInfo{Role: RoleListbox, Value: ""}) {
 		t.Errorf("ListBox empty A11y() = %+v", got)
 	}

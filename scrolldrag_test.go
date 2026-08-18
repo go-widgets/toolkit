@@ -175,10 +175,10 @@ func TestListBoxScrollbarDragPagesAndSelects(t *testing.T) {
 
 	// A press left of the scrollbar still selects a row.
 	l.ScrollTo(0)
-	l.Selected = -1
+	l.Selected().Set(-1)
 	l.OnEvent(Event{Kind: EventClick, X: 50, Y: 20})
-	if l.Selected != 1 {
-		t.Fatalf("content press should select row 1, got %d", l.Selected)
+	if l.Selected().Get() != 1 {
+		t.Fatalf("content press should select row 1, got %d", l.Selected().Get())
 	}
 	if l.ScrollRow != 0 {
 		t.Fatalf("selecting must not scroll: ScrollRow = %d, want 0", l.ScrollRow)

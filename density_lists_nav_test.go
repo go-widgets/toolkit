@@ -86,12 +86,12 @@ func TestListBoxHitTouch(t *testing.T) {
 	l := NewListBox(manyItems(5))
 	l.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 300})
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 44}) // first pixel of row 1
-	if l.Selected != 1 {
-		t.Fatalf("touch click at y=44 selected row %d, want 1 (44px rows)", l.Selected)
+	if l.Selected().Get() != 1 {
+		t.Fatalf("touch click at y=44 selected row %d, want 1 (44px rows)", l.Selected().Get())
 	}
 	l.OnEvent(Event{Kind: EventClick, X: 5, Y: 43}) // last pixel of row 0
-	if l.Selected != 0 {
-		t.Fatalf("touch click at y=43 selected row %d, want 0", l.Selected)
+	if l.Selected().Get() != 0 {
+		t.Fatalf("touch click at y=43 selected row %d, want 0", l.Selected().Get())
 	}
 }
 

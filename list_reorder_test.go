@@ -55,7 +55,7 @@ func TestListBoxNotReorderableDrawUnchanged(t *testing.T) {
 	const w, h = 64, 64
 	theme := DefaultLight()
 	l := NewListBox([]string{"a", "b"})
-	l.Selected = 1
+	l.Selected().Set(1)
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 40})
 	l.OnEvent(Event{Kind: EventDragMove, Y: 5})
 	buf := makeSurface(w, h)
@@ -226,7 +226,7 @@ func TestListBoxDropReordersMoveDown(t *testing.T) {
 	l.Reorderable = true
 	l.RowHeight = 20
 	l.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 100})
-	l.Selected = 0 // the row being dragged is selected
+	l.Selected().Set(0) // the row being dragged is selected
 
 	gotFrom, gotTo := -1, -1
 	l.OnReorder = func(from, to int) { gotFrom, gotTo = from, to }
@@ -244,8 +244,8 @@ func TestListBoxDropReordersMoveDown(t *testing.T) {
 	if gotFrom != 0 || gotTo != 2 {
 		t.Fatalf("OnReorder(%d,%d), want (0,2)", gotFrom, gotTo)
 	}
-	if l.Selected != 2 {
-		t.Fatalf("Selected = %d, want 2 (follows the moved row)", l.Selected)
+	if l.Selected().Get() != 2 {
+		t.Fatalf("Selected = %d, want 2 (follows the moved row)", l.Selected().Get())
 	}
 	if l.dropIndicator != -1 {
 		t.Fatalf("dropIndicator = %d, want -1 after drop", l.dropIndicator)

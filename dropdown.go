@@ -291,7 +291,7 @@ func (d *DropDown) DrawPopover(p painter.Painter, theme *Theme) {
 		return
 	}
 	lb := NewListBox(d.Options)
-	lb.Selected = d.Selected().Get()
+	lb.Selected().Set(d.Selected().Get())
 	// Feed the persistent scroll offset into the ListBox's own native virtual
 	// scrolling so options beyond PopoverMaxRows are painted (and a scrollbar
 	// appears) when the popover is scrolled. At popScroll == 0 this is

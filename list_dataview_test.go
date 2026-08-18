@@ -25,7 +25,7 @@ type rendererCall struct {
 func TestListBoxItemRendererPerRow(t *testing.T) {
 	theme := DefaultLight()
 	lb := NewListBox([]string{"a", "b", "c", "d", "e"})
-	lb.Selected = 2
+	lb.Selected().Set(2)
 	lb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 5 * 18}) // all 5 rows fit, no scrollbar
 
 	var calls []rendererCall
@@ -93,5 +93,28 @@ func TestListBoxItemRendererActuallyPaints(t *testing.T) {
 	lb.Draw(newP(buf, w), DefaultLight())
 	if pixelAt(buf, w, 30, 9) != red {
 		t.Fatalf("renderer fill not present: %+v", pixelAt(buf, w, 30, 9))
+	}
+}
+
+// TestListBoxSelectedObservable covers the zero-value lazy-init of the Selected
+// accessor and the host binding path: a ListBox built as a bare struct (no
+// NewListBox) still yields a usable Observable that lazy-inits to 0, Setting it
+// from outside is reflected by the widget + notifies subscribers (there is no
+// imperative Selected field), and NewListBox seeds the anchor to -1.
+func TestListBoxSelectedObservable(t *testing.T) {
+	lb := &ListBox{} // no NewListBox -> selectedRow Observable is nil until accessed
+	if lb.Selected().Get() != 0 {
+		t.Fatalf("bare &ListBox{} Selected = %d, want 0 (lazy-init)", lb.Selected().Get())
+	}
+	seen := -99
+	lb.Selected().Subscribe(func(v int) { seen = v })
+	lb.Selected().Set(3) // a host drives the selection through the Observable
+	if lb.Selected().Get() != 3 || seen != 3 {
+		t.Fatalf("host Set: Selected=%d subscriber=%d, want 3/3", lb.Selected().Get(), seen)
+	}
+
+	nb := NewListBox([]string{"a", "b"})
+	if nb.Selected().Get() != -1 {
+		t.Fatalf("NewListBox Selected = %d, want -1 (no selection)", nb.Selected().Get())
 	}
 }
