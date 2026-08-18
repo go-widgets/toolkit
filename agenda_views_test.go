@@ -107,10 +107,10 @@ func TestAgendaMonthDraw(t *testing.T) {
 	teal := RGB(0x0D, 0x94, 0x88)
 	gold := RGB(0xE0, 0xA0, 0x30)
 	a := NewAgenda(monthEvents(teal, gold))
-	a.View = AgendaMonth
+	a.View().Set(AgendaMonth)
 	a.Year, a.Month = 2026, 2
 	a.DayNames = []string{"Mon", "Tue"} // short list -> empty header labels for cols 2..6
-	a.Selected = 1                      // the teal event gets a selection tint
+	a.Selected().Set(1)                 // the teal event gets a selection tint
 	w, h := 560, AgendaHeaderH+6*AgendaDayCellH
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	surf := makeSurface(w, h)
@@ -146,7 +146,7 @@ func TestAgendaMonthEmpty(t *testing.T) {
 	// No dated events and no explicit period -> the grid stays empty but the
 	// weekday header band still paints.
 	a := NewAgenda(nil)
-	a.View = AgendaMonth
+	a.View().Set(AgendaMonth)
 	w, h := 400, AgendaHeaderH+6*AgendaDayCellH
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	surf := makeSurface(w, h)
@@ -167,7 +167,7 @@ func TestAgendaMonthEmpty(t *testing.T) {
 func TestAgendaMonthJanuaryLeadingFromPrevYear(t *testing.T) {
 	// January focus exercises prevMonth's month==1 wrap for the leading cells.
 	a := NewAgenda([]AgendaEvent{{Title: "NY", Y: 2026, M: 1, D: 1}})
-	a.View = AgendaMonth
+	a.View().Set(AgendaMonth)
 	a.Year, a.Month = 2026, 1
 	w, h := 480, AgendaHeaderH+6*AgendaDayCellH
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
@@ -183,9 +183,9 @@ func TestAgendaMonthHit(t *testing.T) {
 	gold := RGB(0xE0, 0xA0, 0x30)
 	fired := -1
 	a := NewAgenda(monthEvents(teal, gold))
-	a.View = AgendaMonth
+	a.View().Set(AgendaMonth)
 	a.Year, a.Month = 2026, 2
-	a.OnSelect = func(i int) { fired = i }
+	a.Selected().Subscribe(func(i int) { fired = i })
 	w, h := 560, AgendaHeaderH+6*AgendaDayCellH
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 
@@ -193,26 +193,26 @@ func TestAgendaMonthHit(t *testing.T) {
 	// Click the centre of the first chip -> selects its event.
 	c0 := chips[0]
 	a.OnEvent(Event{Kind: EventClick, X: c0.rect.X + c0.rect.W/2, Y: c0.rect.Y + c0.rect.H/2})
-	if a.Selected != c0.idx || fired != c0.idx {
-		t.Errorf("chip click: Selected=%d fired=%d, want %d", a.Selected, fired, c0.idx)
+	if a.Selected().Get() != c0.idx || fired != c0.idx {
+		t.Errorf("chip click: Selected=%d fired=%d, want %d", a.Selected().Get(), fired, c0.idx)
 	}
 	// A non-click event is ignored.
-	a.Selected = 99
+	a.Selected().Set(99)
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if a.Selected != 99 {
-		t.Errorf("non-click changed Selected to %d, want 99", a.Selected)
+	if a.Selected().Get() != 99 {
+		t.Errorf("non-click changed Selected to %d, want 99", a.Selected().Get())
 	}
 	// A click on the "+N" overflow marker selects nothing.
-	a.Selected = 99
+	a.Selected().Set(99)
 	ov := overflows[0]
 	a.OnEvent(Event{Kind: EventClick, X: ov.rect.X + ov.rect.W/2, Y: ov.rect.Y + ov.rect.H/2})
-	if a.Selected != 99 {
-		t.Errorf("overflow-marker click changed Selected to %d, want 99", a.Selected)
+	if a.Selected().Get() != 99 {
+		t.Errorf("overflow-marker click changed Selected to %d, want 99", a.Selected().Get())
 	}
 	// A click on an empty day cell selects nothing.
 	a.OnEvent(Event{Kind: EventClick, X: 5, Y: AgendaHeaderH + 5})
-	if a.Selected != 99 {
-		t.Errorf("empty-cell click changed Selected to %d, want 99", a.Selected)
+	if a.Selected().Get() != 99 {
+		t.Errorf("empty-cell click changed Selected to %d, want 99", a.Selected().Get())
 	}
 }
 
@@ -220,9 +220,9 @@ func TestAgendaMonthRenderPNG(t *testing.T) {
 	teal := RGB(0x0D, 0x94, 0x88)
 	gold := RGB(0xE0, 0xA0, 0x30)
 	a := NewAgenda(monthEvents(teal, gold))
-	a.View = AgendaMonth
+	a.View().Set(AgendaMonth)
 	a.Year, a.Month = 2026, 2
-	a.Selected = 1
+	a.Selected().Set(1)
 	w, h := 640, AgendaHeaderH+6*AgendaDayCellH
 	png, err := RenderPNG(a, w, h, DefaultLight())
 	if err != nil {
@@ -249,9 +249,9 @@ func TestAgendaQuarterDrawAndHit(t *testing.T) {
 		{Title: "Dec", Y: 2026, M: 12, D: 24}, // zero Fill -> Accent dot
 		{Title: "Jan", Y: 2027, M: 1, D: 3, Fill: gold},
 	})
-	a.View = AgendaQuarter
+	a.View().Set(AgendaQuarter)
 	a.Year, a.Month = 2026, 11
-	a.OnSelect = func(i int) { fired = i }
+	a.Selected().Subscribe(func(i int) { fired = i })
 	w, h := 600, 220
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	surf := makeSurface(w, h)
@@ -284,29 +284,29 @@ func TestAgendaQuarterDrawAndHit(t *testing.T) {
 	cx := box.X + col*cellW + cellW/2
 	cy := gridTop + row*cellH + cellH/2
 	a.OnEvent(Event{Kind: EventClick, X: cx, Y: cy})
-	if a.Selected != 2 || fired != 2 {
-		t.Errorf("quarter day click: Selected=%d fired=%d, want 2", a.Selected, fired)
+	if a.Selected().Get() != 2 || fired != 2 {
+		t.Errorf("quarter day click: Selected=%d fired=%d, want 2", a.Selected().Get(), fired)
 	}
 
 	// A click on a title row (y < gridTop) selects nothing.
-	a.Selected = -1
+	a.Selected().Set(-1)
 	a.OnEvent(Event{Kind: EventClick, X: box.X + box.W/2, Y: box.Y + 1})
-	if a.Selected != -1 {
-		t.Errorf("title-row click changed Selected to %d, want -1", a.Selected)
+	if a.Selected().Get() != -1 {
+		t.Errorf("title-row click changed Selected to %d, want -1", a.Selected().Get())
 	}
 	// A click on a dateless cell (day 3 exists, but pick an empty day) selects
 	// nothing: click day 1 of Jan which has no event.
 	idx1 := first // day 1
 	c1, r1 := idx1%7, idx1/7
 	a.OnEvent(Event{Kind: EventClick, X: box.X + c1*cellW + cellW/2, Y: gridTop + r1*cellH + cellH/2})
-	if a.Selected != -1 {
-		t.Errorf("empty-day click changed Selected to %d, want -1", a.Selected)
+	if a.Selected().Get() != -1 {
+		t.Errorf("empty-day click changed Selected to %d, want -1", a.Selected().Get())
 	}
 }
 
 func TestAgendaQuarterEmpty(t *testing.T) {
 	a := NewAgenda(nil)
-	a.View = AgendaQuarter
+	a.View().Set(AgendaQuarter)
 	w, h := 500, 200
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	surf := makeSurface(w, h)
@@ -322,7 +322,7 @@ func TestAgendaQuarterEmpty(t *testing.T) {
 
 func TestAgendaQuarterHitEdges(t *testing.T) {
 	a := NewAgenda([]AgendaEvent{{Y: 2026, M: 5, D: 10}})
-	a.View = AgendaQuarter
+	a.View().Set(AgendaQuarter)
 	a.Year, a.Month = 2026, 5
 	// Tiny height so each mini month's cell height floors to 0 -> the
 	// cellH<=0 guard fires when a click lands inside a box below its title.
@@ -362,7 +362,7 @@ func TestAgendaQuarterRenderPNG(t *testing.T) {
 		{Y: 2026, M: 12, D: 24},
 		{Y: 2027, M: 1, D: 3, Fill: gold},
 	})
-	a.View = AgendaQuarter
+	a.View().Set(AgendaQuarter)
 	a.Year, a.Month = 2026, 11
 	png, err := RenderPNG(a, 720, 220, DefaultLight())
 	if err != nil {
@@ -386,9 +386,9 @@ func TestAgendaYearDrawAndHit(t *testing.T) {
 		{Title: "Feb", Y: 2026, M: 2, D: 14, Fill: teal}, // month index 1
 		{Title: "May", Y: 2026, M: 5, D: 10, Fill: gold}, // month index 4
 	})
-	a.View = AgendaYear
+	a.View().Set(AgendaYear)
 	a.Year = 2026
-	a.OnSelect = func(i int) { fired = i }
+	a.Selected().Subscribe(func(i int) { fired = i })
 	w, h := 720, 480
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	surf := makeSurface(w, h)
@@ -416,14 +416,14 @@ func TestAgendaYearDrawAndHit(t *testing.T) {
 	idx := first + 10 - 1
 	col, row := idx%7, idx/7
 	a.OnEvent(Event{Kind: EventClick, X: box.X + col*cellW + cellW/2, Y: gridTop + row*cellH + cellH/2})
-	if a.Selected != 1 || fired != 1 {
-		t.Errorf("year day click: Selected=%d fired=%d, want 1", a.Selected, fired)
+	if a.Selected().Get() != 1 || fired != 1 {
+		t.Errorf("year day click: Selected=%d fired=%d, want 1", a.Selected().Get(), fired)
 	}
 }
 
 func TestAgendaYearEmpty(t *testing.T) {
 	a := NewAgenda(nil)
-	a.View = AgendaYear
+	a.View().Set(AgendaYear)
 	w, h := 600, 400
 	a.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	surf := makeSurface(w, h)
@@ -443,7 +443,7 @@ func TestAgendaYearRenderPNG(t *testing.T) {
 		{Y: 2026, M: 9, D: 1},
 		{Y: 2026, M: 12, D: 25, Fill: RGB(0xC0, 0x30, 0x30)},
 	})
-	a.View = AgendaYear
+	a.View().Set(AgendaYear)
 	a.Year = 2026
 	png, err := RenderPNG(a, 760, 520, DefaultLight())
 	if err != nil {
