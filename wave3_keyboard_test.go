@@ -727,68 +727,63 @@ func TestPaginationKeyNavigates(t *testing.T) {
 func TestCalendarKeyboard(t *testing.T) {
 	// August 2026 has 31 days.
 	c := NewCalendar(2026, 8, 15)
-	sel := [3]int{}
-	c.OnSelect = func(y, m, d int) { sel = [3]int{y, m, d} }
+	// In the MVVM model the selection IS the Day Observable, so every keyboard
+	// move Sets it and notifies; a host binds Day() (and Month() for paging).
+	lastDay := 0
+	c.Day().Subscribe(func(d int) { lastDay = d })
 	monthChanges := 0
-	c.OnMonthChange = func(y, m int) { monthChanges++ }
-	c.OnEvent(kd("ArrowRight")) // 15 -> 16, no OnSelect
-	if c.Day != 16 || sel != [3]int{} {
-		t.Fatalf("ArrowRight: Day=%d sel=%v (should not select)", c.Day, sel)
+	c.Month().Subscribe(func(int) { monthChanges++ })
+
+	c.OnEvent(kd("ArrowRight")) // 15 -> 16, notifies
+	if c.Day().Get() != 16 || lastDay != 16 {
+		t.Fatalf("ArrowRight: Day=%d lastDay=%d", c.Day().Get(), lastDay)
 	}
 	c.OnEvent(kd("ArrowLeft")) // 16 -> 15
 	c.OnEvent(kd("ArrowDown")) // +7 -> 22
-	if c.Day != 22 {
-		t.Fatalf("ArrowDown: Day=%d", c.Day)
+	if c.Day().Get() != 22 {
+		t.Fatalf("ArrowDown: Day=%d", c.Day().Get())
 	}
 	c.OnEvent(kd("ArrowUp")) // -7 -> 15
-	if c.Day != 15 {
-		t.Fatalf("ArrowUp: Day=%d", c.Day)
+	if c.Day().Get() != 15 {
+		t.Fatalf("ArrowUp: Day=%d", c.Day().Get())
 	}
 	c.OnEvent(kd("End")) // last of month -> 31
-	if c.Day != 31 {
-		t.Fatalf("End: Day=%d", c.Day)
+	if c.Day().Get() != 31 {
+		t.Fatalf("End: Day=%d", c.Day().Get())
 	}
 	c.OnEvent(kd("ArrowDown")) // +7 clamps at 31
-	if c.Day != 31 {
-		t.Fatalf("ArrowDown clamp: Day=%d", c.Day)
+	if c.Day().Get() != 31 {
+		t.Fatalf("ArrowDown clamp: Day=%d", c.Day().Get())
 	}
 	c.OnEvent(kd("Home")) // first of month -> 1
-	if c.Day != 1 {
-		t.Fatalf("Home: Day=%d", c.Day)
+	if c.Day().Get() != 1 {
+		t.Fatalf("Home: Day=%d", c.Day().Get())
 	}
 	c.OnEvent(kd("ArrowLeft")) // clamp at 1
-	if c.Day != 1 {
-		t.Fatalf("ArrowLeft clamp: Day=%d", c.Day)
+	if c.Day().Get() != 1 {
+		t.Fatalf("ArrowLeft clamp: Day=%d", c.Day().Get())
 	}
-	// PageUp / PageDown step the month, reusing Prev/NextMonth (OnMonthChange).
+	// PageUp / PageDown step the month, reusing Prev/NextMonth (Month notifies).
 	c.OnEvent(kd("PageDown")) // -> September
-	if c.Month != 9 || monthChanges != 1 {
-		t.Fatalf("PageDown: Month=%d changes=%d", c.Month, monthChanges)
+	if c.Month().Get() != 9 || monthChanges != 1 {
+		t.Fatalf("PageDown: Month=%d changes=%d", c.Month().Get(), monthChanges)
 	}
 	c.OnEvent(kd("PageUp")) // -> August
-	if c.Month != 8 || monthChanges != 2 {
-		t.Fatalf("PageUp: Month=%d changes=%d", c.Month, monthChanges)
+	if c.Month().Get() != 8 || monthChanges != 2 {
+		t.Fatalf("PageUp: Month=%d changes=%d", c.Month().Get(), monthChanges)
 	}
-	// Enter selects the focused day.
-	c.Day = 10
+	// An unhandled key is a no-op.
+	c.Day().Set(11)
 	c.OnEvent(kd("Enter"))
-	if sel != [3]int{2026, 8, 10} {
-		t.Fatalf("Enter select: sel=%v", sel)
-	}
-	// Space also selects.
-	c.Day = 11
-	c.OnEvent(kd(" "))
-	if sel != [3]int{2026, 8, 11} {
-		t.Fatalf("Space select: sel=%v", sel)
+	if c.Day().Get() != 11 {
+		t.Fatalf("unhandled key moved the day (Day=%d)", c.Day().Get())
 	}
 	// Disabled ignores keys.
 	c.Disabled = true
 	c.OnEvent(kd("ArrowRight"))
-	if c.Day != 11 {
-		t.Fatalf("disabled calendar moved (Day=%d)", c.Day)
+	if c.Day().Get() != 11 {
+		t.Fatalf("disabled calendar moved (Day=%d)", c.Day().Get())
 	}
-	// Nil OnSelect is safe.
-	NewCalendar(2026, 8, 1).OnEvent(kd("Enter"))
 	// A non-click, non-keydown event is ignored.
 	NewCalendar(2026, 8, 1).OnEvent(Event{Kind: EventChar, Code: "a"})
 }

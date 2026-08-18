@@ -49,8 +49,9 @@ func (a Date) isZero() bool { return a.M == 0 }
 // once a complete range exists begins a fresh selection.
 //
 // It composes Calendar for all of the month-grid layout + day hit-testing math
-// (via the embedded Cal, whose OnSelect this widget wires to its own selection
-// logic) and adds a header with prev/next-month arrows that Calendar lacks. The
+// (via the embedded Cal, whose Day Observable this widget subscribes to for its
+// own selection logic) and adds a header with prev/next-month arrows that
+// Calendar lacks. The
 // range fill uses the theme's SurfaceAlt tone; the two endpoints use Accent.
 type DateRangePicker struct {
 	Base
@@ -63,12 +64,15 @@ type DateRangePicker struct {
 // selection. The caller positions it with SetBounds; the grid is 7 cells wide.
 func NewDateRangePicker(year, month int) *DateRangePicker {
 	rp := &DateRangePicker{Cal: NewCalendar(year, month, 1)}
-	rp.Cal.OnSelect = func(y, m, d int) { rp.selectDay(y, m, d) }
+	rp.Cal.Day().Subscribe(func(d int) {
+		rp.selectDay(rp.Cal.Year().Get(), rp.Cal.Month().Get(), d)
+	})
 	return rp
 }
 
-// selectDay advances the selection state machine for a clicked day. It is the
-// Calendar's OnSelect callback, so the day arrives already hit-tested.
+// selectDay advances the selection state machine for a clicked day. It runs on
+// the embedded Calendar's Day Observable changing, so the day arrives already
+// hit-tested.
 func (rp *DateRangePicker) selectDay(y, m, d int) {
 	clicked := Date{Y: y, M: m, D: d}
 	if rp.Start.isZero() || !rp.End.isZero() {
@@ -90,22 +94,28 @@ func (rp *DateRangePicker) selectDay(y, m, d int) {
 	}
 }
 
-// prevMonth moves the displayed grid back one month (wrapping the year).
+// prevMonth moves the displayed grid back one month (wrapping the year),
+// Setting the embedded Calendar's Year / Month Observables.
 func (rp *DateRangePicker) prevMonth() {
-	rp.Cal.Month--
-	if rp.Cal.Month < 1 {
-		rp.Cal.Month = 12
-		rp.Cal.Year--
+	y, m := rp.Cal.Year().Get(), rp.Cal.Month().Get()-1
+	if m < 1 {
+		m = 12
+		y--
 	}
+	rp.Cal.Year().Set(y)
+	rp.Cal.Month().Set(m)
 }
 
-// nextMonth moves the displayed grid forward one month (wrapping the year).
+// nextMonth moves the displayed grid forward one month (wrapping the year),
+// Setting the embedded Calendar's Year / Month Observables.
 func (rp *DateRangePicker) nextMonth() {
-	rp.Cal.Month++
-	if rp.Cal.Month > 12 {
-		rp.Cal.Month = 1
-		rp.Cal.Year++
+	y, m := rp.Cal.Year().Get(), rp.Cal.Month().Get()+1
+	if m > 12 {
+		m = 1
+		y++
 	}
+	rp.Cal.Year().Set(y)
+	rp.Cal.Month().Set(m)
 }
 
 // isEndpoint reports whether day is the selected start or end.
@@ -129,7 +139,7 @@ func (rp *DateRangePicker) inRange(day Date) bool {
 // and the day grid with range highlighting.
 func (rp *DateRangePicker) Draw(p painter.Painter, theme *Theme) {
 	r := rp.Bounds()
-	y, m := rp.Cal.Year, rp.Cal.Month
+	y, m := rp.Cal.Year().Get(), rp.Cal.Month().Get()
 	// Calendar cell/header sizes belong to Calendar (calendar.go); routed through
 	// scaled so this month grid grows with HiDPI and touch Density. Identity at
 	// compact/1x, so the grid is byte-identical to before.

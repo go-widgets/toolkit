@@ -4,23 +4,45 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // DatePicker is a form input for a single calendar date: a field showing the
 // selected date as ISO YYYY-MM-DD text with a small grid icon, and a drop-down
 // Calendar that opens beneath it when the field is clicked. Picking a day in
-// the calendar updates the field, closes the popup, and fires OnChange.
+// the calendar updates the field and closes the popup.
 //
 // Where the display-only Calendar just renders a month, DatePicker is the
 // composite entry control built around it — the pixel sibling of a native
-// date field. It owns its Calendar (exposed as Cal) and renders the popup
-// itself when Open, so it works standalone; a host that composites overlays on
-// a separate surface can instead read Open + PopoverBounds and draw Cal there.
+// date field. It owns its Calendar (exposed as Cal, config) and renders the
+// popup itself when open, so it works standalone; a host that composites
+// overlays on a separate surface can instead read [DatePicker.Open] +
+// PopoverBounds and draw Cal there.
+//
+// The reactive state is MVVM-only: the popover open/closed flag lives in an
+// unexported Observable exposed via [DatePicker.Open]. A host binds it (Set /
+// Subscribe / two-way) and reads the selected date through the embedded
+// Calendar's own accessors (dp.Cal.Year() / dp.Cal.Month() / dp.Cal.Day()).
+// There is no settable Open field and no OnChange callback.
 type DatePicker struct {
 	Base
-	Cal      *Calendar
-	Open     bool
-	OnChange func(y, m, d int)
+	// Cal is the embedded month grid the picker drives (config); its date is
+	// read/bound via its own Year() / Month() / Day() accessors.
+	Cal *Calendar
+
+	open *mvvm.Observable[bool]
+}
+
+// Open is the popover open/closed flag as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way). There is no settable Open field; a
+// field click toggles it and picking a day closes it.
+func (dp *DatePicker) Open() *mvvm.Observable[bool] {
+	if dp.open == nil {
+		dp.open = mvvm.NewObservable(false)
+	}
+	return dp.open
 }
 
 // datePicker layout bases in LOGICAL pixels, routed through scaled at use so the
@@ -47,18 +69,15 @@ func (dp *DatePicker) HitRect() Rect { return touchHitRect(dp.Bounds()) }
 // NewDatePicker builds a DatePicker initialised to (year, month, day).
 func NewDatePicker(year, month, day int) *DatePicker {
 	dp := &DatePicker{Cal: NewCalendar(year, month, day)}
-	dp.Cal.OnSelect = func(y, m, d int) {
-		dp.Open = false
-		if dp.OnChange != nil {
-			dp.OnChange(y, m, d)
-		}
-	}
+	dp.open = mvvm.NewObservable(false)
+	// Picking a day (the Calendar's Day Observable changing) closes the popup.
+	dp.Cal.Day().Subscribe(func(int) { dp.Open().Set(false) })
 	return dp
 }
 
 // Date returns the currently-selected (year, month, day).
 func (dp *DatePicker) Date() (y, m, d int) {
-	return dp.Cal.Year, dp.Cal.Month, dp.Cal.Day
+	return dp.Cal.Year().Get(), dp.Cal.Month().Get(), dp.Cal.Day().Get()
 }
 
 // SetDate moves the selection to (year, month, day) without opening the popup.
@@ -66,7 +85,7 @@ func (dp *DatePicker) SetDate(year, month, day int) { dp.Cal.SetDate(year, month
 
 // Text is the field's displayed value: ISO 8601 YYYY-MM-DD.
 func (dp *DatePicker) Text() string {
-	return pad(dp.Cal.Year, 4) + "-" + pad(dp.Cal.Month, 2) + "-" + pad(dp.Cal.Day, 2)
+	return pad(dp.Cal.Year().Get(), 4) + "-" + pad(dp.Cal.Month().Get(), 2) + "-" + pad(dp.Cal.Day().Get(), 2)
 }
 
 // PopoverBounds is the Rect the Calendar occupies when Open: same X and full
@@ -90,7 +109,7 @@ func (dp *DatePicker) Draw(p painter.Painter, theme *Theme) {
 	textY := r.Y + (r.H-dp.glyphHeight())/2
 	dp.drawText(p, r.X+scaled(datePickerPadX), textY, dp.Text(), theme.OnSurface)
 	dp.drawIcon(p, r, theme)
-	if dp.Open {
+	if dp.Open().Get() {
 		dp.Cal.SetBounds(dp.PopoverBounds())
 		dp.Cal.Draw(p, theme)
 	}
@@ -114,13 +133,13 @@ func (dp *DatePicker) drawIcon(p painter.Painter, r Rect, theme *Theme) {
 
 // OnEvent: a click on the field toggles the popup; while open, a click inside
 // the popup is forwarded (translated to Calendar-local coordinates) to the
-// Calendar, whose OnSelect closes the popup and fires OnChange.
+// Calendar, whose Day Observable change closes the popup (see NewDatePicker).
 func (dp *DatePicker) OnEvent(ev Event) {
 	if ev.Kind != EventClick {
 		return
 	}
 	r := dp.Bounds()
-	if dp.Open {
+	if dp.Open().Get() {
 		pb := dp.PopoverBounds()
 		// The event arrives widget-local (relative to the field's top-left);
 		// re-base it into the Calendar's own coordinate frame.
@@ -134,7 +153,7 @@ func (dp *DatePicker) OnEvent(ev Event) {
 	}
 	// A click on the field itself toggles the popup.
 	if ev.X >= 0 && ev.X < r.W && ev.Y >= 0 && ev.Y < r.H {
-		dp.Open = !dp.Open
+		dp.Open().Set(!dp.Open().Get())
 	}
 }
 

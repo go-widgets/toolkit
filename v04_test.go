@@ -306,20 +306,20 @@ func TestCalendarDraw(t *testing.T) {
 
 func TestCalendarClampMonth(t *testing.T) {
 	c := NewCalendar(2026, 0, 1)
-	if c.Month != 1 {
-		t.Fatalf("month=0 must clamp to 1, got %d", c.Month)
+	if c.Month().Get() != 1 {
+		t.Fatalf("month=0 must clamp to 1, got %d", c.Month().Get())
 	}
 	c = NewCalendar(2026, 13, 1)
-	if c.Month != 12 {
-		t.Fatalf("month=13 must clamp to 12, got %d", c.Month)
+	if c.Month().Get() != 12 {
+		t.Fatalf("month=13 must clamp to 12, got %d", c.Month().Get())
 	}
 	c = NewCalendar(2026, 6, 0)
-	if c.Day != 1 {
-		t.Fatalf("day=0 must clamp to 1, got %d", c.Day)
+	if c.Day().Get() != 1 {
+		t.Fatalf("day=0 must clamp to 1, got %d", c.Day().Get())
 	}
 	c = NewCalendar(2026, 6, 99)
-	if c.Day != 30 {
-		t.Fatalf("day=99 must clamp to 30, got %d", c.Day)
+	if c.Day().Get() != 30 {
+		t.Fatalf("day=99 must clamp to 30, got %d", c.Day().Get())
 	}
 }
 
@@ -359,21 +359,21 @@ func TestCalendarWeekday(t *testing.T) {
 }
 
 func TestCalendarSelect(t *testing.T) {
-	c := NewCalendar(2026, 6, 1)
+	c := NewCalendar(2026, 6, 2) // start off day 1 so a day-1 click is a real change
 	var got int
-	c.OnSelect = func(y, m, d int) { got = d }
+	c.Day().Subscribe(func(d int) { got = d })
 	c.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
 	// June 2026 first = Mon -> col 0 row 0. Click the 1st cell.
 	gridY := CalendarHeaderH + GlyphHeight() + 4
 	c.OnEvent(Event{Kind: EventClick, X: 0, Y: gridY + 2})
-	if got != 1 {
-		t.Fatalf("want day=1, got %d", got)
+	if got != 1 || c.Day().Get() != 1 {
+		t.Fatalf("want day=1, got got=%d Day=%d", got, c.Day().Get())
 	}
-	// Click outside the grid (above): no-op.
+	// Click outside the grid (above): no-op (Day unchanged, no notify).
 	got = 0
 	c.OnEvent(Event{Kind: EventClick, X: 0, Y: 5})
-	if got != 0 {
-		t.Fatal("click in header must not fire OnSelect")
+	if got != 0 || c.Day().Get() != 1 {
+		t.Fatal("click in header must not select a day")
 	}
 	// Click on a column out of range: no-op.
 	c.OnEvent(Event{Kind: EventClick, X: 99999, Y: gridY + 2})
@@ -382,7 +382,7 @@ func TestCalendarSelect(t *testing.T) {
 	// gap: 2025-11 starts on Sat (col 5) so clicking col 0 should
 	// fall in the gap).
 	c2 := NewCalendar(2025, 11, 1)
-	c2.OnSelect = func(y, m, d int) { t.Fatalf("gap click must not fire (got d=%d)", d) }
+	c2.Day().Subscribe(func(d int) { t.Fatalf("gap click must not fire (got d=%d)", d) })
 	c2.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
 	c2.OnEvent(Event{Kind: EventClick, X: 0, Y: gridY + 2})
 	// Click well past the last day: no-op.
@@ -392,8 +392,8 @@ func TestCalendarSelect(t *testing.T) {
 func TestCalendarSetDate(t *testing.T) {
 	c := NewCalendar(2026, 1, 1)
 	c.SetDate(2027, 8, 15)
-	if c.Year != 2027 || c.Month != 8 || c.Day != 15 {
-		t.Fatalf("SetDate failed: y=%d m=%d d=%d", c.Year, c.Month, c.Day)
+	if c.Year().Get() != 2027 || c.Month().Get() != 8 || c.Day().Get() != 15 {
+		t.Fatalf("SetDate failed: y=%d m=%d d=%d", c.Year().Get(), c.Month().Get(), c.Day().Get())
 	}
 }
 

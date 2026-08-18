@@ -4,34 +4,72 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Calendar renders a month grid (Mon..Sun columns, up to 6 rows) for
 // a given (Year, Month). The currently-selected day is highlighted;
-// click on a day-cell selects it + fires OnSelect with the absolute
-// (Y, M, D) triple.
+// clicking a day-cell selects it by Setting the [Calendar.Day]
+// Observable (and [Calendar.Year] / [Calendar.Month] when the click lands
+// in an adjacent month), notifying subscribers.
 //
 // Calendar takes no time-source dep; the host must pass it the
 // current year/month/day. A "today" pill can be drawn by setting
 // Today (year/month/day); set to (0, 0, 0) to disable it.
 //
+// The reactive state is MVVM-only: the viewed year / month and the selected
+// day live in unexported Observables exposed via [Calendar.Year],
+// [Calendar.Month] and [Calendar.Day]. A host binds them (Set / Subscribe /
+// two-way); there are no settable Year/Month/Day fields.
+//
 // The header carries prev/next arrows ("<" / ">"): clicking them steps
-// the viewed month (wrapping the year at the Dec/Jan boundary) and fires
-// OnMonthChange with the new (year, month). PrevMonth / NextMonth expose
-// the same navigation programmatically.
+// the viewed month (wrapping the year at the Dec/Jan boundary) by Setting
+// the Year / Month Observables. PrevMonth / NextMonth expose the same
+// navigation programmatically.
 type Calendar struct {
 	Base
 	focusState
-	Year     int
-	Month    int // 1..12
-	Day      int // selected day in [1, daysInMonth]
-	TodayY   int
-	TodayM   int
-	TodayD   int
-	OnSelect func(y, m, d int)
-	// OnMonthChange fires after PrevMonth / NextMonth (or a header-arrow click)
-	// moves the view to a new (year, month). Nil-safe.
-	OnMonthChange func(y, m int)
+	// TodayY / TodayM / TodayD are the set-once "today" pill the calendar
+	// highlights regardless of the viewed (Y/M); (0, 0, 0) disables it. They are
+	// appearance config, not reactive state.
+	TodayY int
+	TodayM int
+	TodayD int
+
+	year  *mvvm.Observable[int]
+	month *mvvm.Observable[int]
+	day   *mvvm.Observable[int]
+}
+
+// Year is the viewed year as a shared [mvvm.Observable]: a host binds it
+// (Set / Subscribe / two-way). There is no settable Year field; prev/next
+// navigation and clicks in an adjacent month Set it.
+func (c *Calendar) Year() *mvvm.Observable[int] {
+	if c.year == nil {
+		c.year = mvvm.NewObservable(0)
+	}
+	return c.year
+}
+
+// Month is the viewed month (1..12) as a shared [mvvm.Observable]: a host binds
+// it. There is no settable Month field; prev/next navigation Sets it.
+func (c *Calendar) Month() *mvvm.Observable[int] {
+	if c.month == nil {
+		c.month = mvvm.NewObservable(0)
+	}
+	return c.month
+}
+
+// Day is the selected day (in [1, daysInMonth]) as a shared [mvvm.Observable]:
+// a host binds it (Set / Subscribe / two-way). There is no settable Day field;
+// a day-click or a keyboard move Sets it, notifying subscribers.
+func (c *Calendar) Day() *mvvm.Observable[int] {
+	if c.day == nil {
+		c.day = mvvm.NewObservable(0)
+	}
+	return c.day
 }
 
 // Sizing.
@@ -46,16 +84,20 @@ const (
 
 // NewCalendar builds a Calendar for the given (year, month, day).
 func NewCalendar(year, month, day int) *Calendar {
-	c := &Calendar{Year: year, Month: month, Day: day}
+	c := &Calendar{}
+	c.year = mvvm.NewObservable(year)
+	c.month = mvvm.NewObservable(month)
+	c.day = mvvm.NewObservable(day)
 	c.clamp()
 	return c
 }
 
-// SetDate moves the calendar to (year, month, day).
+// SetDate moves the calendar to (year, month, day), Setting the Year / Month /
+// Day Observables (notifying subscribers) and re-clamping into legal ranges.
 func (c *Calendar) SetDate(year, month, day int) {
-	c.Year = year
-	c.Month = month
-	c.Day = day
+	c.Year().Set(year)
+	c.Month().Set(month)
+	c.Day().Set(day)
 	c.clamp()
 }
 
@@ -68,50 +110,53 @@ func (c *Calendar) SetToday(y, m, d int) {
 }
 
 // NextMonth advances the view one month, wrapping December to the next
-// January, re-clamps the selected day into the new month, and fires
-// OnMonthChange.
+// January (Setting the Year / Month Observables) and re-clamps the selected day
+// into the new month. Subscribers are notified through the Observables.
 func (c *Calendar) NextMonth() {
-	c.Month++
-	if c.Month > 12 {
-		c.Month = 1
-		c.Year++
+	y, m := c.Year().Get(), c.Month().Get()+1
+	if m > 12 {
+		m = 1
+		y++
 	}
+	c.Year().Set(y)
+	c.Month().Set(m)
 	c.clamp()
-	if c.OnMonthChange != nil {
-		c.OnMonthChange(c.Year, c.Month)
-	}
 }
 
 // PrevMonth steps the view one month back, wrapping January to the previous
-// December, re-clamps the selected day into the new month, and fires
-// OnMonthChange.
+// December (Setting the Year / Month Observables) and re-clamps the selected
+// day into the new month. Subscribers are notified through the Observables.
 func (c *Calendar) PrevMonth() {
-	c.Month--
-	if c.Month < 1 {
-		c.Month = 12
-		c.Year--
+	y, m := c.Year().Get(), c.Month().Get()-1
+	if m < 1 {
+		m = 12
+		y--
 	}
+	c.Year().Set(y)
+	c.Month().Set(m)
 	c.clamp()
-	if c.OnMonthChange != nil {
-		c.OnMonthChange(c.Year, c.Month)
-	}
 }
 
 // clamp keeps the month + day in legal ranges so a malformed payload
-// can't break the layout.
+// can't break the layout; it Sets the Month / Day Observables when a value
+// falls outside its bounds (an unchanged value is a no-op).
 func (c *Calendar) clamp() {
-	if c.Month < 1 {
-		c.Month = 1
-	} else if c.Month > 12 {
-		c.Month = 12
+	m := c.Month().Get()
+	if m < 1 {
+		m = 1
+	} else if m > 12 {
+		m = 12
 	}
-	dim := DaysInMonth(c.Year, c.Month)
-	if c.Day < 1 {
-		c.Day = 1
+	c.Month().Set(m)
+	dim := DaysInMonth(c.Year().Get(), m)
+	d := c.Day().Get()
+	if d < 1 {
+		d = 1
 	}
-	if c.Day > dim {
-		c.Day = dim
+	if d > dim {
+		d = dim
 	}
+	c.Day().Set(d)
 }
 
 // DaysInMonth returns the day count for (year, month).
@@ -170,7 +215,8 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	// Header: month / year, centred, flanked by prev/next arrows.
-	hdr := monthName(c.Month) + " " + itoa(c.Year)
+	year, month, selDay := c.Year().Get(), c.Month().Get(), c.Day().Get()
+	hdr := monthName(month) + " " + itoa(year)
 	hx := r.X + (r.W-c.textWidth(hdr))/2
 	hy := r.Y + (scaled(CalendarHeaderH)-c.glyphHeight())/2
 	c.drawText(p, hx, hy, hdr, theme.OnSurface)
@@ -183,8 +229,8 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 		c.drawText(p, cx, weekdayY+2, label, theme.OnSurface)
 	}
 	// Day grid.
-	first := WeekdayOfFirst(c.Year, c.Month)
-	dim := DaysInMonth(c.Year, c.Month)
+	first := WeekdayOfFirst(year, month)
+	dim := DaysInMonth(year, month)
 	gridY := weekdayY + c.glyphHeight() + 4
 	for d := 1; d <= dim; d++ {
 		idx := first + d - 1
@@ -194,8 +240,8 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 		cy := gridY + row*scaled(CalendarCellH)
 		bg := theme.Surface
 		ink := theme.OnSurface
-		isToday := (c.TodayY == c.Year && c.TodayM == c.Month && c.TodayD == d)
-		if d == c.Day {
+		isToday := (c.TodayY == year && c.TodayM == month && c.TodayD == d)
+		if d == selDay {
 			bg = theme.Accent
 			ink = theme.Background
 		} else if isToday {
@@ -214,7 +260,7 @@ func (c *Calendar) Draw(p painter.Painter, theme *Theme) {
 }
 
 // OnEvent dispatches a header-arrow click to Prev/NextMonth and a day-cell
-// click to OnSelect.
+// click to the Day Observable (Setting the selected day).
 func (c *Calendar) OnEvent(ev Event) {
 	if ev.Kind == EventKeyDown {
 		c.onKey(ev.Code)
@@ -242,27 +288,25 @@ func (c *Calendar) OnEvent(ev Event) {
 		return
 	}
 	row := (ev.Y - gridY) / scaled(CalendarCellH)
-	first := WeekdayOfFirst(c.Year, c.Month)
+	first := WeekdayOfFirst(c.Year().Get(), c.Month().Get())
 	idx := row*7 + col
 	if idx < first {
 		return
 	}
 	d := idx - first + 1
-	dim := DaysInMonth(c.Year, c.Month)
+	dim := DaysInMonth(c.Year().Get(), c.Month().Get())
 	if d < 1 || d > dim {
 		return
 	}
-	c.Day = d
-	c.commitSelect()
+	c.Day().Set(d)
 }
 
 // onKey drives the calendar from the keyboard while focused. Left/Right move the
-// day cursor by one, Up/Down by a week; Home/End jump to the first/last day of
-// the month; PageUp/PageDown step the viewed month (reusing Prev/NextMonth, so
-// OnMonthChange fires exactly as a header-arrow click would); Enter or Space
-// selects the day the cursor sits on (firing OnSelect like a day click). Cursor
-// moves stay within the month and do not fire OnSelect -- selection is the
-// explicit Enter/Space commit. A disabled calendar ignores every key.
+// selected day by one, Up/Down by a week; Home/End jump to the first/last day of
+// the month; PageUp/PageDown step the viewed month (reusing Prev/NextMonth). In
+// the MVVM model the selection IS the [Calendar.Day] Observable, so every move
+// Sets it and notifies subscribers -- there is no separate Enter/Space commit.
+// A disabled calendar ignores every key.
 func (c *Calendar) onKey(code string) {
 	if c.Disabled {
 		return
@@ -277,37 +321,27 @@ func (c *Calendar) onKey(code string) {
 	case "ArrowDown":
 		c.moveDay(+7)
 	case "Home":
-		c.moveDay(-c.Day + 1) // first of month
+		c.moveDay(-c.Day().Get() + 1) // first of month
 	case "End":
-		c.moveDay(DaysInMonth(c.Year, c.Month) - c.Day) // last of month
+		c.moveDay(DaysInMonth(c.Year().Get(), c.Month().Get()) - c.Day().Get()) // last of month
 	case "PageUp":
 		c.PrevMonth()
 	case "PageDown":
 		c.NextMonth()
-	case "Enter", " ", "Space":
-		c.commitSelect()
 	}
 }
 
-// moveDay shifts the day cursor by delta, clamped to [1, days-in-month], without
-// firing OnSelect (arrow navigation previews; Enter/Space commits).
+// moveDay shifts the selected day by delta, clamped to [1, days-in-month], and
+// Sets the Day Observable (notifying subscribers on change).
 func (c *Calendar) moveDay(delta int) {
-	d := c.Day + delta
+	d := c.Day().Get() + delta
 	if d < 1 {
 		d = 1
 	}
-	if dim := DaysInMonth(c.Year, c.Month); d > dim {
+	if dim := DaysInMonth(c.Year().Get(), c.Month().Get()); d > dim {
 		d = dim
 	}
-	c.Day = d
-}
-
-// commitSelect fires OnSelect (nil-safe) for the currently-highlighted day --
-// the shared callback path for a day click and an Enter/Space key press.
-func (c *Calendar) commitSelect() {
-	if c.OnSelect != nil {
-		c.OnSelect(c.Year, c.Month, c.Day)
-	}
+	c.Day().Set(d)
 }
 
 var weekdayLabels = [7]string{"M", "T", "W", "T", "F", "S", "S"}

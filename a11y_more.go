@@ -464,14 +464,14 @@ func (o *Overlay) A11y() A11yInfo {
 
 // A11y reports the Calendar as a grid carrying its selected date.
 func (c *Calendar) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGrid, Value: isoDate(c.Year, c.Month, c.Day)}
+	return A11yInfo{Role: RoleGrid, Value: isoDate(c.Year().Get(), c.Month().Get(), c.Day().Get())}
 }
 
 // A11y reports the DatePicker as a group carrying its selected date.
 func (d *DatePicker) A11y() A11yInfo {
 	v := ""
 	if d.Cal != nil {
-		v = isoDate(d.Cal.Year, d.Cal.Month, d.Cal.Day)
+		v = isoDate(d.Cal.Year().Get(), d.Cal.Month().Get(), d.Cal.Day().Get())
 	}
 	return A11yInfo{Role: RoleGroup, Value: v}
 }
