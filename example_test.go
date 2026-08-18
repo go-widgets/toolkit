@@ -50,7 +50,10 @@ func ExampleMarkdownView() {
 // ExampleDatePicker shows a date field with a drop-down calendar.
 func ExampleDatePicker() {
 	dp := toolkit.NewDatePicker(2026, 7, 10)
-	dp.OnChange = func(y, m, d int) { fmt.Printf("picked %04d-%02d-%02d\n", y, m, d) }
+	// A host observes the picked date through the embedded Calendar's accessors.
+	dp.Cal.Day().Subscribe(func(d int) {
+		fmt.Printf("picked %04d-%02d-%02d\n", dp.Cal.Year().Get(), dp.Cal.Month().Get(), d)
+	})
 	dp.SetBounds(toolkit.Rect{X: 0, Y: 0, W: 170, H: toolkit.DatePickerFieldH()})
 	fmt.Println(dp.Text())
 	// Output: 2026-07-10

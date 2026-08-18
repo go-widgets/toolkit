@@ -155,8 +155,8 @@ func TestDateRangePickerMonthNav(t *testing.T) {
 
 	// Prev arrow: July -> June (no wrap).
 	rp.OnEvent(Event{Kind: EventClick, X: CalendarCellW / 2, Y: CalendarHeaderH / 2})
-	if rp.Cal.Month != 6 || rp.Cal.Year != 2026 {
-		t.Fatalf("after prev: %d-%d, want 2026-6", rp.Cal.Year, rp.Cal.Month)
+	if rp.Cal.Month().Get() != 6 || rp.Cal.Year().Get() != 2026 {
+		t.Fatalf("after prev: %d-%d, want 2026-6", rp.Cal.Year().Get(), rp.Cal.Month().Get())
 	}
 	if rp.Start != start || !rp.End.isZero() {
 		t.Fatalf("nav disturbed selection: Start=%+v End=%+v", rp.Start, rp.End)
@@ -166,27 +166,27 @@ func TestDateRangePickerMonthNav(t *testing.T) {
 	r := rp.Bounds()
 	rp.OnEvent(Event{Kind: EventClick, X: r.W - 1, Y: CalendarHeaderH / 2})
 	rp.OnEvent(Event{Kind: EventClick, X: r.W - 1, Y: CalendarHeaderH / 2})
-	if rp.Cal.Month != 8 || rp.Cal.Year != 2026 {
-		t.Fatalf("after two next: %d-%d, want 2026-8", rp.Cal.Year, rp.Cal.Month)
+	if rp.Cal.Month().Get() != 8 || rp.Cal.Year().Get() != 2026 {
+		t.Fatalf("after two next: %d-%d, want 2026-8", rp.Cal.Year().Get(), rp.Cal.Month().Get())
 	}
 
 	// Middle-of-header click is a no-op.
 	rp.OnEvent(Event{Kind: EventClick, X: r.W / 2, Y: CalendarHeaderH / 2})
-	if rp.Cal.Month != 8 {
-		t.Fatalf("header middle click changed month to %d", rp.Cal.Month)
+	if rp.Cal.Month().Get() != 8 {
+		t.Fatalf("header middle click changed month to %d", rp.Cal.Month().Get())
 	}
 
 	// Prev wrap: January -> December of the previous year.
-	rp.Cal.Month = 1
+	rp.Cal.Month().Set(1)
 	rp.OnEvent(Event{Kind: EventClick, X: CalendarCellW / 2, Y: CalendarHeaderH / 2})
-	if rp.Cal.Month != 12 || rp.Cal.Year != 2025 {
-		t.Fatalf("after prev wrap: %d-%d, want 2025-12", rp.Cal.Year, rp.Cal.Month)
+	if rp.Cal.Month().Get() != 12 || rp.Cal.Year().Get() != 2025 {
+		t.Fatalf("after prev wrap: %d-%d, want 2025-12", rp.Cal.Year().Get(), rp.Cal.Month().Get())
 	}
 
 	// Next wrap: December -> January of the next year.
 	rp.OnEvent(Event{Kind: EventClick, X: r.W - 1, Y: CalendarHeaderH / 2})
-	if rp.Cal.Month != 1 || rp.Cal.Year != 2026 {
-		t.Fatalf("after next wrap: %d-%d, want 2026-1", rp.Cal.Year, rp.Cal.Month)
+	if rp.Cal.Month().Get() != 1 || rp.Cal.Year().Get() != 2026 {
+		t.Fatalf("after next wrap: %d-%d, want 2026-1", rp.Cal.Year().Get(), rp.Cal.Month().Get())
 	}
 }
 
