@@ -38,6 +38,9 @@ type ScrollView struct {
 	velX, velY float64
 	// flinging reports whether the view is coasting after a release.
 	flinging bool
+	// driver, when set, is whatever owns this view's touch scrolling; the
+	// view then does not pan or fling on its own. See SetScrollDriver.
+	driver any
 }
 
 // contentPan is a drag of the scrolled content — the gesture that scrolls a
@@ -245,7 +248,7 @@ func (s *ScrollView) OnEvent(ev Event) {
 		// Neither scrollbar wanted the press, so it landed on the content:
 		// begin a pan. The content area is otherwise passive for clicks, so
 		// this takes nothing away from anything else.
-		if s.viewport().Contains(ev.X, ev.Y) {
+		if !s.ScrollDriven() && s.viewport().Contains(ev.X, ev.Y) {
 			// Catching a coasting view stops it dead, the way putting a
 			// finger on a spinning record does.
 			s.stopFling()
@@ -388,7 +391,7 @@ const (
 // host hands to a tick. So a drag accumulates pixels, and each tick converts
 // the pixels since the previous one into pixels per second.
 func (s *ScrollView) Tick(dt float64) {
-	if dt <= 0 {
+	if dt <= 0 || s.ScrollDriven() {
 		return
 	}
 	if s.pan.active {
@@ -452,4 +455,29 @@ func maxInt(a, b int) int {
 		return a
 	}
 	return b
+}
+
+// ScrollDriven reports whether something else owns this view's scrolling.
+//
+// A [MomentumScroller] wrapping a ScrollView consumes the same drag the view's
+// own content pan does, and a host has to deliver those events to the widget
+// tree anyway — buttons and lists need them. So without this the gesture lands
+// twice and the view scrolls at double speed: one 30-pixel drag sample moved a
+// wrapped view 60 pixels.
+//
+// A driven view therefore stands down: it neither pans nor flings on its own,
+// and leaves OffsetX/OffsetY entirely to its driver. Everything else — wheel,
+// arrow and page keys, scrollbar thumbs — keeps working, because those are not
+// what the driver consumes.
+func (s *ScrollView) ScrollDriven() bool { return s.driver != nil }
+
+// SetScrollDriver hands this view's touch scrolling to driver, or takes it back
+// when driver is nil. [NewMomentumScroller] calls it, so wrapping a view is all
+// a caller has to do.
+func (s *ScrollView) SetScrollDriver(driver any) {
+	s.driver = driver
+	if driver != nil {
+		s.pan.release()
+		s.stopFling()
+	}
 }
