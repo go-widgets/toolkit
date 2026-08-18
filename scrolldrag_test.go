@@ -145,21 +145,21 @@ func TestListBoxScrollbarDragPagesAndSelects(t *testing.T) {
 	// Geometry: visibleRows=4, contentH=360, max=16, thumbH=10, thumb [0,10).
 	trackX := 100 - scrollbarWidth // 88
 
-	before := l.ScrollRow
+	before := l.ScrollRow().Get()
 	l.OnEvent(Event{Kind: EventClick, X: trackX + 3, Y: 3})
 	if !l.sbDrag.active {
 		t.Fatal("pressing the thumb should begin a drag")
 	}
 	l.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 3, Y: 30})
-	if l.ScrollRow != 9 { // (27*16+25)/50 = 9.14 -> 9
-		t.Fatalf("mid drag ScrollRow = %d, want 9", l.ScrollRow)
+	if l.ScrollRow().Get() != 9 { // (27*16+25)/50 = 9.14 -> 9
+		t.Fatalf("mid drag ScrollRow = %d, want 9", l.ScrollRow().Get())
 	}
-	if !(l.ScrollRow > before && l.ScrollRow < 16) {
-		t.Fatalf("mid drag ScrollRow = %d, want strictly between %d and 16", l.ScrollRow, before)
+	if !(l.ScrollRow().Get() > before && l.ScrollRow().Get() < 16) {
+		t.Fatalf("mid drag ScrollRow = %d, want strictly between %d and 16", l.ScrollRow().Get(), before)
 	}
 	l.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 3, Y: 60})
-	if l.ScrollRow != 16 {
-		t.Fatalf("drag past the end ScrollRow = %d, want 16 (clamped)", l.ScrollRow)
+	if l.ScrollRow().Get() != 16 {
+		t.Fatalf("drag past the end ScrollRow = %d, want 16 (clamped)", l.ScrollRow().Get())
 	}
 	l.OnEvent(Event{Kind: EventMouseUp})
 	if l.sbDrag.active {
@@ -169,8 +169,8 @@ func TestListBoxScrollbarDragPagesAndSelects(t *testing.T) {
 	// Track press below the thumb pages down.
 	l.ScrollTo(0)
 	l.OnEvent(Event{Kind: EventClick, X: trackX + 3, Y: 40})
-	if l.ScrollRow != 4 {
-		t.Fatalf("page-down ScrollRow = %d, want 4", l.ScrollRow)
+	if l.ScrollRow().Get() != 4 {
+		t.Fatalf("page-down ScrollRow = %d, want 4", l.ScrollRow().Get())
 	}
 
 	// A press left of the scrollbar still selects a row.
@@ -180,8 +180,8 @@ func TestListBoxScrollbarDragPagesAndSelects(t *testing.T) {
 	if l.Selected().Get() != 1 {
 		t.Fatalf("content press should select row 1, got %d", l.Selected().Get())
 	}
-	if l.ScrollRow != 0 {
-		t.Fatalf("selecting must not scroll: ScrollRow = %d, want 0", l.ScrollRow)
+	if l.ScrollRow().Get() != 0 {
+		t.Fatalf("selecting must not scroll: ScrollRow = %d, want 0", l.ScrollRow().Get())
 	}
 }
 
@@ -197,8 +197,8 @@ func TestListBoxScrollbarNoTravelWhenBarelyOverflowing(t *testing.T) {
 	trackX := 100 - scrollbarWidth
 	l.OnEvent(Event{Kind: EventClick, X: trackX + 3, Y: 2}) // grab the immovable thumb
 	l.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 3, Y: 18})
-	if l.ScrollRow != 0 {
-		t.Fatalf("an immovable thumb must keep ScrollRow at 0, got %d", l.ScrollRow)
+	if l.ScrollRow().Get() != 0 {
+		t.Fatalf("an immovable thumb must keep ScrollRow at 0, got %d", l.ScrollRow().Get())
 	}
 	l.OnEvent(Event{Kind: EventMouseUp})
 }

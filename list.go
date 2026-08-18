@@ -87,13 +87,15 @@ type ListBox struct {
 	// Nil-guarded; never called while Reorderable is false.
 	OnReorder func(from, to int)
 
-	// ScrollRow is the index of the row painted at the very top of the
-	// widget's bounds. Reads through Draw/OnEvent are clamped to
-	// [0, maxScrollRow()] on the fly (see clampedScrollRow), so setting
-	// this directly to an out-of-range value is safe -- it just behaves
-	// as whichever in-range value it clamps to. Prefer ScrollTo/ScrollBy,
-	// which clamp + write back immediately.
-	ScrollRow int
+	// scrollRow is the index of the row painted at the very top of the
+	// widget's bounds. The reactive scroll position is MVVM-only: it lives in
+	// an unexported Observable exposed via [ListBox.ScrollRow]; there is no
+	// settable ScrollRow field. Reads through Draw/OnEvent are clamped to
+	// [0, maxScrollRow()] on the fly (see clampedScrollRow), so Setting it
+	// directly to an out-of-range value is safe -- it just behaves as
+	// whichever in-range value it clamps to. Prefer ScrollTo/ScrollBy, which
+	// clamp + write back immediately.
+	scrollRow *mvvm.Observable[int]
 
 	// selected holds the multi-selection set. Only consulted for
 	// rendering/queries when MultiSelect is true, but the mutator
@@ -126,6 +128,7 @@ func NewListBox(items []string) *ListBox {
 	return &ListBox{
 		Items:         items,
 		selectedRow:   mvvm.NewObservable(-1),
+		scrollRow:     mvvm.NewObservable(0),
 		RowHeight:     scaled(18),
 		pressedRow:    -1,
 		dropIndicator: -1,
@@ -141,6 +144,18 @@ func (l *ListBox) Selected() *mvvm.Observable[int] {
 		l.selectedRow = mvvm.NewObservable(0)
 	}
 	return l.selectedRow
+}
+
+// ScrollRow is the index of the top visible row as a shared [mvvm.Observable]:
+// a host binds it (Set / Subscribe / two-way) — there is no settable ScrollRow
+// field. A wheel scroll, an arrow-key scroll-into-view, or a scrollbar drag
+// Sets it (always clamped, see ScrollTo/ScrollBy); Draw reads it back. A bare
+// &ListBox{} lazy-inits the observable to 0; NewListBox seeds it to 0 too.
+func (l *ListBox) ScrollRow() *mvvm.Observable[int] {
+	if l.scrollRow == nil {
+		l.scrollRow = mvvm.NewObservable(0)
+	}
+	return l.scrollRow
 }
 
 // rowHeight is the effective per-row pixel height used for every layout and
@@ -327,7 +342,7 @@ func (l *ListBox) maxScrollRow() int {
 // directly, or left stale after Items shrank) never paints or
 // hit-tests outside the valid window.
 func (l *ListBox) clampedScrollRow() int {
-	s := l.ScrollRow
+	s := l.ScrollRow().Get()
 	if s < 0 {
 		s = 0
 	}
@@ -341,14 +356,14 @@ func (l *ListBox) clampedScrollRow() int {
 // [0, maxScrollRow()], and writes the clamped value back to
 // ScrollRow.
 func (l *ListBox) ScrollTo(row int) {
-	l.ScrollRow = row
-	l.ScrollRow = l.clampedScrollRow()
+	l.ScrollRow().Set(row)
+	l.ScrollRow().Set(l.clampedScrollRow())
 }
 
 // ScrollBy shifts ScrollRow by delta rows (negative scrolls up),
 // clamped exactly like ScrollTo.
 func (l *ListBox) ScrollBy(delta int) {
-	l.ScrollTo(l.ScrollRow + delta)
+	l.ScrollTo(l.ScrollRow().Get() + delta)
 }
 
 // scrollToSelected nudges ScrollRow so Selected stays within the
@@ -365,7 +380,7 @@ func (l *ListBox) scrollToSelected() {
 	if sel < 0 {
 		return
 	}
-	if sel < l.ScrollRow {
+	if sel < l.ScrollRow().Get() {
 		l.ScrollTo(sel)
 		return
 	}
@@ -373,7 +388,7 @@ func (l *ListBox) scrollToSelected() {
 	if vr <= 0 {
 		return
 	}
-	if sel >= l.ScrollRow+vr {
+	if sel >= l.ScrollRow().Get()+vr {
 		l.ScrollTo(sel - vr + 1)
 	}
 }

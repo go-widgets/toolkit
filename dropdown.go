@@ -296,7 +296,7 @@ func (d *DropDown) DrawPopover(p painter.Painter, theme *Theme) {
 	// scrolling so options beyond PopoverMaxRows are painted (and a scrollbar
 	// appears) when the popover is scrolled. At popScroll == 0 this is
 	// byte-identical to an unscrolled list.
-	lb.ScrollRow = d.clampedPopScroll()
+	lb.ScrollRow().Set(d.clampedPopScroll())
 	lb.SetBounds(d.PopoverBounds())
 	lb.Draw(p, theme)
 }

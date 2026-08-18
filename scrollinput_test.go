@@ -35,18 +35,18 @@ func TestListBoxWheelScroll(t *testing.T) {
 	}
 
 	lb.OnEvent(Event{Kind: EventScroll, Delta: 2})
-	if lb.ScrollRow != 2 {
-		t.Fatalf("wheel down 2: ScrollRow=%d, want 2", lb.ScrollRow)
+	if lb.ScrollRow().Get() != 2 {
+		t.Fatalf("wheel down 2: ScrollRow=%d, want 2", lb.ScrollRow().Get())
 	}
 	// Clamp at the bottom: an over-large delta pins to maxScrollRow.
 	lb.OnEvent(Event{Kind: EventScroll, Delta: 1000})
-	if lb.ScrollRow != max {
-		t.Fatalf("wheel to end: ScrollRow=%d, want %d", lb.ScrollRow, max)
+	if lb.ScrollRow().Get() != max {
+		t.Fatalf("wheel to end: ScrollRow=%d, want %d", lb.ScrollRow().Get(), max)
 	}
 	// Clamp at the top: can't go negative.
 	lb.OnEvent(Event{Kind: EventScroll, Delta: -1000})
-	if lb.ScrollRow != 0 {
-		t.Fatalf("wheel to top: ScrollRow=%d, want 0", lb.ScrollRow)
+	if lb.ScrollRow().Get() != 0 {
+		t.Fatalf("wheel to top: ScrollRow=%d, want 0", lb.ScrollRow().Get())
 	}
 }
 
@@ -276,8 +276,8 @@ func TestContainerForwardsScrollToChildUnderPointer(t *testing.T) {
 	// A wheel event at a point inside the container (container-local coords)
 	// must reach the ListBox and scroll it.
 	c.OnEvent(Event{Kind: EventScroll, X: 30, Y: 30, Delta: 3})
-	if lb.ScrollRow != 3 {
-		t.Fatalf("container did not forward EventScroll: ListBox ScrollRow=%d, want 3", lb.ScrollRow)
+	if lb.ScrollRow().Get() != 3 {
+		t.Fatalf("container did not forward EventScroll: ListBox ScrollRow=%d, want 3", lb.ScrollRow().Get())
 	}
 }
 
@@ -294,7 +294,7 @@ func TestVBoxForwardsScrollToChildUnderPointer(t *testing.T) {
 	if bottom.ScrollRow != 2 {
 		t.Fatalf("VBox forwarded to wrong child: TreeTable ScrollRow=%d, want 2", bottom.ScrollRow)
 	}
-	if top.ScrollRow != 0 {
-		t.Fatalf("ListBox should not have scrolled: %d", top.ScrollRow)
+	if top.ScrollRow().Get() != 0 {
+		t.Fatalf("ListBox should not have scrolled: %d", top.ScrollRow().Get())
 	}
 }
