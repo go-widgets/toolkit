@@ -161,18 +161,18 @@ func TestCarouselOnChangeClampNoFireAndNilSafe(t *testing.T) {
 	}
 }
 
-// --- CycleButton.OnChangeIndex ------------------------------------------------
+// --- CycleButton.Index Observable ---------------------------------------------
 
-func TestCycleButtonOnChangeIndexFires(t *testing.T) {
+func TestCycleButtonIndexObservableFires(t *testing.T) {
 	c := NewCycleButton("List", "Grid", "Compact")
 	var got, calls int
 	got = -1
-	c.OnChangeIndex = func(i int) { got, calls = i, calls+1 }
+	c.Index().Subscribe(func(i int) { got, calls = i, calls+1 })
 	c.OnEvent(Event{Kind: EventClick}) // List -> Grid
-	if c.Index != 1 || got != 1 || calls != 1 {
-		t.Fatalf("after click: Index=%d got=%d calls=%d, want 1/1/1", c.Index, got, calls)
+	if c.Index().Get() != 1 || got != 1 || calls != 1 {
+		t.Fatalf("after click: Index=%d got=%d calls=%d, want 1/1/1", c.Index().Get(), got, calls)
 	}
-	// Both slots fire together; ArrowLeft steps back and reports index 0.
+	// ArrowLeft steps back and notifies the subscriber with index 0.
 	c.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
 	if got != 0 || calls != 2 {
 		t.Fatalf("after ArrowLeft: got=%d calls=%d, want 0/2", got, calls)

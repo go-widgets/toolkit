@@ -43,8 +43,8 @@ func (t *TagField) A11y() A11yInfo {
 // (the value that advances on each click), or "" when it has no options.
 func (c *CycleButton) A11y() A11yInfo {
 	name := ""
-	if c.Index >= 0 && c.Index < len(c.Options) {
-		name = c.Options[c.Index]
+	if i := c.Index().Get(); i >= 0 && i < len(c.Options) {
+		name = c.Options[i]
 	}
 	return A11yInfo{Role: RoleButton, Name: name}
 }
