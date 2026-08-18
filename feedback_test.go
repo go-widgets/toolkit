@@ -345,11 +345,11 @@ func TestSpinButtonStepZeroClampsToOne(t *testing.T) {
 func TestSpinButtonSetValueClamps(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetValue(-5)
-	if s.Value != 0 {
+	if s.Value().Get() != 0 {
 		t.Fatal("low clamp")
 	}
 	s.SetValue(50)
-	if s.Value != 10 {
+	if s.Value().Get() != 10 {
 		t.Fatal("high clamp")
 	}
 }
@@ -357,12 +357,12 @@ func TestSpinButtonSetValueClamps(t *testing.T) {
 func TestSpinButtonClickPlusIncrements(t *testing.T) {
 	got := -1
 	s := NewSpinButton(0, 10, 5, 2)
-	s.OnChange = func(v int) { got = v }
+	s.Value().Subscribe(func(v int) { got = v })
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
 	// Click on the upper button: x in [60-16, 60), y < 12.
 	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 4})
-	if s.Value != 7 || got != 7 {
-		t.Fatalf("after +: Value=%d got=%d", s.Value, got)
+	if s.Value().Get() != 7 || got != 7 {
+		t.Fatalf("after +: Value=%d got=%d", s.Value().Get(), got)
 	}
 }
 
@@ -370,8 +370,8 @@ func TestSpinButtonClickMinusDecrements(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 2)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
 	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 20})
-	if s.Value != 3 {
-		t.Fatalf("after -: Value=%d", s.Value)
+	if s.Value().Get() != 3 {
+		t.Fatalf("after -: Value=%d", s.Value().Get())
 	}
 }
 
@@ -379,7 +379,7 @@ func TestSpinButtonBodyClickNoOp(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
 	s.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
-	if s.Value != 5 {
+	if s.Value().Get() != 5 {
 		t.Fatal("body click must not change value")
 	}
 }
@@ -388,15 +388,32 @@ func TestSpinButtonIgnoresNonClick(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Up"})
-	if s.Value != 5 {
+	if s.Value().Get() != 5 {
 		t.Fatal("KeyDown should not change value")
 	}
 }
 
-func TestSpinButtonNilCallbackNoPanic(t *testing.T) {
+func TestSpinButtonNoSubscriberNoPanic(t *testing.T) {
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 24})
-	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 4})
+	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 4}) // no Observable subscriber attached
+}
+
+// TestSpinButtonValueObservable covers the zero-value lazy-init of the Value
+// accessor and the host binding path: a SpinButton built as a bare struct (no
+// NewSpinButton) still yields a usable Observable, and Setting it from outside
+// is reflected by the widget (there is no imperative Value field).
+func TestSpinButtonValueObservable(t *testing.T) {
+	s := &SpinButton{Max: 10} // no NewSpinButton → value Observable is nil until accessed
+	if s.Value().Get() != 0 {
+		t.Fatalf("zero-value SpinButton Value = %d, want 0", s.Value().Get())
+	}
+	seen := -1
+	s.Value().Subscribe(func(v int) { seen = v })
+	s.Value().Set(7) // a host drives the spinbutton through the Observable
+	if s.Value().Get() != 7 || seen != 7 {
+		t.Fatalf("host Set: value=%d subscriber=%d, want 7/7", s.Value().Get(), seen)
+	}
 }
 
 func TestSpinButtonDraw(t *testing.T) {

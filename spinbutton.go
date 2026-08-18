@@ -4,21 +4,39 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"strconv"
 
-import "strconv"
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // SpinButton is an integer input with `+` and `−` buttons on the
 // right. Click `+` adds Step, click `−` subtracts Step (clamped to
 // [Min, Max]). The value is rendered as a decimal string in the left
 // portion of the body.
+//
+// Min, Max and Step are config; the reactive value is MVVM-only: it lives in an
+// unexported Observable exposed via [SpinButton.Value]. A host binds it (Set /
+// Subscribe / two-way) — there is no settable Value field. A +/− click or a
+// stepper key Sets it (clamped to [Min, Max]); subscribers are notified.
 type SpinButton struct {
 	Base
 	focusState
 	Min, Max int
-	Value    int
 	Step     int
-	OnChange func(v int)
+
+	value *mvvm.Observable[int]
+}
+
+// Value is the current value as a shared [mvvm.Observable]: a host binds it
+// (Set / Subscribe / two-way) — there is no settable Value field. A +/− click
+// or a stepper key Sets it (clamped to [Min, Max]); subscribers are notified.
+func (s *SpinButton) Value() *mvvm.Observable[int] {
+	if s.value == nil {
+		s.value = mvvm.NewObservable(0)
+	}
+	return s.value
 }
 
 // spinButtonW is the pixel width of each up/down button on the right.
@@ -37,11 +55,14 @@ func NewSpinButton(min, max, initial, step int) *SpinButton {
 		step = 1
 	}
 	s := &SpinButton{Min: min, Max: max, Step: step}
+	s.value = mvvm.NewObservable(0)
 	s.SetValue(initial)
 	return s
 }
 
-// SetValue clamps + assigns.
+// SetValue clamps v to [Min, Max] and Sets the Value Observable — the shared
+// mutate path for a +/− button click and every stepper key. Subscribers are
+// notified on change (an unchanged value is a no-op, per mvvm.Observable).
 func (s *SpinButton) SetValue(v int) {
 	if v < s.Min {
 		v = s.Min
@@ -49,7 +70,7 @@ func (s *SpinButton) SetValue(v int) {
 	if v > s.Max {
 		v = s.Max
 	}
-	s.Value = v
+	s.Value().Set(v)
 }
 
 // Draw paints the body (with the value text) + the two stacked
@@ -66,7 +87,7 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, bodyC)
 	strokeRect(p, r.X, r.Y, r.W, r.H, borderC)
 	// Value text in the left portion.
-	text := strconv.Itoa(s.Value)
+	text := strconv.Itoa(s.Value().Get())
 	textY := r.Y + (r.H-s.glyphHeight())/2
 	s.drawText(p, r.X+scaled(spinTextPad), textY, text, textC)
 	// Two buttons on the right, vertically stacked.
@@ -98,20 +119,20 @@ func (s *SpinButton) OnEvent(ev Event) {
 	}
 	if ev.Kind == EventKeyDown {
 		// Up/Down step by Step (like the +/- buttons); PageUp/PageDown by a large
-		// step (10x); Home/End jump to Min/Max. Each reuses SetValue+OnChange.
+		// step (10x); Home/End jump to Min/Max. Each reuses SetValue.
 		switch ev.Code {
 		case "ArrowUp":
-			s.apply(s.Value + s.Step)
+			s.SetValue(s.Value().Get() + s.Step)
 		case "ArrowDown":
-			s.apply(s.Value - s.Step)
+			s.SetValue(s.Value().Get() - s.Step)
 		case "PageUp":
-			s.apply(s.Value + 10*s.Step)
+			s.SetValue(s.Value().Get() + 10*s.Step)
 		case "PageDown":
-			s.apply(s.Value - 10*s.Step)
+			s.SetValue(s.Value().Get() - 10*s.Step)
 		case "Home":
-			s.apply(s.Min)
+			s.SetValue(s.Min)
 		case "End":
-			s.apply(s.Max)
+			s.SetValue(s.Max)
 		}
 		return
 	}
@@ -128,17 +149,8 @@ func (s *SpinButton) OnEvent(ev Event) {
 		return // body click: no action in v0.2 (would open keypad)
 	}
 	if ev.Y < r.H/2 {
-		s.apply(s.Value + s.Step)
+		s.SetValue(s.Value().Get() + s.Step)
 	} else {
-		s.apply(s.Value - s.Step)
-	}
-}
-
-// apply clamps + assigns v (via SetValue) and fires OnChange (nil-safe) -- the
-// shared mutate+callback path for a +/- button click and every stepper key.
-func (s *SpinButton) apply(v int) {
-	s.SetValue(v)
-	if s.OnChange != nil {
-		s.OnChange(s.Value)
+		s.SetValue(s.Value().Get() - s.Step)
 	}
 }
