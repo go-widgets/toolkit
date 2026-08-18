@@ -325,7 +325,7 @@ func TestA11yAccordion(t *testing.T) {
 
 func TestA11yCarouselAndWizard(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("1"), NewLabel("2"), NewLabel("3")})
-	c.Current = 1
+	c.Current().Set(1)
 	if got := c.A11y(); got != (A11yInfo{Role: RoleGroup, Value: "2/3"}) {
 		t.Errorf("Carousel A11y() = %+v", got)
 	}

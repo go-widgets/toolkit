@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Carousel shows one child Widget (a "slide") at a time from Slides,
 // picked by Current. A gutter on each side hosts a ◂ / ▸ arrow
@@ -19,15 +22,24 @@ import "github.com/go-widgets/painter"
 type Carousel struct {
 	Base
 	focusState
-	Slides  []Widget
-	Current int
-	Wrap    bool
+	// Slides + Wrap are config. The reactive slide index is MVVM-only: it lives
+	// in an unexported Observable exposed via [Carousel.Current].
+	Slides []Widget
+	Wrap   bool
 
-	// OnChange fires whenever the shown slide (Current) changes through a user
-	// interaction: a gutter-arrow step (Prev/Next), a dot-indicator click, or an
-	// arrow key. i is the new Current index. It runs only when Current actually
-	// changes, so re-selecting the shown slide is silent. Nil is safe.
-	OnChange func(i int)
+	current *mvvm.Observable[int]
+}
+
+// Current is the shown slide index as a shared [mvvm.Observable]: a host binds
+// it (Set / Subscribe / two-way) — there is no settable Current field. A
+// gutter-arrow step (Prev/Next), a dot-indicator click or an arrow key Sets it;
+// subscribers are notified on change (an unchanged value is a no-op, so
+// re-selecting the shown slide is silent).
+func (c *Carousel) Current() *mvvm.Observable[int] {
+	if c.current == nil {
+		c.current = mvvm.NewObservable(0)
+	}
+	return c.current
 }
 
 // Carousel layout constants. carouselGutterW is the pixel width of each
@@ -47,7 +59,9 @@ const (
 // NewCarousel builds a Carousel over slides, starting at Current = 0
 // with Wrap = false (clamp at the ends).
 func NewCarousel(slides []Widget) *Carousel {
-	return &Carousel{Slides: slides}
+	c := &Carousel{Slides: slides}
+	c.current = mvvm.NewObservable(0)
+	return c
 }
 
 // clampCurrent brings Current into [0, len(Slides)-1]. Called before Next /
@@ -55,20 +69,22 @@ func NewCarousel(slides []Widget) *Carousel {
 // of Slides (e.g. the slice shrank) doesn't index out of range.
 func (c *Carousel) clampCurrent() {
 	n := len(c.Slides)
-	if c.Current < 0 {
-		c.Current = 0
-	} else if c.Current >= n {
-		c.Current = n - 1
+	cur := c.Current().Get()
+	if cur < 0 {
+		c.Current().Set(0)
+	} else if cur >= n {
+		c.Current().Set(n - 1)
 	}
 }
 
 // currentSlide returns the widget at Current, or nil when Slides is empty
 // or Current (defensively re-checked here too) falls outside it.
 func (c *Carousel) currentSlide() Widget {
-	if c.Current < 0 || c.Current >= len(c.Slides) {
+	cur := c.Current().Get()
+	if cur < 0 || cur >= len(c.Slides) {
 		return nil
 	}
-	return c.Slides[c.Current]
+	return c.Slides[cur]
 }
 
 // Next advances Current by one slide. At the last slide it wraps to the
@@ -80,27 +96,22 @@ func (c *Carousel) Next() {
 		return
 	}
 	c.clampCurrent()
-	if c.Current == n-1 {
+	cur := c.Current().Get()
+	if cur == n-1 {
 		if c.Wrap {
 			c.setCurrent(0)
 		}
 		return
 	}
-	c.setCurrent(c.Current + 1)
+	c.setCurrent(cur + 1)
 }
 
-// setCurrent moves the shown slide to i and fires OnChange (nil-safe) when the
-// value actually changes -- the shared mutate+notify path Prev/Next, a dot
-// click and the arrow keys all funnel through. Re-selecting the shown slide is
-// silent, keeping a two-way binding loop-free.
+// setCurrent moves the shown slide to i by Setting the Current Observable -- the
+// shared mutate path Prev/Next, a dot click and the arrow keys all funnel
+// through. Subscribers are notified on change; re-selecting the shown slide is a
+// no-op (per mvvm.Observable), keeping a two-way binding loop-free.
 func (c *Carousel) setCurrent(i int) {
-	if c.Current == i {
-		return
-	}
-	c.Current = i
-	if c.OnChange != nil {
-		c.OnChange(i)
-	}
+	c.Current().Set(i)
 }
 
 // Prev retreats Current by one slide. At the first slide it wraps to the
@@ -112,13 +123,14 @@ func (c *Carousel) Prev() {
 		return
 	}
 	c.clampCurrent()
-	if c.Current == 0 {
+	cur := c.Current().Get()
+	if cur == 0 {
 		if c.Wrap {
 			c.setCurrent(n - 1)
 		}
 		return
 	}
-	c.setCurrent(c.Current - 1)
+	c.setCurrent(cur - 1)
 }
 
 // contentRect is the slide viewport: the bounds minus the two side gutters
@@ -203,10 +215,11 @@ func (c *Carousel) drawArrow(p painter.Painter, theme *Theme, gutter Rect, left,
 // drawDots paints the page-indicator row: the Current dot filled Accent,
 // every other dot filled SurfaceAlt, each with a thin Border outline.
 func (c *Carousel) drawDots(p painter.Painter, theme *Theme) {
+	cur := c.Current().Get()
 	for i := range c.Slides {
 		dr := c.dotRect(i)
 		fill := theme.SurfaceAlt
-		if i == c.Current {
+		if i == cur {
 			fill = theme.Accent
 		}
 		fillRect(p, dr.X, dr.Y, dr.W, dr.H, fill)
@@ -238,8 +251,9 @@ func (c *Carousel) Draw(p painter.Painter, theme *Theme) {
 		}
 	}
 	n := len(c.Slides)
-	c.drawArrow(p, theme, c.leftGutter(), true, c.Wrap || c.Current > 0)
-	c.drawArrow(p, theme, c.rightGutter(), false, c.Wrap || c.Current < n-1)
+	cur := c.Current().Get()
+	c.drawArrow(p, theme, c.leftGutter(), true, c.Wrap || cur > 0)
+	c.drawArrow(p, theme, c.rightGutter(), false, c.Wrap || cur < n-1)
 	c.drawDots(p, theme)
 	// Focus ring around the whole carousel (paints nothing when unfocused, so an
 	// unfocused render is byte-identical).

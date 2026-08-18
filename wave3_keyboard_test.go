@@ -905,22 +905,22 @@ func TestCarouselKeyNavigates(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
 	c.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 120})
 	c.OnEvent(kd("ArrowRight")) // 0 -> 1
-	if c.Current != 1 {
-		t.Fatalf("ArrowRight: Current=%d", c.Current)
+	if c.Current().Get() != 1 {
+		t.Fatalf("ArrowRight: Current=%d", c.Current().Get())
 	}
 	c.OnEvent(kd("ArrowLeft")) // 1 -> 0
-	if c.Current != 0 {
-		t.Fatalf("ArrowLeft: Current=%d", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("ArrowLeft: Current=%d", c.Current().Get())
 	}
 	c.OnEvent(kd("ArrowLeft")) // clamp at 0 (Wrap off)
-	if c.Current != 0 {
-		t.Fatalf("clamp at 0: Current=%d", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("clamp at 0: Current=%d", c.Current().Get())
 	}
 	// Disabled ignores keys.
 	c.Disabled = true
 	c.OnEvent(kd("ArrowRight"))
-	if c.Current != 0 {
-		t.Fatalf("disabled carousel moved (Current=%d)", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("disabled carousel moved (Current=%d)", c.Current().Get())
 	}
 	// Empty carousel is a no-op.
 	NewCarousel(nil).OnEvent(kd("ArrowRight"))

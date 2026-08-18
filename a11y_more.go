@@ -428,7 +428,7 @@ func (a *Accordion) A11y() A11yInfo {
 // A11y reports the Carousel as a group carrying its "current/total" slide
 // position.
 func (c *Carousel) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: strconv.Itoa(c.Current+1) + "/" + strconv.Itoa(len(c.Slides))}
+	return A11yInfo{Role: RoleGroup, Value: strconv.Itoa(c.Current().Get()+1) + "/" + strconv.Itoa(len(c.Slides))}
 }
 
 // A11y reports the Wizard as a group carrying its current step's title.

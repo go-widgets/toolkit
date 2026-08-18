@@ -16,11 +16,41 @@ func TestNewCarouselDefaults(t *testing.T) {
 	if len(c.Slides) != 2 || c.Slides[0] != s1 || c.Slides[1] != s2 {
 		t.Fatalf("Slides not stored: %+v", c.Slides)
 	}
-	if c.Current != 0 {
-		t.Fatalf("Current = %d, want 0", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0", c.Current().Get())
 	}
 	if c.Wrap {
 		t.Fatal("Wrap should default false")
+	}
+}
+
+// A bare &Carousel{} (no constructor) must lazily initialise the Current
+// Observable on first access to 0, and a host can bind it.
+func TestCarouselZeroValueCurrentLazyInit(t *testing.T) {
+	c := &Carousel{}
+	if c.Current().Get() != 0 {
+		t.Fatalf("zero-value Current = %d, want 0", c.Current().Get())
+	}
+	// Same Observable returned on subsequent access (not re-created).
+	if c.Current() != c.Current() {
+		t.Fatal("Current() returned distinct Observables across calls")
+	}
+}
+
+// A host binds Current() and observes navigation through the Observable's
+// subscribers -- the MVVM replacement for the old OnChange callback.
+func TestCarouselCurrentHostBinding(t *testing.T) {
+	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
+	var seen []int
+	c.Current().Subscribe(func(i int) { seen = append(seen, i) })
+	c.Next() // 0 -> 1
+	c.Next() // 1 -> 2
+	c.Prev() // 2 -> 1
+	if len(seen) != 3 || seen[0] != 1 || seen[1] != 2 || seen[2] != 1 {
+		t.Fatalf("host saw %v, want [1 2 1]", seen)
+	}
+	if c.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want 1", c.Current().Get())
 	}
 }
 
@@ -29,70 +59,70 @@ func TestNewCarouselDefaults(t *testing.T) {
 func TestCarouselNextAdvancesInMiddle(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
 	c.Next()
-	if c.Current != 1 {
-		t.Fatalf("Current = %d, want 1", c.Current)
+	if c.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want 1", c.Current().Get())
 	}
 }
 
 func TestCarouselPrevRetreatsInMiddle(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
-	c.Current = 2
+	c.Current().Set(2)
 	c.Prev()
-	if c.Current != 1 {
-		t.Fatalf("Current = %d, want 1", c.Current)
+	if c.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want 1", c.Current().Get())
 	}
 }
 
 func TestCarouselNextWrapsAtEnd(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
 	c.Wrap = true
-	c.Current = 2
+	c.Current().Set(2)
 	c.Next()
-	if c.Current != 0 {
-		t.Fatalf("Current = %d, want 0 (wrapped)", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0 (wrapped)", c.Current().Get())
 	}
 }
 
 func TestCarouselPrevWrapsAtStart(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
 	c.Wrap = true
-	c.Current = 0
+	c.Current().Set(0)
 	c.Prev()
-	if c.Current != 2 {
-		t.Fatalf("Current = %d, want 2 (wrapped)", c.Current)
+	if c.Current().Get() != 2 {
+		t.Fatalf("Current = %d, want 2 (wrapped)", c.Current().Get())
 	}
 }
 
 func TestCarouselNextClampsAtEndWithoutWrap(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
-	c.Current = 2
+	c.Current().Set(2)
 	c.Next()
-	if c.Current != 2 {
-		t.Fatalf("Current = %d, want 2 (clamped)", c.Current)
+	if c.Current().Get() != 2 {
+		t.Fatalf("Current = %d, want 2 (clamped)", c.Current().Get())
 	}
 }
 
 func TestCarouselPrevClampsAtStartWithoutWrap(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
 	c.Prev()
-	if c.Current != 0 {
-		t.Fatalf("Current = %d, want 0 (clamped)", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0 (clamped)", c.Current().Get())
 	}
 }
 
 func TestCarouselNextEmptySlidesNoOp(t *testing.T) {
 	c := NewCarousel(nil)
 	c.Next()
-	if c.Current != 0 {
-		t.Fatalf("Current = %d, want 0", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0", c.Current().Get())
 	}
 }
 
 func TestCarouselPrevEmptySlidesNoOp(t *testing.T) {
 	c := NewCarousel(nil)
 	c.Prev()
-	if c.Current != 0 {
-		t.Fatalf("Current = %d, want 0", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0", c.Current().Get())
 	}
 }
 
@@ -100,10 +130,10 @@ func TestCarouselPrevEmptySlidesNoOp(t *testing.T) {
 // is clamped to 0 before Next steps from there.
 func TestCarouselNextClampsStaleNegativeCurrent(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
-	c.Current = -5
+	c.Current().Set(-5)
 	c.Next()
-	if c.Current != 1 { // clamp to 0, then advance to 1
-		t.Fatalf("Current = %d, want 1", c.Current)
+	if c.Current().Get() != 1 { // clamp to 0, then advance to 1
+		t.Fatalf("Current = %d, want 1", c.Current().Get())
 	}
 }
 
@@ -111,10 +141,10 @@ func TestCarouselNextClampsStaleNegativeCurrent(t *testing.T) {
 // before Prev steps from there.
 func TestCarouselPrevClampsStaleOverflowCurrent(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
-	c.Current = 99
+	c.Current().Set(99)
 	c.Prev()
-	if c.Current != 1 { // clamp to 2 (last index), then retreat to 1
-		t.Fatalf("Current = %d, want 1", c.Current)
+	if c.Current().Get() != 1 { // clamp to 2 (last index), then retreat to 1
+		t.Fatalf("Current = %d, want 1", c.Current().Get())
 	}
 }
 
@@ -183,7 +213,7 @@ func TestCarouselDrawOutOfRangeCurrentSkipsSlideNoPanic(t *testing.T) {
 	theme := DefaultLight()
 	slide := &fillWidget{color: RGBA{R: 1, A: 255}}
 	c := NewCarousel([]Widget{slide})
-	c.Current = 7 // out of range for a single slide
+	c.Current().Set(7) // out of range for a single slide
 	c.SetBounds(Rect{X: 10, Y: 5, W: 200, H: 120})
 	buf := makeSurface(w, h)
 	c.Draw(newP(buf, w), theme)
@@ -199,7 +229,7 @@ func TestCarouselDrawDotsAccentOnCurrent(t *testing.T) {
 	const w, h = 220, 130
 	theme := DefaultLight()
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
-	c.Current = 1
+	c.Current().Set(1)
 	c.SetBounds(Rect{X: 10, Y: 5, W: 200, H: 120})
 	buf := makeSurface(w, h)
 	c.Draw(newP(buf, w), theme)
@@ -218,7 +248,7 @@ func TestCarouselDrawArrowsEnabledUseOnSurfaceInk(t *testing.T) {
 	theme := DefaultLight()
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
 	c.Wrap = true // both arrows always enabled regardless of Current
-	c.Current = 0
+	c.Current().Set(0)
 	c.SetBounds(Rect{X: 10, Y: 5, W: 200, H: 120})
 	buf := makeSurface(w, h)
 	c.Draw(newP(buf, w), theme)
@@ -237,7 +267,7 @@ func TestCarouselDrawArrowsDisabledUseBorderInk(t *testing.T) {
 	theme := DefaultLight()
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
 	c.Wrap = false
-	c.Current = 0 // left arrow disabled (no wrap, at first slide)
+	c.Current().Set(0) // left arrow disabled (no wrap, at first slide)
 	c.SetBounds(Rect{X: 10, Y: 5, W: 200, H: 120})
 	buf := makeSurface(w, h)
 	c.Draw(newP(buf, w), theme)
@@ -247,7 +277,7 @@ func TestCarouselDrawArrowsDisabledUseBorderInk(t *testing.T) {
 		t.Fatal("disabled left arrow: no Border ink found")
 	}
 
-	c.Current = 2 // right arrow disabled (no wrap, at last slide)
+	c.Current().Set(2) // right arrow disabled (no wrap, at last slide)
 	buf2 := makeSurface(w, h)
 	c.Draw(newP(buf2, w), theme)
 	rg := c.rightGutter()
@@ -280,13 +310,13 @@ func surfacePointToLocal(c *Carousel, x, y int) Event {
 
 func TestCarouselClickLeftGutterCallsPrev(t *testing.T) {
 	c := NewCarousel([]Widget{NewLabel("a"), NewLabel("b"), NewLabel("c")})
-	c.Current = 2
+	c.Current().Set(2)
 	c.SetBounds(Rect{X: 10, Y: 5, W: 200, H: 120})
 	lg := c.leftGutter()
 	ev := surfacePointToLocal(c, lg.X+2, lg.Y+2)
 	c.OnEvent(ev)
-	if c.Current != 1 {
-		t.Fatalf("Current = %d, want 1", c.Current)
+	if c.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want 1", c.Current().Get())
 	}
 }
 
@@ -296,8 +326,8 @@ func TestCarouselClickRightGutterCallsNext(t *testing.T) {
 	rg := c.rightGutter()
 	ev := surfacePointToLocal(c, rg.X+2, rg.Y+2)
 	c.OnEvent(ev)
-	if c.Current != 1 {
-		t.Fatalf("Current = %d, want 1", c.Current)
+	if c.Current().Get() != 1 {
+		t.Fatalf("Current = %d, want 1", c.Current().Get())
 	}
 }
 
@@ -307,8 +337,8 @@ func TestCarouselClickDotJumps(t *testing.T) {
 	d2 := c.dotRect(2)
 	ev := surfacePointToLocal(c, d2.X+2, d2.Y+2)
 	c.OnEvent(ev)
-	if c.Current != 2 {
-		t.Fatalf("Current = %d, want 2", c.Current)
+	if c.Current().Get() != 2 {
+		t.Fatalf("Current = %d, want 2", c.Current().Get())
 	}
 }
 
@@ -333,7 +363,7 @@ func TestCarouselClickContentForwardsTranslatedCoords(t *testing.T) {
 func TestCarouselClickContentOutOfRangeCurrentNoForwardNoPanic(t *testing.T) {
 	rw := &recordingWidget{}
 	c := NewCarousel([]Widget{rw})
-	c.Current = 9 // out of range
+	c.Current().Set(9) // out of range
 	c.SetBounds(Rect{X: 10, Y: 5, W: 200, H: 120})
 	content := c.contentRect()
 	ev := surfacePointToLocal(c, content.X+5, content.Y+5)
@@ -352,10 +382,10 @@ func TestCarouselClickDeadZoneNoOp(t *testing.T) {
 	gapX := d0.X + d0.W + (d1.X-(d0.X+d0.W))/2
 	gapY := d0.Y + d0.H/2
 	ev := surfacePointToLocal(c, gapX, gapY)
-	before := c.Current
+	before := c.Current().Get()
 	c.OnEvent(ev)
-	if c.Current != before {
-		t.Fatalf("dead-zone click changed Current: %d -> %d", before, c.Current)
+	if c.Current().Get() != before {
+		t.Fatalf("dead-zone click changed Current: %d -> %d", before, c.Current().Get())
 	}
 }
 
@@ -364,8 +394,8 @@ func TestCarouselOnEventIgnoresNonClick(t *testing.T) {
 	c.SetBounds(Rect{X: 10, Y: 5, W: 200, H: 120})
 	// Left/Right step slides as of Wave 3; an unrelated key (Tab) must not.
 	c.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if c.Current != 0 {
-		t.Fatalf("Current = %d, want 0 (non-click ignored)", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0 (non-click ignored)", c.Current().Get())
 	}
 }
 
@@ -373,7 +403,7 @@ func TestCarouselOnEventEmptySlidesNoOp(t *testing.T) {
 	c := NewCarousel(nil)
 	c.SetBounds(Rect{X: 10, Y: 5, W: 200, H: 120})
 	c.OnEvent(Event{Kind: EventClick, X: 20, Y: 20})
-	if c.Current != 0 {
-		t.Fatalf("Current = %d, want 0", c.Current)
+	if c.Current().Get() != 0 {
+		t.Fatalf("Current = %d, want 0", c.Current().Get())
 	}
 }
