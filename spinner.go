@@ -4,9 +4,12 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"math"
 
-import "math"
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // SpinnerStyle selects an indeterminate-spinner look. The zero value is
 // SpinnerHand, so an untouched Spinner keeps the original rotating-hand
@@ -28,19 +31,36 @@ const (
 	SpinnerBars
 )
 
-// Spinner is an indeterminate loading indicator. When Active, Draw paints the
+// Spinner is an indeterminate loading indicator. When active, Draw paints the
 // selected Style advanced by Phase in Theme.Accent. The caller drives Phase via
 // Tick(dt) so the animation cadence stays tied to the host's frame loop (no
-// goroutine, no timer).
+// goroutine, no timer). The reactive running state is MVVM-only: it lives in an
+// unexported Observable exposed via [Spinner.Active]; Phase and Style stay plain
+// config fields.
 type Spinner struct {
 	Base
-	Active bool
-	Phase  float64      // 0..1, full cycle
-	Style  SpinnerStyle // look; zero value = SpinnerHand
+	Phase float64      // 0..1, full cycle (config; host-driven per frame)
+	Style SpinnerStyle // look; zero value = SpinnerHand (config)
+
+	active *mvvm.Observable[bool]
+}
+
+// Active is the spinner's running state as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Active field. The
+// spinner draws and reports itself animating exactly while it is true.
+func (s *Spinner) Active() *mvvm.Observable[bool] {
+	if s.active == nil {
+		s.active = mvvm.NewObservable(false)
+	}
+	return s.active
 }
 
 // NewSpinner builds a Spinner stopped at Phase=0 in the default (hand) style.
-func NewSpinner() *Spinner { return &Spinner{} }
+func NewSpinner() *Spinner {
+	s := &Spinner{}
+	s.active = mvvm.NewObservable(false)
+	return s
+}
 
 // Tick advances Phase by deltaSeconds, wrapping modulo 1 so the value stays
 // bounded.
@@ -52,12 +72,12 @@ func (s *Spinner) Tick(deltaSeconds float64) {
 // Animating reports whether the spinner still needs frames: true exactly when
 // it is Active, so a host stops repainting once the spinner is stopped. It makes
 // Spinner an [Animator], driven by [TickTree] / [TreeAnimating].
-func (s *Spinner) Animating() bool { return s.Active }
+func (s *Spinner) Animating() bool { return s.Active().Get() }
 
 // Draw paints the spinner when Active, dispatching on Style. It is a no-op when
 // inactive or given empty bounds.
 func (s *Spinner) Draw(p painter.Painter, theme *Theme) {
-	if !s.Active {
+	if !s.Active().Get() {
 		return
 	}
 	r := s.Bounds()

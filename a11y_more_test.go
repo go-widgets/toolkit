@@ -234,7 +234,7 @@ func TestA11yFeedbackWidgets(t *testing.T) {
 	lvl := NewLevelBar(10)
 	lvl.Value = 4
 	activeSpinner := NewSpinner()
-	activeSpinner.Active = true
+	activeSpinner.Active().Set(true)
 	idleSpinner := NewSpinner()
 
 	checkA11yCases(t, []a11yCase{

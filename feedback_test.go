@@ -500,7 +500,7 @@ func TestSpinnerInactiveDoesNotDraw(t *testing.T) {
 func TestSpinnerActivePaintsHand(t *testing.T) {
 	theme := DefaultLight()
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	s.Phase = 0 // 0 radians -> hand points to the right (+x).
 	s.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 20})
 	buf := makeSurface(32, 32)
@@ -520,7 +520,7 @@ func TestSpinnerActivePaintsHand(t *testing.T) {
 
 func TestSpinnerZeroBoundsNoCrash(t *testing.T) {
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 0})
 	s.Draw(newP(makeSurface(16, 16), 16), DefaultLight())
 }
@@ -528,7 +528,7 @@ func TestSpinnerZeroBoundsNoCrash(t *testing.T) {
 func TestSpinnerSmallerHeightRadius(t *testing.T) {
 	// Cover the `if r.H < r.W` branch picking H/2 as the radius.
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 10})
 	s.Draw(newP(makeSurface(64, 16), 64), DefaultLight())
 }
@@ -536,7 +536,7 @@ func TestSpinnerSmallerHeightRadius(t *testing.T) {
 func TestSpinnerSubPixelStepsClamp(t *testing.T) {
 	// radius < 1 forces steps to clamp to 1.
 	s := NewSpinner()
-	s.Active = true
+	s.Active().Set(true)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 4, H: 4})
 	s.Draw(newP(makeSurface(8, 8), 8), DefaultLight())
 }

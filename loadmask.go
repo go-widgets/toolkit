@@ -84,7 +84,7 @@ func (m *LoadMask) Draw(p painter.Painter, theme *Theme) {
 	}
 	sx := r.X + (r.W-sz)/2
 	top := r.Y + (r.H-block)/2
-	m.spinner.Active = true
+	m.spinner.Active().Set(true)
 	m.spinner.SetBounds(Rect{X: sx, Y: top, W: sz, H: sz})
 	m.spinner.Draw(p, theme)
 
