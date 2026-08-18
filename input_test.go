@@ -386,14 +386,14 @@ func TestEntryCopyThenPasteAcrossEntriesRoundTrip(t *testing.T) {
 func TestCheckButtonClickToggles(t *testing.T) {
 	got := false
 	c := NewCheckButton("OK", false)
-	c.OnToggle = func(v bool) { got = v }
+	c.Checked().Subscribe(func(v bool) { got = v })
 	c.OnEvent(Event{Kind: EventClick})
-	if !c.Checked || !got {
-		t.Fatalf("after click: Checked=%v got=%v", c.Checked, got)
+	if !c.Checked().Get() || !got {
+		t.Fatalf("after click: Checked=%v got=%v", c.Checked().Get(), got)
 	}
 	c.OnEvent(Event{Kind: EventClick})
-	if c.Checked || got {
-		t.Fatalf("after second click: Checked=%v got=%v", c.Checked, got)
+	if c.Checked().Get() || got {
+		t.Fatalf("after second click: Checked=%v got=%v", c.Checked().Get(), got)
 	}
 }
 
@@ -401,14 +401,30 @@ func TestCheckButtonIgnoresOtherEvents(t *testing.T) {
 	c := NewCheckButton("OK", false)
 	// Space/Enter toggle as of Wave 3; an unrelated key (Tab) must not.
 	c.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if c.Checked {
+	if c.Checked().Get() {
 		t.Fatal("KeyDown should not toggle")
 	}
 }
 
-func TestCheckButtonNilCallbackNoPanic(t *testing.T) {
+func TestCheckButtonNoSubscriberNoPanic(t *testing.T) {
 	c := NewCheckButton("OK", false)
 	c.OnEvent(Event{Kind: EventClick})
+}
+
+// A bare &CheckButton{} has a nil observable; the Checked() accessor must
+// lazy-init it (to false) so a host can bind it and a toggle works, matching
+// the constructor path.
+func TestCheckButtonZeroValueAccessor(t *testing.T) {
+	c := &CheckButton{}
+	if c.Checked().Get() {
+		t.Fatal("zero-value CheckButton should be unchecked")
+	}
+	got := false
+	c.Checked().Subscribe(func(v bool) { got = v })
+	c.OnEvent(Event{Kind: EventClick})
+	if !c.Checked().Get() || !got {
+		t.Fatalf("after click on zero value: Checked=%v got=%v", c.Checked().Get(), got)
+	}
 }
 
 func TestCheckButtonDrawCheckedAndUnchecked(t *testing.T) {
@@ -423,7 +439,7 @@ func TestCheckButtonDrawCheckedAndUnchecked(t *testing.T) {
 	if pixelAt(buf, w, 5, 10) != theme.Accent {
 		t.Fatalf("checked box fill = %+v, want Accent", pixelAt(buf, w, 5, 10))
 	}
-	c.Checked = false
+	c.Checked().Set(false)
 	buf2 := makeSurface(w, h)
 	c.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 5, 10) != theme.Surface {

@@ -91,21 +91,21 @@ func TestCheckButtonKeyToggles(t *testing.T) {
 	toggles := 0
 	last := false
 	c := NewCheckButton("OK", false)
-	c.OnToggle = func(checked bool) { toggles++; last = checked }
+	c.Checked().Subscribe(func(v bool) { toggles++; last = v })
 	c.OnEvent(kd(" "))
-	if !c.Checked || toggles != 1 || !last {
-		t.Fatalf("space: Checked=%v toggles=%d last=%v", c.Checked, toggles, last)
+	if !c.Checked().Get() || toggles != 1 || !last {
+		t.Fatalf("space: Checked=%v toggles=%d last=%v", c.Checked().Get(), toggles, last)
 	}
 	c.OnEvent(kd("Enter"))
-	if c.Checked || toggles != 2 || last {
-		t.Fatalf("enter: Checked=%v toggles=%d last=%v", c.Checked, toggles, last)
+	if c.Checked().Get() || toggles != 2 || last {
+		t.Fatalf("enter: Checked=%v toggles=%d last=%v", c.Checked().Get(), toggles, last)
 	}
 	c.Disabled = true
 	c.OnEvent(kd(" "))
-	if c.Checked || toggles != 2 {
-		t.Fatalf("disabled check toggled (Checked=%v toggles=%d)", c.Checked, toggles)
+	if c.Checked().Get() || toggles != 2 {
+		t.Fatalf("disabled check toggled (Checked=%v toggles=%d)", c.Checked().Get(), toggles)
 	}
-	NewCheckButton("nil", false).OnEvent(kd(" ")) // nil OnToggle safe
+	NewCheckButton("nil", false).OnEvent(kd(" ")) // no subscriber: toggle is safe
 }
 
 func TestSwitchKeyToggles(t *testing.T) {
