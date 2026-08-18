@@ -107,6 +107,20 @@ func scrollbarTrack() int { return scaled(scrollbarWidth) }
 // never touches the thumb and the gap is the same everywhere.
 func scrollGutter() int { return scaled(scrollbarWidth) + scaled(scrollbarGap) }
 
+// localViewport is [ScrollView.viewport] in WIDGET-LOCAL coordinates, the space
+// an event arrives in.
+//
+// A parent hands a child an event measured from the CHILD's top-left (see
+// translateEvent), while viewport() is derived from Bounds and is therefore
+// surface-absolute. Comparing one against the other silently works for a
+// ScrollView that happens to sit at the surface origin and silently fails for
+// every other one — which is what happened: a ScrollView nested in a box never
+// armed its content pan, so it could not be scrolled by dragging at all.
+func (s *ScrollView) localViewport() Rect {
+	r, vp := s.Bounds(), s.viewport()
+	return Rect{X: vp.X - r.X, Y: vp.Y - r.Y, W: vp.W, H: vp.H}
+}
+
 // viewport is the visible content rect: the bounds minus the always-reserved
 // right scrollbar gutter and — when the content overflows horizontally — the
 // bottom scrollbar gutter. The gutter is the track plus a normalized gap, so the
@@ -252,7 +266,7 @@ func (s *ScrollView) OnEvent(ev Event) {
 		// Neither scrollbar wanted the press, so it landed on the content:
 		// begin a pan. The content area is otherwise passive for clicks, so
 		// this takes nothing away from anything else.
-		if !s.ScrollDriven() && s.viewport().Contains(ev.X, ev.Y) {
+		if !s.ScrollDriven() && s.localViewport().Contains(ev.X, ev.Y) {
 			// Catching a coasting view stops it dead, the way putting a
 			// finger on a spinning record does.
 			s.stopTouchScroll()
