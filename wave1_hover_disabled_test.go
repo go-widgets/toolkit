@@ -383,8 +383,8 @@ func TestComboBoxDisabled(t *testing.T) {
 	c.Disabled = true
 	c.OnEvent(Event{Kind: EventChar, Code: "z"})
 	c.OnEvent(Event{Kind: EventClick})
-	if c.Text != "" || c.Open {
-		t.Fatalf("disabled combobox reacted: text=%q open=%v", c.Text, c.Open)
+	if c.Text().Get() != "" || c.Open().Get() {
+		t.Fatalf("disabled combobox reacted: text=%q open=%v", c.Text().Get(), c.Open().Get())
 	}
 	buf := makeSurface(100, 24)
 	c.Draw(newP(buf, 100), th)
