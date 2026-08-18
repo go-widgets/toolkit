@@ -239,7 +239,7 @@ func (b *Breadcrumbs) A11y() A11yInfo {
 // A11y reports the Pagination as navigation carrying its "current/total"
 // page position.
 func (p *Pagination) A11y() A11yInfo {
-	return A11yInfo{Role: RoleNavigation, Value: strconv.Itoa(p.Current) + "/" + strconv.Itoa(p.Total)}
+	return A11yInfo{Role: RoleNavigation, Value: strconv.Itoa(p.Current().Get()) + "/" + strconv.Itoa(p.Total)}
 }
 
 // A11y reports the Steps strip as a group carrying its current step's label.

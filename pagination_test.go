@@ -18,36 +18,54 @@ func paginationLayoutW(n int) int {
 
 func TestNewPaginationClampsCurrentLow(t *testing.T) {
 	p := NewPagination(-3, 10)
-	if p.Current != 1 || p.Total != 10 {
-		t.Fatalf("clamp low: Current=%d Total=%d", p.Current, p.Total)
+	if p.Current().Get() != 1 || p.Total != 10 {
+		t.Fatalf("clamp low: Current=%d Total=%d", p.Current().Get(), p.Total)
 	}
 }
 
 func TestNewPaginationClampsCurrentHigh(t *testing.T) {
 	p := NewPagination(99, 10)
-	if p.Current != 10 || p.Total != 10 {
-		t.Fatalf("clamp high: Current=%d Total=%d", p.Current, p.Total)
+	if p.Current().Get() != 10 || p.Total != 10 {
+		t.Fatalf("clamp high: Current=%d Total=%d", p.Current().Get(), p.Total)
 	}
 }
 
 func TestNewPaginationTotalZeroParksCurrentAtOne(t *testing.T) {
 	p := NewPagination(5, 0)
-	if p.Current != 1 || p.Total != 0 {
-		t.Fatalf("total 0: Current=%d Total=%d", p.Current, p.Total)
+	if p.Current().Get() != 1 || p.Total != 0 {
+		t.Fatalf("total 0: Current=%d Total=%d", p.Current().Get(), p.Total)
 	}
 }
 
 func TestNewPaginationTotalNegativeParksCurrentAtOne(t *testing.T) {
 	p := NewPagination(5, -3)
-	if p.Current != 1 || p.Total != -3 {
-		t.Fatalf("total -3: Current=%d Total=%d", p.Current, p.Total)
+	if p.Current().Get() != 1 || p.Total != -3 {
+		t.Fatalf("total -3: Current=%d Total=%d", p.Current().Get(), p.Total)
 	}
 }
 
 func TestNewPaginationRoundTripsValidInputs(t *testing.T) {
 	p := NewPagination(3, 10)
-	if p.Current != 3 || p.Total != 10 {
-		t.Fatalf("valid inputs mangled: Current=%d Total=%d", p.Current, p.Total)
+	if p.Current().Get() != 3 || p.Total != 10 {
+		t.Fatalf("valid inputs mangled: Current=%d Total=%d", p.Current().Get(), p.Total)
+	}
+}
+
+// TestPaginationCurrentObservable covers the zero-value lazy-init of the
+// Current accessor and the host binding path: a Pagination built as a bare
+// struct (no NewPagination) still yields a usable Observable, and Setting it
+// from outside is reflected by the widget (there is no imperative Current
+// field).
+func TestPaginationCurrentObservable(t *testing.T) {
+	p := &Pagination{Total: 10} // no NewPagination → current Observable is nil until accessed
+	if p.Current().Get() != 0 {
+		t.Fatalf("zero-value Pagination Current = %d, want 0", p.Current().Get())
+	}
+	seen := -1
+	p.Current().Subscribe(func(v int) { seen = v })
+	p.Current().Set(4) // a host drives the current page through the Observable
+	if p.Current().Get() != 4 || seen != 4 {
+		t.Fatalf("host Set: current=%d subscriber=%d, want 4/4", p.Current().Get(), seen)
 	}
 }
 
@@ -337,11 +355,11 @@ func TestPaginationClickPrevEnabled(t *testing.T) {
 	got := -1
 	p := NewPagination(3, 10)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(7), H: PaginationBtnH})
-	p.OnChange = func(page int) { got = page }
+	p.Current().Subscribe(func(page int) { got = page })
 	// Prev button: idx 0, X in [0, PaginationBtnW).
 	p.OnEvent(Event{Kind: EventClick, X: 4, Y: 4})
-	if p.Current != 2 || got != 2 {
-		t.Fatalf("prev enabled: Current=%d got=%d", p.Current, got)
+	if p.Current().Get() != 2 || got != 2 {
+		t.Fatalf("prev enabled: Current=%d got=%d", p.Current().Get(), got)
 	}
 }
 
@@ -349,10 +367,10 @@ func TestPaginationClickPrevDisabled(t *testing.T) {
 	p := NewPagination(1, 10)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(7), H: PaginationBtnH})
 	changes := 0
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	p.OnEvent(Event{Kind: EventClick, X: 4, Y: 4})
-	if p.Current != 1 || changes != 0 {
-		t.Fatalf("prev disabled: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 1 || changes != 0 {
+		t.Fatalf("prev disabled: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 }
 
@@ -360,12 +378,12 @@ func TestPaginationClickNextEnabled(t *testing.T) {
 	got := -1
 	p := NewPagination(3, 10)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(7), H: PaginationBtnH})
-	p.OnChange = func(page int) { got = page }
+	p.Current().Subscribe(func(page int) { got = page })
 	// Next button lives at button index 8 (prev + 7 numeric slots).
 	nextX := (PaginationBtnW+PaginationGap)*8 + 4
 	p.OnEvent(Event{Kind: EventClick, X: nextX, Y: 4})
-	if p.Current != 4 || got != 4 {
-		t.Fatalf("next enabled: Current=%d got=%d", p.Current, got)
+	if p.Current().Get() != 4 || got != 4 {
+		t.Fatalf("next enabled: Current=%d got=%d", p.Current().Get(), got)
 	}
 }
 
@@ -373,11 +391,11 @@ func TestPaginationClickNextDisabled(t *testing.T) {
 	p := NewPagination(10, 10)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(7), H: PaginationBtnH})
 	changes := 0
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	nextX := (PaginationBtnW+PaginationGap)*8 + 4
 	p.OnEvent(Event{Kind: EventClick, X: nextX, Y: 4})
-	if p.Current != 10 || changes != 0 {
-		t.Fatalf("next disabled: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 10 || changes != 0 {
+		t.Fatalf("next disabled: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 }
 
@@ -385,12 +403,12 @@ func TestPaginationClickPageNumber(t *testing.T) {
 	got := -1
 	p := NewPagination(2, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
-	p.OnChange = func(page int) { got = page }
+	p.Current().Subscribe(func(page int) { got = page })
 	// Click page 4: numeric slot idx 3 → overall button idx 4.
 	x := (PaginationBtnW+PaginationGap)*4 + 4
 	p.OnEvent(Event{Kind: EventClick, X: x, Y: 4})
-	if p.Current != 4 || got != 4 {
-		t.Fatalf("click page 4: Current=%d got=%d", p.Current, got)
+	if p.Current().Get() != 4 || got != 4 {
+		t.Fatalf("click page 4: Current=%d got=%d", p.Current().Get(), got)
 	}
 }
 
@@ -398,12 +416,12 @@ func TestPaginationClickCurrentPageNoOp(t *testing.T) {
 	changes := 0
 	p := NewPagination(3, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	// Numeric slot idx 2 = current page 3 → overall button idx 3.
 	x := (PaginationBtnW+PaginationGap)*3 + 4
 	p.OnEvent(Event{Kind: EventClick, X: x, Y: 4})
-	if p.Current != 3 || changes != 0 {
-		t.Fatalf("click current: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 3 || changes != 0 {
+		t.Fatalf("click current: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 }
 
@@ -411,12 +429,12 @@ func TestPaginationClickEllipsisNoOp(t *testing.T) {
 	changes := 0
 	p := NewPagination(50, 100)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(7), H: PaginationBtnH})
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	// Left ellipsis lives at numeric slot idx 1 → overall button idx 2.
 	x := (PaginationBtnW+PaginationGap)*2 + 4
 	p.OnEvent(Event{Kind: EventClick, X: x, Y: 4})
-	if p.Current != 50 || changes != 0 {
-		t.Fatalf("click ellipsis: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 50 || changes != 0 {
+		t.Fatalf("click ellipsis: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 }
 
@@ -424,12 +442,12 @@ func TestPaginationClickInGapNoOp(t *testing.T) {
 	p := NewPagination(3, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
 	changes := 0
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	// A click at x = PaginationBtnW lands in the gap between prev and
 	// slot 0 (button width is PaginationBtnW, gap starts right after).
 	p.OnEvent(Event{Kind: EventClick, X: PaginationBtnW, Y: 4})
-	if p.Current != 3 || changes != 0 {
-		t.Fatalf("gap click: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 3 || changes != 0 {
+		t.Fatalf("gap click: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 }
 
@@ -437,10 +455,10 @@ func TestPaginationClickBelowRowNoOp(t *testing.T) {
 	p := NewPagination(3, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
 	changes := 0
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	p.OnEvent(Event{Kind: EventClick, X: 4, Y: PaginationBtnH + 5})
-	if p.Current != 3 || changes != 0 {
-		t.Fatalf("below-row click: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 3 || changes != 0 {
+		t.Fatalf("below-row click: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 }
 
@@ -448,10 +466,10 @@ func TestPaginationClickAboveRowNoOp(t *testing.T) {
 	p := NewPagination(3, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
 	changes := 0
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	p.OnEvent(Event{Kind: EventClick, X: 4, Y: -1})
-	if p.Current != 3 || changes != 0 {
-		t.Fatalf("above-row click: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 3 || changes != 0 {
+		t.Fatalf("above-row click: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 }
 
@@ -461,10 +479,10 @@ func TestPaginationClickShortBoundsNoOp(t *testing.T) {
 	p := NewPagination(3, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: 4})
 	changes := 0
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	p.OnEvent(Event{Kind: EventClick, X: 4, Y: 8})
-	if p.Current != 3 || changes != 0 {
-		t.Fatalf("short-bounds click: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 3 || changes != 0 {
+		t.Fatalf("short-bounds click: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 }
 
@@ -472,7 +490,7 @@ func TestPaginationClickTotalZeroNoOp(t *testing.T) {
 	p := NewPagination(1, 0)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(0), H: PaginationBtnH})
 	changes := 0
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	p.OnEvent(Event{Kind: EventClick, X: 4, Y: 4})
 	if changes != 0 {
 		t.Fatalf("total=0 click: changes=%d", changes)
@@ -483,18 +501,18 @@ func TestPaginationIgnoresNonClick(t *testing.T) {
 	p := NewPagination(3, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
 	changes := 0
-	p.OnChange = func(page int) { changes++ }
+	p.Current().Subscribe(func(int) { changes++ })
 	// Left/Right/Home/End navigate as of Wave 3; an unrelated key (Tab) must not.
 	p.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if p.Current != 3 || changes != 0 {
-		t.Fatalf("non-click event: Current=%d changes=%d", p.Current, changes)
+	if p.Current().Get() != 3 || changes != 0 {
+		t.Fatalf("non-click event: Current=%d changes=%d", p.Current().Get(), changes)
 	}
 }
 
-func TestPaginationNilOnChangeNoPanic(t *testing.T) {
+func TestPaginationNoSubscriberNoPanic(t *testing.T) {
 	p := NewPagination(3, 5)
 	p.SetBounds(Rect{X: 0, Y: 0, W: paginationLayoutW(5), H: PaginationBtnH})
-	// Fire every mutation path; nil OnChange must be safe.
+	// Fire every mutation path; no subscriber must be safe.
 	p.OnEvent(Event{Kind: EventClick, X: 4, Y: 4}) // prev
 	x := (PaginationBtnW+PaginationGap)*4 + 4
 	p.OnEvent(Event{Kind: EventClick, X: x, Y: 4}) // page 4
