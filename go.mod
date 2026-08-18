@@ -7,8 +7,8 @@ require github.com/go-widgets/painter v0.11.0
 require github.com/go-opentype/opentype v0.5.0
 
 require (
-	github.com/go-opentype/bidi v0.2.1
-	github.com/go-opentype/shape v0.4.0
+	github.com/go-opentype/shape v0.5.0
+	github.com/go-typeset/bidi v0.3.0
 )
 
 require github.com/go-opentype/fonts v0.6.0

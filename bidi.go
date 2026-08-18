@@ -4,7 +4,7 @@
 
 package toolkit
 
-import "github.com/go-opentype/bidi"
+import "github.com/go-typeset/bidi"
 
 // TextDirection selects the base paragraph direction the toolkit uses when it
 // reorders logical text into visual order before laying glyphs strictly
