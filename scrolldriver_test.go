@@ -40,7 +40,7 @@ func TestMomentumScrollerClaimsTheView(t *testing.T) {
 	// And the view's own fling stays out of it: only the engine coasts.
 	ms.TouchUp()
 	sv.OnEvent(Event{Kind: EventMouseUp, X: 40, Y: 30})
-	if sv.flinging {
+	if sv.Animating() {
 		t.Fatal("a driven view must not fling on its own")
 	}
 	at := sv.OffsetY
@@ -69,12 +69,12 @@ func TestSetScrollDriverStopsWhatIsInFlight(t *testing.T) {
 	// Handing a coasting, mid-drag view to a driver must leave nothing of the
 	// old motion behind for the driver to fight.
 	sv := flick(60, 1.0/60)
-	if !sv.flinging {
+	if !sv.Animating() {
 		t.Fatal("setup: expected a fling")
 	}
 	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60}) // re-arm a pan
 	sv.SetScrollDriver(NewMomentum())
-	if sv.flinging || sv.pan.active {
-		t.Fatal("claiming a view should stop its fling and release its pan")
+	if sv.Animating() || sv.pan.active {
+		t.Fatal("claiming a view should stop its coast and release its pan")
 	}
 }

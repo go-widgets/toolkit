@@ -4,11 +4,7 @@
 
 package toolkit
 
-import (
-	"math"
-
-	"github.com/go-widgets/painter"
-)
+import "github.com/go-widgets/painter"
 
 // ScrollView is a viewport over a child widget whose content may be
 // larger than the visible area. The child's own Bounds is logical
@@ -33,11 +29,15 @@ type ScrollView struct {
 	// pan tracks an in-progress drag of the CONTENT itself.
 	pan contentPan
 
-	// velX and velY are the pointer speed in pixels per second, measured by
-	// Tick while a drag is in progress and decayed by it during a fling.
-	velX, velY float64
-	// flinging reports whether the view is coasting after a release.
-	flinging bool
+	// momX and momY are the per-axis touch-scroll engines, created on first
+	// use. They hold the authoritative position, which OffsetX/OffsetY mirror
+	// clamped and overscrollX/Y complete.
+	momX, momY *Momentum
+	// trackX and trackY smooth the drag samples into a release velocity.
+	trackX, trackY VelocityTracker
+	// overscrollX and overscrollY are the rubber-band displacement beyond the
+	// clamped offsets; only Draw consults them.
+	overscrollX, overscrollY int
 	// driver, when set, is whatever owns this view's touch scrolling; the
 	// view then does not pan or fling on its own. See SetScrollDriver.
 	driver any
@@ -255,8 +255,9 @@ func (s *ScrollView) OnEvent(ev Event) {
 		if !s.ScrollDriven() && s.viewport().Contains(ev.X, ev.Y) {
 			// Catching a coasting view stops it dead, the way putting a
 			// finger on a spinning record does.
-			s.stopFling()
+			s.stopTouchScroll()
 			s.pan.start(ev)
+			s.beginTouchScroll()
 		}
 	case EventMouseDrag:
 		gv, okv := s.vscrollGeom()
@@ -267,7 +268,7 @@ func (s *ScrollView) OnEvent(ev Event) {
 		// scrollbar is being dragged, so one gesture never moves the view
 		// twice.
 		if s.pan.active && !s.sbV.active && !s.sbH.active {
-			s.Scroll(s.pan.delta(ev))
+			s.dragTouchScroll(s.pan.delta(ev))
 		}
 	case EventMouseUp:
 		s.sbV.release()
@@ -275,7 +276,7 @@ func (s *ScrollView) OnEvent(ev Event) {
 		if s.pan.active {
 			// Let go while still moving and the view carries on.
 			s.pan.release()
-			s.startFling()
+			s.endTouchScroll()
 		}
 	case EventKeyDown:
 		switch ev.Code {
@@ -322,14 +323,18 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 		// nothing and is simply true: that is where the content starts, and
 		// the offset says how far it has scrolled away.
 		cb := s.Child.Bounds()
+		// The rubber band rides ON TOP of the offset, and only here: it moves
+		// the painted content without moving the scroll position anything else
+		// reads. At rest it is zero and this is the offset alone.
+		px, py := s.OffsetX+s.overscrollX, s.OffsetY+s.overscrollY
 		tr, canTranslate := p.(painter.Translator)
 		if canTranslate {
 			s.Child.SetBounds(Rect{X: r.X, Y: r.Y, W: cb.W, H: cb.H})
-			tr.PushTranslate(-s.OffsetX, -s.OffsetY)
+			tr.PushTranslate(-px, -py)
 		} else {
 			// A back-end with no translation still has to scroll, so fall back
 			// to the old shape rather than showing the content unscrolled.
-			s.Child.SetBounds(Rect{X: r.X - s.OffsetX, Y: r.Y - s.OffsetY, W: cb.W, H: cb.H})
+			s.Child.SetBounds(Rect{X: r.X - px, Y: r.Y - py, W: cb.W, H: cb.H})
 		}
 		s.Child.Draw(p, theme)
 		if canTranslate {
@@ -364,92 +369,148 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 // HitTest covers the full bounds (the scrollbar is interactive too).
 func (s *ScrollView) HitTest(px, py int) bool { return s.Bounds().Contains(px, py) }
 
-// Fling tuning. The numbers are the physical feel of the gesture, so they are
-// named constants rather than literals buried in the maths.
-const (
-	// flingFriction is the exponential decay of the fling velocity, per
-	// second: after one second the view retains e^-flingFriction of its speed.
-	// It is the difference between a flick that glides and one that stops as
-	// if the content were made of sand.
-	flingFriction = 4.0
-	// flingMinVelocity is the speed, in pixels per second, below which a fling
-	// is over. Left to decay forever an exponential never reaches zero, and a
-	// view creeping by a pixel every few frames would keep the host repainting
-	// for nothing.
-	flingMinVelocity = 24.0
-	// flingStartVelocity is the release speed, in pixels per second, a drag
-	// must reach to become a fling at all. Below it the gesture was a
-	// deliberate placement, and carrying it on would fight the user.
-	flingStartVelocity = 120.0
-)
+// The touch-scroll engine.
+//
+// ScrollView drives a [Momentum] per axis — the same engine [MomentumScroller]
+// exposes for a host that routes touch itself — so a drag rubber-bands past the
+// ends, a release coasts with the engine's physics, and an overscrolled view
+// springs home. It needs no host wiring at all: ScrollView is an [Animator], so
+// a host already calling [TickTree] drives it, and [TreeAnimating] lets that
+// host stop scheduling frames the moment the view comes to rest.
+//
+// OffsetX and OffsetY REMAIN STRICTLY CLAMPED to [0, max]. That is deliberate,
+// and it is the difference between this and writing the engine's offset
+// straight into them: they are exported fields that callers read to convert a
+// screen point into a content point, and the scrollbar geometry computes the
+// thumb from them — an offset past a bound puts the thumb outside its own
+// track. So the engine's excursion is split in two. The part inside the bounds
+// is the offset; the part beyond is [ScrollView.Overscroll], which only Draw
+// consults, shifting the painted content without ever moving the scroll
+// position a caller can see.
 
-// Tick advances an in-flight fling by dt seconds, and turns the movement the
-// last frame's drag accumulated into a velocity.
+// axis returns the engine for one axis, creating it on first use so a
+// zero-value ScrollView needs no constructor change.
+func (s *ScrollView) axis(a **Momentum) *Momentum {
+	if *a == nil {
+		*a = NewMomentum()
+	}
+	return *a
+}
+
+// syncEngines refreshes each engine's clamp window from the current geometry
+// and seeds it with the offset the view actually has, so a drag starts from
+// where the content sits however it got there (a wheel notch, a key, a thumb).
+func (s *ScrollView) syncEngines() {
+	x, y := s.axis(&s.momX), s.axis(&s.momY)
+	x.SetBounds(0, float64(s.maxOffsetX()))
+	y.SetBounds(0, float64(s.maxOffsetY()))
+	x.SetOffset(float64(s.OffsetX))
+	y.SetOffset(float64(s.OffsetY))
+}
+
+// beginTouchScroll arms both engines for a content drag.
+func (s *ScrollView) beginTouchScroll() {
+	s.syncEngines()
+	s.momX.BeginDrag()
+	s.momY.BeginDrag()
+	s.trackX.Reset()
+	s.trackY.Reset()
+}
+
+// dragTouchScroll feeds one drag sample: dx, dy is the movement to add to the
+// scroll offset, already inverted so the content follows the finger.
+func (s *ScrollView) dragTouchScroll(dx, dy int) {
+	s.axis(&s.momX).DragBy(float64(dx))
+	s.axis(&s.momY).DragBy(float64(dy))
+	s.pan.accumX += dx
+	s.pan.accumY += dy
+	s.pushEngines()
+}
+
+// endTouchScroll releases the drag into a coast at the velocity the trackers
+// smoothed from the recent samples. A release while overscrolled springs home
+// whatever the velocity was.
+func (s *ScrollView) endTouchScroll() {
+	s.axis(&s.momX).EndDrag(s.trackX.Velocity())
+	s.axis(&s.momY).EndDrag(s.trackY.Velocity())
+}
+
+// pushEngines writes the engines' positions back to the view, splitting each
+// into the clamped offset and the overscroll beyond it.
+func (s *ScrollView) pushEngines() {
+	s.OffsetX, s.overscrollX = splitOverscroll(s.axis(&s.momX).OffsetInt(), s.maxOffsetX())
+	s.OffsetY, s.overscrollY = splitOverscroll(s.axis(&s.momY).OffsetInt(), s.maxOffsetY())
+}
+
+// splitOverscroll divides an engine position into the part a scroll offset may
+// legally hold and the rubber-band excess beyond it.
+func splitOverscroll(pos, max int) (offset, over int) {
+	switch {
+	case pos < 0:
+		return 0, pos
+	case pos > max:
+		return max, pos - max
+	default:
+		return pos, 0
+	}
+}
+
+// Overscroll reports the rubber-band displacement, in pixels: negative past the
+// start of the content, positive past its end, zero at rest. It is what Draw
+// shifts the content by ON TOP of the scroll offset, so a caller wanting to know
+// where the content actually sits adds it to OffsetX/OffsetY; a caller wanting
+// the scroll position ignores it, which is why the offsets stay clamped.
+func (s *ScrollView) Overscroll() (x, y int) { return s.overscrollX, s.overscrollY }
+
+// Tick advances the touch-scroll engines by dt seconds, and turns the movement
+// the last frame's drag accumulated into a velocity.
 //
-// It makes ScrollView an [Animator], so a host already calling [TickTree] drives
-// the fling with no extra wiring, and [TreeAnimating] lets it stop scheduling
-// frames the moment the view comes to rest.
-//
-// Velocity is measured HERE rather than in the drag handler because a
-// toolkit.Event carries no timestamp: the only clock in the toolkit is the dt a
-// host hands to a tick. So a drag accumulates pixels, and each tick converts
-// the pixels since the previous one into pixels per second.
+// It makes ScrollView an [Animator], so a host already calling [TickTree]
+// drives the coast with no extra wiring. Velocity is measured HERE rather than
+// in the drag handler because a toolkit.Event carries no timestamp: the only
+// clock in the toolkit is the dt a host hands to a tick.
 func (s *ScrollView) Tick(dt float64) {
 	if dt <= 0 || s.ScrollDriven() {
 		return
 	}
 	if s.pan.active {
-		// Still under the finger: measure, do not move. The drag itself is
-		// what scrolls while the contact lasts.
-		s.velX = float64(s.pan.accumX) / dt
-		s.velY = float64(s.pan.accumY) / dt
+		// Under the finger: measure, do not advance. The drag itself is what
+		// moves the content while the contact lasts.
+		s.trackX.Sample(float64(s.pan.accumX), dt)
+		s.trackY.Sample(float64(s.pan.accumY), dt)
 		s.pan.accumX, s.pan.accumY = 0, 0
 		return
 	}
-	if !s.flinging {
+	if s.momX == nil && s.momY == nil {
 		return
 	}
-	s.Scroll(int(s.velX*dt), int(s.velY*dt))
-	decay := math.Exp(-flingFriction * dt)
-	s.velX *= decay
-	s.velY *= decay
-	if math.Abs(s.velX) < flingMinVelocity && math.Abs(s.velY) < flingMinVelocity {
-		s.stopFling()
-	}
-	// Hitting an end stops the fling on that axis: the content cannot move, so
-	// there is nothing left to carry.
-	if s.OffsetX <= 0 || s.OffsetX >= s.maxOffsetX() {
-		s.velX = 0
-	}
-	if s.OffsetY <= 0 || s.OffsetY >= s.maxOffsetY() {
-		s.velY = 0
-	}
-	if s.velX == 0 && s.velY == 0 {
-		s.stopFling()
-	}
+	s.axis(&s.momX).Tick(dt)
+	s.axis(&s.momY).Tick(dt)
+	s.pushEngines()
 }
 
-// Animating reports whether the view still needs frames: true exactly while a
-// fling is running, or while a finger is down and its speed is being measured.
-func (s *ScrollView) Animating() bool { return s.flinging || s.pan.active }
-
-// stopFling brings the view to rest.
-func (s *ScrollView) stopFling() {
-	s.flinging = false
-	s.velX, s.velY = 0, 0
-}
-
-// startFling launches a fling if the release was fast enough to be one.
-func (s *ScrollView) startFling() {
-	if math.Abs(s.velX) < flingStartVelocity && math.Abs(s.velY) < flingStartVelocity {
-		s.stopFling()
-		return
+// Animating reports whether the view still needs frames: while an engine is
+// settling, or while a finger is down and its speed is being measured.
+func (s *ScrollView) Animating() bool {
+	if s.pan.active {
+		return true
 	}
-	s.flinging = true
+	return (s.momX != nil && s.momX.Settling()) || (s.momY != nil && s.momY.Settling())
 }
 
-// maxOffsetX and maxOffsetY are the largest legal scroll offsets, i.e. how far
-// the content can move before its far edge meets the viewport's.
+// stopTouchScroll brings the view to rest wherever it is, discarding any coast.
+func (s *ScrollView) stopTouchScroll() {
+	if s.momX != nil {
+		s.momX.Stop()
+	}
+	if s.momY != nil {
+		s.momY.Stop()
+	}
+	s.overscrollX, s.overscrollY = 0, 0
+}
+
+// maxOffsetX and maxOffsetY are the largest legal scroll offsets: how far the
+// content can move before its far edge meets the viewport's.
 func (s *ScrollView) maxOffsetX() int { return maxInt(0, s.contentW-s.viewport().W) }
 func (s *ScrollView) maxOffsetY() int { return maxInt(0, s.contentH-s.viewport().H) }
 
@@ -482,6 +543,6 @@ func (s *ScrollView) SetScrollDriver(driver any) {
 	s.driver = driver
 	if driver != nil {
 		s.pan.release()
-		s.stopFling()
+		s.stopTouchScroll()
 	}
 }

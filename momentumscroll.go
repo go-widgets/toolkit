@@ -4,10 +4,17 @@
 
 package toolkit
 
-// MomentumScroller adapts the pure-logic [Momentum] engine onto an existing
-// [ScrollView], giving it the touch fling + rubber-band behaviour without
-// changing ScrollView itself. It is deliberately ADDITIVE: a ScrollView that is
-// never wrapped keeps its exact previous behaviour — wheel, keys, scrollbar
+// MomentumScroller drives a [ScrollView] from a host that routes touch itself,
+// with its own clock.
+//
+// A ScrollView now drives the same [Momentum] engines on its own — see
+// ScrollView.Tick — so nothing has to be wrapped to get touch scrolling,
+// rubber-band overscroll and spring-back. This type remains for the host that
+// wants to own the timing, feed its own dt, or retune an axis: wrapping claims
+// the view (see [ScrollView.SetScrollDriver]) so the two never both move it.
+//
+// It is deliberately ADDITIVE: a ScrollView that is never wrapped keeps its own
+// behaviour — wheel, keys, scrollbar
 // drag and content pan all run through ScrollView.OnEvent as before — because
 // this type modifies no ScrollView code and only ever runs when a host routes
 // touch events to it explicitly. That is the gate: default (non-touch) scrolling
