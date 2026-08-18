@@ -40,6 +40,32 @@ type Entry struct {
 	Composition string
 }
 
+// entryPadX is the left inset in LOGICAL pixels between the field border and the
+// text baseline column. Routed through [scaled] at every use so the gap grows
+// with HiDPI and touch [Density] instead of staying a fixed 4 device pixels
+// while the glyphs around it double; at [DensityCompact] and MetricScale 1 it is
+// its literal 4, byte-identical to the pre-density field.
+const entryPadX = 4
+
+// hitRectFor clamps a widget's drawn rectangle up to the current density's
+// minimum hit dimension on each axis (via [TouchTarget]) and re-centres the
+// enlarged rect over the original, so the interactive target meets the touch
+// floor without moving or resizing what Draw paints. Under [DensityCompact]
+// TouchTarget is a pass-through, so the returned rect equals r byte-for-byte —
+// the shared engine behind every INPUTS/PICKERS HitRect, mirroring the worked
+// [Switch.HitRect] example.
+func hitRectFor(r Rect) Rect {
+	w, h := TouchTarget(r.W), TouchTarget(r.H)
+	return Rect{X: r.X - (w-r.W)/2, Y: r.Y - (h-r.H)/2, W: w, H: h}
+}
+
+// HitRect is the Entry's interactive tap target: its drawn [Widget.Bounds] with
+// each axis clamped up to the touch minimum and centred, so a single-line field
+// only a glyph-row tall still offers a finger the platform's 44-logical-pixel
+// reach under [DensityTouch]. At [DensityCompact] it equals Bounds byte-for-byte
+// (the clamp is a pass-through), leaving desktop hit-testing unchanged.
+func (e *Entry) HitRect() Rect { return hitRectFor(e.Bounds()) }
+
 // NewEntry builds an Entry with initial text + cursor parked at end.
 func NewEntry(initial string) *Entry {
 	r := []rune(initial)
@@ -77,10 +103,11 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, border)
 	textY := r.Y + (r.H-e.glyphHeight())/2
 	shown := e.display()
+	pad := scaled(entryPadX)
 	if shown == "" && e.Composition == "" && e.Placeholder != "" {
-		e.drawText(p, r.X+4, textY, e.Placeholder, theme.SurfaceAlt)
+		e.drawText(p, r.X+pad, textY, e.Placeholder, theme.SurfaceAlt)
 	} else {
-		e.drawText(p, r.X+4, textY, shown, theme.OnSurface)
+		e.drawText(p, r.X+pad, textY, shown, theme.OnSurface)
 	}
 	if e.focused {
 		// Caret x measured from the shown text up to the cursor, so it lands
@@ -89,7 +116,7 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 		if e.Cursor > len(runes) {
 			e.Cursor = len(runes)
 		}
-		cx := r.X + 4 + e.textWidth(string(runes[:e.Cursor]))
+		cx := r.X + pad + e.textWidth(string(runes[:e.Cursor]))
 		if e.Composition != "" {
 			// IME composition preview: render the pending string in
 			// the muted SurfaceAlt tone right at the cursor, ghosted +

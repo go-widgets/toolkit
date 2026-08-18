@@ -109,6 +109,29 @@ func (s *RangeSlider) thumbPos(v float64) int {
 	return start + int(pos*float64(length-scaled(scaleThumbSize)))
 }
 
+// thumbRect returns the drawn rectangle of the handle at value v, placed exactly
+// as Draw paints it: a scaled square centred across the track, its top-left along
+// the active axis given by thumbPos. The two HitRect accessors derive their
+// finger grabs from it.
+func (s *RangeSlider) thumbRect(v float64) Rect {
+	r := s.Bounds()
+	sz := scaled(scaleThumbSize)
+	pos := s.thumbPos(v)
+	if s.Orientation == Vertical {
+		return Rect{X: r.X + (r.W-sz)/2, Y: pos, W: sz, H: sz}
+	}
+	return Rect{X: pos, Y: r.Y + (r.H-sz)/2, W: sz, H: sz}
+}
+
+// LowThumbHitRect and HighThumbHitRect are the finger grabs for the two handles:
+// each drawn thumb clamped up to the touch minimum on both axes and centred over
+// the knob, so a 16-logical-pixel handle exposes a 44px target under
+// [DensityTouch]. At [DensityCompact] each equals its drawn thumb byte-for-byte.
+func (s *RangeSlider) LowThumbHitRect() Rect { return hitRectFor(s.thumbRect(s.Low)) }
+
+// HighThumbHitRect is the finger grab for the High handle; see LowThumbHitRect.
+func (s *RangeSlider) HighThumbHitRect() Rect { return hitRectFor(s.thumbRect(s.High)) }
+
 // Draw paints the rounded track, the Accent band between the two handles, and
 // a circular white thumb at each handle -- matching Scale's macOS styling.
 func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {

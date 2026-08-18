@@ -130,30 +130,34 @@ func (rp *DateRangePicker) inRange(day Date) bool {
 func (rp *DateRangePicker) Draw(p painter.Painter, theme *Theme) {
 	r := rp.Bounds()
 	y, m := rp.Cal.Year, rp.Cal.Month
+	// Calendar cell/header sizes belong to Calendar (calendar.go); routed through
+	// scaled so this month grid grows with HiDPI and touch Density. Identity at
+	// compact/1x, so the grid is byte-identical to before.
+	hdrH, cellW, cellH := scaled(CalendarHeaderH), scaled(CalendarCellW), scaled(CalendarCellH)
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	// Header: prev arrow, centred month/year, next arrow.
-	hy := r.Y + (CalendarHeaderH-rp.glyphHeight())/2
+	hy := r.Y + (hdrH-rp.glyphHeight())/2
 	hdr := monthName(m) + " " + itoa(y)
 	rp.drawText(p, r.X+(r.W-rp.textWidth(hdr))/2, hy, hdr, theme.OnSurface)
-	rp.drawText(p, r.X+(CalendarCellW-rp.textWidth("<"))/2, hy, "<", theme.OnSurface)
-	rp.drawText(p, r.X+r.W-CalendarCellW+(CalendarCellW-rp.textWidth(">"))/2, hy, ">", theme.OnSurface)
+	rp.drawText(p, r.X+(cellW-rp.textWidth("<"))/2, hy, "<", theme.OnSurface)
+	rp.drawText(p, r.X+r.W-cellW+(cellW-rp.textWidth(">"))/2, hy, ">", theme.OnSurface)
 	// Weekday row.
-	weekdayY := r.Y + CalendarHeaderH
+	weekdayY := r.Y + hdrH
 	for i, label := range weekdayLabels {
-		cx := r.X + i*CalendarCellW + (CalendarCellW-rp.textWidth(label))/2
-		rp.drawText(p, cx, weekdayY+2, label, theme.OnSurface)
+		cx := r.X + i*cellW + (cellW-rp.textWidth(label))/2
+		rp.drawText(p, cx, weekdayY+scaled(drpWeekdayGap), label, theme.OnSurface)
 	}
 	// Day grid.
 	first := WeekdayOfFirst(y, m)
 	dim := DaysInMonth(y, m)
-	gridY := weekdayY + rp.glyphHeight() + 4
+	gridY := weekdayY + rp.glyphHeight() + scaled(drpGridGap)
 	for d := 1; d <= dim; d++ {
 		idx := first + d - 1
 		col := idx % 7
 		row := idx / 7
-		cx := r.X + col*CalendarCellW
-		cy := gridY + row*CalendarCellH
+		cx := r.X + col*cellW
+		cy := gridY + row*cellH
 		day := Date{Y: y, M: m, D: d}
 		bg := theme.Surface
 		ink := theme.OnSurface
@@ -163,11 +167,44 @@ func (rp *DateRangePicker) Draw(p painter.Painter, theme *Theme) {
 		} else if rp.inRange(day) {
 			bg = theme.SurfaceAlt
 		}
-		fillRect(p, cx, cy, CalendarCellW, CalendarCellH, bg)
+		fillRect(p, cx, cy, cellW, cellH, bg)
 		txt := itoa(d)
-		rp.drawText(p, cx+(CalendarCellW-rp.textWidth(txt))/2, cy+(CalendarCellH-rp.glyphHeight())/2, txt, ink)
+		rp.drawText(p, cx+(cellW-rp.textWidth(txt))/2, cy+(cellH-rp.glyphHeight())/2, txt, ink)
 	}
 }
+
+// drpWeekdayGap and drpGridGap are the LOGICAL vertical gaps below the weekday
+// row and above the day grid, scaled at use; identity at compact/1x.
+const (
+	drpWeekdayGap = 2
+	drpGridGap    = 4
+)
+
+// prevArrowRect and nextArrowRect are the drawn header arrow cells (one
+// CalendarCellW wide at each end of the header row), the two discrete buttons a
+// finger presses to page the month.
+func (rp *DateRangePicker) prevArrowRect() Rect {
+	r := rp.Bounds()
+	return Rect{X: r.X, Y: r.Y, W: scaled(CalendarCellW), H: scaled(CalendarHeaderH)}
+}
+
+func (rp *DateRangePicker) nextArrowRect() Rect {
+	r := rp.Bounds()
+	cellW := scaled(CalendarCellW)
+	return Rect{X: r.X + r.W - cellW, Y: r.Y, W: cellW, H: scaled(CalendarHeaderH)}
+}
+
+// PrevArrowHitRect and NextArrowHitRect are the finger targets for the two
+// month-paging arrows: each drawn arrow cell clamped up to the touch minimum on
+// both axes and centred over it, so the 24-logical-pixel cells reach the 44px
+// floor under [DensityTouch]. They sit at opposite header ends, so the enlarged
+// grabs never overlap. At [DensityCompact] each equals its drawn cell
+// byte-for-byte.
+func (rp *DateRangePicker) PrevArrowHitRect() Rect { return hitRectFor(rp.prevArrowRect()) }
+
+// NextArrowHitRect is the finger target for the next-month arrow; see
+// PrevArrowHitRect.
+func (rp *DateRangePicker) NextArrowHitRect() Rect { return hitRectFor(rp.nextArrowRect()) }
 
 // OnEvent handles clicks (widget-local coordinates): the header arrows page the
 // month; a day-cell click is forwarded to the embedded Calendar, whose OnSelect
@@ -177,12 +214,13 @@ func (rp *DateRangePicker) OnEvent(ev Event) {
 		return
 	}
 	r := rp.Bounds()
-	if ev.Y >= 0 && ev.Y < CalendarHeaderH {
-		if ev.X >= 0 && ev.X < CalendarCellW {
+	cellW := scaled(CalendarCellW)
+	if ev.Y >= 0 && ev.Y < scaled(CalendarHeaderH) {
+		if ev.X >= 0 && ev.X < cellW {
 			rp.prevMonth()
 			return
 		}
-		if ev.X >= r.W-CalendarCellW && ev.X < r.W {
+		if ev.X >= r.W-cellW && ev.X < r.W {
 			rp.nextMonth()
 			return
 		}

@@ -34,11 +34,20 @@ type TimePicker struct {
 // widget's top-left; scaled(tpBtnW) is the width of the up/down affordance column
 // stacked on the right of each spinner cell.
 const (
-	tpCellW  = 34 // width of an hour / minute spinner cell
-	tpColonW = 8  // width of the ":" separator cell
-	tpAmPmW  = 34 // width of the AM/PM toggle cell (only when Use12h)
-	tpBtnW   = 14 // width of the ▲/▼ button column inside a spinner cell
+	tpCellW    = 34 // width of an hour / minute spinner cell
+	tpColonW   = 8  // width of the ":" separator cell
+	tpAmPmW    = 34 // width of the AM/PM toggle cell (only when Use12h)
+	tpBtnW     = 14 // width of the ▲/▼ button column inside a spinner cell
+	tpTextPadX = 4  // left inset for a spinner cell's value text
 )
+
+// HitRect is the TimePicker's field-level tap target: Bounds clamped up to the
+// touch minimum on each axis and centred, byte-identical to Bounds at
+// [DensityCompact]. The two ▲/▼ steppers are stacked within each spinner cell,
+// so they cannot each grow to the 44px floor without overlapping; the field
+// clamp guarantees the control as a whole meets the touch height, while the
+// cells (scaled(tpCellW) wide) grow with density so the steppers stay legible.
+func (tp *TimePicker) HitRect() Rect { return hitRectFor(tp.Bounds()) }
 
 // NewTimePicker builds a TimePicker initialised to (hour, minute). The inputs
 // are normalised into range (hour into 0..23, minute into 0..59) so an
@@ -176,7 +185,7 @@ func (tp *TimePicker) drawSpinner(p painter.Painter, theme *Theme, cell Rect, te
 	fillRect(p, cell.X, cell.Y, cell.W, cell.H, theme.Surface)
 	strokeRect(p, cell.X, cell.Y, cell.W, cell.H, theme.Border)
 	ty := cell.Y + (cell.H-tp.glyphHeight())/2
-	tp.drawText(p, cell.X+4, ty, text, theme.OnSurface)
+	tp.drawText(p, cell.X+scaled(tpTextPadX), ty, text, theme.OnSurface)
 	up, down := spinButtons(cell)
 	fillRect(p, up.X, up.Y, up.W, up.H, theme.SurfaceAlt)
 	fillRect(p, down.X, down.Y, down.W, down.H, theme.SurfaceAlt)
