@@ -685,8 +685,8 @@ func TestTooltipDrawVisible(t *testing.T) {
 
 func TestDropDownNewClampsSelected(t *testing.T) {
 	d := NewDropDown([]string{"a", "b"}, 99)
-	if d.Selected != 0 {
-		t.Fatalf("Selected = %d, want 0", d.Selected)
+	if d.Selected().Get() != 0 {
+		t.Fatalf("Selected = %d, want 0", d.Selected().Get())
 	}
 }
 
@@ -702,7 +702,7 @@ func TestDropDownCurrent(t *testing.T) {
 	if d.Current() != "b" {
 		t.Fatalf("Current = %q", d.Current())
 	}
-	d.Selected = 99
+	d.Selected().Set(99)
 	if d.Current() != "" {
 		t.Fatalf("Current with invalid Selected = %q", d.Current())
 	}
@@ -711,11 +711,11 @@ func TestDropDownCurrent(t *testing.T) {
 func TestDropDownToggleOpen(t *testing.T) {
 	d := NewDropDown([]string{"a"}, 0)
 	d.OnEvent(Event{Kind: EventClick})
-	if !d.Open {
+	if !d.Open().Get() {
 		t.Fatal("after first click: Open")
 	}
 	d.OnEvent(Event{Kind: EventClick})
-	if d.Open {
+	if d.Open().Get() {
 		t.Fatal("after second click: closed")
 	}
 }
@@ -723,7 +723,7 @@ func TestDropDownToggleOpen(t *testing.T) {
 func TestDropDownIgnoresNonClick(t *testing.T) {
 	d := NewDropDown([]string{"a"}, 0)
 	d.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if d.Open {
+	if d.Open().Get() {
 		t.Fatal("KeyDown should not toggle")
 	}
 }
@@ -731,11 +731,11 @@ func TestDropDownIgnoresNonClick(t *testing.T) {
 func TestDropDownSelectValid(t *testing.T) {
 	got := -1
 	d := NewDropDown([]string{"a", "b", "c"}, 0)
-	d.Open = true
-	d.OnSelect = func(i int) { got = i }
+	d.Open().Set(true)
+	d.Selected().Subscribe(func(i int) { got = i })
 	d.Select(2)
-	if d.Selected != 2 || d.Open || got != 2 {
-		t.Fatalf("Select(2): Selected=%d Open=%v got=%d", d.Selected, d.Open, got)
+	if d.Selected().Get() != 2 || d.Open().Get() || got != 2 {
+		t.Fatalf("Select(2): Selected=%d Open=%v got=%d", d.Selected().Get(), d.Open().Get(), got)
 	}
 }
 
@@ -743,12 +743,12 @@ func TestDropDownSelectInvalid(t *testing.T) {
 	d := NewDropDown([]string{"a"}, 0)
 	d.Select(-1)
 	d.Select(99)
-	if d.Selected != 0 {
+	if d.Selected().Get() != 0 {
 		t.Fatal("invalid Select should not change Selected")
 	}
 }
 
-func TestDropDownSelectNilCallback(t *testing.T) {
+func TestDropDownSelectNoSubscriber(t *testing.T) {
 	d := NewDropDown([]string{"a"}, 0)
 	d.Select(0)
 }

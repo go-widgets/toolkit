@@ -365,7 +365,7 @@ func TestDropDownDisabled(t *testing.T) {
 	d.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 20})
 	d.Disabled = true
 	d.OnEvent(Event{Kind: EventClick})
-	if d.Open {
+	if d.Open().Get() {
 		t.Fatal("disabled dropdown should not open")
 	}
 	buf := makeSurface(80, 20)

@@ -445,49 +445,49 @@ func TestDropDownKeyboard(t *testing.T) {
 	d := NewDropDown(opts, 1)
 	// Closed: an unrelated key does not open.
 	d.OnEvent(kd("ArrowUp"))
-	if d.Open {
+	if d.Open().Get() {
 		t.Fatal("ArrowUp opened a closed dropdown")
 	}
 	// Space opens and remembers the current selection.
 	d.OnEvent(kd(" "))
-	if !d.Open || d.savedSelected != 1 {
-		t.Fatalf("space open: Open=%v saved=%d", d.Open, d.savedSelected)
+	if !d.Open().Get() || d.savedSelected != 1 {
+		t.Fatalf("space open: Open=%v saved=%d", d.Open().Get(), d.savedSelected)
 	}
 	// ArrowDown moves the highlight, clamped at the last option.
 	d.OnEvent(kd("ArrowDown")) // 1 -> 2
 	d.OnEvent(kd("ArrowDown")) // clamp at 2
-	if d.Selected != 2 {
-		t.Fatalf("ArrowDown clamp: Selected=%d", d.Selected)
+	if d.Selected().Get() != 2 {
+		t.Fatalf("ArrowDown clamp: Selected=%d", d.Selected().Get())
 	}
 	// ArrowUp moves up, clamped at 0.
 	d.OnEvent(kd("ArrowUp")) // 2 -> 1
 	d.OnEvent(kd("ArrowUp")) // 1 -> 0
 	d.OnEvent(kd("ArrowUp")) // clamp at 0
-	if d.Selected != 0 {
-		t.Fatalf("ArrowUp clamp: Selected=%d", d.Selected)
+	if d.Selected().Get() != 0 {
+		t.Fatalf("ArrowUp clamp: Selected=%d", d.Selected().Get())
 	}
 	// Escape restores the pre-open selection and closes.
 	d.OnEvent(kd("Escape"))
-	if d.Open || d.Selected != 1 {
-		t.Fatalf("escape: Open=%v Selected=%d (want closed, 1)", d.Open, d.Selected)
+	if d.Open().Get() || d.Selected().Get() != 1 {
+		t.Fatalf("escape: Open=%v Selected=%d (want closed, 1)", d.Open().Get(), d.Selected().Get())
 	}
 
 	// ArrowDown opens (from closed), then Enter commits the highlighted option.
 	sel := -1
 	d2 := NewDropDown(opts, 0)
-	d2.OnSelect = func(i int) { sel = i }
+	d2.Selected().Subscribe(func(i int) { sel = i })
 	d2.OnEvent(kd("ArrowDown")) // closed -> open, saved=0
 	d2.OnEvent(kd("ArrowDown")) // 0 -> 1
 	d2.OnEvent(kd("Enter"))     // commit 1
-	if d2.Open || d2.Selected != 1 || sel != 1 {
-		t.Fatalf("enter commit: Open=%v Selected=%d cb=%d", d2.Open, d2.Selected, sel)
+	if d2.Open().Get() || d2.Selected().Get() != 1 || sel != 1 {
+		t.Fatalf("enter commit: Open=%v Selected=%d cb=%d", d2.Open().Get(), d2.Selected().Get(), sel)
 	}
 
 	// Disabled ignores keys.
 	d3 := NewDropDown(opts, 0)
 	d3.Disabled = true
 	d3.OnEvent(kd(" "))
-	if d3.Open {
+	if d3.Open().Get() {
 		t.Fatal("disabled dropdown opened")
 	}
 }
