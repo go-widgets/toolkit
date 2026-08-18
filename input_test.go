@@ -480,10 +480,10 @@ func TestCheckButtonSizedCheckmark(t *testing.T) {
 func TestRadioButtonStandaloneToggles(t *testing.T) {
 	got := false
 	r := NewRadioButton("A")
-	r.OnToggle = func(v bool) { got = v }
+	r.Checked().Subscribe(func(v bool) { got = v })
 	r.OnEvent(Event{Kind: EventClick})
-	if !r.Checked || !got {
-		t.Fatalf("standalone toggle: Checked=%v got=%v", r.Checked, got)
+	if !r.Checked().Get() || !got {
+		t.Fatalf("standalone toggle: Checked=%v got=%v", r.Checked().Get(), got)
 	}
 }
 
@@ -492,7 +492,7 @@ func TestRadioButtonIgnoresNonClick(t *testing.T) {
 	// A standalone radio toggles on Space/Enter as of Wave 3; an unrelated key
 	// (Tab) must not.
 	r.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if r.Checked {
+	if r.Checked().Get() {
 		t.Fatal("KeyDown should not toggle a radio")
 	}
 }
@@ -505,48 +505,79 @@ func TestRadioGroupMutualExclusion(t *testing.T) {
 	g.Add(a)
 	g.Add(b)
 	g.Add(c)
-	if g.Active != -1 {
-		t.Fatalf("initial Active = %d, want -1", g.Active)
+	if g.Active().Get() != -1 {
+		t.Fatalf("initial Active = %d, want -1", g.Active().Get())
 	}
 	b.OnEvent(Event{Kind: EventClick})
-	if !b.Checked || a.Checked || c.Checked || g.Active != 1 {
-		t.Fatalf("after click B: a=%v b=%v c=%v active=%d", a.Checked, b.Checked, c.Checked, g.Active)
+	if !b.Checked().Get() || a.Checked().Get() || c.Checked().Get() || g.Active().Get() != 1 {
+		t.Fatalf("after click B: a=%v b=%v c=%v active=%d", a.Checked().Get(), b.Checked().Get(), c.Checked().Get(), g.Active().Get())
 	}
 	a.OnEvent(Event{Kind: EventClick})
-	if !a.Checked || b.Checked || c.Checked || g.Active != 0 {
-		t.Fatalf("after click A: a=%v b=%v c=%v active=%d", a.Checked, b.Checked, c.Checked, g.Active)
+	if !a.Checked().Get() || b.Checked().Get() || c.Checked().Get() || g.Active().Get() != 0 {
+		t.Fatalf("after click A: a=%v b=%v c=%v active=%d", a.Checked().Get(), b.Checked().Get(), c.Checked().Get(), g.Active().Get())
 	}
 }
 
-func TestRadioGroupOnToggleFires(t *testing.T) {
+// TestRadioGroupBindingsFireOnActivation proves a host observes a group
+// selection purely through the members' Checked() Observables and the group's
+// Active() Observable — the callbacks (OnToggle/OnChange) are gone.
+func TestRadioGroupBindingsFireOnActivation(t *testing.T) {
 	g := NewRadioGroup()
 	r := NewRadioButton("X")
+	checked := false
+	r.Checked().Subscribe(func(v bool) { checked = v })
+	active := -1
+	g.Active().Subscribe(func(v int) { active = v })
+	g.Add(r)
+	r.OnEvent(Event{Kind: EventClick})
+	if !checked || active != 0 {
+		t.Fatalf("group activation bindings: checked=%v active=%d, want true/0", checked, active)
+	}
+}
+
+func TestRadioGroupNilBindingNoPanic(t *testing.T) {
+	g := NewRadioGroup()
+	r := NewRadioButton("X")
+	g.Add(r)
+	r.OnEvent(Event{Kind: EventClick}) // no subscribers bound
+}
+
+// TestRadioButtonBareAccessorInits proves the Checked accessor lazily
+// initialises to false on a bare &RadioButton{} (nil observable), and a host can
+// bind it before any interaction.
+func TestRadioButtonBareAccessorInits(t *testing.T) {
+	r := &RadioButton{}
+	if r.Checked().Get() {
+		t.Fatal("bare RadioButton Checked() = true, want false")
+	}
 	got := false
-	r.OnToggle = func(v bool) { got = v }
-	g.Add(r)
-	r.OnEvent(Event{Kind: EventClick})
-	if !got {
-		t.Fatal("OnToggle didn't fire on group activation")
+	r.Checked().Subscribe(func(v bool) { got = v })
+	r.Checked().Set(true)
+	if !got || !r.Checked().Get() {
+		t.Fatalf("host bind: got=%v Checked=%v", got, r.Checked().Get())
 	}
 }
 
-func TestRadioButtonStandaloneNilCallbackNoPanic(t *testing.T) {
-	r := NewRadioButton("X")
-	r.OnEvent(Event{Kind: EventClick}) // OnToggle == nil
-}
-
-func TestRadioGroupNilOnToggleNoPanic(t *testing.T) {
-	g := NewRadioGroup()
-	r := NewRadioButton("X")
-	g.Add(r)
-	r.OnEvent(Event{Kind: EventClick})
+// TestRadioGroupBareAccessorInits proves the Active accessor lazily initialises
+// to 0 on a bare &RadioGroup{} (nil observable), and a host can bind it.
+func TestRadioGroupBareAccessorInits(t *testing.T) {
+	g := &RadioGroup{}
+	if g.Active().Get() != 0 {
+		t.Fatalf("bare RadioGroup Active() = %d, want 0", g.Active().Get())
+	}
+	got := -99
+	g.Active().Subscribe(func(v int) { got = v })
+	g.Active().Set(2)
+	if got != 2 || g.Active().Get() != 2 {
+		t.Fatalf("host bind: got=%d Active=%d", got, g.Active().Get())
+	}
 }
 
 func TestRadioButtonDrawCheckedAndUnchecked(t *testing.T) {
 	const w, h = 80, 24
 	theme := DefaultLight()
 	r := NewRadioButton("X")
-	r.Checked = true
+	r.Checked().Set(true)
 	r.SetBounds(Rect{X: 2, Y: 4, W: 70, H: 16})
 	buf := makeSurface(w, h)
 	r.Draw(newP(buf, w), theme)
@@ -554,7 +585,7 @@ func TestRadioButtonDrawCheckedAndUnchecked(t *testing.T) {
 	if pixelAt(buf, w, 8, 10) != theme.Accent {
 		t.Fatalf("checked radio dot = %+v, want Accent", pixelAt(buf, w, 8, 10))
 	}
-	r.Checked = false
+	r.Checked().Set(false)
 	buf2 := makeSurface(w, h)
 	r.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 8, 10) != theme.Surface {

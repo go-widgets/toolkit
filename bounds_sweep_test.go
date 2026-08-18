@@ -25,7 +25,7 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"button", func() Widget { return NewButton("Click me", nil) }},
 		{"togglebutton", func() Widget { return NewToggleButton("Toggle", true) }},
 		{"checkbutton", func() Widget { return NewCheckButton("Enable", true) }},
-		{"radiobutton", func() Widget { rb := NewRadioButton("Opt"); rb.Checked = true; return rb }},
+		{"radiobutton", func() Widget { rb := NewRadioButton("Opt"); rb.Checked().Set(true); return rb }},
 		{"switch", func() Widget { return NewSwitch(true) }},
 		{"splitbutton", func() Widget { return NewSplitButton("Deploy", nil) }},
 		{"label", func() Widget { return NewLabel("Label text") }},

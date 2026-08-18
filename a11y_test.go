@@ -9,7 +9,7 @@ import "testing"
 func TestA11yInfoPerWidget(t *testing.T) {
 	check := NewCheckButton("Enable", true)
 	radio := NewRadioButton("Option")
-	radio.Checked = false
+	radio.Checked().Set(false)
 	sw := NewSwitch(true)
 	scale := NewScale(0, 100, 42)
 

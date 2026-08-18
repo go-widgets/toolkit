@@ -153,11 +153,8 @@ func TestToggleButtonKeyToggles(t *testing.T) {
 func TestRadioGroupArrowMovesChecked(t *testing.T) {
 	g := NewRadioGroup()
 	var members []*RadioButton
-	fired := make([]int, 3)
 	for i := 0; i < 3; i++ {
 		r := NewRadioButton("R")
-		idx := i
-		r.OnToggle = func(bool) { fired[idx]++ }
 		g.Add(r)
 		members = append(members, r)
 	}
@@ -165,57 +162,57 @@ func TestRadioGroupArrowMovesChecked(t *testing.T) {
 	members[0].SetFocused(true)
 	// ArrowDown moves the checked member from 0 to 1 and follows focus.
 	members[0].OnEvent(kd("ArrowDown"))
-	if g.Active != 1 || !members[1].Checked || members[0].Checked {
-		t.Fatalf("after ArrowDown: Active=%d checked=%v/%v", g.Active, members[0].Checked, members[1].Checked)
+	if g.Active().Get() != 1 || !members[1].Checked().Get() || members[0].Checked().Get() {
+		t.Fatalf("after ArrowDown: Active=%d checked=%v/%v", g.Active().Get(), members[0].Checked().Get(), members[1].Checked().Get())
 	}
 	if !members[1].Focused() || members[0].Focused() {
 		t.Fatalf("focus did not follow to member 1 (0=%v 1=%v)", members[0].Focused(), members[1].Focused())
 	}
 	// ArrowUp from member 1 wraps? No -- goes to 0.
 	members[1].OnEvent(kd("ArrowLeft"))
-	if g.Active != 0 || !members[0].Checked {
-		t.Fatalf("after ArrowLeft: Active=%d", g.Active)
+	if g.Active().Get() != 0 || !members[0].Checked().Get() {
+		t.Fatalf("after ArrowLeft: Active=%d", g.Active().Get())
 	}
 	// ArrowUp from member 0 wraps to the last member (2).
 	members[0].OnEvent(kd("ArrowUp"))
-	if g.Active != 2 || !members[2].Checked {
-		t.Fatalf("wrap ArrowUp: Active=%d", g.Active)
+	if g.Active().Get() != 2 || !members[2].Checked().Get() {
+		t.Fatalf("wrap ArrowUp: Active=%d", g.Active().Get())
 	}
 	// ArrowRight from 2 wraps to 0.
 	members[2].OnEvent(kd("ArrowRight"))
-	if g.Active != 0 {
-		t.Fatalf("wrap ArrowRight: Active=%d", g.Active)
+	if g.Active().Get() != 0 {
+		t.Fatalf("wrap ArrowRight: Active=%d", g.Active().Get())
 	}
 	// Disabled member ignores arrows.
 	members[0].Disabled = true
 	members[0].OnEvent(kd("ArrowDown"))
-	if g.Active != 0 {
-		t.Fatalf("disabled radio moved selection (Active=%d)", g.Active)
+	if g.Active().Get() != 0 {
+		t.Fatalf("disabled radio moved selection (Active=%d)", g.Active().Get())
 	}
 }
 
 func TestRadioStandaloneKeyToggles(t *testing.T) {
 	toggles := 0
 	r := NewRadioButton("A")
-	r.OnToggle = func(bool) { toggles++ }
+	r.Checked().Subscribe(func(bool) { toggles++ })
 	r.OnEvent(kd(" "))
-	if !r.Checked || toggles != 1 {
-		t.Fatalf("space: Checked=%v toggles=%d", r.Checked, toggles)
+	if !r.Checked().Get() || toggles != 1 {
+		t.Fatalf("space: Checked=%v toggles=%d", r.Checked().Get(), toggles)
 	}
 	r.OnEvent(kd("Enter"))
-	if r.Checked || toggles != 2 {
-		t.Fatalf("enter: Checked=%v toggles=%d", r.Checked, toggles)
+	if r.Checked().Get() || toggles != 2 {
+		t.Fatalf("enter: Checked=%v toggles=%d", r.Checked().Get(), toggles)
 	}
-	NewRadioButton("nil").OnEvent(kd(" ")) // nil OnToggle safe
+	NewRadioButton("nil").OnEvent(kd(" ")) // no subscribers bound; safe
 }
 
 func TestRadioGroupMoveCheckedEmptyMembers(t *testing.T) {
 	// Defensive n==0 guard: a radio whose group has no members must not panic.
-	g := &RadioGroup{Active: -1}
+	g := NewRadioGroup()
 	r := &RadioButton{group: g}
 	r.OnEvent(kd("ArrowDown"))
-	if g.Active != -1 {
-		t.Fatalf("empty group moved (Active=%d)", g.Active)
+	if g.Active().Get() != -1 {
+		t.Fatalf("empty group moved (Active=%d)", g.Active().Get())
 	}
 }
 

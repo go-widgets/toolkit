@@ -294,10 +294,10 @@ func TestRadioButtonDisabled(t *testing.T) {
 	r.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	r.Disabled = true
 	r.OnEvent(Event{Kind: EventClick})
-	if r.Checked {
+	if r.Checked().Get() {
 		t.Fatal("disabled radio should not toggle")
 	}
-	r.Checked = true // exercise the muted dot path
+	r.Checked().Set(true) // exercise the muted dot path
 	buf := makeSurface(60, 20)
 	r.Draw(newP(buf, 60), th)
 	if px := pixelAt(buf, 60, 1, 8); px != mutedFace(th) {
