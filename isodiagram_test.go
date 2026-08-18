@@ -574,13 +574,20 @@ func TestIsoContextMenuOnEmpty(t *testing.T) {
 	gx, gy := 3, 5
 	sx, sy := localOf(d, iso.V(float64(gx)+0.5, float64(gy)+0.5, 0))
 	d.OnEvent(Event{Kind: EventSecondaryClick, X: sx, Y: sy})
-	if len(d.menu.Menu.Items) != 1 || d.menu.Menu.Items[0].Label != "Add node" {
-		t.Fatalf("menu items = %+v, want [Add node]", d.menu.Menu.Items)
+	if len(d.menu.Menu.Items) != 2 ||
+		d.menu.Menu.Items[0].Label != "Add node" || d.menu.Menu.Items[1].Label != "Add text" {
+		t.Fatalf("menu items = %+v, want [Add node, Add text]", d.menu.Menu.Items)
 	}
 	d.menu.Menu.Items[0].Action()
 	nodes := d.Doc().Nodes()
 	if len(nodes) != 1 || nodes[0].X != gx || nodes[0].Y != gy {
 		t.Fatalf("Add node placed %+v, want one at (%d,%d)", nodes, gx, gy)
+	}
+	// The second item drops a text annotation at the same cell.
+	d.menu.Menu.Items[1].Action()
+	texts := d.Doc().Texts()
+	if len(texts) != 1 || texts[0].X != gx || texts[0].Y != gy {
+		t.Fatalf("Add text placed %+v, want one at (%d,%d)", texts, gx, gy)
 	}
 }
 

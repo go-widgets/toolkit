@@ -21,12 +21,21 @@ import (
 type IsoMode int
 
 const (
-	// IsoModeSelect is the default: click selects a node, drag moves it to
-	// another cell, drag on empty ground pans the view.
+	// IsoModeSelect is the default: click selects a node / connector / zone / text,
+	// drag moves the pressed node, zone or text (or resizes the selected zone by a
+	// corner handle), and drag on empty ground pans the view.
 	IsoModeSelect IsoMode = iota
 	// IsoModeConnect turns a node drag into a connector gesture: press one node,
 	// release on another, and a connector is created between them.
 	IsoModeConnect
+	// IsoModeZone turns a ground drag into a zone-creation gesture: press one
+	// ground cell, drag to another and release to create a rectangular zone
+	// spanning the two cells.
+	IsoModeZone
+	// IsoModeText turns a ground tap into a text-annotation gesture: tap a ground
+	// cell to drop a new (empty-captioned) text annotation there, selected and
+	// ready for [IsoDiagram.SetSelectedTextContent].
+	IsoModeText
 )
 
 // isoGesture is the in-flight pointer gesture between an EventClick (press) and
@@ -38,6 +47,19 @@ const (
 	isoGestureMove
 	isoGestureConnect
 	isoGesturePan
+	// isoGestureZoneCreate is a rubber-band rectangle on the ground that becomes a
+	// zone on release.
+	isoGestureZoneCreate
+	// isoGestureZoneMove drags a whole zone by a cell delta.
+	isoGestureZoneMove
+	// isoGestureZoneResize drags one corner handle of the selected zone, the
+	// opposite corner staying fixed.
+	isoGestureZoneResize
+	// isoGestureTextMove drags a text annotation by a cell delta.
+	isoGestureTextMove
+	// isoGestureTextAdd drops a new text annotation on release (a ground tap in
+	// [IsoModeText]).
+	isoGestureTextAdd
 )
 
 // isoSnapshot is a whole-document copy for the undo/redo stacks. The document is
@@ -47,6 +69,8 @@ const (
 type isoSnapshot struct {
 	nodes []IsoNode
 	conns []IsoConnector
+	zones []IsoZone
+	texts []IsoText
 }
 
 // IsoZoomStep is the multiplicative zoom applied per wheel notch.
@@ -90,6 +114,14 @@ type IsoDiagram struct {
 	// the connector selection is cleared. It mirrors OnSelect for the connector
 	// half of the selection, so a host can drive a "connector properties" panel.
 	OnSelectConnector func(id string)
+	// OnSelectZone fires when the selected zone changes; id is "" when the zone
+	// selection is cleared. It mirrors OnSelect for the zone third of the
+	// selection, so a host can drive a "zone properties" panel.
+	OnSelectZone func(id string)
+	// OnSelectText fires when the selected text annotation changes; id is "" when
+	// the text selection is cleared. It mirrors OnSelect for the text quarter of
+	// the selection, so a host can drive a "text properties" panel.
+	OnSelectText func(id string)
 	// OnInvalidate, when set, is called whenever the widget's appearance changed
 	// and it should be redrawn. A document edit (including one from another
 	// collaborator, via the store's Subscribe) also triggers it.
@@ -105,7 +137,13 @@ type IsoDiagram struct {
 	// [IsoDiagram.SelectedConnectorObservable] into a view model instead of the
 	// widget copying the id out every frame. "" means no connector selected.
 	selConn *mvvm.Observable[string]
-	seq     int // monotonic id source for placed nodes/connectors
+	// selZone / selText are the selected zone / text-annotation ids, each held in
+	// its own mvvm.Observable on the same model as selConn so all four selection
+	// channels (node, connector, zone, text) are mutually exclusive and each
+	// crosses the widget/host boundary the MVVM way. "" means nothing selected.
+	selZone *mvvm.Observable[string]
+	selText *mvvm.Observable[string]
+	seq     int // monotonic id source for placed nodes/connectors/zones/texts
 
 	// interaction state
 	gesture     isoGesture
@@ -126,6 +164,19 @@ type IsoDiagram struct {
 	grabNodeY int
 	grabCellX int
 	grabCellY int
+
+	// zone / text move + resize state. dragZone / dragText name the entity a
+	// move gesture is dragging; grabEntX/grabEntY is that entity's own base cell
+	// at grab time (the cell-DELTA anchor, like grabNodeX/Y for a node).
+	dragZone string
+	dragText string
+	grabEntX int
+	grabEntY int
+	// resizeFixX/resizeFixY is the OPPOSITE grid vertex of the corner a zone
+	// resize gesture drags, held fixed while the dragged corner follows the
+	// pointer.
+	resizeFixX int
+	resizeFixY int
 
 	userMoved bool // set once the user pans/zooms so auto-centre stops
 
@@ -149,12 +200,27 @@ func NewIsoDiagram(doc IsoDocument) *IsoDiagram {
 		proj:    iso.NewDefault(geometry.Pt(0, 0)),
 		menu:    NewContextMenu(NewMenu(nil)),
 		selConn: mvvm.NewObservable(""),
+		selZone: mvvm.NewObservable(""),
+		selText: mvvm.NewObservable(""),
 	}
 	// A connector-selection change repaints (highlight) and notifies the host,
 	// exactly as a node selection does.
 	d.selConn.Subscribe(func(id string) {
 		if d.OnSelectConnector != nil {
 			d.OnSelectConnector(id)
+		}
+		d.invalidate()
+	})
+	// The zone and text selections notify + repaint on the same model.
+	d.selZone.Subscribe(func(id string) {
+		if d.OnSelectZone != nil {
+			d.OnSelectZone(id)
+		}
+		d.invalidate()
+	})
+	d.selText.Subscribe(func(id string) {
+		if d.OnSelectText != nil {
+			d.OnSelectText(id)
 		}
 		d.invalidate()
 	})
@@ -187,11 +253,11 @@ func (d *IsoDiagram) SelectedConnector() string { return d.selConn.Get() }
 func (d *IsoDiagram) SelectedConnectorObservable() *mvvm.Observable[string] { return d.selConn }
 
 // SelectConnector selects the connector with the given id (or clears the
-// connector selection when id is ""). Selecting a connector clears any node
-// selection so the two never highlight at once.
+// connector selection when id is ""). Selecting a connector clears any node,
+// zone or text selection so only one entity ever highlights at once.
 func (d *IsoDiagram) SelectConnector(id string) {
 	if id != "" {
-		d.setSelected("")
+		d.clearOtherSelections(isoSelConn)
 	}
 	d.selConn.Set(id)
 }
@@ -672,6 +738,10 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 	}
 	img := raster.New(b.W, b.H)
 	fillRaster(img, theme.Surface)
+	// Floor layer: zones are painted at the very back — BEFORE the depth-sorted
+	// node/connector scene — so a zone can never mask a node standing on it. The
+	// scene's own depth-sort is left completely untouched.
+	d.drawZones(img, theme)
 	d.scene(theme).Render(img)
 	d.drawSprites(img, theme)
 	blitImage(p, b, b, img.Pix, b.W, b.H)
@@ -682,6 +752,11 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 			a := d.proj.Project(d.nodeAnchor(from))
 			drawLine(p, b.X+iround(a.X), b.Y+iround(a.Y), b.X+d.curX, b.Y+d.curY, theme.Accent)
 		}
+	}
+
+	// rubber-band preview while drawing a new zone rectangle
+	if d.gesture == isoGestureZoneCreate {
+		d.drawZonePreview(p, b, theme)
 	}
 
 	// labels
@@ -700,6 +775,10 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 	// the same overlay layer node labels and the node outline use.
 	d.drawConnectors(p, b, theme)
 
+	// zone chrome (corner labels, the selection outline and its resize handles),
+	// in painter space so it stays grabbable over any node drawn on the zone.
+	d.drawZoneOverlays(p, b, theme)
+
 	// selection outline (top face of the selected node)
 	if n, ok := d.doc.Node(d.selected); ok {
 		poly := d.topFacePoly(n)
@@ -708,6 +787,9 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 			drawLine(p, b.X+iround(a.X), b.Y+iround(a.Y), b.X+iround(c.X), b.Y+iround(c.Y), theme.Accent)
 		}
 	}
+
+	// Top layer: text annotations float above every node, connector and zone.
+	d.drawTexts(p, b, theme)
 
 	if d.menu.Open {
 		d.menu.SetBounds(b)
@@ -776,11 +858,24 @@ func (d *IsoDiagram) drawArrowHead(p painter.Painter, b Rect, tip, from geometry
 // iround rounds a float to the nearest int (half away from zero).
 func iround(v float64) int { return int(math.Round(v)) }
 
+// iabs is the absolute value of an int.
+func iabs(v int) int {
+	if v < 0 {
+		return -v
+	}
+	return v
+}
+
 // --- editing commands ---------------------------------------------------
 
 // snapshot copies the whole document.
 func (d *IsoDiagram) snapshot() isoSnapshot {
-	return isoSnapshot{nodes: d.doc.Nodes(), conns: d.doc.Connectors()}
+	return isoSnapshot{
+		nodes: d.doc.Nodes(),
+		conns: d.doc.Connectors(),
+		zones: d.doc.Zones(),
+		texts: d.doc.Texts(),
+	}
 }
 
 // restore replaces the document's contents with s, without touching the undo
@@ -794,17 +889,35 @@ func (d *IsoDiagram) restore(s isoSnapshot) {
 	for _, n := range d.doc.Nodes() {
 		d.doc.RemoveNode(n.ID)
 	}
+	for _, z := range d.doc.Zones() {
+		d.doc.RemoveZone(z.ID)
+	}
+	for _, t := range d.doc.Texts() {
+		d.doc.RemoveText(t.ID)
+	}
 	for _, n := range s.nodes {
 		d.doc.PutNode(n)
 	}
 	for _, c := range s.conns {
 		d.doc.PutConnector(c)
 	}
+	for _, z := range s.zones {
+		d.doc.PutZone(z)
+	}
+	for _, t := range s.texts {
+		d.doc.PutText(t)
+	}
 	if _, ok := d.doc.Node(d.selected); !ok {
 		d.setSelected("")
 	}
 	if _, ok := d.connectorByID(d.selConn.Get()); !ok {
 		d.selConn.Set("")
+	}
+	if _, ok := d.doc.Zone(d.selZone.Get()); !ok {
+		d.selZone.Set("")
+	}
+	if _, ok := d.doc.Text(d.selText.Get()); !ok {
+		d.selText.Set("")
 	}
 }
 
@@ -847,12 +960,48 @@ func (d *IsoDiagram) Redo() {
 	d.invalidate()
 }
 
+// isoSelKind names one of the four mutually exclusive selection channels.
+type isoSelKind int
+
+const (
+	isoSelNode isoSelKind = iota
+	isoSelConn
+	isoSelZone
+	isoSelText
+)
+
+// clearOtherSelections clears every selection channel except keep, so at most
+// one of node / connector / zone / text is ever selected. Each clear is a Set to
+// "" which is a no-op (and fires nothing) when that channel is already empty.
+func (d *IsoDiagram) clearOtherSelections(keep isoSelKind) {
+	if keep != isoSelNode {
+		d.setSelected("")
+	}
+	if keep != isoSelConn {
+		d.selConn.Set("")
+	}
+	if keep != isoSelZone {
+		d.selZone.Set("")
+	}
+	if keep != isoSelText {
+		d.selText.Set("")
+	}
+}
+
+// clearAllSelections drops every selection (a press on empty ground).
+func (d *IsoDiagram) clearAllSelections() {
+	d.setSelected("")
+	d.selConn.Set("")
+	d.selZone.Set("")
+	d.selText.Set("")
+}
+
 // setSelected updates the node selection and fires OnSelect when it changed.
-// Selecting a node clears any connector selection so only one of the two is
-// ever highlighted.
+// Selecting a node clears any connector / zone / text selection so only one of
+// the four is ever highlighted.
 func (d *IsoDiagram) setSelected(id string) {
 	if id != "" {
-		d.selConn.Set("")
+		d.clearOtherSelections(isoSelNode)
 	}
 	if d.selected == id {
 		return
@@ -1101,15 +1250,25 @@ func (d *IsoDiagram) ZoomAt(factor float64, cx, cy int) {
 // --- context menu -------------------------------------------------------
 
 // openContextMenu builds and pops up the right-click menu for widget-local
-// (x, y): Delete on a node, Add node on empty ground.
+// (x, y): Delete on the topmost entity under the pointer (text, then node, then
+// zone), or Add node / Add text on empty ground.
 func (d *IsoDiagram) openContextMenu(x, y int) {
 	b := d.Bounds()
-	if id, ok := d.nodeAtLocal(x, y); ok {
+	if id, ok := d.textAtLocal(x, y); ok {
+		d.SelectText(id)
+		d.menu.Menu.Items = []MenuItem{{Label: "Delete", Action: func() { d.commitDeleteText(id) }}}
+	} else if id, ok := d.nodeAtLocal(x, y); ok {
 		d.setSelected(id)
 		d.menu.Menu.Items = []MenuItem{{Label: "Delete", Action: func() { d.commitDelete(id) }}}
+	} else if id, ok := d.zoneAtLocal(x, y); ok {
+		d.SelectZone(id)
+		d.menu.Menu.Items = []MenuItem{{Label: "Delete", Action: func() { d.commitDeleteZone(id) }}}
 	} else {
 		gx, gy := d.cellAtLocal(x, y)
-		d.menu.Menu.Items = []MenuItem{{Label: "Add node", Action: func() { d.commitPlace(gx, gy) }}}
+		d.menu.Menu.Items = []MenuItem{
+			{Label: "Add node", Action: func() { d.commitPlace(gx, gy) }},
+			{Label: "Add text", Action: func() { d.commitPlaceText(gx, gy) }},
+		}
 	}
 	d.menu.SetBounds(b)
 	d.menu.Popup(b.X+x, b.Y+y)
@@ -1159,6 +1318,35 @@ func (d *IsoDiagram) onPress(ev Event) {
 	d.curX, d.curY = ev.X, ev.Y
 	d.pressX, d.pressY = ev.X, ev.Y
 	d.lastX, d.lastY = ev.X, ev.Y
+
+	// The creation modes are modal: a press begins a zone rectangle or arms a
+	// text drop, regardless of what lies under the pointer.
+	switch d.Mode {
+	case IsoModeZone:
+		d.gesture = isoGestureZoneCreate
+		d.clearAllSelections()
+		d.invalidate()
+		return
+	case IsoModeText:
+		d.gesture = isoGestureTextAdd
+		d.invalidate()
+		return
+	}
+
+	// A resize handle of the already-selected zone wins over every other target,
+	// so a corner handle sitting under a node is still grabbable.
+	if corner, ok := d.zoneHandleAt(ev.X, ev.Y); ok {
+		d.beginZoneResize(corner)
+		d.invalidate()
+		return
+	}
+	// Text annotations are the topmost content layer, so they pick first.
+	if id, ok := d.textAtLocal(ev.X, ev.Y); ok {
+		d.SelectText(id)
+		d.beginTextMove(id, ev.X, ev.Y)
+		d.invalidate()
+		return
+	}
 	if id, ok := d.nodeAtLocal(ev.X, ev.Y); ok {
 		d.setSelected(id)
 		if d.Mode == IsoModeConnect {
@@ -1182,10 +1370,16 @@ func (d *IsoDiagram) onPress(ev Event) {
 		d.invalidate()
 		return
 	}
+	// a zone body (the floor layer) selects it and starts a move.
+	if id, ok := d.zoneAtLocal(ev.X, ev.Y); ok {
+		d.SelectZone(id)
+		d.beginZoneMove(id, ev.X, ev.Y)
+		d.invalidate()
+		return
+	}
 	// empty ground: could become a pan (drag) or a place (tap on release)
 	d.gesture = isoGesturePan
-	d.setSelected("")
-	d.selConn.Set("")
+	d.clearAllSelections()
 	d.invalidate()
 }
 
@@ -1205,6 +1399,26 @@ func (d *IsoDiagram) onDrag(ev Event) {
 		d.lastX, d.lastY = ev.X, ev.Y
 	case isoGestureConnect:
 		d.moved = true
+	case isoGestureZoneCreate, isoGestureTextAdd:
+		d.moved = true
+	case isoGestureZoneMove:
+		if !d.moved {
+			d.beginEdit()
+			d.moved = true
+		}
+		d.moveZoneDragTo(ev.X, ev.Y)
+	case isoGestureZoneResize:
+		if !d.moved {
+			d.beginEdit()
+			d.moved = true
+		}
+		d.resizeZoneDragTo(ev.X, ev.Y)
+	case isoGestureTextMove:
+		if !d.moved {
+			d.beginEdit()
+			d.moved = true
+		}
+		d.moveTextDragTo(ev.X, ev.Y)
 	}
 	d.invalidate()
 }
@@ -1225,10 +1439,33 @@ func (d *IsoDiagram) onRelease(ev Event) {
 			gx, gy := d.cellAtLocal(d.pressX, d.pressY)
 			d.commitPlace(gx, gy)
 		}
+	case isoGestureZoneCreate:
+		gx0, gy0 := d.cellAtLocal(d.pressX, d.pressY)
+		gx1, gy1 := d.cellAtLocal(ev.X, ev.Y)
+		d.commitPlaceZone(gx0, gy0, gx1, gy1)
+	case isoGestureZoneMove:
+		if d.moved {
+			d.moveZoneDragTo(ev.X, ev.Y)
+		}
+	case isoGestureZoneResize:
+		if d.moved {
+			d.resizeZoneDragTo(ev.X, ev.Y)
+		}
+	case isoGestureTextMove:
+		if d.moved {
+			d.moveTextDragTo(ev.X, ev.Y)
+		}
+	case isoGestureTextAdd:
+		if !d.moved {
+			gx, gy := d.cellAtLocal(d.pressX, d.pressY)
+			d.commitPlaceText(gx, gy)
+		}
 	}
 	d.gesture = isoGestureNone
 	d.dragNode = ""
 	d.connectFrom = ""
+	d.dragZone = ""
+	d.dragText = ""
 	d.moved = false
 	d.invalidate()
 }
@@ -1238,8 +1475,13 @@ func (d *IsoDiagram) onRelease(ev Event) {
 func (d *IsoDiagram) onKey(ev Event) {
 	switch ev.Code {
 	case "Delete", "Backspace":
-		if d.selected != "" {
+		switch {
+		case d.selected != "":
 			d.commitDelete(d.selected)
+		case d.selZone.Get() != "":
+			d.commitDeleteZone(d.selZone.Get())
+		case d.selText.Get() != "":
+			d.commitDeleteText(d.selText.Get())
 		}
 	case "z", "Z":
 		if ev.Ctrl {
@@ -1291,7 +1533,42 @@ func (d *IsoDiagram) Children() []Widget {
 		}
 		out = append(out, &isoProxy{info: A11yInfo{Role: RoleImg, Name: name}})
 	}
+	selZone := d.selZone.Get()
+	for _, z := range d.doc.Zones() {
+		name := z.Label
+		if name == "" {
+			name = z.ID
+		}
+		pr := &isoProxy{info: A11yInfo{Role: RoleGroup, Name: name, Value: stateValue(z.ID == selZone, "selected")}}
+		corners := d.zoneCorners(z)
+		pr.SetBounds(zoneBoundsRect(b, corners))
+		out = append(out, pr)
+	}
+	selText := d.selText.Get()
+	for _, t := range d.doc.Texts() {
+		name := t.Text
+		if name == "" {
+			name = t.ID
+		}
+		box := d.textBox(t)
+		pr := &isoProxy{info: A11yInfo{Role: RoleImg, Name: name, Value: stateValue(t.ID == selText, "selected")}}
+		pr.SetBounds(Rect{X: b.X + box.X, Y: b.Y + box.Y, W: box.W, H: box.H})
+		out = append(out, pr)
+	}
 	return out
+}
+
+// zoneBoundsRect is the widget-absolute bounding rectangle of a zone's projected
+// corners (buffer-local), offset into the widget by b's origin — the a11y box a
+// screen reader reports for the zone.
+func zoneBoundsRect(b Rect, corners []geometry.Point) Rect {
+	minX, minY := corners[0].X, corners[0].Y
+	maxX, maxY := corners[0].X, corners[0].Y
+	for _, c := range corners[1:] {
+		minX, maxX = math.Min(minX, c.X), math.Max(maxX, c.X)
+		minY, maxY = math.Min(minY, c.Y), math.Max(maxY, c.Y)
+	}
+	return Rect{X: b.X + iround(minX), Y: b.Y + iround(minY), W: iround(maxX - minX), H: iround(maxY - minY)}
 }
 
 // isoProxy is a non-visual widget that carries one accessibility description for
