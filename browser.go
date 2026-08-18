@@ -9,6 +9,7 @@ import (
 	"math"
 	"strings"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -82,12 +83,10 @@ type Browser struct {
 	LeadingIcon func(p painter.Painter, r Rect, ink RGBA)
 
 	// BookmarkIcon, when set, paints a toggle glyph at the RIGHT of the address
-	// field — e.g. a star, filled when on. It takes the current Bookmarked state
-	// so the host can draw the on/off variant. Clicking the slot flips Bookmarked
-	// and fires OnBookmarkToggle. Nil → no bookmark slot.
-	BookmarkIcon     func(p painter.Painter, r Rect, ink RGBA, on bool)
-	Bookmarked       bool
-	OnBookmarkToggle func(on bool)
+	// field — e.g. a star, filled when on. It takes the current bookmark state so
+	// the host can draw the on/off variant. Clicking the slot flips the shared
+	// [Browser.Bookmarked] Observable. Nil → no bookmark slot.
+	BookmarkIcon func(p painter.Painter, r Rect, ink RGBA, on bool)
 
 	// OnChange fires once whenever any observable-relevant state mutates
 	// (navigation, tab add/close/switch, loading/progress change, address edit,
@@ -127,11 +126,11 @@ type Browser struct {
 	active int
 	mode   TabMode
 
-	// addr is the composed editable address field ([AddressBar]). The host-facing
-	// address configuration (LeadingIcon / BookmarkIcon / Bookmarked /
-	// OnBookmarkToggle, plus the current URL as its Text and the chrome metrics)
-	// is mirrored into it each frame by syncAddr; its focus / edit-buffer / copy
-	// state lives entirely in the widget.
+	// addr is the composed editable address field ([AddressBar]). Its appearance
+	// config + bounds are set each frame by layoutAddr, and the Browser publishes
+	// the current URL into its shared URL Observable; all of the field's mutable
+	// STATE (focus, edit buffer, bookmark, copy flag) lives in the field's own
+	// Observables, which the Browser subscribes to for repaint — never copied.
 	addr AddressBar
 
 	// pressActive + pressKind give a toolbar button its click feedback: a click
@@ -330,12 +329,14 @@ func (b *Browser) btnEnabled(k browserBtnKind) bool {
 // NewBrowser builds an empty Browser in the default MultiTab mode at 1.0 zoom.
 func NewBrowser() *Browser {
 	b := &Browser{zoom: 1.0}
-	// Stable callbacks wired once: Enter commits by normalising + navigating, and
-	// every observable change flows through the Browser's own changed(). The
-	// per-frame configuration (URL text, icons, bookmark state, metrics, bounds)
-	// is pushed by syncAddr.
-	b.addr.OnCommit = func(s string) { b.Navigate(normalizeURL(s)) }
-	b.addr.OnChange = b.changed
+	// The address field is MVVM: Enter runs a Command that normalises + navigates
+	// to the field's edit buffer, and the Browser repaints by SUBSCRIBING to the
+	// field's state Observables — no per-frame state copy, no read-back. The URL
+	// Observable is published by the Browser (the source of truth) in layoutAddr.
+	b.addr.Commit = mvvm.NewCommand(func() { b.Navigate(normalizeURL(b.addr.Editing().Get())) }, nil)
+	for _, o := range []mvvm.Changeable{b.addr.Editing(), b.addr.Focused(), b.addr.Copied(), b.addr.Bookmarked()} {
+		o.SubscribeChanged(b.changed)
+	}
 	return b
 }
 
@@ -1112,25 +1113,31 @@ func (b *Browser) drawToolbar(p painter.Painter, theme *Theme) {
 	nav, zoom, addr := b.toolbarGroups()
 	nav.Draw(p, theme)
 	zoom.Draw(p, theme)
-	b.syncAddr(addr)
+	b.layoutAddr(addr)
 	b.addr.Draw(p, theme)
 }
 
-// syncAddr mirrors the host-facing address configuration (the current URL as the
-// field's Text, the icon hooks, the bookmark state) and the current chrome
-// metrics (corner radius, text inset, font, bounds) into the composed address
-// field before it is drawn or handed an event.
-func (b *Browser) syncAddr(r Rect) {
+// layoutAddr positions + configures the composed address field before it is drawn
+// or handed an event: its bounds, the appearance config (icon hooks, corner
+// radius, text inset, font) and the current URL published into its shared
+// Observable (the Browser is the URL source of truth). This is layout + config
+// only — the field's mutable STATE (focus, edit buffer, bookmark, copy flag)
+// lives in its own Observables and is never copied here or read back.
+func (b *Browser) layoutAddr(r Rect) {
 	b.addr.SetBounds(r)
-	b.addr.Text = b.CurrentURL()
 	b.addr.LeadingIcon = b.LeadingIcon
 	b.addr.BookmarkIcon = b.BookmarkIcon
-	b.addr.Bookmarked = b.Bookmarked
-	b.addr.OnBookmarkToggle = b.OnBookmarkToggle
 	b.addr.Radius = b.sc(4)
 	b.addr.TextPad = b.btnPad()
 	b.addr.SetFont(b.EffectiveFont())
+	b.addr.URL().Set(b.CurrentURL())
 }
+
+// Bookmarked is the shared bookmark-toggle Observable of the address field: the
+// host binds it to its bookmark store (Set it, or Subscribe to it), and clicking
+// the bookmark slot flips it. It replaces the former Bookmarked field +
+// OnBookmarkToggle callback — bookmark state now flows only through MVVM.
+func (b *Browser) Bookmarked() *mvvm.Observable[bool] { return b.addr.Bookmarked() }
 
 // unionRect is the smallest rect covering a and b, both on the same toolbar row.
 func unionRect(a, b Rect) Rect {
@@ -1140,12 +1147,12 @@ func unionRect(a, b Rect) Rect {
 // AddressFocused reports whether the address field currently holds keyboard
 // focus (a prior click landed in it), so a host can route a copy chord to
 // [Browser.CopyAddress] instead of its own copy action.
-func (b *Browser) AddressFocused() bool { return b.addr.Focused() }
+func (b *Browser) AddressFocused() bool { return b.addr.Focused().Get() }
 
 // AddressText returns the text the address field shows: the editable buffer
 // while focused, else the current page URL.
 func (b *Browser) AddressText() string {
-	if b.addr.Focused() {
+	if b.addr.Focused().Get() {
 		return b.addr.Value()
 	}
 	return b.CurrentURL()
@@ -1356,12 +1363,12 @@ func (b *Browser) handleClick(ax, ay int) {
 			}
 		}
 		if addr.Contains(ax, ay) {
-			// The composed field decides: a click on the bookmark slot toggles it
-			// (read the flip back into Bookmarked), any other click focuses + seeds
-			// the edit buffer from the current URL (its synced Text).
-			b.syncAddr(addr)
+			// The composed field decides: a click on the bookmark slot flips the
+			// shared Bookmarked Observable, any other click focuses + seeds the edit
+			// buffer from the current URL. No state is read back — the toggle and
+			// focus live in the field's own Observables that the Browser subscribes to.
+			b.layoutAddr(addr)
 			b.addr.OnEvent(Event{Kind: EventClick, X: ax - addr.X, Y: ay - addr.Y})
-			b.Bookmarked = b.addr.Bookmarked
 			return
 		}
 	}
