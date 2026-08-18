@@ -132,7 +132,7 @@ func (c *CheckButton) A11y() A11yInfo {
 
 // A11y reports the RadioButton as a radio with its checked state.
 func (r *RadioButton) A11y() A11yInfo {
-	return A11yInfo{Role: RoleRadio, Name: r.Label, Value: checkedValue(r.Checked)}
+	return A11yInfo{Role: RoleRadio, Name: r.Label, Value: checkedValue(r.Checked().Get())}
 }
 
 // A11y reports the Switch as a switch with an on/off value.

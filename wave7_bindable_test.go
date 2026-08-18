@@ -178,26 +178,28 @@ func TestCycleButtonIndexObservableFires(t *testing.T) {
 	}
 }
 
-// --- RadioGroup.OnChange ------------------------------------------------------
+// --- RadioGroup.Active (MVVM) -------------------------------------------------
 
-func TestRadioGroupOnChangeFiresOnClickAndKey(t *testing.T) {
+func TestRadioGroupActiveObservableFiresOnClickAndKey(t *testing.T) {
 	g := NewRadioGroup()
 	r0, r1 := NewRadioButton("a"), NewRadioButton("b")
 	g.Add(r0)
 	g.Add(r1)
 	var got, calls int
 	got = -1
-	g.OnChange = func(active int) { got, calls = active, calls+1 }
+	// A host binds the group selection via the Active Observable; there is no
+	// OnChange callback anymore.
+	g.Active().Subscribe(func(active int) { got, calls = active, calls+1 })
 
 	// Click member 1 -> group Active becomes 1.
 	r1.OnEvent(Event{Kind: EventClick})
-	if g.Active != 1 || got != 1 || calls != 1 {
-		t.Fatalf("click member1: Active=%d got=%d calls=%d, want 1/1/1", g.Active, got, calls)
+	if g.Active().Get() != 1 || got != 1 || calls != 1 {
+		t.Fatalf("click member1: Active=%d got=%d calls=%d, want 1/1/1", g.Active().Get(), got, calls)
 	}
 	// ArrowDown from member 1 wraps the checked member to member 0.
 	r1.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if g.Active != 0 || got != 0 || calls != 2 {
-		t.Fatalf("ArrowDown: Active=%d got=%d calls=%d, want 0/0/2", g.Active, got, calls)
+	if g.Active().Get() != 0 || got != 0 || calls != 2 {
+		t.Fatalf("ArrowDown: Active=%d got=%d calls=%d, want 0/0/2", g.Active().Get(), got, calls)
 	}
 }
 

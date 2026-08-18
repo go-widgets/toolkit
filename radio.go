@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // RadioButton is a circular toggle paired with a label. RadioButtons
 // are typically grouped via RadioGroup so exactly one in the group is
@@ -13,12 +16,25 @@ import "github.com/go-widgets/painter"
 type RadioButton struct {
 	Base
 	focusState
-	Label    string
-	Checked  bool
-	OnToggle func(checked bool)
+	Label string
+
+	// checked is the reactive checked state, MVVM-only: it lives in an
+	// unexported Observable exposed via [RadioButton.Checked]. A host binds it
+	// (Set / Subscribe / two-way); there is no settable Checked field.
+	checked *mvvm.Observable[bool]
 
 	group *RadioGroup
 	index int
+}
+
+// Checked is the current checked state as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Checked field. A
+// click (standalone) or a group selection Sets it, notifying subscribers.
+func (r *RadioButton) Checked() *mvvm.Observable[bool] {
+	if r.checked == nil {
+		r.checked = mvvm.NewObservable(false)
+	}
+	return r.checked
 }
 
 // radioBoxSize is the pixel diameter of the round mark.
@@ -38,7 +54,9 @@ const (
 // label. Add it to a RadioGroup with group.Add(r) for mutual-exclusion
 // behaviour.
 func NewRadioButton(label string) *RadioButton {
-	return &RadioButton{Label: label}
+	r := &RadioButton{Label: label}
+	r.checked = mvvm.NewObservable(false)
+	return r
 }
 
 // Draw paints the circular mark + label. The "circle" is a 12 x 12
@@ -56,7 +74,7 @@ func (r *RadioButton) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRect(p, b.X, boxY, scaled(radioBoxSize), scaled(radioBoxSize), face)
 	strokeRect(p, b.X, boxY, scaled(radioBoxSize), scaled(radioBoxSize), border)
-	if r.Checked {
+	if r.Checked().Get() {
 		inset := scaled(radioDotInset)
 		fillRect(p, b.X+inset, boxY+inset, scaled(radioBoxSize)-2*inset, scaled(radioBoxSize)-2*inset, dot)
 	}
@@ -81,8 +99,9 @@ func (r *RadioButton) OnEvent(ev Event) {
 	case EventKeyDown:
 		if r.group != nil {
 			// Arrow keys move the checked member through the group, wrapping,
-			// firing the newly-checked member's callback (reusing group.activate)
-			// and following focus to it -- the ARIA radio-group convention.
+			// setting the newly-checked member's Checked Observable (reusing
+			// group.activate) and following focus to it -- the ARIA radio-group
+			// convention.
 			switch ev.Code {
 			case "ArrowDown", "ArrowRight":
 				r.group.moveChecked(r, +1)
@@ -100,13 +119,11 @@ func (r *RadioButton) OnEvent(ev Event) {
 	}
 }
 
-// toggleStandalone flips a group-less radio's Checked and fires OnToggle
-// (nil-safe) -- the shared mutate path for a click and a Space/Enter key press.
+// toggleStandalone flips a group-less radio's Checked Observable -- the shared
+// mutate path for a click and a Space/Enter key press. Subscribers are notified
+// on change.
 func (r *RadioButton) toggleStandalone() {
-	r.Checked = !r.Checked
-	if r.OnToggle != nil {
-		r.OnToggle(r.Checked)
-	}
+	r.Checked().Set(!r.Checked().Get())
 }
 
 // HitRect is the radio button's interactive rectangle: its drawn Bounds clamped
@@ -125,19 +142,32 @@ func (r *RadioButton) HitTest(px, py int) bool { return r.HitRect().Contains(px,
 // been clicked yet.
 type RadioGroup struct {
 	Members []*RadioButton
-	Active  int
 
-	// OnChange fires whenever the checked member changes through a user
-	// interaction: a click on a member, or an arrow key moving the checked
-	// member through the group. active is the new Active index. It fires
-	// alongside the newly-checked member's own OnToggle, giving the group a
-	// single-argument slot the whole selection can be observed through (e.g.
-	// via mvvmtk.BindRadioGroup). Nil is safe.
-	OnChange func(active int)
+	// active is the index of the currently-checked member, MVVM-only: it lives in
+	// an unexported Observable exposed via [RadioGroup.Active]. A host binds it
+	// (Set / Subscribe / two-way); there is no settable Active field.
+	active *mvvm.Observable[int]
+}
+
+// Active is the index of the currently-checked member as a shared
+// [mvvm.Observable], or -1 when none has been clicked yet: a host binds it (Set
+// / Subscribe / two-way) — there is no settable Active field. A click on a
+// member, or an arrow key moving the checked member, Sets it and notifies
+// subscribers. A bare &RadioGroup{} lazy-inits Active to 0; NewRadioGroup starts
+// it at -1.
+func (g *RadioGroup) Active() *mvvm.Observable[int] {
+	if g.active == nil {
+		g.active = mvvm.NewObservable(0)
+	}
+	return g.active
 }
 
 // NewRadioGroup builds an empty group with Active = -1.
-func NewRadioGroup() *RadioGroup { return &RadioGroup{Active: -1} }
+func NewRadioGroup() *RadioGroup {
+	g := &RadioGroup{}
+	g.active = mvvm.NewObservable(-1)
+	return g
+}
 
 // Add appends r to the group + remembers its membership so a click
 // on any member can clear the others.
@@ -147,25 +177,21 @@ func (g *RadioGroup) Add(r *RadioButton) {
 	g.Members = append(g.Members, r)
 }
 
-// activate sets Active = idx, clears every other member's Checked,
-// + fires OnToggle on the newly-checked one.
+// activate Sets Active = idx and clears every other member's Checked, Setting
+// the newly-checked one's Checked to true. A host observes the selection through
+// the members' Checked() Observables and/or the group's Active() Observable.
 func (g *RadioGroup) activate(idx int) {
-	g.Active = idx
+	g.Active().Set(idx)
 	for i, m := range g.Members {
-		m.Checked = i == idx
-	}
-	if cb := g.Members[idx].OnToggle; cb != nil {
-		cb(true)
-	}
-	if g.OnChange != nil {
-		g.OnChange(idx)
+		m.Checked().Set(i == idx)
 	}
 }
 
 // moveChecked steps the checked member delta places (±1) from the currently
 // focused member from, wrapping at both ends, activates it (reusing activate so
-// the member callback fires exactly as a click would), and follows keyboard
-// focus to the newly-checked member -- the ARIA radio-group arrow convention.
+// the member Checked Observable Sets exactly as a click would), and follows
+// keyboard focus to the newly-checked member -- the ARIA radio-group arrow
+// convention.
 func (g *RadioGroup) moveChecked(from *RadioButton, delta int) {
 	n := len(g.Members)
 	if n == 0 {
