@@ -614,3 +614,175 @@ func TestPagedViewIconsExist(t *testing.T) {
 		}
 	}
 }
+
+// --- Geometry seams (source↔render linking): ScrollOffset / PageAt / ScrollToPage.
+
+// TestPagedViewScrollOffset covers the passthrough seam and its lazy-ensure
+// branch (a bare zero value builds the inner ScrollView on first read).
+func TestPagedViewScrollOffset(t *testing.T) {
+	// Bare zero value: ensure lazily builds the scroll pane; the offset is (0,0).
+	z := &PagedView{}
+	if x, y := z.ScrollOffset(); x != 0 || y != 0 {
+		t.Fatalf("zero-value ScrollOffset = (%d,%d), want (0,0)", x, y)
+	}
+	pv := NewPagedView([]*image.RGBA{solidPage(60, 800, pgRed)})
+	pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
+	pv.scroll.Scroll(0, 40)
+	if x, y := pv.ScrollOffset(); x != 0 || y != 40 {
+		t.Fatalf("ScrollOffset = (%d,%d), want (0,40)", x, y)
+	}
+}
+
+// TestPagedViewPageAt covers every branch of the pointer→(page, natural-point)
+// map: the toolbar-strip early return, a hit inside a card, the inter-card gap,
+// a point outside every card horizontally, and an empty view.
+func TestPagedViewPageAt(t *testing.T) {
+	pv := NewPagedView([]*image.RGBA{
+		solidPage(40, 40, pgRed), solidPage(40, 40, pgGreen),
+	})
+	pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 300})
+	tbH := scaled(pagedToolbarH)
+
+	// A point in the toolbar strip is over no page.
+	if _, _, _, ok := pv.PageAt(150, tbH-1); ok {
+		t.Fatal("PageAt in the toolbar returned ok")
+	}
+
+	// A point inside card 1 maps to page 1 and a natural point in [0,40).
+	c0 := pv.lay.cards[0]
+	px := c0.X + c0.W/2         // offset is 0, so content x == widget x
+	py := tbH + (c0.Y + c0.H/2) // and content y == widget y - tbH
+	page, lx, ly, ok := pv.PageAt(px, py)
+	if !ok || page != 1 {
+		t.Fatalf("PageAt over page 1 = page %d ok=%v, want page 1 ok", page, ok)
+	}
+	if lx < 0 || lx >= 40 || ly < 0 || ly >= 40 {
+		t.Fatalf("PageAt natural point (%d,%d) out of [0,40)", lx, ly)
+	}
+
+	// A point in the vertical gap between card 1 and card 2 hits no page.
+	if _, _, _, ok := pv.PageAt(px, tbH+c0.Y+c0.H+3); ok {
+		t.Fatal("PageAt in the inter-card gap returned ok")
+	}
+	// A point far to the right of every card (over the gutter / outside) misses.
+	if _, _, _, ok := pv.PageAt(295, tbH+c0.Y+c0.H/2); ok {
+		t.Fatal("PageAt outside every card returned ok")
+	}
+	// An empty view has no cards at all.
+	empty := NewPagedView(nil)
+	empty.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
+	if _, _, _, ok := empty.PageAt(100, 100); ok {
+		t.Fatal("PageAt on empty view returned ok")
+	}
+}
+
+// TestPagedViewScrollToPage covers every branch: the empty + out-of-range
+// no-ops, the continuous mapping, both clamps, and the paginated different-page
+// (setPage) vs same-page (relayout) branches.
+func TestPagedViewScrollToPage(t *testing.T) {
+	pv := NewPagedView([]*image.RGBA{
+		solidPage(60, 800, pgRed), solidPage(60, 800, pgGreen), solidPage(60, 800, pgBlue),
+	})
+	pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
+
+	// Out-of-range pages are no-ops (offset stays at 0).
+	pv.ScrollToPage(0, 10) // page < 1
+	pv.ScrollToPage(9, 10) // page > count
+	if _, y := pv.ScrollOffset(); y != 0 {
+		t.Fatalf("out-of-range ScrollToPage moved offset to %d", y)
+	}
+	// An empty view is a no-op (cnt == 0).
+	empty := NewPagedView(nil)
+	empty.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 200})
+	empty.ScrollToPage(1, 10)
+	if _, y := empty.ScrollOffset(); y != 0 {
+		t.Fatalf("empty ScrollToPage moved offset to %d", y)
+	}
+
+	// Continuous: bring natural y=100 of page 2 to the top (zoom 100 → 1:1).
+	pv.ScrollToPage(2, 100)
+	wantY := pv.lay.cards[1].Y + 100
+	if _, y := pv.ScrollOffset(); y != wantY {
+		t.Fatalf("continuous ScrollToPage → offset %d, want %d", y, wantY)
+	}
+	// Clamp high: a huge localY clamps to maxOffsetY.
+	pv.ScrollToPage(3, 100000)
+	if _, y := pv.ScrollOffset(); y != pv.scroll.maxOffsetY() {
+		t.Fatalf("high clamp → %d, want %d", y, pv.scroll.maxOffsetY())
+	}
+	// Clamp low: a negative localY on page 1 clamps to 0.
+	pv.ScrollToPage(1, -100000)
+	if _, y := pv.ScrollOffset(); y != 0 {
+		t.Fatalf("low clamp → %d, want 0", y)
+	}
+
+	// Paginated, a DIFFERENT page: sets the current page (setPage branch) + scrolls.
+	pv.Mode().Set(PagedPaginated)
+	pv.CurrentPage().Set(1)
+	pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
+	pv.ScrollToPage(3, 50)
+	if pv.cur() != 3 {
+		t.Fatalf("paginated ScrollToPage did not set current page (got %d)", pv.cur())
+	}
+	wantY = pv.lay.cards[0].Y + 50
+	if _, y := pv.ScrollOffset(); y != wantY {
+		t.Fatalf("paginated diff-page offset %d, want %d", y, wantY)
+	}
+	// Paginated, the SAME page: relayout branch, scroll only.
+	pv.ScrollToPage(3, 20)
+	wantY = pv.lay.cards[0].Y + 20
+	if _, y := pv.ScrollOffset(); y != wantY {
+		t.Fatalf("paginated same-page offset %d, want %d", y, wantY)
+	}
+}
+
+// TestPagedViewPageAtScrollToPageRoundTrip proves PageAt and ScrollToPage are
+// exact inverses of the SAME internal geometry (they share naturalToContentY /
+// contentYToNatural): reading a point, then scrolling that page's natural-Y to
+// the top, lands the point back at the top row to within a pixel — across both
+// modes and 50% / 100% / 200% zoom.
+func TestPagedViewPageAtScrollToPageRoundTrip(t *testing.T) {
+	for _, mode := range []PagedMode{PagedContinuous, PagedPaginated} {
+		for _, zoom := range []int{50, 100, 200} {
+			pv := NewPagedView([]*image.RGBA{
+				solidPage(100, 600, pgRed),
+				solidPage(100, 600, pgGreen),
+				solidPage(100, 600, pgBlue),
+			})
+			pv.Mode().Set(mode)
+			pv.CurrentPage().Set(2)
+			pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 250})
+			pv.setZoom(zoom)
+			tbH := scaled(pagedToolbarH)
+
+			// The card for page 2 (continuous keeps all cards; paginated lays out
+			// only the current one), brought to the top of the pane.
+			k := 0
+			if mode == PagedContinuous {
+				k = 1
+			}
+			pv.scroll.Scroll(0, pv.lay.cards[k].Y-pv.scroll.OffsetY)
+
+			card := pv.lay.cards[k]
+			px := card.X + card.W/2 - pv.scroll.OffsetX
+			py := tbH + 50
+
+			page, _, localY, ok := pv.PageAt(px, py)
+			if !ok || page != 2 {
+				t.Fatalf("mode=%d zoom=%d: PageAt(%d,%d) = page %d ok=%v, want page 2",
+					mode, zoom, px, py, page, ok)
+			}
+			// Round-trip: bring that natural-Y to the top, read the top row back.
+			pv.ScrollToPage(page, localY)
+			page2, _, localY2, ok2 := pv.PageAt(px, tbH)
+			if !ok2 || page2 != 2 {
+				t.Fatalf("mode=%d zoom=%d: post-scroll PageAt = page %d ok=%v",
+					mode, zoom, page2, ok2)
+			}
+			if d := localY2 - localY; d < -2 || d > 2 {
+				t.Fatalf("mode=%d zoom=%d: round-trip localY %d → %d (Δ%d), want within 2",
+					mode, zoom, localY, localY2, d)
+			}
+		}
+	}
+}

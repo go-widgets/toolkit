@@ -445,6 +445,101 @@ func (pv *PagedView) A11y() A11yInfo {
 	return info
 }
 
+// ScrollOffset reports the inner [ScrollView]'s current content offset, in
+// DEVICE pixels: how far the page content has scrolled right (x) and down (y)
+// inside the pane. A host persists it to restore the scroll position across a
+// reload, or pairs it with [PagedView.PageAt] / [PagedView.ScrollToPage] to
+// reason about what is currently visible. It is a thin passthrough of the owned
+// ScrollView's OffsetX / OffsetY.
+func (pv *PagedView) ScrollOffset() (x, y int) {
+	pv.ensure()
+	return pv.scroll.OffsetX, pv.scroll.OffsetY
+}
+
+// naturalToContentY and contentYToNatural are the ONE page-y↔content-y mapping,
+// as an inverse pair over a single card. contentY is the ScrollView content-space
+// Y (origin at the top of the page stack, device pixels); naturalY is a Y in the
+// page bitmap's own un-zoomed pixels. [PagedView.PageAt] inverts this with
+// contentYToNatural and [PagedView.ScrollToPage] applies it with naturalToContentY,
+// so the two seams read the same card offset (lay.cards[k].Y) and the same zoom
+// and can never drift — the discipline PagedView already keeps between Draw and
+// its hit-tests. cardIdx indexes pv.lay.cards (NOT a page number).
+func (pv *PagedView) naturalToContentY(cardIdx, naturalY int) int {
+	return pv.lay.cards[cardIdx].Y + naturalY*pv.Zoom().Get()/100
+}
+
+func (pv *PagedView) contentYToNatural(cardIdx, contentY int) int {
+	return (contentY - pv.lay.cards[cardIdx].Y) * 100 / pv.Zoom().Get()
+}
+
+// PageAt maps a WIDGET-LOCAL pointer position — (x, y) as delivered to
+// [PagedView.OnEvent], i.e. relative to the widget's own bounds — to the page
+// under it and the point WITHIN that page's NATURAL (un-zoomed) image pixels. It
+// accounts for the toolbar strip height, the layout mode (a continuous stack vs a
+// single centred page), the zoom factor (divided back out so localX / localY are
+// natural pixels), the scroll offset, and each card's own position and the gaps
+// between them. The returned page is 1-based, matching [PagedView.CurrentPage].
+//
+// ok is false when the point falls in the toolbar strip, in a gap between cards,
+// over the scrollbar gutter, or outside every page (including every case where
+// there are no pages) — the localX / localY are then zero. This is the seam that
+// turns a click on a rendered page into a (page, natural-point) a host can look
+// up against its own source map. It is the exact inverse of [PagedView.ScrollToPage]'s
+// vertical mapping (they share naturalToContentY / contentYToNatural).
+func (pv *PagedView) PageAt(x, y int) (page, localX, localY int, ok bool) {
+	pv.relayout()
+	tbH := scaled(pagedToolbarH)
+	if y < tbH {
+		return 0, 0, 0, false // in the toolbar strip, not over any page
+	}
+	// Widget-local → content-space: the pane starts at widget-local (0, tbH), and
+	// the ScrollView shows the content shifted up/left by its offset.
+	contentX := x + pv.scroll.OffsetX
+	contentY := (y - tbH) + pv.scroll.OffsetY
+	for k, card := range pv.lay.cards {
+		if contentX < card.X || contentX >= card.X+card.W ||
+			contentY < card.Y || contentY >= card.Y+card.H {
+			continue // outside this card (or it is a zero-area / nil page)
+		}
+		localX = (contentX - card.X) * 100 / pv.Zoom().Get()
+		localY = pv.contentYToNatural(k, contentY)
+		return pv.lay.indices[k] + 1, localX, localY, true
+	}
+	return 0, 0, 0, false // in a gap, the gutter, or past the last card
+}
+
+// ScrollToPage scrolls the pane so that natural-coordinate localY of the given
+// 1-based page is brought to the TOP of the viewport (clamped to the legal scroll
+// range at both ends). It is the vertical inverse of [PagedView.PageAt]: a
+// round-trip — PageAt to read a point, then ScrollToPage with the page + localY it
+// returned — lands that point at the top of the pane to within a pixel.
+//
+// In PagedPaginated mode it also makes page the current page (so the single
+// displayed card is that page). A page outside [1, PageCount] or an empty view is
+// a no-op. This is the seam that turns an editor caret move into a scroll: a host
+// maps the caret's source line to (page, natural-Y) via its own source map and
+// calls this to bring that line into view.
+func (pv *PagedView) ScrollToPage(page, localY int) {
+	cnt := pv.PageCount()
+	if cnt == 0 || page < 1 || page > cnt {
+		return // empty view or page out of range
+	}
+	var k int
+	if pv.Mode().Get() == PagedPaginated {
+		if page != pv.cur() {
+			pv.setPage(page, false) // switch the displayed page (relays out)
+		} else {
+			pv.relayout()
+		}
+		k = 0 // paginated lays out exactly the current page as the sole card
+	} else {
+		pv.relayout()
+		k = page - 1 // continuous cards are 1:1 with pages, in order
+	}
+	target := pv.naturalToContentY(k, localY)
+	pv.scroll.Scroll(0, target-pv.scroll.OffsetY) // Scroll clamps to [0, max]
+}
+
 // OnEvent drives the widget: a toolbar click routes to the button under it; a
 // wheel scroll pages-or-scrolls (see onScroll); a nav key steps the page; every
 // other pointer event (drag / release for the pane's pan + scrollbars) forwards
