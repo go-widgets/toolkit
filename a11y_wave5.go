@@ -65,7 +65,7 @@ func (k *Kanban) A11y() A11yInfo {
 // A11y reports the TimePicker as a group carrying its selected time as a
 // 24-hour "HH:MM" string (the picker always stores 24-hour internally).
 func (t *TimePicker) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: fmt.Sprintf("%02d:%02d", t.Hour, t.Minute)}
+	return A11yInfo{Role: RoleGroup, Value: fmt.Sprintf("%02d:%02d", t.Hour().Get(), t.Minute().Get())}
 }
 
 // A11y reports the PropertyGrid as a grid carrying the selected property's name,

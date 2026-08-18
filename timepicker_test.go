@@ -18,28 +18,53 @@ func tpClickAt(tp *TimePicker, sx, sy int) {
 
 func TestNewTimePickerNormalises(t *testing.T) {
 	tp := NewTimePicker(26, 65) // out of range on purpose
-	if tp.Hour != 2 || tp.Minute != 5 {
-		t.Fatalf("normalise: got %d:%d want 02:05", tp.Hour, tp.Minute)
+	if tp.Hour().Get() != 2 || tp.Minute().Get() != 5 {
+		t.Fatalf("normalise: got %d:%d want 02:05", tp.Hour().Get(), tp.Minute().Get())
 	}
 	if tp.MinuteStep != 1 {
 		t.Fatalf("default MinuteStep: got %d want 1", tp.MinuteStep)
 	}
 }
 
+// TestZeroValueObservablesInitAndBind proves a bare &TimePicker{} lazily inits
+// both observables (nil -> 0) via the accessors, and that a host binding sees
+// the widget's Sets. Both nil branches of Hour()/Minute() are exercised here.
+func TestZeroValueObservablesInitAndBind(t *testing.T) {
+	tp := &TimePicker{}
+	if tp.Hour().Get() != 0 {
+		t.Fatalf("zero-value Hour: got %d want 0", tp.Hour().Get())
+	}
+	if tp.Minute().Get() != 0 {
+		t.Fatalf("zero-value Minute: got %d want 0", tp.Minute().Get())
+	}
+	// A host binds the observables and observes the widget's own mutations.
+	var hostH, hostM int
+	tp.Hour().Subscribe(func(v int) { hostH = v })
+	tp.Minute().Subscribe(func(v int) { hostM = v })
+	tp.StepHour(1)   // 0 -> 1
+	tp.StepMinute(1) // 0 -> 1 (default step 1 since MinuteStep zero)
+	if hostH != 1 || tp.Hour().Get() != 1 {
+		t.Fatalf("host hour bind: host=%d widget=%d want 1", hostH, tp.Hour().Get())
+	}
+	if hostM != 1 || tp.Minute().Get() != 1 {
+		t.Fatalf("host minute bind: host=%d widget=%d want 1", hostM, tp.Minute().Get())
+	}
+}
+
 func TestStepHourWrap(t *testing.T) {
 	tp := NewTimePicker(23, 0)
 	var got []int
-	tp.OnChange = func(h, m int) { got = append(got, h) }
+	tp.Hour().Subscribe(func(v int) { got = append(got, v) })
 	tp.StepHour(1) // 23 -> 0
-	if tp.Hour != 0 {
-		t.Fatalf("23+1: got %d want 0", tp.Hour)
+	if tp.Hour().Get() != 0 {
+		t.Fatalf("23+1: got %d want 0", tp.Hour().Get())
 	}
 	tp.StepHour(-1) // 0 -> 23
-	if tp.Hour != 23 {
-		t.Fatalf("0-1: got %d want 23", tp.Hour)
+	if tp.Hour().Get() != 23 {
+		t.Fatalf("0-1: got %d want 23", tp.Hour().Get())
 	}
 	if len(got) != 2 || got[0] != 0 || got[1] != 23 {
-		t.Fatalf("OnChange hours: got %v want [0 23]", got)
+		t.Fatalf("Hour subscribers: got %v want [0 23]", got)
 	}
 }
 
@@ -47,15 +72,15 @@ func TestStepMinuteStepAndWrap(t *testing.T) {
 	tp := NewTimePicker(10, 0)
 	tp.MinuteStep = 15
 	tp.StepMinute(-1) // 0 -> 45 (wrap, no carry)
-	if tp.Minute != 45 {
-		t.Fatalf("0-15: got %d want 45", tp.Minute)
+	if tp.Minute().Get() != 45 {
+		t.Fatalf("0-15: got %d want 45", tp.Minute().Get())
 	}
-	if tp.Hour != 10 {
-		t.Fatalf("hour must not carry: got %d want 10", tp.Hour)
+	if tp.Hour().Get() != 10 {
+		t.Fatalf("hour must not carry: got %d want 10", tp.Hour().Get())
 	}
 	tp.StepMinute(1) // 45 -> 0 (wrap)
-	if tp.Minute != 0 {
-		t.Fatalf("45+15: got %d want 0", tp.Minute)
+	if tp.Minute().Get() != 0 {
+		t.Fatalf("45+15: got %d want 0", tp.Minute().Get())
 	}
 }
 
@@ -63,20 +88,20 @@ func TestStepMinuteDefaultStepWhenNonPositive(t *testing.T) {
 	tp := NewTimePicker(0, 0)
 	tp.MinuteStep = 0 // must be treated as 1
 	tp.StepMinute(1)
-	if tp.Minute != 1 {
-		t.Fatalf("step<=0 default: got %d want 1", tp.Minute)
+	if tp.Minute().Get() != 1 {
+		t.Fatalf("step<=0 default: got %d want 1", tp.Minute().Get())
 	}
 }
 
 func TestToggleAmPmShiftsHour(t *testing.T) {
 	tp := NewTimePicker(9, 30) // AM
 	tp.ToggleAmPm()            // -> PM
-	if tp.Hour != 21 {
-		t.Fatalf("9 AM->PM: got %d want 21", tp.Hour)
+	if tp.Hour().Get() != 21 {
+		t.Fatalf("9 AM->PM: got %d want 21", tp.Hour().Get())
 	}
 	tp.ToggleAmPm() // -> AM
-	if tp.Hour != 9 {
-		t.Fatalf("21 PM->AM: got %d want 9", tp.Hour)
+	if tp.Hour().Get() != 9 {
+		t.Fatalf("21 PM->AM: got %d want 9", tp.Hour().Get())
 	}
 }
 
@@ -154,55 +179,60 @@ func TestOnEventHitsEachRegion(t *testing.T) {
 	tp.Use12h = true
 	tp.SetBounds(tpBounds)
 	fired := 0
-	tp.OnChange = func(h, m int) { fired++ }
+	tp.Hour().Subscribe(func(int) { fired++ })
+	tp.Minute().Subscribe(func(int) { fired++ })
 	hUp, hDown, mUp, mDown, ampm, colon := regionCentres(tp)
 
 	tpClickAt(tp, hUp[0], hUp[1])
-	if tp.Hour != 11 {
-		t.Fatalf("hour up: got %d want 11", tp.Hour)
+	if tp.Hour().Get() != 11 {
+		t.Fatalf("hour up: got %d want 11", tp.Hour().Get())
 	}
 	tpClickAt(tp, hDown[0], hDown[1])
-	if tp.Hour != 10 {
-		t.Fatalf("hour down: got %d want 10", tp.Hour)
+	if tp.Hour().Get() != 10 {
+		t.Fatalf("hour down: got %d want 10", tp.Hour().Get())
 	}
 	tpClickAt(tp, mUp[0], mUp[1])
-	if tp.Minute != 31 {
-		t.Fatalf("minute up: got %d want 31", tp.Minute)
+	if tp.Minute().Get() != 31 {
+		t.Fatalf("minute up: got %d want 31", tp.Minute().Get())
 	}
 	tpClickAt(tp, mDown[0], mDown[1])
-	if tp.Minute != 30 {
-		t.Fatalf("minute down: got %d want 30", tp.Minute)
+	if tp.Minute().Get() != 30 {
+		t.Fatalf("minute down: got %d want 30", tp.Minute().Get())
 	}
 	tpClickAt(tp, ampm[0], ampm[1]) // AM -> PM
-	if tp.Hour != 22 {
-		t.Fatalf("ampm toggle: got %d want 22", tp.Hour)
+	if tp.Hour().Get() != 22 {
+		t.Fatalf("ampm toggle: got %d want 22", tp.Hour().Get())
 	}
 	if fired != 5 {
-		t.Fatalf("OnChange fires: got %d want 5", fired)
+		t.Fatalf("Observable notifications: got %d want 5", fired)
 	}
 
-	// Click on the ":" separator: no region, no change, no fire.
+	// Click on the ":" separator: no region, no change, no notification.
 	fired = 0
-	before := *tp
+	beforeH, beforeM := tp.Hour().Get(), tp.Minute().Get()
 	tpClickAt(tp, colon[0], colon[1])
-	if tp.Hour != before.Hour || tp.Minute != before.Minute || fired != 0 {
-		t.Fatalf("colon click changed state: %v -> %d:%d fired=%d", before, tp.Hour, tp.Minute, fired)
+	if tp.Hour().Get() != beforeH || tp.Minute().Get() != beforeM || fired != 0 {
+		t.Fatalf("colon click changed state: %02d:%02d -> %d:%d fired=%d",
+			beforeH, beforeM, tp.Hour().Get(), tp.Minute().Get(), fired)
 	}
 }
 
 func TestOnEventIgnoresNonClick(t *testing.T) {
 	tp := NewTimePicker(10, 30)
 	tp.SetBounds(tpBounds)
-	tp.OnChange = func(h, m int) { t.Fatal("non-click event must not step") }
+	tp.Hour().Subscribe(func(int) { t.Fatal("non-click event must not step hour") })
+	tp.Minute().Subscribe(func(int) { t.Fatal("non-click event must not step minute") })
 	tp.OnEvent(Event{Kind: EventKeyDown, X: 0, Y: 0, Code: "ArrowUp"})
 }
 
-func TestNilCallbackSafe(t *testing.T) {
-	tp := NewTimePicker(23, 59) // OnChange nil
+// TestNoSubscriberSafe drives every mutation path on a widget nobody bound, so a
+// Set with no subscribers is a no-op rather than a panic.
+func TestNoSubscriberSafe(t *testing.T) {
+	tp := NewTimePicker(23, 59) // no subscribers
 	tp.SetBounds(tpBounds)
 	tp.StepHour(1)
 	tp.StepMinute(1)
 	tp.ToggleAmPm()
 	hUp, _, _, _, _, _ := regionCentres(tp)
-	tpClickAt(tp, hUp[0], hUp[1]) // click path with nil callback
+	tpClickAt(tp, hUp[0], hUp[1]) // click path with no subscribers
 }

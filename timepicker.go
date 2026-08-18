@@ -4,17 +4,25 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // TimePicker is a stepper-based time-of-day picker — the pixel sibling of the
 // calendar-oriented DatePicker. It shows two spinners laid left-to-right, one
 // for the hour and one for the minute, each with a ▲ (up) and ▼ (down)
 // affordance the user clicks to increment / decrement. A ":" separates them.
 // When Use12h is set an extra AM/PM toggle cell is drawn on the right and the
-// hour reads as a 12-hour clock, while the stored Hour stays 0..23.
+// hour reads as a 12-hour clock, while the stored hour stays 0..23.
 //
 // The widget never reads the wall clock: the initial hour+minute are supplied
 // by the caller (NewTimePicker), so it stays deterministic and host-agnostic.
+//
+// The reactive state is MVVM-only: the current hour and minute each live in an
+// unexported [mvvm.Observable] exposed via [TimePicker.Hour] and
+// [TimePicker.Minute]. A host binds either (Set / Subscribe / two-way) — there
+// are no settable Hour / Minute fields and no change callback.
 //
 // Minute wrap policy: StepMinute wraps the minute within 0..59 WITHOUT
 // carrying into the hour — stepping past :59 rolls back to the low end of the
@@ -23,11 +31,32 @@ import "github.com/go-widgets/painter"
 // time stepper behaves.
 type TimePicker struct {
 	Base
-	Hour       int  // 0..23, always stored as 24-hour
-	Minute     int  // 0..59
 	MinuteStep int  // increment per minute step (default 1; e.g. 5 or 15)
 	Use12h     bool // display as 12-hour with an AM/PM segment
-	OnChange   func(hour, minute int)
+
+	hour   *mvvm.Observable[int]
+	minute *mvvm.Observable[int]
+}
+
+// Hour is the current hour (0..23, always 24-hour) as a shared
+// [mvvm.Observable]: a host binds it (Set / Subscribe / two-way) — there is no
+// settable Hour field. A spin or an AM/PM toggle Sets it (wrapped into 0..23);
+// subscribers are notified.
+func (tp *TimePicker) Hour() *mvvm.Observable[int] {
+	if tp.hour == nil {
+		tp.hour = mvvm.NewObservable(0)
+	}
+	return tp.hour
+}
+
+// Minute is the current minute (0..59) as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) — there is no settable Minute field. A
+// spin Sets it (wrapped into 0..59); subscribers are notified.
+func (tp *TimePicker) Minute() *mvvm.Observable[int] {
+	if tp.minute == nil {
+		tp.minute = mvvm.NewObservable(0)
+	}
+	return tp.minute
 }
 
 // TimePicker layout constants. Cells are laid out left-to-right from the
@@ -55,8 +84,8 @@ func (tp *TimePicker) HitRect() Rect { return touchHitRect(tp.Bounds()) }
 // defaults to 1.
 func NewTimePicker(hour, minute int) *TimePicker {
 	tp := &TimePicker{MinuteStep: 1}
-	tp.Hour = ((hour % 24) + 24) % 24
-	tp.Minute = ((minute % 60) + 60) % 60
+	tp.hour = mvvm.NewObservable(((hour % 24) + 24) % 24)
+	tp.minute = mvvm.NewObservable(((minute % 60) + 60) % 60)
 	return tp
 }
 
@@ -65,14 +94,14 @@ func NewTimePicker(hour, minute int) *TimePicker {
 // 12-hour form, as AM and PM respectively.
 func (tp *TimePicker) String() string {
 	if tp.Use12h {
-		return itoa(tp.hour12()) + ":" + pad(tp.Minute, 2) + " " + tp.meridiem()
+		return itoa(tp.hour12()) + ":" + pad(tp.Minute().Get(), 2) + " " + tp.meridiem()
 	}
-	return pad(tp.Hour, 2) + ":" + pad(tp.Minute, 2)
+	return pad(tp.Hour().Get(), 2) + ":" + pad(tp.Minute().Get(), 2)
 }
 
-// hour12 maps the stored 24-hour Hour onto a 1..12 clock face.
+// hour12 maps the stored 24-hour hour onto a 1..12 clock face.
 func (tp *TimePicker) hour12() int {
-	h := tp.Hour % 12
+	h := tp.Hour().Get() % 12
 	if h == 0 {
 		h = 12
 	}
@@ -81,48 +110,40 @@ func (tp *TimePicker) hour12() int {
 
 // meridiem is "AM" for hours [0,12) and "PM" for [12,24).
 func (tp *TimePicker) meridiem() string {
-	if tp.Hour >= 12 {
+	if tp.Hour().Get() >= 12 {
 		return "PM"
 	}
 	return "AM"
 }
 
 // StepHour adjusts the hour by delta (typically +1 / -1), wrapping 0..23 in
-// both directions, then fires OnChange.
+// both directions, then Sets the Hour Observable.
 func (tp *TimePicker) StepHour(delta int) {
-	tp.Hour = ((tp.Hour+delta)%24 + 24) % 24
-	tp.fire()
+	tp.Hour().Set(((tp.Hour().Get()+delta)%24 + 24) % 24)
 }
 
 // StepMinute adjusts the minute by delta*MinuteStep (delta is a direction,
-// +1 / -1), wrapping within 0..59 without carrying into the hour, then fires
-// OnChange. A non-positive MinuteStep is treated as 1 so a click is never a
-// silent no-op.
+// +1 / -1), wrapping within 0..59 without carrying into the hour, then Sets the
+// Minute Observable. A non-positive MinuteStep is treated as 1 so a click is
+// never a silent no-op.
 func (tp *TimePicker) StepMinute(delta int) {
 	step := tp.MinuteStep
 	if step <= 0 {
 		step = 1
 	}
-	tp.Minute = ((tp.Minute+delta*step)%60 + 60) % 60
-	tp.fire()
+	tp.Minute().Set(((tp.Minute().Get()+delta*step)%60 + 60) % 60)
 }
 
-// ToggleAmPm flips between AM and PM by shifting Hour ±12, keeping the stored
-// value in 0..23, then fires OnChange.
+// ToggleAmPm flips between AM and PM by shifting the hour ±12, keeping the
+// stored value in 0..23, then Sets the Hour Observable.
 func (tp *TimePicker) ToggleAmPm() {
-	if tp.Hour < 12 {
-		tp.Hour += 12
+	h := tp.Hour().Get()
+	if h < 12 {
+		h += 12
 	} else {
-		tp.Hour -= 12
+		h -= 12
 	}
-	tp.fire()
-}
-
-// fire notifies OnChange if one is set.
-func (tp *TimePicker) fire() {
-	if tp.OnChange != nil {
-		tp.OnChange(tp.Hour, tp.Minute)
-	}
+	tp.Hour().Set(h)
 }
 
 // hourText is the string shown in the hour cell: the 12-hour face when Use12h,
@@ -131,7 +152,7 @@ func (tp *TimePicker) hourText() string {
 	if tp.Use12h {
 		return itoa(tp.hour12())
 	}
-	return pad(tp.Hour, 2)
+	return pad(tp.Hour().Get(), 2)
 }
 
 // layout resolves the absolute Rects of the cells, laid out left-to-right from
@@ -171,7 +192,7 @@ func (tp *TimePicker) Draw(p painter.Painter, theme *Theme) {
 	hourCell, colon, minCell, ampmCell := tp.layout()
 	tp.drawSpinner(p, theme, hourCell, tp.hourText())
 	tp.drawCentredText(p, colon, ":", theme.OnSurface)
-	tp.drawSpinner(p, theme, minCell, pad(tp.Minute, 2))
+	tp.drawSpinner(p, theme, minCell, pad(tp.Minute().Get(), 2))
 	if tp.Use12h {
 		fillRect(p, ampmCell.X, ampmCell.Y, ampmCell.W, ampmCell.H, theme.SurfaceAlt)
 		strokeRect(p, ampmCell.X, ampmCell.Y, ampmCell.W, ampmCell.H, theme.Border)
