@@ -115,18 +115,18 @@ func TestA11yTreeTable(t *testing.T) {
 	root.Children = []*TreeTableNode{child}
 	tt := NewTreeTable([]TreeTableColumn{{Title: "Name"}, {Title: "N"}}, []*TreeTableNode{root})
 
-	tt.Selected = child
+	tt.Selected().Set(child)
 	if got := tt.A11y(); got != (A11yInfo{Role: RoleTree, Value: "Child"}) {
 		t.Errorf("TreeTable selected A11y() = %+v", got)
 	}
 
-	tt.Selected = nil
+	tt.Selected().Set(nil)
 	if got := tt.A11y(); got != (A11yInfo{Role: RoleTree, Value: ""}) {
 		t.Errorf("TreeTable no-selection A11y() = %+v", got)
 	}
 
 	// A selected node with no cells yields an empty value.
-	tt.Selected = &TreeTableNode{}
+	tt.Selected().Set(&TreeTableNode{})
 	if got := tt.A11y(); got != (A11yInfo{Role: RoleTree, Value: ""}) {
 		t.Errorf("TreeTable empty-cells A11y() = %+v", got)
 	}

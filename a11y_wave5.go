@@ -26,8 +26,8 @@ func (c *ComboBox) A11y() A11yInfo { return A11yInfo{Role: RoleCombobox, Name: c
 // label (the column that carries the tree structure), or "" with no selection.
 func (t *TreeTable) A11y() A11yInfo {
 	v := ""
-	if t.Selected != nil && len(t.Selected.Cells) > 0 {
-		v = t.Selected.Cells[0]
+	if sel := t.Selected().Get(); sel != nil && len(sel.Cells) > 0 {
+		v = sel.Cells[0]
 	}
 	return A11yInfo{Role: RoleTree, Value: v}
 }

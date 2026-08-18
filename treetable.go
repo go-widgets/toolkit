@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // TreeTableColumn is one column definition for a TreeTable header — the
 // same shape as TableColumn (title + optional fixed pixel Width + Align),
@@ -51,17 +54,13 @@ type TreeTable struct {
 	// host can list multiple top-level entries without a synthetic
 	// invisible parent).
 	Root []*TreeTableNode
-	// Selected is the node highlighted with Theme.Accent, or nil for no
-	// selection.
-	Selected *TreeTableNode
 
-	// ScrollRow is the index, into the current visible-flattened node
-	// list, of the top row Draw paints. It's clamped on every Draw /
-	// OnEvent to [0, max(0, visibleCount-windowRows)], so it's always
-	// safe to set directly; prefer ScrollTo/ScrollBy for arithmetic on
-	// it. When the whole tree fits in Bounds().H, ScrollRow==0 paints
-	// every row.
-	ScrollRow int
+	// selected / scrollRow are the widget's reactive state, MVVM-only:
+	// the highlighted node and the top scroll row live in unexported
+	// Observables exposed via [TreeTable.Selected] / [TreeTable.ScrollRow].
+	// There is no settable Selected / ScrollRow field.
+	selected  *mvvm.Observable[*TreeTableNode]
+	scrollRow *mvvm.Observable[int]
 
 	// rows is a transient flat list of (node, depth) pairs computed on
 	// every Draw + OnEvent so hit-tests + paint share one definition of
@@ -83,10 +82,37 @@ const TreeTableHeaderHeight = 24
 // TreeTableRowHeight is the pixel height of one body row.
 const TreeTableRowHeight = 22
 
+// Selected is the highlighted node as a shared [mvvm.Observable]: a host binds
+// it (Set / Subscribe / two-way) — there is no settable Selected field. A row
+// click or a keyboard cursor move Sets it (nil for no selection); subscribers
+// are notified on change. The node is painted with Theme.Accent when it is a
+// currently-visible row.
+func (t *TreeTable) Selected() *mvvm.Observable[*TreeTableNode] {
+	if t.selected == nil {
+		t.selected = mvvm.NewObservable[*TreeTableNode](nil)
+	}
+	return t.selected
+}
+
+// ScrollRow is the index, into the current visible-flattened node list, of the
+// top row Draw paints, as a shared [mvvm.Observable]. It's clamped on every Draw
+// / OnEvent to [0, max(0, visibleCount-windowRows)], so it's always safe to Set
+// directly; prefer ScrollTo/ScrollBy for arithmetic on it. When the whole tree
+// fits in Bounds().H, ScrollRow==0 paints every row.
+func (t *TreeTable) ScrollRow() *mvvm.Observable[int] {
+	if t.scrollRow == nil {
+		t.scrollRow = mvvm.NewObservable(0)
+	}
+	return t.scrollRow
+}
+
 // NewTreeTable builds a TreeTable with the given columns + forest of root
 // nodes.
 func NewTreeTable(cols []TreeTableColumn, root []*TreeTableNode) *TreeTable {
-	return &TreeTable{Columns: cols, Root: root}
+	t := &TreeTable{Columns: cols, Root: root}
+	t.selected = mvvm.NewObservable[*TreeTableNode](nil)
+	t.scrollRow = mvvm.NewObservable(0)
+	return t
 }
 
 // rowH is the effective body-row pixel height used for every body layout and
@@ -144,13 +170,13 @@ func (t *TreeTable) clampScrollRow(row, total, window int) int {
 // flattened shape + the widget's bounds.
 func (t *TreeTable) ScrollTo(row int) {
 	t.flatten()
-	t.ScrollRow = t.clampScrollRow(row, len(t.rows), t.bodyVisibleRows())
+	t.ScrollRow().Set(t.clampScrollRow(row, len(t.rows), t.bodyVisibleRows()))
 }
 
 // ScrollBy adjusts ScrollRow by delta, with the same clamping as ScrollTo.
 // Negative delta scrolls up.
 func (t *TreeTable) ScrollBy(delta int) {
-	t.ScrollTo(t.ScrollRow + delta)
+	t.ScrollTo(t.ScrollRow().Get() + delta)
 }
 
 // scrollToSelected nudges ScrollRow by the minimum amount needed to bring
@@ -158,13 +184,14 @@ func (t *TreeTable) ScrollBy(delta int) {
 // yet) is a deliberate no-op — mirrors TreeView.scrollToSelected exactly,
 // including the "Selected isn't currently visible" no-op (idx==-1).
 func (t *TreeTable) scrollToSelected() {
-	if t.Selected == nil {
+	sel := t.Selected().Get()
+	if sel == nil {
 		return
 	}
 	t.flatten()
 	idx := -1
 	for i, row := range t.rows {
-		if row.node == t.Selected {
+		if row.node == sel {
 			idx = i
 			break
 		}
@@ -173,13 +200,14 @@ func (t *TreeTable) scrollToSelected() {
 		return
 	}
 	wr := t.bodyVisibleRows()
+	sr := t.ScrollRow().Get()
 	switch {
-	case idx < t.ScrollRow:
-		t.ScrollRow = idx
-	case wr > 0 && idx >= t.ScrollRow+wr:
-		t.ScrollRow = idx - wr + 1
+	case idx < sr:
+		t.ScrollRow().Set(idx)
+	case wr > 0 && idx >= sr+wr:
+		t.ScrollRow().Set(idx - wr + 1)
 	}
-	t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), wr)
+	t.ScrollRow().Set(t.clampScrollRow(t.ScrollRow().Get(), len(t.rows), wr))
 }
 
 // handleKey drives the keyboard roving cursor over the visible flattened
@@ -216,11 +244,12 @@ func (t *TreeTable) handleKey(ev Event) {
 // cursorRow returns the flattened-row index of Selected, or -1 when nothing is
 // selected or Selected is not currently visible. Callers flatten() first.
 func (t *TreeTable) cursorRow() int {
-	if t.Selected == nil {
+	sel := t.Selected().Get()
+	if sel == nil {
 		return -1
 	}
 	for i, row := range t.rows {
-		if row.node == t.Selected {
+		if row.node == sel {
 			return i
 		}
 	}
@@ -231,7 +260,7 @@ func (t *TreeTable) cursorRow() int {
 // keep it visible), the keyboard analogue of clicking that row. Callers pass
 // an in-range idx.
 func (t *TreeTable) setCursorRow(idx int) {
-	t.Selected = t.rows[idx].node
+	t.Selected().Set(t.rows[idx].node)
 	t.scrollToSelected()
 }
 
@@ -240,7 +269,7 @@ func (t *TreeTable) setCursorRow(idx int) {
 // the cursor node selected (it already is). A nil cursor is a no-op.
 func (t *TreeTable) activateCursor() {
 	if cur := t.cursorRow(); cur >= 0 {
-		t.Selected = t.rows[cur].node
+		t.Selected().Set(t.rows[cur].node)
 	}
 }
 
@@ -260,7 +289,7 @@ func (t *TreeTable) expandOrDescend(cur int) {
 	if !node.Expanded {
 		node.Expanded = true
 		t.flatten()
-		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.bodyVisibleRows())
+		t.ScrollRow().Set(t.clampScrollRow(t.ScrollRow().Get(), len(t.rows), t.bodyVisibleRows()))
 		return
 	}
 	// The node is expanded and has children, so its first child is the very
@@ -279,7 +308,7 @@ func (t *TreeTable) collapseOrParent(cur int) {
 	if len(node.Children) > 0 && node.Expanded {
 		node.Expanded = false
 		t.flatten()
-		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.bodyVisibleRows())
+		t.ScrollRow().Set(t.clampScrollRow(t.ScrollRow().Get(), len(t.rows), t.bodyVisibleRows()))
 		return
 	}
 	depth := t.rows[cur].depth
@@ -361,7 +390,7 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 	total := len(t.rows)
 	wr := t.bodyVisibleRows()
 	windowed := wr > 0 && total > wr
-	t.ScrollRow = t.clampScrollRow(t.ScrollRow, total, wr)
+	t.ScrollRow().Set(t.clampScrollRow(t.ScrollRow().Get(), total, wr))
 
 	bodyW := r.W
 	if windowed {
@@ -383,7 +412,7 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 	bodyY := r.Y + scaled(TreeTableHeaderHeight)
 	start, end := 0, total
 	if windowed {
-		start = t.ScrollRow
+		start = t.ScrollRow().Get()
 		end = start + wr
 	}
 
@@ -395,12 +424,13 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 		}
 	}
 	onAccent := accentInk(theme)
+	sel := t.Selected().Get()
 	for i := start; i < end; i++ {
 		row := t.rows[i]
 		y := bodyY + (i-start)*t.rowH()
 		bg := theme.Surface
 		ink := theme.OnSurface
-		if row.node == t.Selected {
+		if row.node == sel {
 			bg = theme.Accent
 			ink = onAccent
 		}
@@ -474,7 +504,7 @@ func (t *TreeTable) scrollbarGeom() (sbGeom, bool) {
 		thumbH = 8
 	}
 	maxScroll := total - wr // > 0 here (total > wr)
-	scroll := t.clampScrollRow(t.ScrollRow, total, wr)
+	scroll := t.clampScrollRow(t.ScrollRow().Get(), total, wr)
 	return sbGeom{
 		cross0:     r.W - scrollbarWidth,
 		trackStart: trackTop,
@@ -515,7 +545,7 @@ func (t *TreeTable) NodeAt(x, y int) *TreeTableNode {
 	if wr > 0 && total > wr && localIdx >= wr {
 		return nil
 	}
-	idx := localIdx + t.clampScrollRow(t.ScrollRow, total, wr)
+	idx := localIdx + t.clampScrollRow(t.ScrollRow().Get(), total, wr)
 	if idx < 0 || idx >= total {
 		return nil
 	}
@@ -594,7 +624,7 @@ func (t *TreeTable) OnEvent(ev Event) {
 	total := len(t.rows)
 	wr := t.bodyVisibleRows()
 	windowed := wr > 0 && total > wr
-	t.ScrollRow = t.clampScrollRow(t.ScrollRow, total, wr)
+	t.ScrollRow().Set(t.clampScrollRow(t.ScrollRow().Get(), total, wr))
 
 	if ev.Y < scaled(TreeTableHeaderHeight) {
 		// Header row: no sort/resize behaviour on a TreeTable — a click
@@ -608,7 +638,7 @@ func (t *TreeTable) OnEvent(ev Event) {
 		// drawn there.
 		return
 	}
-	idx := localIdx + t.ScrollRow
+	idx := localIdx + t.ScrollRow().Get()
 	if idx >= total {
 		return
 	}
@@ -617,8 +647,8 @@ func (t *TreeTable) OnEvent(ev Event) {
 	if ev.X >= chevronX-scaled(3) && ev.X < chevronX+scaled(8) && len(row.node.Children) > 0 {
 		row.node.Expanded = !row.node.Expanded
 		t.flatten()
-		t.ScrollRow = t.clampScrollRow(t.ScrollRow, len(t.rows), t.bodyVisibleRows())
+		t.ScrollRow().Set(t.clampScrollRow(t.ScrollRow().Get(), len(t.rows), t.bodyVisibleRows()))
 		return
 	}
-	t.Selected = row.node
+	t.Selected().Set(row.node)
 }

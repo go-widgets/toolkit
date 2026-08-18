@@ -79,13 +79,13 @@ func TestTreeTableScrollbarDragPagesAndSelects(t *testing.T) {
 
 	// Press ON the thumb, then drag down the track: ScrollRow rises
 	// proportionally and clamps at the end.
-	before := tt.ScrollRow
+	before := tt.ScrollRow().Get()
 	tt.OnEvent(Event{Kind: EventClick, X: trackX + 3, Y: 26})
 	if !tt.sbDrag.active {
 		t.Fatal("pressing the thumb should begin a drag")
 	}
 	tt.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 3, Y: 50})
-	mid := tt.ScrollRow
+	mid := tt.ScrollRow().Get()
 	if !(mid > before && mid < 17) {
 		t.Fatalf("mid drag ScrollRow = %d, want strictly between %d and 17", mid, before)
 	}
@@ -93,8 +93,8 @@ func TestTreeTableScrollbarDragPagesAndSelects(t *testing.T) {
 		t.Fatalf("mid drag ScrollRow = %d, want 7", mid)
 	}
 	tt.OnEvent(Event{Kind: EventMouseDrag, X: trackX + 3, Y: 90})
-	if tt.ScrollRow != 17 {
-		t.Fatalf("drag past the end ScrollRow = %d, want 17 (clamped)", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 17 {
+		t.Fatalf("drag past the end ScrollRow = %d, want 17 (clamped)", tt.ScrollRow().Get())
 	}
 	tt.OnEvent(Event{Kind: EventMouseUp, X: trackX + 3, Y: 90})
 	if tt.sbDrag.active {
@@ -104,25 +104,25 @@ func TestTreeTableScrollbarDragPagesAndSelects(t *testing.T) {
 	// A press on the track BELOW the thumb pages down by one window.
 	tt.ScrollTo(0)
 	tt.OnEvent(Event{Kind: EventClick, X: trackX + 3, Y: 60})
-	if tt.ScrollRow != 3 {
-		t.Fatalf("page-down ScrollRow = %d, want 3 (one window)", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 3 {
+		t.Fatalf("page-down ScrollRow = %d, want 3 (one window)", tt.ScrollRow().Get())
 	}
 	// A press on the track ABOVE the thumb pages up by one window.
 	tt.ScrollTo(10)
 	tt.OnEvent(Event{Kind: EventClick, X: trackX + 3, Y: 30})
-	if tt.ScrollRow != 7 {
-		t.Fatalf("page-up ScrollRow = %d, want 7", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 7 {
+		t.Fatalf("page-up ScrollRow = %d, want 7", tt.ScrollRow().Get())
 	}
 
 	// A press LEFT of the scrollbar still selects a row and never scrolls.
 	tt.ScrollTo(5)
-	tt.Selected = nil
+	tt.Selected().Set(nil)
 	tt.OnEvent(Event{Kind: EventClick, X: 100, Y: 30})
-	if tt.Selected == nil {
+	if tt.Selected().Get() == nil {
 		t.Fatal("a press left of the scrollbar must select a row")
 	}
-	if tt.ScrollRow != 5 {
-		t.Fatalf("selecting a row must not scroll: ScrollRow = %d, want 5", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 5 {
+		t.Fatalf("selecting a row must not scroll: ScrollRow = %d, want 5", tt.ScrollRow().Get())
 	}
 	if tt.sbDrag.active {
 		t.Fatal("a content press must not begin a scrollbar drag")
@@ -250,8 +250,8 @@ func TestTreeScrollbarWidgetsIgnoreUnrelatedEvents(t *testing.T) {
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90})
 	tt.ScrollTo(4)
 	tt.OnEvent(Event{Kind: EventKeyUp, X: 10, Y: 10})
-	if tt.ScrollRow != 4 || tt.sbDrag.active {
-		t.Fatalf("TreeTable must ignore EventKeyUp: ScrollRow=%d active=%v", tt.ScrollRow, tt.sbDrag.active)
+	if tt.ScrollRow().Get() != 4 || tt.sbDrag.active {
+		t.Fatalf("TreeTable must ignore EventKeyUp: ScrollRow=%d active=%v", tt.ScrollRow().Get(), tt.sbDrag.active)
 	}
 
 	root, _ := manyLeaves(20)

@@ -529,8 +529,8 @@ func ttVisible(t *testing.T, tt *TreeTable) {
 	tt.flatten()
 	idx := tt.cursorRow()
 	wr := tt.bodyVisibleRows()
-	if idx < tt.ScrollRow || idx >= tt.ScrollRow+wr {
-		t.Fatalf("cursor row %d outside window [%d,%d)", idx, tt.ScrollRow, tt.ScrollRow+wr)
+	if sr := tt.ScrollRow().Get(); idx < sr || idx >= sr+wr {
+		t.Fatalf("cursor row %d outside window [%d,%d)", idx, sr, sr+wr)
 	}
 }
 
@@ -538,33 +538,33 @@ func TestTreeTableKeyCursorAndActivate(t *testing.T) {
 	tt := newCursorTreeTable()
 	tt.OnEvent(kd3b("ArrowDown")) // none -> row 0
 	tt.flatten()
-	if tt.Selected != tt.rows[0].node {
-		t.Fatalf("ArrowDown from none: Selected=%v", tt.Selected)
+	if tt.Selected().Get() != tt.rows[0].node {
+		t.Fatalf("ArrowDown from none: Selected=%v", tt.Selected().Get())
 	}
 	ttVisible(t, tt)
 	tt.OnEvent(kd3b("End"))
 	tt.flatten()
-	if tt.Selected != tt.rows[len(tt.rows)-1].node || tt.ScrollRow != len(tt.rows)-tt.bodyVisibleRows() {
-		t.Fatalf("End: ScrollRow=%d", tt.ScrollRow)
+	if tt.Selected().Get() != tt.rows[len(tt.rows)-1].node || tt.ScrollRow().Get() != len(tt.rows)-tt.bodyVisibleRows() {
+		t.Fatalf("End: ScrollRow=%d", tt.ScrollRow().Get())
 	}
 	ttVisible(t, tt)
 	tt.OnEvent(kd3b("PageUp"))
 	ttVisible(t, tt)
 	tt.OnEvent(kd3b("Home"))
-	if tt.ScrollRow != 0 {
-		t.Fatalf("Home ScrollRow=%d", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 0 {
+		t.Fatalf("Home ScrollRow=%d", tt.ScrollRow().Get())
 	}
 	ttVisible(t, tt)
 	// Enter/Space keep the cursor node as Selected (click-equivalent).
-	keep := tt.Selected
+	keep := tt.Selected().Get()
 	tt.OnEvent(kd3b("Enter"))
 	tt.OnEvent(kd3b(" "))
-	if tt.Selected != keep {
-		t.Fatalf("Enter changed Selected: %v want %v", tt.Selected, keep)
+	if tt.Selected().Get() != keep {
+		t.Fatalf("Enter changed Selected: %v want %v", tt.Selected().Get(), keep)
 	}
 	// A non-navigation key is ignored.
 	tt.OnEvent(kd3b("Tab"))
-	if tt.Selected != keep {
+	if tt.Selected().Get() != keep {
 		t.Fatalf("Tab moved cursor")
 	}
 }
@@ -588,20 +588,20 @@ func TestTreeTableKeyExpandCollapse(t *testing.T) {
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 120, H: TreeTableHeaderHeight + 20*TreeTableRowHeight})
 
 	// ArrowRight expands a collapsed parent.
-	tt.Selected = a
+	tt.Selected().Set(a)
 	tt.OnEvent(kd3b("ArrowRight"))
 	if !a.Expanded {
 		t.Fatal("ArrowRight did not expand a")
 	}
 	// ArrowRight (expanded) descends to first child.
 	tt.OnEvent(kd3b("ArrowRight"))
-	if tt.Selected != a1 {
-		t.Fatalf("descend: Selected=%v want a1", tt.Selected)
+	if tt.Selected().Get() != a1 {
+		t.Fatalf("descend: Selected=%v want a1", tt.Selected().Get())
 	}
 	// ArrowLeft on the leaf child goes to parent a.
 	tt.OnEvent(kd3b("ArrowLeft"))
-	if tt.Selected != a {
-		t.Fatalf("to parent: Selected=%v want a", tt.Selected)
+	if tt.Selected().Get() != a {
+		t.Fatalf("to parent: Selected=%v want a", tt.Selected().Get())
 	}
 	// ArrowLeft collapses expanded a.
 	tt.OnEvent(kd3b("ArrowLeft"))
@@ -610,20 +610,20 @@ func TestTreeTableKeyExpandCollapse(t *testing.T) {
 	}
 	// ArrowLeft again -> parent root0.
 	tt.OnEvent(kd3b("ArrowLeft"))
-	if tt.Selected != root0 {
-		t.Fatalf("to root0: Selected=%v", tt.Selected)
+	if tt.Selected().Get() != root0 {
+		t.Fatalf("to root0: Selected=%v", tt.Selected().Get())
 	}
 	// ArrowRight on a leaf (b) does nothing.
-	tt.Selected = b
+	tt.Selected().Set(b)
 	tt.OnEvent(kd3b("ArrowRight"))
-	if tt.Selected != b {
-		t.Fatalf("ArrowRight on leaf moved: Selected=%v", tt.Selected)
+	if tt.Selected().Get() != b {
+		t.Fatalf("ArrowRight on leaf moved: Selected=%v", tt.Selected().Get())
 	}
 	// ArrowLeft on a top-level leaf (root1) with no parent stays put.
-	tt.Selected = root1
+	tt.Selected().Set(root1)
 	tt.OnEvent(kd3b("ArrowLeft"))
-	if tt.Selected != root1 {
-		t.Fatalf("ArrowLeft top-level leaf moved: Selected=%v", tt.Selected)
+	if tt.Selected().Get() != root1 {
+		t.Fatalf("ArrowLeft top-level leaf moved: Selected=%v", tt.Selected().Get())
 	}
 }
 
@@ -633,43 +633,43 @@ func TestTreeTableKeyEdgeCases(t *testing.T) {
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 120, H: TreeTableHeaderHeight + 20*TreeTableRowHeight})
 
 	// ArrowRight with no cursor selects the first row.
-	tt.Selected = nil
+	tt.Selected().Set(nil)
 	tt.OnEvent(kd3b("ArrowRight"))
-	if tt.Selected != root0 {
-		t.Fatalf("ArrowRight from none: Selected=%v", tt.Selected)
+	if tt.Selected().Get() != root0 {
+		t.Fatalf("ArrowRight from none: Selected=%v", tt.Selected().Get())
 	}
 	// ArrowLeft with no cursor is a no-op.
-	tt.Selected = nil
+	tt.Selected().Set(nil)
 	tt.OnEvent(kd3b("ArrowLeft"))
-	if tt.Selected != nil {
-		t.Fatalf("ArrowLeft from none moved: Selected=%v", tt.Selected)
+	if tt.Selected().Get() != nil {
+		t.Fatalf("ArrowLeft from none moved: Selected=%v", tt.Selected().Get())
 	}
 	// Enter with no cursor (cursorRow == -1) is a no-op.
-	tt.Selected = nil
+	tt.Selected().Set(nil)
 	tt.OnEvent(kd3b("Enter"))
-	if tt.Selected != nil {
-		t.Fatalf("Enter from none moved: Selected=%v", tt.Selected)
+	if tt.Selected().Get() != nil {
+		t.Fatalf("Enter from none moved: Selected=%v", tt.Selected().Get())
 	}
 	// Selected on a not-currently-visible node -> cursorRow -1 -> ArrowDown row 0.
-	tt.Selected = a1 // a1 hidden (a collapsed)
+	tt.Selected().Set(a1) // a1 hidden (a collapsed)
 	tt.OnEvent(kd3b("ArrowDown"))
-	if tt.Selected != root0 {
-		t.Fatalf("ArrowDown from invisible cursor: Selected=%v", tt.Selected)
+	if tt.Selected().Get() != root0 {
+		t.Fatalf("ArrowDown from invisible cursor: Selected=%v", tt.Selected().Get())
 	}
 	// Disabled ignores keys.
 	tt.Disabled = true
-	keep := tt.Selected
+	keep := tt.Selected().Get()
 	tt.OnEvent(kd3b("ArrowDown"))
-	if tt.Selected != keep {
-		t.Fatalf("disabled tree table moved (Selected=%v)", tt.Selected)
+	if tt.Selected().Get() != keep {
+		t.Fatalf("disabled tree table moved (Selected=%v)", tt.Selected().Get())
 	}
 	// Empty forest is safe.
 	empty := NewTreeTable([]TreeTableColumn{{Title: "A"}}, nil)
 	empty.SetBounds(Rect{X: 0, Y: 0, W: 120, H: TreeTableHeaderHeight + 3*TreeTableRowHeight})
 	empty.OnEvent(kd3b("ArrowDown"))
 	empty.OnEvent(kd3b("Enter"))
-	if empty.Selected != nil {
-		t.Fatalf("empty forest moved (Selected=%v)", empty.Selected)
+	if empty.Selected().Get() != nil {
+		t.Fatalf("empty forest moved (Selected=%v)", empty.Selected().Get())
 	}
 }
 

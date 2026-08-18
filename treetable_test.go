@@ -53,8 +53,38 @@ func TestNewTreeTable(t *testing.T) {
 	if len(tt.Columns) != 2 || len(tt.Root) != 4 {
 		t.Fatalf("shape = %+v", tt)
 	}
-	if tt.Selected != nil || tt.ScrollRow != 0 {
-		t.Fatalf("fresh TreeTable should have no selection + ScrollRow=0, got %+v", tt)
+	if tt.Selected().Get() != nil || tt.ScrollRow().Get() != 0 {
+		t.Fatalf("fresh TreeTable should have no selection + ScrollRow=0, got sel=%v scroll=%d",
+			tt.Selected().Get(), tt.ScrollRow().Get())
+	}
+}
+
+// TestTreeTableZeroValueObservables proves a bare &TreeTable{} (no constructor)
+// lazily materialises both Observables on first accessor call: Selected reads
+// the nil zero node, ScrollRow the 0 zero row, and a host can bind either.
+func TestTreeTableZeroValueObservables(t *testing.T) {
+	tt := &TreeTable{}
+	if got := tt.Selected().Get(); got != nil {
+		t.Fatalf("zero-value Selected().Get() = %v, want nil", got)
+	}
+	if got := tt.ScrollRow().Get(); got != 0 {
+		t.Fatalf("zero-value ScrollRow().Get() = %d, want 0", got)
+	}
+
+	// A host binds both Observables and must see every change.
+	var gotSel *TreeTableNode
+	gotScroll := -1
+	tt.Selected().Subscribe(func(n *TreeTableNode) { gotSel = n })
+	tt.ScrollRow().Subscribe(func(n int) { gotScroll = n })
+
+	node := &TreeTableNode{Cells: []string{"x"}}
+	tt.Selected().Set(node)
+	tt.ScrollRow().Set(7)
+	if gotSel != node {
+		t.Fatalf("Selected subscriber saw %v, want the bound node", gotSel)
+	}
+	if gotScroll != 7 {
+		t.Fatalf("ScrollRow subscriber saw %d, want 7", gotScroll)
 	}
 }
 
@@ -179,8 +209,8 @@ func TestTreeTableLeafClickWithinChevronRangeSelects(t *testing.T) {
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 150})
 
 	tt.OnEvent(Event{Kind: EventClick, X: 4, Y: TreeTableHeaderHeight + 1}) // row 0 = a
-	if tt.Selected != a {
-		t.Fatalf("Selected = %+v, want a", tt.Selected)
+	if tt.Selected().Get() != a {
+		t.Fatalf("Selected = %+v, want a", tt.Selected().Get())
 	}
 }
 
@@ -192,15 +222,15 @@ func TestTreeTableSelectionOnOtherColumn(t *testing.T) {
 	// c is row index 4: local y = header + 4*rowHeight. Click well past
 	// the first column, in column 2's territory.
 	tt.OnEvent(Event{Kind: EventClick, X: 150, Y: TreeTableHeaderHeight + 4*TreeTableRowHeight + 1})
-	if tt.Selected != c {
-		t.Fatalf("Selected = %+v, want c", tt.Selected)
+	if tt.Selected().Get() != c {
+		t.Fatalf("Selected = %+v, want c", tt.Selected().Get())
 	}
 }
 
 func TestTreeTableSelectedRowHighlightedInAccent(t *testing.T) {
 	cols, root, _, _, _, _, _, _, c := newTreeTableFixture()
 	tt := NewTreeTable(cols, root)
-	tt.Selected = c
+	tt.Selected().Set(c)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 150})
 	theme := DefaultLight()
 	buf := makeSurface(200, 150)
@@ -224,7 +254,7 @@ func TestTreeTableEmptyRootNoPanic(t *testing.T) {
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 150})
 	tt.Draw(newP(makeSurface(200, 150), 200), DefaultLight())
 	tt.OnEvent(Event{Kind: EventClick, X: 50, Y: TreeTableHeaderHeight + 5})
-	if tt.Selected != nil {
+	if tt.Selected().Get() != nil {
 		t.Fatal("click on an empty tree should not select anything")
 	}
 }
@@ -276,8 +306,8 @@ func TestTreeTableOnEventBeforeSetBoundsSkipsVirtualization(t *testing.T) {
 	cols, root, a, _, _, _, _, _, _ := newTreeTableFixture()
 	tt := NewTreeTable(cols, root)
 	tt.OnEvent(Event{Kind: EventClick, X: 4, Y: TreeTableHeaderHeight + 1})
-	if tt.Selected != a {
-		t.Fatalf("Selected = %+v, want a despite unset Bounds", tt.Selected)
+	if tt.Selected().Get() != a {
+		t.Fatalf("Selected = %+v, want a despite unset Bounds", tt.Selected().Get())
 	}
 }
 
@@ -286,7 +316,7 @@ func TestTreeTableIgnoresNonClick(t *testing.T) {
 	tt := NewTreeTable(cols, root)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 150})
 	tt.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if tt.Selected != nil {
+	if tt.Selected().Get() != nil {
 		t.Fatal("KeyDown should not select")
 	}
 }
@@ -296,7 +326,7 @@ func TestTreeTableClickOnHeaderRowIgnored(t *testing.T) {
 	tt := NewTreeTable(cols, root)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 150})
 	tt.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if tt.Selected != nil {
+	if tt.Selected().Get() != nil {
 		t.Fatal("a click on the header row must not select a body row")
 	}
 }
@@ -306,7 +336,7 @@ func TestTreeTableClickPastLastRowIgnored(t *testing.T) {
 	tt := NewTreeTable(cols, root)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 150}) // unwindowed, total=5
 	tt.OnEvent(Event{Kind: EventClick, X: 50, Y: TreeTableHeaderHeight + 10*TreeTableRowHeight})
-	if tt.Selected != nil {
+	if tt.Selected().Get() != nil {
 		t.Fatal("click past the last row should not select anything")
 	}
 }
@@ -316,7 +346,7 @@ func TestTreeTableClickPastLastRowIgnored(t *testing.T) {
 func TestTreeTableWindowedRenderingOffWindowNodeNotPainted(t *testing.T) {
 	nodes := manyTreeTableLeaves(20)
 	tt := NewTreeTable([]TreeTableColumn{{Title: "Name"}}, nodes)
-	tt.Selected = nodes[15]
+	tt.Selected().Set(nodes[15])
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90}) // wr=3
 
 	theme := DefaultLight()
@@ -339,8 +369,8 @@ func TestTreeTableWindowedRenderingOffWindowNodeNotPainted(t *testing.T) {
 	}
 
 	tt.ScrollTo(15)
-	if tt.ScrollRow != 15 {
-		t.Fatalf("ScrollRow = %d, want 15", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 15 {
+		t.Fatalf("ScrollRow = %d, want 15", tt.ScrollRow().Get())
 	}
 	buf2 := makeSurface(200, 90)
 	tt.Draw(newP(buf2, 200), theme)
@@ -356,7 +386,7 @@ func TestTreeTableClickBelowWindowIgnored(t *testing.T) {
 	tt.ScrollTo(2)
 
 	tt.OnEvent(Event{Kind: EventClick, X: 80, Y: TreeTableHeaderHeight + 3*TreeTableRowHeight})
-	if tt.Selected != nil {
+	if tt.Selected().Get() != nil {
 		t.Fatal("click below the painted window should not select anything")
 	}
 }
@@ -368,8 +398,8 @@ func TestTreeTableClickWithNonZeroScrollRowSelectsCorrectNode(t *testing.T) {
 
 	tt.ScrollTo(8) // window [8,11)
 	tt.OnEvent(Event{Kind: EventClick, X: 80, Y: TreeTableHeaderHeight + 2*TreeTableRowHeight})
-	if tt.Selected != nodes[10] {
-		t.Fatalf("Selected = %v, want nodes[10]", tt.Selected)
+	if tt.Selected().Get() != nodes[10] {
+		t.Fatalf("Selected = %v, want nodes[10]", tt.Selected().Get())
 	}
 }
 
@@ -385,8 +415,8 @@ func TestTreeTableScrollClickCollapseReClampsScrollRow(t *testing.T) {
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90}) // wr=3, total=23
 
 	tt.ScrollTo(1) // window [1,4): B,b0,b1 — B at local row 0
-	if tt.ScrollRow != 1 {
-		t.Fatalf("ScrollRow = %d, want 1", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 1 {
+		t.Fatalf("ScrollRow = %d, want 1", tt.ScrollRow().Get())
 	}
 
 	tt.OnEvent(Event{Kind: EventClick, X: 4, Y: TreeTableHeaderHeight})
@@ -394,8 +424,8 @@ func TestTreeTableScrollClickCollapseReClampsScrollRow(t *testing.T) {
 		t.Fatal("chevron click should have collapsed B")
 	}
 	// Post-collapse total = A,B,C = 3 <= window(3): re-clamp to 0.
-	if tt.ScrollRow != 0 {
-		t.Fatalf("ScrollRow after click-collapse = %d, want re-clamped to 0", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollRow after click-collapse = %d, want re-clamped to 0", tt.ScrollRow().Get())
 	}
 }
 
@@ -405,21 +435,21 @@ func TestTreeTableScrollToAndScrollByClamp(t *testing.T) {
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90}) // wr=3, total=20, max=17
 
 	tt.ScrollTo(-5)
-	if tt.ScrollRow != 0 {
-		t.Fatalf("ScrollTo(-5) = %d, want 0", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollTo(-5) = %d, want 0", tt.ScrollRow().Get())
 	}
 	tt.ScrollTo(999)
-	if tt.ScrollRow != 17 {
-		t.Fatalf("ScrollTo(999) = %d, want 17", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 17 {
+		t.Fatalf("ScrollTo(999) = %d, want 17", tt.ScrollRow().Get())
 	}
 	tt.ScrollTo(10)
 	tt.ScrollBy(3)
-	if tt.ScrollRow != 13 {
-		t.Fatalf("ScrollBy(3) from 10 = %d, want 13", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 13 {
+		t.Fatalf("ScrollBy(3) from 10 = %d, want 13", tt.ScrollRow().Get())
 	}
 	tt.ScrollBy(-100)
-	if tt.ScrollRow != 0 {
-		t.Fatalf("ScrollBy(-100) = %d, want 0", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollBy(-100) = %d, want 0", tt.ScrollRow().Get())
 	}
 }
 
@@ -429,11 +459,11 @@ func TestTreeTableScrollToSelectedNilIsNoop(t *testing.T) {
 	cols, root, _, _, _, _, _, _, _ := newTreeTableFixture()
 	tt := NewTreeTable(cols, root)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 50}) // wr=1
-	tt.ScrollRow = 3
+	tt.ScrollRow().Set(3)
 
 	tt.scrollToSelected()
-	if tt.ScrollRow != 3 {
-		t.Fatalf("scrollToSelected with nil Selected changed ScrollRow to %d, want unchanged 3", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 3 {
+		t.Fatalf("scrollToSelected with nil Selected changed ScrollRow to %d, want unchanged 3", tt.ScrollRow().Get())
 	}
 }
 
@@ -442,12 +472,12 @@ func TestTreeTableScrollToSelectedNotVisibleIsNoop(t *testing.T) {
 	cols, root, _, _, _, _, _, d1, _ := newTreeTableFixture()
 	tt := NewTreeTable(cols, root)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 150})
-	tt.Selected = d1
-	tt.ScrollRow = 0
+	tt.Selected().Set(d1)
+	tt.ScrollRow().Set(0)
 
 	tt.scrollToSelected()
-	if tt.ScrollRow != 0 {
-		t.Fatalf("scrollToSelected with a hidden Selected changed ScrollRow to %d, want unchanged 0", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 0 {
+		t.Fatalf("scrollToSelected with a hidden Selected changed ScrollRow to %d, want unchanged 0", tt.ScrollRow().Get())
 	}
 }
 
@@ -456,16 +486,16 @@ func TestTreeTableScrollToSelectedAdjustsMinimally(t *testing.T) {
 	tt := NewTreeTable([]TreeTableColumn{{Title: "Name"}}, nodes)
 	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90}) // wr=3, total=20
 
-	tt.Selected = nodes[15]
+	tt.Selected().Set(nodes[15])
 	tt.scrollToSelected()
-	if want := 15 - 3 + 1; tt.ScrollRow != want {
-		t.Fatalf("ScrollRow = %d, want %d", tt.ScrollRow, want)
+	if want := 15 - 3 + 1; tt.ScrollRow().Get() != want {
+		t.Fatalf("ScrollRow = %d, want %d", tt.ScrollRow().Get(), want)
 	}
 
-	tt.Selected = nodes[0]
+	tt.Selected().Set(nodes[0])
 	tt.scrollToSelected()
-	if tt.ScrollRow != 0 {
-		t.Fatalf("ScrollRow = %d, want 0", tt.ScrollRow)
+	if tt.ScrollRow().Get() != 0 {
+		t.Fatalf("ScrollRow = %d, want 0", tt.ScrollRow().Get())
 	}
 }
 
