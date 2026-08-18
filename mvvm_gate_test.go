@@ -59,6 +59,21 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Notebook":     {"Tabs": true, "TabSide": true},
 	"DropDown":     {"Options": true, "OpenUp": true},
 	"Accordion":    {"Sections": true, "Multiple": true},
+	// Batch 4 (selection/range widgets): the selected index / low-high / open /
+	// checked state is unexported behind accessors; the slices + flags below are
+	// config (func hooks like OnActivate/OnReorder/OnCardMove/OnTaskChange/OnRefresh
+	// are auto-allowed).
+	"Carousel":      {"Slides": true, "Wrap": true},
+	"PagingToolbar": {"PageCount": true, "ShowRefresh": true},
+	"RadioButton":   {"Label": true},
+	"RadioGroup":    {"Members": true},
+	"ComboBox":      {"Options": true, "Placeholder": true},
+	// ListBox: Selected is migrated (PR #285) but ScrollRow (scroll-position state)
+	// is not yet, so ListBox is intentionally NOT gated yet — a follow-up migrates
+	// ScrollRow, then it joins the map. Same for Table/TreeView (ScrollRow/ScrollX).
+	"Gantt":       {"Tasks": true, "Units": true},
+	"RangeSlider": {"Orientation": true, "Step": true, "Min": true, "Max": true},
+	"Kanban":      {"Columns": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
