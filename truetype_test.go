@@ -10,7 +10,7 @@ import (
 	"fmt"
 	"testing"
 
-	"github.com/go-opentype/bidi"
+	"github.com/go-typeset/bidi"
 	"github.com/go-opentype/fonts/inter"
 	"github.com/go-opentype/fonts/notosansarabic"
 	"github.com/go-opentype/shape"
