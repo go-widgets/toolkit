@@ -121,6 +121,11 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// set-once tab captions (layout config, not reactive state), so it is the
 	// sole allowlisted field.
 	"FolderTabs": {"Labels": true},
+	// TabBar: the highlighted item index is unexported behind the Selected()
+	// Observable accessor; a tap/swipe/arrow-key Sets it and subscribers replace
+	// the old OnSelect callback. Items (destinations), SwipeNavigation and the
+	// Gestures recognizer are set-once config.
+	"TabBar": {"Items": true, "SwipeNavigation": true, "Gestures": true},
 	// TextView: the committed contents live on the Text() Observable and the
 	// caret line/col, the scroll offset, the selection range and the focus flag
 	// are each their own Observable accessor; the line buffer + IME preview are

@@ -32,17 +32,17 @@ func sampleItems() []TabItem {
 }
 
 func TestNewTabBarClamps(t *testing.T) {
-	if b := NewTabBar(nil, 7); b.Selected != 0 {
-		t.Fatalf("empty items selected = %d, want 0", b.Selected)
+	if b := NewTabBar(nil, 7); b.Selected().Get() != 0 {
+		t.Fatalf("empty items selected = %d, want 0", b.Selected().Get())
 	}
-	if b := NewTabBar(sampleItems(), -5); b.Selected != 0 {
-		t.Fatalf("negative selected = %d, want 0", b.Selected)
+	if b := NewTabBar(sampleItems(), -5); b.Selected().Get() != 0 {
+		t.Fatalf("negative selected = %d, want 0", b.Selected().Get())
 	}
-	if b := NewTabBar(sampleItems(), 99); b.Selected != 3 {
-		t.Fatalf("overshoot selected = %d, want 3", b.Selected)
+	if b := NewTabBar(sampleItems(), 99); b.Selected().Get() != 3 {
+		t.Fatalf("overshoot selected = %d, want 3", b.Selected().Get())
 	}
-	if b := NewTabBar(sampleItems(), 2); b.Selected != 2 {
-		t.Fatalf("in-range selected = %d, want 2", b.Selected)
+	if b := NewTabBar(sampleItems(), 2); b.Selected().Get() != 2 {
+		t.Fatalf("in-range selected = %d, want 2", b.Selected().Get())
 	}
 	if b := NewTabBar(sampleItems(), 0); b.Gestures == nil {
 		t.Fatal("NewTabBar left Gestures nil")
@@ -304,15 +304,19 @@ func TestTabBarBadgeClampsIntoColumn(t *testing.T) {
 func TestTabBarTapSelectsExactlyOnce(t *testing.T) {
 	const w = 200
 	for i := 0; i < 4; i++ {
-		b := NewTabBar(sampleItems(), 0)
+		// Start on a DIFFERENT column than the one tapped, so every tap is a
+		// genuine selection change: Selected() is a deduping Observable, so
+		// re-tapping the already-selected column is (correctly) a no-op that
+		// notifies nobody — the tap-fires-once contract is about real changes.
+		b := NewTabBar(sampleItems(), (i+1)%4)
 		b.SetBounds(Rect{X: 0, Y: 0, W: w, H: 56})
 		calls := 0
 		gotIdx := -1
-		b.OnSelect = func(idx int) { calls++; gotIdx = idx }
+		b.Selected().Subscribe(func(idx int) { calls++; gotIdx = idx })
 		localX := i*50 + 25 // centre of column i
 		b.OnEvent(Event{Kind: EventClick, X: localX})
-		if b.Selected != i {
-			t.Fatalf("tap col %d: Selected = %d, want %d", i, b.Selected, i)
+		if b.Selected().Get() != i {
+			t.Fatalf("tap col %d: Selected = %d, want %d", i, b.Selected().Get(), i)
 		}
 		if calls != 1 || gotIdx != i {
 			t.Fatalf("tap col %d: calls=%d idx=%d, want calls=1 idx=%d", i, calls, gotIdx, i)
@@ -324,14 +328,14 @@ func TestTabBarTapRemainderAndOutOfRange(t *testing.T) {
 	b := NewTabBar(sampleItems(), 1)
 	b.SetBounds(Rect{X: 0, Y: 0, W: 203, H: 56}) // 3-px remainder past x=200
 	calls := 0
-	b.OnSelect = func(int) { calls++ }
+	b.Selected().Subscribe(func(int) { calls++ })
 	b.OnEvent(Event{Kind: EventClick, X: 201}) // in the remainder region
-	if calls != 0 || b.Selected != 1 {
-		t.Fatalf("remainder tap: calls=%d selected=%d, want 0/1", calls, b.Selected)
+	if calls != 0 || b.Selected().Get() != 1 {
+		t.Fatalf("remainder tap: calls=%d selected=%d, want 0/1", calls, b.Selected().Get())
 	}
 	b.OnEvent(Event{Kind: EventClick, X: -4}) // negative local x
-	if calls != 0 || b.Selected != 1 {
-		t.Fatalf("negative tap: calls=%d selected=%d, want 0/1", calls, b.Selected)
+	if calls != 0 || b.Selected().Get() != 1 {
+		t.Fatalf("negative tap: calls=%d selected=%d, want 0/1", calls, b.Selected().Get())
 	}
 	// Zero-width bar: no column to hit.
 	b.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 56})
@@ -342,7 +346,7 @@ func TestTabBarTapRemainderAndOutOfRange(t *testing.T) {
 	// Empty bar: selectAt short-circuits on n==0.
 	eb := NewTabBar(nil, 0)
 	eb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 56})
-	eb.OnSelect = func(int) { t.Fatal("empty bar tap fired OnSelect") }
+	eb.Selected().Subscribe(func(int) { t.Fatal("empty bar tap fired OnSelect") })
 	eb.OnEvent(Event{Kind: EventClick, X: 5})
 }
 
@@ -352,8 +356,8 @@ func TestTabBarTapUsesLocalCoords(t *testing.T) {
 	b := NewTabBar(sampleItems(), 3)
 	b.SetBounds(Rect{X: 40, Y: 0, W: 200, H: 56})
 	b.OnEvent(Event{Kind: EventClick, X: 25})
-	if b.Selected != 0 {
-		t.Fatalf("local-coord tap: Selected = %d, want 0", b.Selected)
+	if b.Selected().Get() != 0 {
+		t.Fatalf("local-coord tap: Selected = %d, want 0", b.Selected().Get())
 	}
 }
 
@@ -361,8 +365,8 @@ func TestTabBarOnSelectNilSafe(t *testing.T) {
 	b := NewTabBar(sampleItems(), 0) // OnSelect nil
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 56})
 	b.OnEvent(Event{Kind: EventClick, X: 125}) // must not panic
-	if b.Selected != 2 {
-		t.Fatalf("nil OnSelect tap: Selected = %d, want 2", b.Selected)
+	if b.Selected().Get() != 2 {
+		t.Fatalf("nil OnSelect tap: Selected = %d, want 2", b.Selected().Get())
 	}
 }
 
@@ -372,48 +376,48 @@ func TestTabBarArrowKeysStepClamped(t *testing.T) {
 	b := NewTabBar(sampleItems(), 0)
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 56})
 	calls := 0
-	b.OnSelect = func(int) { calls++ }
+	b.Selected().Subscribe(func(int) { calls++ })
 
 	// Left at index 0 clamps => no change, no fire.
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
-	if b.Selected != 0 || calls != 0 {
-		t.Fatalf("clamp-left: selected=%d calls=%d, want 0/0", b.Selected, calls)
+	if b.Selected().Get() != 0 || calls != 0 {
+		t.Fatalf("clamp-left: selected=%d calls=%d, want 0/0", b.Selected().Get(), calls)
 	}
 	// Right advances and fires once.
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
-	if b.Selected != 1 || calls != 1 {
-		t.Fatalf("right: selected=%d calls=%d, want 1/1", b.Selected, calls)
+	if b.Selected().Get() != 1 || calls != 1 {
+		t.Fatalf("right: selected=%d calls=%d, want 1/1", b.Selected().Get(), calls)
 	}
 	// ArrowDown is an alias for forward.
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if b.Selected != 2 {
-		t.Fatalf("down alias: selected=%d, want 2", b.Selected)
+	if b.Selected().Get() != 2 {
+		t.Fatalf("down alias: selected=%d, want 2", b.Selected().Get())
 	}
 	// ArrowUp is an alias for backward.
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
-	if b.Selected != 1 {
-		t.Fatalf("up alias: selected=%d, want 1", b.Selected)
+	if b.Selected().Get() != 1 {
+		t.Fatalf("up alias: selected=%d, want 1", b.Selected().Get())
 	}
 	// Jump to last, then Right clamps.
-	b.Selected = 3
+	b.Selected().Set(3)
 	before := calls
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
-	if b.Selected != 3 || calls != before {
-		t.Fatalf("clamp-right: selected=%d calls delta=%d, want 3/0", b.Selected, calls-before)
+	if b.Selected().Get() != 3 || calls != before {
+		t.Fatalf("clamp-right: selected=%d calls delta=%d, want 3/0", b.Selected().Get(), calls-before)
 	}
 	// An unhandled key is a no-op.
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if b.Selected != 3 {
-		t.Fatalf("Enter changed selection to %d", b.Selected)
+	if b.Selected().Get() != 3 {
+		t.Fatalf("Enter changed selection to %d", b.Selected().Get())
 	}
 }
 
 func TestTabBarStepEmptyNoop(t *testing.T) {
 	b := NewTabBar(nil, 0)
-	b.OnSelect = func(int) { t.Fatal("empty step fired OnSelect") }
+	b.Selected().Subscribe(func(int) { t.Fatal("empty step fired OnSelect") })
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
-	if b.Selected != 0 {
-		t.Fatalf("empty step selected = %d, want 0", b.Selected)
+	if b.Selected().Get() != 0 {
+		t.Fatalf("empty step selected = %d, want 0", b.Selected().Get())
 	}
 }
 
@@ -423,12 +427,12 @@ func TestTabBarTouchTapSelects(t *testing.T) {
 	b := NewTabBar(sampleItems(), 0)
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 56})
 	calls := 0
-	b.OnSelect = func(int) { calls++ }
+	b.Selected().Subscribe(func(int) { calls++ })
 	// A touch that lands and lifts in the same spot is a tap on column 1.
 	b.OnEvent(Event{Kind: EventTouchStart, X: 75, Y: 30, Code: "t0"})
 	b.OnEvent(Event{Kind: EventTouchEnd, X: 75, Y: 30, Code: "t0"})
-	if b.Selected != 1 || calls != 1 {
-		t.Fatalf("touch tap: selected=%d calls=%d, want 1/1", b.Selected, calls)
+	if b.Selected().Get() != 1 || calls != 1 {
+		t.Fatalf("touch tap: selected=%d calls=%d, want 1/1", b.Selected().Get(), calls)
 	}
 }
 
@@ -438,27 +442,27 @@ func TestTabBarSwipeNavigationGated(t *testing.T) {
 	// SwipeNavigation off (default): a swipe does nothing.
 	b.OnEvent(Event{Kind: EventTouchStart, X: 100, Y: 30, Code: "s"})
 	b.OnEvent(Event{Kind: EventTouchEnd, X: 60, Y: 30, Code: "s"}) // dx=-40 => SwipeLeft
-	if b.Selected != 1 {
-		t.Fatalf("gated-off swipe changed selection to %d", b.Selected)
+	if b.Selected().Get() != 1 {
+		t.Fatalf("gated-off swipe changed selection to %d", b.Selected().Get())
 	}
 
 	// Turn it on: SwipeLeft advances, SwipeRight retreats, clamped.
 	b.SwipeNavigation = true
 	b.OnEvent(Event{Kind: EventTouchStart, X: 100, Y: 30, Code: "s"})
 	b.OnEvent(Event{Kind: EventTouchEnd, X: 60, Y: 30, Code: "s"}) // SwipeLeft => +1
-	if b.Selected != 2 {
-		t.Fatalf("swipe-left: selected=%d, want 2", b.Selected)
+	if b.Selected().Get() != 2 {
+		t.Fatalf("swipe-left: selected=%d, want 2", b.Selected().Get())
 	}
 	b.OnEvent(Event{Kind: EventTouchStart, X: 60, Y: 30, Code: "s"})
 	b.OnEvent(Event{Kind: EventTouchEnd, X: 100, Y: 30, Code: "s"}) // SwipeRight => -1
-	if b.Selected != 1 {
-		t.Fatalf("swipe-right: selected=%d, want 1", b.Selected)
+	if b.Selected().Get() != 1 {
+		t.Fatalf("swipe-right: selected=%d, want 1", b.Selected().Get())
 	}
 	// A vertical swipe is ignored by the horizontal-only navigation.
 	b.OnEvent(Event{Kind: EventTouchStart, X: 100, Y: 10, Code: "s"})
 	b.OnEvent(Event{Kind: EventTouchEnd, X: 100, Y: 50, Code: "s"}) // SwipeDown
-	if b.Selected != 1 {
-		t.Fatalf("vertical swipe changed selection to %d", b.Selected)
+	if b.Selected().Get() != 1 {
+		t.Fatalf("vertical swipe changed selection to %d", b.Selected().Get())
 	}
 }
 
@@ -473,10 +477,10 @@ func TestTabBarTouchWithNilGesturesNoPanic(t *testing.T) {
 func TestTabBarIgnoresUnrelatedEvent(t *testing.T) {
 	b := NewTabBar(sampleItems(), 2)
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 56})
-	b.OnSelect = func(int) { t.Fatal("scroll event fired OnSelect") }
+	b.Selected().Subscribe(func(int) { t.Fatal("scroll event fired OnSelect") })
 	b.OnEvent(Event{Kind: EventScroll, Delta: 3})
-	if b.Selected != 2 {
-		t.Fatalf("scroll changed selection to %d", b.Selected)
+	if b.Selected().Get() != 2 {
+		t.Fatalf("scroll changed selection to %d", b.Selected().Get())
 	}
 }
 
@@ -487,13 +491,13 @@ func TestTabBarDisabledIgnoresInput(t *testing.T) {
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 56})
 	b.SwipeNavigation = true
 	b.Disabled = true
-	b.OnSelect = func(int) { t.Fatal("disabled bar fired OnSelect") }
+	b.Selected().Subscribe(func(int) { t.Fatal("disabled bar fired OnSelect") })
 	b.OnEvent(Event{Kind: EventClick, X: 125})
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
 	b.OnEvent(Event{Kind: EventTouchStart, X: 100, Y: 30, Code: "d"})
 	b.OnEvent(Event{Kind: EventTouchEnd, X: 60, Y: 30, Code: "d"})
-	if b.Selected != 0 {
-		t.Fatalf("disabled bar selection moved to %d", b.Selected)
+	if b.Selected().Get() != 0 {
+		t.Fatalf("disabled bar selection moved to %d", b.Selected().Get())
 	}
 }
 
@@ -655,5 +659,17 @@ func TestTabItemNodeIconFallback(t *testing.T) {
 func TestTabBarChildrenEmpty(t *testing.T) {
 	if got := NewTabBar(nil, 0).Children(); len(got) != 0 {
 		t.Fatalf("empty Children len = %d, want 0", len(got))
+	}
+}
+
+// A bare &TabBar{} lazily creates its Selected() Observable on first access.
+func TestTabBarSelectedLazyInit(t *testing.T) {
+	b := &TabBar{}
+	if b.Selected().Get() != 0 {
+		t.Fatalf("bare TabBar Selected() = %d, want 0", b.Selected().Get())
+	}
+	b.Selected().Set(2)
+	if b.Selected().Get() != 2 {
+		t.Fatalf("after Set(2): %d", b.Selected().Get())
 	}
 }
