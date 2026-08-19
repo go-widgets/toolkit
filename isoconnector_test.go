@@ -149,16 +149,16 @@ func TestIsoConnWidthDefault(t *testing.T) {
 
 func TestIsoFaceAnchorSides(t *testing.T) {
 	d := NewIsoDiagram(nil)
-	n := IsoNode{X: 2, Y: 3}
+	n := IsoNode{X: 2, Y: 3} // default cube: height 1, so face centre at z = 0.5
 	cases := []struct {
 		dx, dy float64
 		want   iso.Vec3
 	}{
-		{+1, 0, iso.V(3, 3.5, 0)},   // +X edge
-		{-1, 0, iso.V(2, 3.5, 0)},   // -X edge
-		{0, +1, iso.V(2.5, 4, 0)},   // +Y edge
-		{0, -1, iso.V(2.5, 3, 0)},   // -Y edge
-		{0.4, -1, iso.V(2.5, 3, 0)}, // |dy| dominates -> -Y
+		{+1, 0, iso.V(3, 3.5, 0.5)},   // +X face centre
+		{-1, 0, iso.V(2, 3.5, 0.5)},   // -X face centre
+		{0, +1, iso.V(2.5, 4, 0.5)},   // +Y face centre
+		{0, -1, iso.V(2.5, 3, 0.5)},   // -Y face centre
+		{0.4, -1, iso.V(2.5, 3, 0.5)}, // |dy| dominates -> -Y
 	}
 	for _, c := range cases {
 		if got := d.faceAnchor(n, c.dx, c.dy); got != c.want {
@@ -172,8 +172,9 @@ func TestIsoRouteTilesElbow(t *testing.T) {
 	a := IsoNode{X: 0, Y: 0}
 	b := IsoNode{X: 4, Y: 3} // dx>dy -> a leaves +X, b entered from -X
 	path := d.routeTiles(a, b)
-	// a's +X face (1,0.5), elbow at (b.X face, a.Y), b's -X face (4,3.5).
-	want := []iso.Vec3{iso.V(1, 0.5, 0), iso.V(4, 0.5, 0), iso.V(4, 3.5, 0)}
+	// a's +X face centre (1,0.5,0.5), elbow at (b.X face, a.Y) at the leaving
+	// height, b's -X face centre (4,3.5,0.5) — both cubes, so the L runs level.
+	want := []iso.Vec3{iso.V(1, 0.5, 0.5), iso.V(4, 0.5, 0.5), iso.V(4, 3.5, 0.5)}
 	if len(path) != len(want) {
 		t.Fatalf("route = %v, want %v", path, want)
 	}
@@ -189,8 +190,9 @@ func TestIsoRouteTilesVerticalFirst(t *testing.T) {
 	a := IsoNode{X: 0, Y: 0}
 	b := IsoNode{X: 1, Y: 5} // dy>dx -> a leaves +Y first
 	path := d.routeTiles(a, b)
-	// a's +Y face (0.5,1), elbow at (a.X, b.Y face) = (0.5,5), b's -Y face (1.5,5).
-	want := []iso.Vec3{iso.V(0.5, 1, 0), iso.V(0.5, 5, 0), iso.V(1.5, 5, 0)}
+	// a's +Y face centre (0.5,1,0.5), elbow at (a.X, b.Y face) = (0.5,5) at the
+	// leaving height, b's -Y face centre (1.5,5,0.5).
+	want := []iso.Vec3{iso.V(0.5, 1, 0.5), iso.V(0.5, 5, 0.5), iso.V(1.5, 5, 0.5)}
 	for i := range want {
 		if path[i] != want[i] {
 			t.Fatalf("route[%d] = %v, want %v", i, path[i], want[i])
@@ -200,15 +202,16 @@ func TestIsoRouteTilesVerticalFirst(t *testing.T) {
 
 func TestIsoRouteTilesAlignedCollapsesElbow(t *testing.T) {
 	d := NewIsoDiagram(nil)
-	// Same row: a at (0,0), b at (3,0). a leaves +X at (1,0.5), b entered from -X
-	// at (3,0.5); the elbow (3,0.5) coincides with b -> deduped to two points.
+	// Same row: a at (0,0), b at (3,0). a leaves +X at (1,0.5,0.5), b entered from
+	// -X at (3,0.5,0.5); the elbow (3,0.5,0.5) coincides with b -> deduped to two
+	// points, both at the cube face-centre height.
 	a := IsoNode{X: 0, Y: 0}
 	b := IsoNode{X: 3, Y: 0}
 	path := d.routeTiles(a, b)
 	if len(path) != 2 {
 		t.Fatalf("aligned route = %v, want 2 points", path)
 	}
-	if path[0] != iso.V(1, 0.5, 0) || path[1] != iso.V(3, 0.5, 0) {
+	if path[0] != iso.V(1, 0.5, 0.5) || path[1] != iso.V(3, 0.5, 0.5) {
 		t.Fatalf("aligned route endpoints = %v", path)
 	}
 }
@@ -237,8 +240,10 @@ func TestIsoConnectorPathModes(t *testing.T) {
 	if !ok || len(routed) != 2 { // same row -> collapsed elbow
 		t.Fatalf("routed path = %v ok=%v", routed, ok)
 	}
-	if routed[0].Z != 0 {
-		t.Fatalf("routed path not on the ground: %v", routed)
+	// The routed path now attaches at the face CENTRE, so both endpoints sit at
+	// half the (cube) node height, not on the ground.
+	if routed[0].Z != 0.5 {
+		t.Fatalf("routed path not at the face centre height: %v", routed)
 	}
 	// Dangling: endpoint missing.
 	if _, ok := d.connectorPath(IsoConnector{From: "a", To: "ghost"}); ok {

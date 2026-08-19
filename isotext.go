@@ -63,7 +63,7 @@ func (d *IsoDiagram) textInk(t IsoText, theme *Theme) RGBA {
 // selectable and movable.
 func (d *IsoDiagram) textBox(t IsoText) Rect {
 	f := d.textFont(t)
-	anchor := d.proj.Project(iso.V(float64(t.X)+0.5, float64(t.Y)+0.5, 0))
+	anchor := d.project(iso.V(float64(t.X)+0.5, float64(t.Y)+0.5, 0))
 	tw := f.Measure(t.Text)
 	if tw < f.Advance() {
 		tw = f.Advance()

@@ -63,7 +63,7 @@ func (d *IsoDiagram) SelectZone(id string) {
 func (d *IsoDiagram) gridRectCorners(x, y, w, h int) []geometry.Point {
 	x0, y0 := float64(x), float64(y)
 	x1, y1 := x0+float64(w), y0+float64(h)
-	pj := d.proj.Project
+	pj := d.project
 	return []geometry.Point{
 		pj(iso.V(x0, y0, 0)),
 		pj(iso.V(x1, y0, 0)),
@@ -195,7 +195,7 @@ func (d *IsoDiagram) drawZoneOverlays(p painter.Painter, b Rect, theme *Theme) {
 		if z.Label == "" || !d.layerVisible(z.Layer) {
 			continue
 		}
-		c := d.proj.Project(iso.V(float64(z.X), float64(z.Y), 0))
+		c := d.project(iso.V(float64(z.X), float64(z.Y), 0))
 		lx := b.X + iround(c.X) + scaled(isoZoneLabelPad)
 		ly := b.Y + iround(c.Y)
 		d.drawText(p, lx, ly, z.Label, zoneBorderRGBA(d.zoneFill(z, theme)))
@@ -292,7 +292,7 @@ func (d *IsoDiagram) zoneHandleAt(x, y int) (int, bool) {
 // (unproject onto z=0, then round) — the snap target when dragging a corner
 // handle.
 func (d *IsoDiagram) vertexAtLocal(x, y int) (int, int) {
-	w := d.proj.Unproject(geometry.Pt(float64(x), float64(y)), 0)
+	w := d.rotInv(d.proj.Unproject(geometry.Pt(float64(x), float64(y)), 0))
 	return int(math.Round(w.X)), int(math.Round(w.Y))
 }
 
