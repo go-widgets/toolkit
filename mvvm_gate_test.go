@@ -111,6 +111,11 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// hook (auto-allowed), so the empty config set enforces that no imperative
 	// state field is ever added.
 	"CodeMinimap": {},
+	// Entry: its committed contents live on the Text() Observable; the cursor
+	// index and the in-flight IME preview are unexported internal editing state;
+	// OnSubmit is an action func hook. Placeholder + Mask are set-once
+	// appearance config, so they are the only allowlisted fields.
+	"Entry": {"Placeholder": true, "Mask": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the

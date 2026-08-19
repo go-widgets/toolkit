@@ -236,7 +236,7 @@ func (s *AgendaSidebar) CommitEdit() {
 	}
 	i := s.editIndex
 	if i >= 0 && i < len(s.Calendars) {
-		s.Calendars[i].Name = s.editEntry.Text
+		s.Calendars[i].Name = s.editEntry.Text().Get()
 		if s.OnRename != nil {
 			s.OnRename(i, s.Calendars[i].Name)
 		}

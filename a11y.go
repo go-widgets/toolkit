@@ -123,7 +123,7 @@ func (b *Button) A11y() A11yInfo {
 func (l *Label) A11y() A11yInfo { return A11yInfo{Role: RoleText, Name: l.Text} }
 
 // A11y reports the Entry as a textbox carrying its current text.
-func (e *Entry) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: e.Text} }
+func (e *Entry) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: e.Text().Get()} }
 
 // A11y reports the CheckButton as a checkbox with its checked state.
 func (c *CheckButton) A11y() A11yInfo {

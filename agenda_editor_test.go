@@ -37,7 +37,7 @@ func TestAgendaEditEventAndEditing(t *testing.T) {
 	if a.Editing() != 0 {
 		t.Fatalf("Editing()=%d, want 0", a.Editing())
 	}
-	if a.editEntry == nil || a.editEntry.Text != "Standup" {
+	if a.editEntry == nil || a.editEntry.Text().Get() != "Standup" {
 		t.Fatalf("editor entry not seeded with the title (%v)", a.editEntry)
 	}
 }
@@ -200,7 +200,7 @@ func TestAgendaCommitStaleIndex(t *testing.T) {
 	fired := false
 	a.OnEventEdited = func(int) { fired = true }
 	a.EditEvent(0)
-	a.editEntry.Text = "changed"
+	a.editEntry.Text().Set("changed")
 	a.Events = a.Events[:0] // the event is gone
 	a.EditorKey("Enter")    // commitEdit with a stale index
 	if a.Editing() != -1 {

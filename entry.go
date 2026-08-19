@@ -4,25 +4,31 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
-// Entry is a single-line text input. Receives focus on click, edits
-// Text via EventKeyDown (Backspace, ArrowLeft/Right, Home, End,
-// Enter) + EventChar (printable runes). A 1-pixel vertical cursor
-// renders at the cursor offset when Focused.
+// Entry is a single-line text input. Receives focus on click, edits its
+// text via EventKeyDown (Backspace, ArrowLeft/Right, Home, End, Enter) +
+// EventChar (printable runes). A 1-pixel vertical cursor renders at the
+// cursor offset when Focused.
 //
-// The widget treats Text as a rune index space so multi-byte UTF-8
-// characters move the cursor by one position even when they take
-// several bytes on the wire.
+// The reactive contents live on the [Entry.Text] Observable: a host binds
+// it (or subscribes) instead of reading a plain field, and every edit
+// publishes through it — so there is no OnChange callback, a Set is the
+// only way in and it is MVVM by construction. The cursor rune index and the
+// in-flight IME preview are internal editing state.
+//
+// The widget treats the text as a rune index space so multi-byte UTF-8
+// characters move the cursor by one position even when they take several
+// bytes on the wire.
 type Entry struct {
 	Base
 	focusState
-	Text     string
-	Cursor   int // rune index in [0, len(runes)]
-	OnChange func(text string)
 	OnSubmit func(text string)
 
-	// Placeholder is shown in the muted tone when Text is empty and no IME
+	// Placeholder is shown in the muted tone when the text is empty and no IME
 	// composition is in flight (a hint like "search…" or "client id").
 	Placeholder string
 
@@ -31,13 +37,15 @@ type Entry struct {
 	// contents; only the display is masked.
 	Mask rune
 
-	// Composition holds the in-progress IME preview string (dead-key
-	// output, CJK candidate, …). Non-empty while an IME composition is
-	// active; cleared on EventCompositionEnd. Mirrors TextView's field
-	// of the same name: the preview is NOT part of Text until the host
-	// commits it via EventChar, so Text always reflects only committed
-	// input.
-	Composition string
+	// text is the committed contents, reactive via the Text() accessor.
+	text *mvvm.Observable[string]
+	// cursor is the caret rune index in [0, len(runes)].
+	cursor int
+	// composition holds the in-progress IME preview string (dead-key output, CJK
+	// candidate, …). Non-empty while an IME composition is active; cleared on
+	// EventCompositionEnd. The preview is NOT part of the text until the host
+	// commits it via EventChar, so the text always reflects only committed input.
+	composition string
 }
 
 // entryPadX is the left inset in LOGICAL pixels between the field border and the
@@ -57,22 +65,36 @@ func (e *Entry) HitRect() Rect { return touchHitRect(e.Bounds()) }
 // NewEntry builds an Entry with initial text + cursor parked at end.
 func NewEntry(initial string) *Entry {
 	r := []rune(initial)
-	return &Entry{Text: initial, Cursor: len(r)}
+	e := &Entry{cursor: len(r)}
+	e.text = mvvm.NewObservable(initial)
+	return e
+}
+
+// Text is the entry's committed contents as a shared [mvvm.Observable]: a host
+// binds it two-way (or subscribes) instead of touching a field, and every edit
+// Sets it — so a Set is the only way to change the text and there is no separate
+// change callback. Lazily created so a bare &Entry{} works.
+func (e *Entry) Text() *mvvm.Observable[string] {
+	if e.text == nil {
+		e.text = mvvm.NewObservable("")
+	}
+	return e.text
 }
 
 // Value returns the entry's current text. It is the accessor
 // FormField.Value uses (via the unexported valueGetter interface) to
-// pull an Entry's contents without depending on the Text field name
+// pull an Entry's contents without depending on the Text observable
 // directly, so a FormField wrapping an Entry can be validated.
-func (e *Entry) Value() string { return e.Text }
+func (e *Entry) Value() string { return e.Text().Get() }
 
 // display is the text as rendered: each rune replaced by Mask when Mask is set
-// (secret fields), else Text verbatim. Value/Text keep the real contents.
+// (secret fields), else the text verbatim. Value/Text keep the real contents.
 func (e *Entry) display() string {
+	t := e.Text().Get()
 	if e.Mask == 0 {
-		return e.Text
+		return t
 	}
-	runes := []rune(e.Text)
+	runes := []rune(t)
 	for i := range runes {
 		runes[i] = e.Mask
 	}
@@ -92,7 +114,7 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	textY := r.Y + (r.H-e.glyphHeight())/2
 	shown := e.display()
 	pad := scaled(entryPadX)
-	if shown == "" && e.Composition == "" && e.Placeholder != "" {
+	if shown == "" && e.composition == "" && e.Placeholder != "" {
 		e.drawText(p, r.X+pad, textY, e.Placeholder, theme.SurfaceAlt)
 	} else {
 		e.drawText(p, r.X+pad, textY, shown, theme.OnSurface)
@@ -101,21 +123,21 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 		// Caret x measured from the shown text up to the cursor, so it lands
 		// correctly under a proportional / CJK font (not a fixed advance).
 		runes := []rune(shown)
-		if e.Cursor > len(runes) {
-			e.Cursor = len(runes)
+		if e.cursor > len(runes) {
+			e.cursor = len(runes)
 		}
-		cx := r.X + pad + e.textWidth(string(runes[:e.Cursor]))
-		if e.Composition != "" {
+		cx := r.X + pad + e.textWidth(string(runes[:e.cursor]))
+		if e.composition != "" {
 			// IME composition preview: render the pending string in
 			// the muted SurfaceAlt tone right at the cursor, ghosted +
 			// underlined so the user sees dead-key / CJK candidates
-			// without them entering Text. Mirrors TextView's
+			// without them entering the text. Mirrors TextView's
 			// treatment. Unlike TextView (multi-line, cursor pinned to
 			// CursorCol), Entry pushes its single caret past the
 			// preview's pixel width so it visually tracks where the
 			// next committed rune will land.
-			cw := e.textWidth(e.Composition)
-			e.drawText(p, cx, textY, e.Composition, theme.SurfaceAlt)
+			cw := e.textWidth(e.composition)
+			e.drawText(p, cx, textY, e.composition, theme.SurfaceAlt)
 			fillRect(p, cx, textY+e.glyphHeight(), cw, 1, theme.SurfaceAlt)
 			cx += cw
 		}
@@ -127,87 +149,75 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 // OnEvent handles focus, keyboard navigation, character insertion +
 // delete.
 func (e *Entry) OnEvent(ev Event) {
-	runes := []rune(e.Text)
+	runes := []rune(e.Text().Get())
 	switch ev.Kind {
 	case EventClick:
 		e.focused = true
 	case EventKeyDown:
 		switch ev.Code {
 		case "Backspace":
-			if e.Cursor > 0 {
-				runes = append(runes[:e.Cursor-1], runes[e.Cursor:]...)
-				e.Cursor--
-				e.Text = string(runes)
-				if e.OnChange != nil {
-					e.OnChange(e.Text)
-				}
+			if e.cursor > 0 {
+				runes = append(runes[:e.cursor-1], runes[e.cursor:]...)
+				e.cursor--
+				e.Text().Set(string(runes))
 			}
 		case "ArrowLeft":
-			if e.Cursor > 0 {
-				e.Cursor--
+			if e.cursor > 0 {
+				e.cursor--
 			}
 		case "ArrowRight":
-			if e.Cursor < len(runes) {
-				e.Cursor++
+			if e.cursor < len(runes) {
+				e.cursor++
 			}
 		case "Home":
-			e.Cursor = 0
+			e.cursor = 0
 		case "End":
-			e.Cursor = len(runes)
+			e.cursor = len(runes)
 		case "Enter":
 			if e.OnSubmit != nil {
-				e.OnSubmit(e.Text)
+				e.OnSubmit(e.Text().Get())
 			}
 		case "Ctrl+C":
 			// Entry has no selection concept: Ctrl+C copies the whole
 			// value, mirroring "select all + copy".
-			if e.Text != "" {
-				SetClipboardText(e.Text)
+			if t := e.Text().Get(); t != "" {
+				SetClipboardText(t)
 			}
 		case "Ctrl+X":
-			if e.Text != "" {
-				SetClipboardText(e.Text)
-				e.Text = ""
-				e.Cursor = 0
-				if e.OnChange != nil {
-					e.OnChange(e.Text)
-				}
+			if e.Text().Get() != "" {
+				SetClipboardText(e.Text().Get())
+				e.cursor = 0
+				e.Text().Set("")
 			}
 		case "Ctrl+V":
 			paste := []rune(ClipboardText())
 			if len(paste) > 0 {
-				runes = append(runes[:e.Cursor], append(paste, runes[e.Cursor:]...)...)
-				e.Cursor += len(paste)
-				e.Text = string(runes)
-				if e.OnChange != nil {
-					e.OnChange(e.Text)
-				}
+				runes = append(runes[:e.cursor], append(paste, runes[e.cursor:]...)...)
+				e.cursor += len(paste)
+				e.Text().Set(string(runes))
 			}
 		}
 	case EventChar:
 		// If an IME composition was in flight, the incoming char is
 		// the commit result — clear the preview BEFORE inserting so
 		// the buffer + display stay consistent.
-		e.Composition = ""
+		e.composition = ""
 		ch := []rune(ev.Code)
 		if len(ch) == 0 {
 			return
 		}
-		runes = append(runes[:e.Cursor], append(ch, runes[e.Cursor:]...)...)
-		e.Cursor += len(ch)
-		e.Text = string(runes)
-		if e.OnChange != nil {
-			e.OnChange(e.Text)
-		}
+		runes = append(runes[:e.cursor], append(ch, runes[e.cursor:]...)...)
+		e.cursor += len(ch)
+		e.Text().Set(string(runes))
 	case EventCompositionStart, EventCompositionUpdate:
-		// Preview only — do NOT touch Text. Repaint responsibility
+		// Preview only — do NOT touch the text. Repaint responsibility
 		// lies with the host, who typically calls Draw after each
 		// composition event.
-		e.Composition = ev.Code
+		e.composition = ev.Code
 	case EventCompositionEnd:
 		// Cancel / commit-without-follow-up: drop the preview. When
 		// the host follows up with EventChar (commit path), the
 		// EventChar arm above will re-clear + insert.
-		e.Composition = ""
+		e.composition = ""
 	}
 }
