@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // GalleryView is a preview-plus-filmstrip browser: a large preview of the
 // current item filling the top region, and a horizontally-scrolling row of
@@ -42,15 +45,14 @@ type GalleryView struct {
 	// back to a generic default.
 	Empty string
 
-	// OnSelect fires when a click or key moves the selection to a NEW item, with
-	// its index. Nil-guarded.
-	OnSelect func(index int)
-
 	// OnActivate fires when the already-selected item is clicked again, or
 	// Enter/Return/Space is pressed, with its index. Nil-guarded.
 	OnActivate func(index int)
 
-	sel         int // selected index, or -1 when nothing is selected
+	// sel is the selected index (-1 = none) as a shared Observable: a click/key
+	// move Sets it (subscribers replace the old OnSelect callback) and a host
+	// binds it.
+	sel         *mvvm.Observable[int]
 	stripScroll int // filmstrip horizontal scroll offset in pixels
 }
 
@@ -85,7 +87,7 @@ const (
 // is selected (Selected returns -1). Call SetBounds to lay it out before
 // drawing.
 func NewGalleryView(items ...GalleryItem) *GalleryView {
-	g := &GalleryView{Items: items, sel: -1}
+	g := &GalleryView{Items: items}
 	g.normalize()
 	return g
 }
@@ -97,8 +99,8 @@ var _ Accessible = (*GalleryView)(nil)
 // empty when nothing is selected.
 func (g *GalleryView) A11y() A11yInfo {
 	label := ""
-	if g.sel >= 0 && g.sel < len(g.Items) {
-		label = g.Items[g.sel].Label
+	if g.Selected().Get() >= 0 && g.Selected().Get() < len(g.Items) {
+		label = g.Items[g.Selected().Get()].Label
 	}
 	return A11yInfo{Role: RoleGrid, Value: label}
 }
@@ -111,17 +113,24 @@ func (g *GalleryView) SetItems(items []GalleryItem) {
 	g.normalize()
 }
 
-// Selected returns the current item index, or -1 when nothing is selected.
-func (g *GalleryView) Selected() int { return g.sel }
+// Selected is the current item index (-1 = none) as a shared [mvvm.Observable]:
+// a host binds it (or subscribes for the old OnSelect notification) instead of
+// reading a field, and a click/key move Sets it. Lazily created so a bare
+// &GalleryView{} works (its zero selection is -1, "nothing selected").
+func (g *GalleryView) Selected() *mvvm.Observable[int] {
+	if g.sel == nil {
+		g.sel = mvvm.NewObservable(-1)
+	}
+	return g.sel
+}
 
 // SetSelected selects item index and auto-scrolls the strip to keep it centred;
 // an out-of-range index clears the selection to -1 (the preview goes blank).
-// Unlike a key/click move it does not fire OnSelect.
 func (g *GalleryView) SetSelected(index int) {
 	if index >= 0 && index < len(g.Items) {
-		g.sel = index
+		g.Selected().Set(index)
 	} else {
-		g.sel = -1
+		g.Selected().Set(-1)
 	}
 	g.scrollToSelection()
 }
@@ -140,11 +149,11 @@ func (g *GalleryView) normalize() {
 	n := len(g.Items)
 	switch {
 	case n == 0:
-		g.sel = -1
-	case g.sel < 0:
-		g.sel = 0
-	case g.sel >= n:
-		g.sel = n - 1
+		g.Selected().Set(-1)
+	case g.Selected().Get() < 0:
+		g.Selected().Set(0)
+	case g.Selected().Get() >= n:
+		g.Selected().Set(n - 1)
 	}
 	g.scrollToSelection()
 }
@@ -231,12 +240,12 @@ func (g *GalleryView) clampStripScroll(s int) int {
 // scrollToSelection re-anchors the strip so the selected thumbnail is centred
 // (clamped at both ends); with nothing selected it just re-clamps the offset.
 func (g *GalleryView) scrollToSelection() {
-	if g.sel < 0 {
+	if g.Selected().Get() < 0 {
 		g.stripScroll = g.clampStripScroll(g.stripScroll)
 		return
 	}
 	sr := g.StripRect()
-	want := gvStripPad + g.sel*g.cellW() + g.thumbSize()/2 - sr.W/2
+	want := gvStripPad + g.Selected().Get()*g.cellW() + g.thumbSize()/2 - sr.W/2
 	g.stripScroll = g.clampStripScroll(want)
 }
 
@@ -314,10 +323,10 @@ func (g *GalleryView) drawEmpty(p painter.Painter, theme *Theme) {
 // subtle rounded frame, then the caption. With nothing selected the preview is
 // blank.
 func (g *GalleryView) drawPreview(p painter.Painter, theme *Theme) {
-	if g.sel < 0 {
+	if g.Selected().Get() < 0 {
 		return
 	}
-	item := g.Items[g.sel]
+	item := g.Items[g.Selected().Get()]
 	area := g.previewImageRect()
 
 	var fit Rect
@@ -393,7 +402,7 @@ func (g *GalleryView) drawStrip(p painter.Painter, theme *Theme) {
 // small document glyph for a non-image item).
 func (g *GalleryView) drawThumb(p painter.Painter, theme *Theme, r Rect, i int) {
 	item := g.Items[i]
-	if i == g.sel {
+	if i == g.Selected().Get() {
 		field := expandRect(r, gvRing)
 		p.FillRoundRect(field, gvThumbRad, withAlpha(theme.Accent, 0x33))
 		p.StrokeRoundRect(field, gvThumbRad, theme.Accent, gvRingW)
@@ -430,7 +439,7 @@ func (g *GalleryView) OnEvent(ev Event) {
 		if idx < 0 {
 			return
 		}
-		if idx == g.sel {
+		if idx == g.Selected().Get() {
 			if g.OnActivate != nil {
 				g.OnActivate(idx)
 			}
@@ -444,24 +453,24 @@ func (g *GalleryView) OnEvent(ev Event) {
 func (g *GalleryView) handleKey(ev Event, n int) {
 	switch ev.Code {
 	case "ArrowRight", "Right":
-		if g.sel < 0 {
+		if g.Selected().Get() < 0 {
 			g.moveSelection(0)
 		} else {
-			g.moveSelection(g.sel + 1)
+			g.moveSelection(g.Selected().Get() + 1)
 		}
 	case "ArrowLeft", "Left":
-		if g.sel < 0 {
+		if g.Selected().Get() < 0 {
 			g.moveSelection(0)
 		} else {
-			g.moveSelection(g.sel - 1)
+			g.moveSelection(g.Selected().Get() - 1)
 		}
 	case "Home":
 		g.moveSelection(0)
 	case "End":
 		g.moveSelection(n - 1)
 	case "Enter", "Return", " ", "Space":
-		if g.sel >= 0 && g.OnActivate != nil {
-			g.OnActivate(g.sel)
+		if g.Selected().Get() >= 0 && g.OnActivate != nil {
+			g.OnActivate(g.Selected().Get())
 		}
 	}
 }
@@ -475,15 +484,12 @@ func (g *GalleryView) moveSelection(to int) {
 	if to >= len(g.Items) {
 		to = len(g.Items) - 1
 	}
-	if to == g.sel {
+	if to == g.Selected().Get() {
 		g.scrollToSelection()
 		return
 	}
-	g.sel = to
+	g.Selected().Set(to)
 	g.scrollToSelection()
-	if g.OnSelect != nil {
-		g.OnSelect(to)
-	}
 }
 
 // expandRect returns r grown by d pixels on every side.

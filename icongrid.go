@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // IconGrid is a selectable, size-driven grid of icon/thumbnail cells that
 // reflows to the widget width. It generalizes a file-manager "icon view": unlike
@@ -42,16 +45,14 @@ type IconGrid struct {
 	// a generic default.
 	Empty string
 
-	// OnSelect fires when a click moves the selection to a new cell, with its
-	// index. Nil-guarded.
-	OnSelect func(index int)
-
 	// OnActivate fires when the already-selected cell is clicked again, with its
 	// index. Nil-guarded.
 	OnActivate func(index int)
 
 	scroll int // vertical scroll offset in pixels
-	sel    int // selected index, or -1
+	// sel is the selected index (-1 = none) as a shared Observable: a click Sets
+	// it (subscribers replace the old OnSelect callback) and a host binds it.
+	sel *mvvm.Observable[int]
 }
 
 // IconCell is one cell of an IconGrid: a thumbnail/icon and a label. Raster marks
@@ -82,7 +83,6 @@ func NewIconGrid(cells ...IconCell) *IconGrid {
 	return &IconGrid{
 		Cells:    cells,
 		IconSize: 48,
-		sel:      -1,
 	}
 }
 
@@ -97,8 +97,8 @@ var (
 // empty when nothing is selected.
 func (v *IconGrid) A11y() A11yInfo {
 	label := ""
-	if v.sel >= 0 && v.sel < len(v.Cells) {
-		label = v.Cells[v.sel].Label
+	if v.Selected().Get() >= 0 && v.Selected().Get() < len(v.Cells) {
+		label = v.Cells[v.Selected().Get()].Label
 	}
 	return A11yInfo{Role: RoleGrid, Value: label}
 }
@@ -113,16 +113,24 @@ func (v *IconGrid) SetIconSize(px int) {
 	v.scroll = 0
 }
 
-// Selected returns the selected cell index, or -1 when nothing is selected.
-func (v *IconGrid) Selected() int { return v.sel }
+// Selected is the selected cell index (-1 = none) as a shared [mvvm.Observable]:
+// a host binds it (or subscribes for the old OnSelect notification) instead of
+// reading a field, and a click Sets it. Lazily created so a bare &IconGrid{}
+// works (its zero selection is -1, "nothing selected").
+func (v *IconGrid) Selected() *mvvm.Observable[int] {
+	if v.sel == nil {
+		v.sel = mvvm.NewObservable(-1)
+	}
+	return v.sel
+}
 
 // SetSelected selects cell index; an out-of-range index clears the selection.
 func (v *IconGrid) SetSelected(index int) {
 	if index >= 0 && index < len(v.Cells) {
-		v.sel = index
+		v.Selected().Set(index)
 		return
 	}
-	v.sel = -1
+	v.Selected().Set(-1)
 }
 
 func (v *IconGrid) cellW() int { return v.IconSize + 2*igPadX }
@@ -185,7 +193,7 @@ func (v *IconGrid) drawEmpty(p painter.Painter, theme *Theme) {
 // hairline frame when it is a raster thumbnail), then the centred, elided label.
 func (v *IconGrid) drawCell(p painter.Painter, theme *Theme, r Rect, i int) {
 	cell := v.Cells[i]
-	selected := i == v.sel
+	selected := i == v.Selected().Get()
 	iconBox := Rect{X: r.X + igPadX, Y: r.Y + igPadTop, W: v.IconSize, H: v.IconSize}
 
 	if selected {
@@ -281,29 +289,26 @@ func (v *IconGrid) OnEvent(ev Event) {
 	case EventClick:
 		idx := v.IndexAt(ev.X, ev.Y)
 		if idx < 0 {
-			v.sel = -1
+			v.Selected().Set(-1)
 			return
 		}
-		if idx == v.sel {
+		if idx == v.Selected().Get() {
 			if v.OnActivate != nil {
 				v.OnActivate(idx)
 			}
 			return
 		}
-		v.sel = idx
-		if v.OnSelect != nil {
-			v.OnSelect(idx)
-		}
+		v.Selected().Set(idx)
 	}
 }
 
 // DragData reports the selected cell's Key, or "" when nothing is selected. It
 // makes the IconGrid a DragSource.
 func (v *IconGrid) DragData() string {
-	if v.sel < 0 || v.sel >= len(v.Cells) {
+	if v.Selected().Get() < 0 || v.Selected().Get() >= len(v.Cells) {
 		return ""
 	}
-	return v.Cells[v.sel].Key
+	return v.Cells[v.Selected().Get()].Key
 }
 
 // withAlpha returns c with its alpha channel replaced.

@@ -138,13 +138,13 @@ func TestIconGridClickSelectActivateDeselect(t *testing.T) {
 	g := sampleIconGrid()
 	g.SetBounds(Rect{X: 0, Y: 0, W: 240, H: 200})
 	var selected, activated = -9, -9
-	g.OnSelect = func(i int) { selected = i }
+	g.Selected().Subscribe(func(i int) { selected = i })
 	g.OnActivate = func(i int) { activated = i }
 
 	// Click cell 0 (x0=6..82, first row): selects it.
 	g.OnEvent(Event{Kind: EventClick, X: 40, Y: 40})
-	if g.Selected() != 0 || selected != 0 {
-		t.Fatalf("after click sel=%d cb=%d, want 0/0", g.Selected(), selected)
+	if g.Selected().Get() != 0 || selected != 0 {
+		t.Fatalf("after click sel=%d cb=%d, want 0/0", g.Selected().Get(), selected)
 	}
 	// Click it again: activates (no re-select callback).
 	selected = -9
@@ -154,8 +154,8 @@ func TestIconGridClickSelectActivateDeselect(t *testing.T) {
 	}
 	// Click empty space to the right of the grid: deselects.
 	g.OnEvent(Event{Kind: EventClick, X: 238, Y: 40})
-	if g.Selected() != -1 {
-		t.Fatalf("click past grid: sel=%d, want -1", g.Selected())
+	if g.Selected().Get() != -1 {
+		t.Fatalf("click past grid: sel=%d, want -1", g.Selected().Get())
 	}
 }
 
@@ -164,8 +164,8 @@ func TestIconGridClickNilCallbacks(t *testing.T) {
 	g.SetBounds(Rect{X: 0, Y: 0, W: 240, H: 200})
 	g.OnEvent(Event{Kind: EventClick, X: 40, Y: 40}) // select, OnSelect nil
 	g.OnEvent(Event{Kind: EventClick, X: 40, Y: 40}) // activate, OnActivate nil
-	if g.Selected() != 0 {
-		t.Fatalf("sel=%d, want 0", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("sel=%d, want 0", g.Selected().Get())
 	}
 }
 
@@ -174,8 +174,8 @@ func TestIconGridDisabledInert(t *testing.T) {
 	g.SetBounds(Rect{X: 0, Y: 0, W: 240, H: 200})
 	g.Disabled = true
 	g.OnEvent(Event{Kind: EventClick, X: 40, Y: 40})
-	if g.Selected() != -1 {
-		t.Fatalf("disabled grid selected %d, want -1", g.Selected())
+	if g.Selected().Get() != -1 {
+		t.Fatalf("disabled grid selected %d, want -1", g.Selected().Get())
 	}
 }
 
@@ -272,12 +272,12 @@ func TestIconGridSetIconSizeClamp(t *testing.T) {
 func TestIconGridSetSelectedValidation(t *testing.T) {
 	g := sampleIconGrid()
 	g.SetSelected(2)
-	if g.Selected() != 2 {
-		t.Fatalf("valid SetSelected = %d, want 2", g.Selected())
+	if g.Selected().Get() != 2 {
+		t.Fatalf("valid SetSelected = %d, want 2", g.Selected().Get())
 	}
 	g.SetSelected(99)
-	if g.Selected() != -1 {
-		t.Fatalf("invalid SetSelected = %d, want -1", g.Selected())
+	if g.Selected().Get() != -1 {
+		t.Fatalf("invalid SetSelected = %d, want -1", g.Selected().Get())
 	}
 }
 
@@ -319,6 +319,6 @@ func ExampleIconGrid() {
 	g.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 160})
 	g.Draw(newP(makeSurface(200, 160), 200), DefaultLight())
 	g.OnEvent(Event{Kind: EventClick, X: 40, Y: 40})
-	fmt.Printf("selected cell %d\n", g.Selected())
+	fmt.Printf("selected cell %d\n", g.Selected().Get())
 	// Output: selected cell 0
 }

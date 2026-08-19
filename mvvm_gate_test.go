@@ -136,6 +136,11 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// Surface is a draw-only view: Frame/Elements/OnInput are all func hooks
 	// (auto-allowed), so it holds no reactive state at all.
 	"Surface": {},
+	// IconGrid / GalleryView: the selected index (-1 = none) is unexported behind
+	// the Selected() Observable; SetSelected clamps+scrolls onto it and OnActivate
+	// is a func hook. Cells/Items + IconSize/Empty are set-once config.
+	"IconGrid":    {"Cells": true, "IconSize": true, "Empty": true},
+	"GalleryView": {"Items": true, "Empty": true},
 	// RichEditor: the edited document lives on the Doc() Observable, and the
 	// caret / selection / focus / scroll offset are each their own Observable
 	// accessor; the pending-style, selection anchor, font caches and last theme

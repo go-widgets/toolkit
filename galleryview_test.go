@@ -32,11 +32,11 @@ func sampleGallery() *GalleryView {
 
 func TestGalleryNewSelectsFirst(t *testing.T) {
 	g := sampleGallery()
-	if g.Selected() != 0 {
-		t.Fatalf("new gallery selected %d, want 0", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("new gallery selected %d, want 0", g.Selected().Get())
 	}
-	if empty := NewGalleryView(); empty.Selected() != -1 {
-		t.Fatalf("empty gallery selected %d, want -1", empty.Selected())
+	if empty := NewGalleryView(); empty.Selected().Get() != -1 {
+		t.Fatalf("empty gallery selected %d, want -1", empty.Selected().Get())
 	}
 }
 
@@ -46,17 +46,17 @@ func TestGallerySetItemsNormalizes(t *testing.T) {
 	g.SetSelected(5)
 	// Fewer items: the out-of-range selection snaps to the last item.
 	g.SetItems([]GalleryItem{{Label: "a"}, {Label: "b"}, {Label: "c"}})
-	if g.Selected() != 2 {
-		t.Fatalf("after shrink selected %d, want 2", g.Selected())
+	if g.Selected().Get() != 2 {
+		t.Fatalf("after shrink selected %d, want 2", g.Selected().Get())
 	}
 	// Clear then repopulate: an unset selection snaps back to the first item.
 	g.SetItems(nil)
-	if g.Selected() != -1 {
-		t.Fatalf("empty selected %d, want -1", g.Selected())
+	if g.Selected().Get() != -1 {
+		t.Fatalf("empty selected %d, want -1", g.Selected().Get())
 	}
 	g.SetItems([]GalleryItem{{Label: "x"}, {Label: "y"}})
-	if g.Selected() != 0 {
-		t.Fatalf("repopulated selected %d, want 0", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("repopulated selected %d, want 0", g.Selected().Get())
 	}
 }
 
@@ -64,12 +64,12 @@ func TestGallerySetSelectedValidation(t *testing.T) {
 	g := sampleGallery()
 	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
 	g.SetSelected(3)
-	if g.Selected() != 3 {
-		t.Fatalf("valid SetSelected = %d, want 3", g.Selected())
+	if g.Selected().Get() != 3 {
+		t.Fatalf("valid SetSelected = %d, want 3", g.Selected().Get())
 	}
 	g.SetSelected(99) // out of range clears
-	if g.Selected() != -1 {
-		t.Fatalf("invalid SetSelected = %d, want -1", g.Selected())
+	if g.Selected().Get() != -1 {
+		t.Fatalf("invalid SetSelected = %d, want -1", g.Selected().Get())
 	}
 }
 
@@ -317,42 +317,42 @@ func TestGalleryKeyboardNavigation(t *testing.T) {
 	g := sampleGallery()
 	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
 	var selects []int
-	g.OnSelect = func(i int) { selects = append(selects, i) }
+	g.Selected().Subscribe(func(i int) { selects = append(selects, i) })
 
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"}) // 0 -> 1
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "Right"})      // 1 -> 2 (alias)
-	if g.Selected() != 2 {
-		t.Fatalf("after two rights sel=%d, want 2", g.Selected())
+	if g.Selected().Get() != 2 {
+		t.Fatalf("after two rights sel=%d, want 2", g.Selected().Get())
 	}
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"}) // 2 -> 1
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "Left"})      // 1 -> 0
-	if g.Selected() != 0 {
-		t.Fatalf("after two lefts sel=%d, want 0", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("after two lefts sel=%d, want 0", g.Selected().Get())
 	}
 	// Left at index 0 is a no-op and fires no OnSelect.
 	before := len(selects)
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "Left"})
-	if g.Selected() != 0 || len(selects) != before {
-		t.Fatalf("left at 0 changed state: sel=%d selects=%v", g.Selected(), selects)
+	if g.Selected().Get() != 0 || len(selects) != before {
+		t.Fatalf("left at 0 changed state: sel=%d selects=%v", g.Selected().Get(), selects)
 	}
 	// End / Home jump to the ends.
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
-	if g.Selected() != 7 {
-		t.Fatalf("End sel=%d, want 7", g.Selected())
+	if g.Selected().Get() != 7 {
+		t.Fatalf("End sel=%d, want 7", g.Selected().Get())
 	}
 	// Right at the last index is a no-op.
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "Right"})
-	if g.Selected() != 7 {
-		t.Fatalf("right at end sel=%d, want 7", g.Selected())
+	if g.Selected().Get() != 7 {
+		t.Fatalf("right at end sel=%d, want 7", g.Selected().Get())
 	}
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
-	if g.Selected() != 0 {
-		t.Fatalf("Home sel=%d, want 0", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("Home sel=%d, want 0", g.Selected().Get())
 	}
 	// An unhandled key does nothing.
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "PageDown"})
-	if g.Selected() != 0 {
-		t.Fatalf("PageDown moved selection to %d", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("PageDown moved selection to %d", g.Selected().Get())
 	}
 	if want := []int{1, 2, 1, 0, 7, 0}; fmt.Sprint(selects) != fmt.Sprint(want) {
 		t.Fatalf("OnSelect sequence = %v, want %v", selects, want)
@@ -364,13 +364,13 @@ func TestGalleryKeyboardFromCleared(t *testing.T) {
 	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
 	g.SetSelected(-1)
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"}) // -1 -> 0
-	if g.Selected() != 0 {
-		t.Fatalf("right from cleared = %d, want 0", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("right from cleared = %d, want 0", g.Selected().Get())
 	}
 	g.SetSelected(-1)
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"}) // -1 -> 0
-	if g.Selected() != 0 {
-		t.Fatalf("left from cleared = %d, want 0", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("left from cleared = %d, want 0", g.Selected().Get())
 	}
 }
 
@@ -400,8 +400,8 @@ func TestGalleryActivateNilCallback(t *testing.T) {
 	g := sampleGallery() // OnActivate nil
 	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"}) // must not panic
-	if g.Selected() != 0 {
-		t.Fatalf("nil-activate changed selection to %d", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("nil-activate changed selection to %d", g.Selected().Get())
 	}
 }
 
@@ -411,13 +411,13 @@ func TestGalleryClickSelectActivate(t *testing.T) {
 	g := sampleGallery()
 	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
 	var selected, activated = -9, -9
-	g.OnSelect = func(i int) { selected = i }
+	g.Selected().Subscribe(func(i int) { selected = i })
 	g.OnActivate = func(i int) { activated = i }
 
 	// Thumb 2 centre = {234,290,100,100} → (284,340).
 	g.OnEvent(Event{Kind: EventClick, X: 284, Y: 340})
-	if g.Selected() != 2 || selected != 2 {
-		t.Fatalf("click thumb2: sel=%d cb=%d, want 2/2", g.Selected(), selected)
+	if g.Selected().Get() != 2 || selected != 2 {
+		t.Fatalf("click thumb2: sel=%d cb=%d, want 2/2", g.Selected().Get(), selected)
 	}
 	// Selecting recenters the strip, so re-click where thumb 2 sits now.
 	r2, _ := g.ThumbRect(2)
@@ -433,13 +433,13 @@ func TestGalleryClickMisses(t *testing.T) {
 	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
 	// Click in the preview region (above the strip) selects nothing new.
 	g.OnEvent(Event{Kind: EventClick, X: 200, Y: 100})
-	if g.Selected() != 0 {
-		t.Fatalf("preview click changed selection to %d", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("preview click changed selection to %d", g.Selected().Get())
 	}
 	// Click in the gap between thumb 0 (ends x=110) and thumb 1 (starts 122).
 	g.OnEvent(Event{Kind: EventClick, X: 115, Y: 340})
-	if g.Selected() != 0 {
-		t.Fatalf("gap click changed selection to %d", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("gap click changed selection to %d", g.Selected().Get())
 	}
 }
 
@@ -467,8 +467,8 @@ func TestGalleryClickNilOnSelect(t *testing.T) {
 	g := NewGalleryView(GalleryItem{Label: "a"}, GalleryItem{Label: "b"}) // OnSelect nil
 	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
 	g.OnEvent(Event{Kind: EventClick, X: 172, Y: 340}) // select thumb 1
-	if g.Selected() != 1 {
-		t.Fatalf("nil-OnSelect click sel=%d, want 1", g.Selected())
+	if g.Selected().Get() != 1 {
+		t.Fatalf("nil-OnSelect click sel=%d, want 1", g.Selected().Get())
 	}
 }
 
@@ -477,8 +477,8 @@ func TestGalleryClickNilOnActivate(t *testing.T) {
 	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
 	g.OnEvent(Event{Kind: EventClick, X: 60, Y: 340}) // select thumb 0
 	g.OnEvent(Event{Kind: EventClick, X: 60, Y: 340}) // re-click: activate, nil cb
-	if g.Selected() != 0 {
-		t.Fatalf("nil-OnActivate re-click sel=%d, want 0", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("nil-OnActivate re-click sel=%d, want 0", g.Selected().Get())
 	}
 }
 
@@ -511,8 +511,8 @@ func TestGalleryEmptyState(t *testing.T) {
 	// An empty gallery ignores clicks and keys.
 	g.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
-	if g.Selected() != -1 {
-		t.Fatalf("empty gallery selected %d, want -1", g.Selected())
+	if g.Selected().Get() != -1 {
+		t.Fatalf("empty gallery selected %d, want -1", g.Selected().Get())
 	}
 }
 
@@ -522,8 +522,8 @@ func TestGalleryDisabledInert(t *testing.T) {
 	g.Disabled = true
 	g.OnEvent(Event{Kind: EventClick, X: 284, Y: 340})
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
-	if g.Selected() != 0 {
-		t.Fatalf("disabled gallery selection moved to %d, want 0", g.Selected())
+	if g.Selected().Get() != 0 {
+		t.Fatalf("disabled gallery selection moved to %d, want 0", g.Selected().Get())
 	}
 }
 
@@ -577,6 +577,6 @@ func ExampleGalleryView() {
 	g.SetBounds(Rect{X: 0, Y: 0, W: 320, H: 240})
 	g.Draw(newP(makeSurface(320, 240), 320), DefaultLight())
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
-	fmt.Printf("selected item %d\n", g.Selected())
+	fmt.Printf("selected item %d\n", g.Selected().Get())
 	// Output: selected item 1
 }
