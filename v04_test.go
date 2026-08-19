@@ -677,11 +677,11 @@ func TestTextViewSelectAll(t *testing.T) {
 func TestTextViewDeleteSelectionFires(t *testing.T) {
 	fired := false
 	tv := NewTextView("hello world")
-	tv.OnChange = func() { fired = true }
+	tv.Text().Subscribe(func(string) { fired = true })
 	tv.SetSelection(Selection{0, 0, 0, 6})
 	tv.DeleteSelection()
-	if tv.Text() != "world" {
-		t.Fatalf("delete-selection wrong: %q", tv.Text())
+	if tv.Text().Get() != "world" {
+		t.Fatalf("delete-selection wrong: %q", tv.Text().Get())
 	}
 	if !fired {
 		t.Fatal("OnChange must fire")
@@ -698,8 +698,8 @@ func TestTextViewDeleteSelectionNilOnChange(t *testing.T) {
 	tv := NewTextView("ab")
 	tv.SetSelection(Selection{0, 0, 0, 2})
 	tv.DeleteSelection()
-	if tv.Text() != "" {
-		t.Fatalf("delete failed: %q", tv.Text())
+	if tv.Text().Get() != "" {
+		t.Fatalf("delete failed: %q", tv.Text().Get())
 	}
 }
 
@@ -755,24 +755,24 @@ func TestTextViewCutCopyPaste(t *testing.T) {
 	if c := tv.CopySelection(); c != "hello" {
 		t.Fatalf("copy want hello, got %q", c)
 	}
-	if tv.Text() != "hello world" {
+	if tv.Text().Get() != "hello world" {
 		t.Fatal("copy must not mutate")
 	}
 	if cut := tv.CutSelection(); cut != "hello" {
 		t.Fatalf("cut want hello, got %q", cut)
 	}
-	if tv.Text() != " world" {
-		t.Fatalf("after cut text wrong: %q", tv.Text())
+	if tv.Text().Get() != " world" {
+		t.Fatalf("after cut text wrong: %q", tv.Text().Get())
 	}
 	// Paste with no selection.
 	tv.Paste("yo")
-	if tv.Text() != "yo world" {
-		t.Fatalf("paste at start wrong: %q", tv.Text())
+	if tv.Text().Get() != "yo world" {
+		t.Fatalf("paste at start wrong: %q", tv.Text().Get())
 	}
 	// Paste over an existing selection.
 	tv.SetSelection(Selection{0, 0, 0, 2})
 	tv.Paste("HEY")
-	if tv.Text() != "HEY world" {
-		t.Fatalf("paste-over-selection wrong: %q", tv.Text())
+	if tv.Text().Get() != "HEY world" {
+		t.Fatalf("paste-over-selection wrong: %q", tv.Text().Get())
 	}
 }

@@ -103,7 +103,7 @@ func (c *CodeEditor) Draw(p painter.Painter, theme *Theme) {
 // current buffer text. It shadows the promoted TextView.A11y so a screen
 // reader hears the code editor, not a bare textbox.
 func (c *CodeEditor) A11y() A11yInfo {
-	return A11yInfo{Role: RoleTextbox, Name: c.Language, Value: c.TextView.Text()}
+	return A11yInfo{Role: RoleTextbox, Name: c.Language, Value: c.TextView.Text().Get()}
 }
 
 // refresh re-runs the highlighter when (and only when) an input it depends on
@@ -116,11 +116,11 @@ func (c *CodeEditor) refresh(theme *Theme) {
 		c.cached = false
 		return
 	}
-	key := c.Language + "\x00" + c.TextView.Text()
+	key := c.Language + "\x00" + c.TextView.Text().Get()
 	if c.cached && c.Syntax == c.cacheHL && theme == c.cacheTheme && key == c.cacheKey {
 		return
 	}
-	c.cacheSpans = c.Syntax.Highlight(c.Language, c.TextView.Lines, theme)
+	c.cacheSpans = c.Syntax.Highlight(c.Language, c.TextView.lines, theme)
 	c.cacheKey = key
 	c.cacheHL = c.Syntax
 	c.cacheTheme = theme
@@ -141,7 +141,7 @@ func (c *CodeEditor) lineSpans(lineIndex int, _ string) []TextSpan {
 // behind the caret's line, and only when HighlightCurrentLine is on. The band
 // colour is CurrentLineColor, or a theme-derived tint when that is unset.
 func (c *CodeEditor) rowBackground(lineIndex int) (RGBA, bool) {
-	if !c.HighlightCurrentLine || lineIndex != c.TextView.CursorLine {
+	if !c.HighlightCurrentLine || lineIndex != c.TextView.CursorLine().Get() {
 		return RGBA{}, false
 	}
 	col := c.CurrentLineColor

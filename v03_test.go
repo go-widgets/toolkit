@@ -14,29 +14,29 @@ import (
 
 func TestTextViewNewEmpty(t *testing.T) {
 	v := NewTextView("")
-	if len(v.Lines) != 1 || v.Lines[0] != "" {
-		t.Fatalf("empty new: Lines = %v", v.Lines)
+	if len(v.lines) != 1 || v.lines[0] != "" {
+		t.Fatalf("empty new: Lines = %v", v.lines)
 	}
 }
 
 func TestTextViewNewWithText(t *testing.T) {
 	v := NewTextView("a\nb\nc")
-	if len(v.Lines) != 3 || v.Lines[1] != "b" {
-		t.Fatalf("new: Lines = %v", v.Lines)
+	if len(v.lines) != 3 || v.lines[1] != "b" {
+		t.Fatalf("new: Lines = %v", v.lines)
 	}
 }
 
 func TestTextViewTextRoundTrip(t *testing.T) {
 	v := NewTextView("hello\nworld")
-	if v.Text() != "hello\nworld" {
-		t.Fatalf("Text() = %q", v.Text())
+	if v.Text().Get() != "hello\nworld" {
+		t.Fatalf("Text() = %q", v.Text().Get())
 	}
 }
 
 func TestTextViewSetTextEmpty(t *testing.T) {
 	v := NewTextView("abc\ndef")
 	v.SetText("")
-	if len(v.Lines) != 1 || v.Lines[0] != "" || v.CursorLine != 0 || v.CursorCol != 0 {
+	if len(v.lines) != 1 || v.lines[0] != "" || v.CursorLine().Get() != 0 || v.CursorCol().Get() != 0 {
 		t.Fatalf("SetText(\"\") didn't reset")
 	}
 }
@@ -44,15 +44,15 @@ func TestTextViewSetTextEmpty(t *testing.T) {
 func TestTextViewSetTextNonEmpty(t *testing.T) {
 	v := NewTextView("abc")
 	v.SetText("one\ntwo")
-	if len(v.Lines) != 2 || v.Lines[1] != "two" {
-		t.Fatalf("SetText: %v", v.Lines)
+	if len(v.lines) != 2 || v.lines[1] != "two" {
+		t.Fatalf("SetText: %v", v.lines)
 	}
 }
 
 func TestTextViewClickFocuses(t *testing.T) {
 	v := NewTextView("a")
 	v.OnEvent(Event{Kind: EventClick})
-	if !v.Focused {
+	if !v.Focused().Get() {
 		t.Fatal("click should focus")
 	}
 }
@@ -60,143 +60,143 @@ func TestTextViewClickFocuses(t *testing.T) {
 func TestTextViewCharInsertsAndFiresOnChange(t *testing.T) {
 	changes := 0
 	v := NewTextView("ab")
-	v.OnChange = func() { changes++ }
-	v.CursorCol = 1
+	v.Text().Subscribe(func(string) { changes++ })
+	v.CursorCol().Set(1)
 	v.OnEvent(Event{Kind: EventChar, Code: "X"})
-	if v.Lines[0] != "aXb" || v.CursorCol != 2 || changes != 1 {
-		t.Fatalf("char insert: %v cursor=%d changes=%d", v.Lines, v.CursorCol, changes)
+	if v.lines[0] != "aXb" || v.CursorCol().Get() != 2 || changes != 1 {
+		t.Fatalf("char insert: %v cursor=%d changes=%d", v.lines, v.CursorCol().Get(), changes)
 	}
 }
 
 func TestTextViewCharWithNewlineSplitsLine(t *testing.T) {
 	v := NewTextView("abc")
-	v.CursorCol = 2
+	v.CursorCol().Set(2)
 	v.OnEvent(Event{Kind: EventChar, Code: "x\ny"})
-	if len(v.Lines) != 2 || v.Lines[0] != "abx" || v.Lines[1] != "yc" {
-		t.Fatalf("split-on-newline: %v", v.Lines)
+	if len(v.lines) != 2 || v.lines[0] != "abx" || v.lines[1] != "yc" {
+		t.Fatalf("split-on-newline: %v", v.lines)
 	}
 }
 
 func TestTextViewEmptyCharNoOp(t *testing.T) {
 	v := NewTextView("ab")
 	v.OnEvent(Event{Kind: EventChar, Code: ""})
-	if v.Lines[0] != "ab" {
+	if v.lines[0] != "ab" {
 		t.Fatal("empty char should not mutate")
 	}
 }
 
 func TestTextViewEnterSplitsLine(t *testing.T) {
 	v := NewTextView("abcdef")
-	v.CursorCol = 3
+	v.CursorCol().Set(3)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if len(v.Lines) != 2 || v.Lines[0] != "abc" || v.Lines[1] != "def" {
-		t.Fatalf("Enter split: %v", v.Lines)
+	if len(v.lines) != 2 || v.lines[0] != "abc" || v.lines[1] != "def" {
+		t.Fatalf("Enter split: %v", v.lines)
 	}
-	if v.CursorLine != 1 || v.CursorCol != 0 {
-		t.Fatalf("cursor after Enter: line=%d col=%d", v.CursorLine, v.CursorCol)
+	if v.CursorLine().Get() != 1 || v.CursorCol().Get() != 0 {
+		t.Fatalf("cursor after Enter: line=%d col=%d", v.CursorLine().Get(), v.CursorCol().Get())
 	}
 }
 
 func TestTextViewBackspaceMidLine(t *testing.T) {
 	v := NewTextView("abc")
-	v.CursorCol = 2
+	v.CursorCol().Set(2)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if v.Lines[0] != "ac" || v.CursorCol != 1 {
-		t.Fatalf("backspace: %v cursor=%d", v.Lines, v.CursorCol)
+	if v.lines[0] != "ac" || v.CursorCol().Get() != 1 {
+		t.Fatalf("backspace: %v cursor=%d", v.lines, v.CursorCol().Get())
 	}
 }
 
 func TestTextViewBackspaceAtLineStartMerges(t *testing.T) {
 	v := NewTextView("ab\ncd")
-	v.CursorLine = 1
-	v.CursorCol = 0
+	v.CursorLine().Set(1)
+	v.CursorCol().Set(0)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if len(v.Lines) != 1 || v.Lines[0] != "abcd" || v.CursorLine != 0 || v.CursorCol != 2 {
-		t.Fatalf("merge: %v line=%d col=%d", v.Lines, v.CursorLine, v.CursorCol)
+	if len(v.lines) != 1 || v.lines[0] != "abcd" || v.CursorLine().Get() != 0 || v.CursorCol().Get() != 2 {
+		t.Fatalf("merge: %v line=%d col=%d", v.lines, v.CursorLine().Get(), v.CursorCol().Get())
 	}
 }
 
 func TestTextViewBackspaceAtBufferStartNoOp(t *testing.T) {
 	v := NewTextView("ab")
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if v.Lines[0] != "ab" {
+	if v.lines[0] != "ab" {
 		t.Fatal("backspace at buffer start should be no-op")
 	}
 }
 
 func TestTextViewArrowLeftRightAndWrap(t *testing.T) {
 	v := NewTextView("ab\ncd")
-	v.CursorCol = 0
+	v.CursorCol().Set(0)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
 	// at (0,0): nowhere to go
-	if v.CursorLine != 0 || v.CursorCol != 0 {
+	if v.CursorLine().Get() != 0 || v.CursorCol().Get() != 0 {
 		t.Fatal("ArrowLeft at start should pin")
 	}
-	v.CursorCol = 2
+	v.CursorCol().Set(2)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
-	if v.CursorLine != 1 || v.CursorCol != 0 {
-		t.Fatalf("ArrowRight wrap: line=%d col=%d", v.CursorLine, v.CursorCol)
+	if v.CursorLine().Get() != 1 || v.CursorCol().Get() != 0 {
+		t.Fatalf("ArrowRight wrap: line=%d col=%d", v.CursorLine().Get(), v.CursorCol().Get())
 	}
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
-	if v.CursorLine != 0 || v.CursorCol != 2 {
-		t.Fatalf("ArrowLeft wrap back: line=%d col=%d", v.CursorLine, v.CursorCol)
+	if v.CursorLine().Get() != 0 || v.CursorCol().Get() != 2 {
+		t.Fatalf("ArrowLeft wrap back: line=%d col=%d", v.CursorLine().Get(), v.CursorCol().Get())
 	}
 	// ArrowRight at end of last line should pin.
-	v.CursorLine = 1
-	v.CursorCol = 2
+	v.CursorLine().Set(1)
+	v.CursorCol().Set(2)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
-	if v.CursorLine != 1 || v.CursorCol != 2 {
+	if v.CursorLine().Get() != 1 || v.CursorCol().Get() != 2 {
 		t.Fatal("ArrowRight at buffer end should pin")
 	}
 }
 
 func TestTextViewArrowUpDownClampsCol(t *testing.T) {
 	v := NewTextView("longer\nshort\nxx")
-	v.CursorLine = 0
-	v.CursorCol = 6
+	v.CursorLine().Set(0)
+	v.CursorCol().Set(6)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if v.CursorLine != 1 || v.CursorCol != 5 {
-		t.Fatalf("after down: line=%d col=%d, want 1/5", v.CursorLine, v.CursorCol)
+	if v.CursorLine().Get() != 1 || v.CursorCol().Get() != 5 {
+		t.Fatalf("after down: line=%d col=%d, want 1/5", v.CursorLine().Get(), v.CursorCol().Get())
 	}
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if v.CursorLine != 2 || v.CursorCol != 2 {
-		t.Fatalf("after second down: line=%d col=%d, want 2/2", v.CursorLine, v.CursorCol)
+	if v.CursorLine().Get() != 2 || v.CursorCol().Get() != 2 {
+		t.Fatalf("after second down: line=%d col=%d, want 2/2", v.CursorLine().Get(), v.CursorCol().Get())
 	}
 	// ArrowDown at last line should pin.
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if v.CursorLine != 2 {
+	if v.CursorLine().Get() != 2 {
 		t.Fatal("ArrowDown at last line should pin")
 	}
 	// ArrowUp back up.
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
-	if v.CursorLine != 1 {
-		t.Fatalf("ArrowUp: line=%d", v.CursorLine)
+	if v.CursorLine().Get() != 1 {
+		t.Fatalf("ArrowUp: line=%d", v.CursorLine().Get())
 	}
 	// ArrowUp at first line should pin.
-	v.CursorLine = 0
+	v.CursorLine().Set(0)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
-	if v.CursorLine != 0 {
+	if v.CursorLine().Get() != 0 {
 		t.Fatal("ArrowUp at first line should pin")
 	}
 }
 
 func TestTextViewHomeEnd(t *testing.T) {
 	v := NewTextView("abcdef")
-	v.CursorCol = 3
+	v.CursorCol().Set(3)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
-	if v.CursorCol != 0 {
+	if v.CursorCol().Get() != 0 {
 		t.Fatal("Home")
 	}
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
-	if v.CursorCol != 6 {
-		t.Fatalf("End: col=%d", v.CursorCol)
+	if v.CursorCol().Get() != 6 {
+		t.Fatalf("End: col=%d", v.CursorCol().Get())
 	}
 }
 
 func TestTextViewUnknownKeyNoOp(t *testing.T) {
 	v := NewTextView("a")
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "F1"})
-	if v.Lines[0] != "a" {
+	if v.lines[0] != "a" {
 		t.Fatal("F1 should not mutate")
 	}
 }
@@ -204,7 +204,7 @@ func TestTextViewUnknownKeyNoOp(t *testing.T) {
 func TestTextViewIgnoresKeyUp(t *testing.T) {
 	v := NewTextView("a")
 	v.OnEvent(Event{Kind: EventKeyUp, Code: "x"})
-	if v.Lines[0] != "a" {
+	if v.lines[0] != "a" {
 		t.Fatal("KeyUp should not mutate")
 	}
 }
@@ -213,7 +213,7 @@ func TestTextViewDrawFocusedAndUnfocused(t *testing.T) {
 	const w, h = 100, 60
 	theme := DefaultLight()
 	v := NewTextView("hello\nworld")
-	v.Focused = true
+	v.Focused().Set(true)
 	v.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	buf := makeSurface(w, h)
 	v.Draw(newP(buf, w), theme)
@@ -221,7 +221,7 @@ func TestTextViewDrawFocusedAndUnfocused(t *testing.T) {
 	if pixelAt(buf, w, 0, 0) != theme.Accent {
 		t.Fatalf("focused border = %+v, want Accent", pixelAt(buf, w, 0, 0))
 	}
-	v.Focused = false
+	v.Focused().Set(false)
 	buf2 := makeSurface(w, h)
 	v.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 0, 0) != theme.Border {
@@ -958,7 +958,7 @@ func TestTreeViewDrawCollapsedChevron(t *testing.T) {
 func TestTextViewSplitLineFiresOnChange(t *testing.T) {
 	c := 0
 	v := NewTextView("abc")
-	v.OnChange = func() { c++ }
+	v.Text().Subscribe(func(string) { c++ })
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if c != 1 {
 		t.Fatalf("OnChange fired %d times after Enter, want 1", c)
@@ -968,8 +968,8 @@ func TestTextViewSplitLineFiresOnChange(t *testing.T) {
 func TestTextViewBackspaceMidLineFiresOnChange(t *testing.T) {
 	c := 0
 	v := NewTextView("abc")
-	v.OnChange = func() { c++ }
-	v.CursorCol = 2
+	v.Text().Subscribe(func(string) { c++ })
+	v.CursorCol().Set(2)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
 	if c != 1 {
 		t.Fatalf("OnChange fired %d times after Backspace mid-line, want 1", c)
@@ -979,9 +979,9 @@ func TestTextViewBackspaceMidLineFiresOnChange(t *testing.T) {
 func TestTextViewBackspaceMergeFiresOnChange(t *testing.T) {
 	c := 0
 	v := NewTextView("ab\ncd")
-	v.OnChange = func() { c++ }
-	v.CursorLine = 1
-	v.CursorCol = 0
+	v.Text().Subscribe(func(string) { c++ })
+	v.CursorLine().Set(1)
+	v.CursorCol().Set(0)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
 	if c != 1 {
 		t.Fatalf("OnChange fired %d times after merge backspace, want 1", c)
@@ -990,49 +990,46 @@ func TestTextViewBackspaceMergeFiresOnChange(t *testing.T) {
 
 func TestTextViewSplitLineNoOnChangeNoPanic(t *testing.T) {
 	v := NewTextView("abc")
-	v.OnChange = nil
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if len(v.Lines) != 2 {
+	if len(v.lines) != 2 {
 		t.Fatal("Enter should still split with nil OnChange")
 	}
 }
 
 func TestTextViewBackspaceNoOnChangeNoPanic(t *testing.T) {
 	v := NewTextView("ab")
-	v.OnChange = nil
-	v.CursorCol = 2
+	v.CursorCol().Set(2)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if v.Lines[0] != "a" {
+	if v.lines[0] != "a" {
 		t.Fatal("Backspace should still delete with nil OnChange")
 	}
 }
 
 func TestTextViewBackspaceMergeNoOnChangeNoPanic(t *testing.T) {
 	v := NewTextView("ab\ncd")
-	v.OnChange = nil
-	v.CursorLine = 1
-	v.CursorCol = 0
+	v.CursorLine().Set(1)
+	v.CursorCol().Set(0)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if len(v.Lines) != 1 {
+	if len(v.lines) != 1 {
 		t.Fatal("merge should work with nil OnChange")
 	}
 }
 
 func TestTextViewCursorLeftInLine(t *testing.T) {
 	v := NewTextView("abc")
-	v.CursorCol = 2
+	v.CursorCol().Set(2)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
-	if v.CursorCol != 1 {
-		t.Fatalf("ArrowLeft in-line: col=%d, want 1", v.CursorCol)
+	if v.CursorCol().Get() != 1 {
+		t.Fatalf("ArrowLeft in-line: col=%d, want 1", v.CursorCol().Get())
 	}
 }
 
 func TestTextViewCursorRightInLine(t *testing.T) {
 	v := NewTextView("abc")
-	v.CursorCol = 1
+	v.CursorCol().Set(1)
 	v.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
-	if v.CursorCol != 2 {
-		t.Fatalf("ArrowRight in-line: col=%d, want 2", v.CursorCol)
+	if v.CursorCol().Get() != 2 {
+		t.Fatalf("ArrowRight in-line: col=%d, want 2", v.CursorCol().Get())
 	}
 }
 
@@ -1250,45 +1247,45 @@ func TestIconSearchNonSquareRect(t *testing.T) {
 
 func TestTextViewCompositionStartUpdateEnd(t *testing.T) {
 	tv := NewTextView("abc")
-	tv.CursorCol = 3
+	tv.CursorCol().Set(3)
 	// Start: preview becomes visible; Lines untouched.
 	tv.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
-	if tv.Composition != "^" {
-		t.Fatalf("start: Composition=%q", tv.Composition)
+	if tv.composition != "^" {
+		t.Fatalf("start: Composition=%q", tv.composition)
 	}
-	if tv.Text() != "abc" {
-		t.Fatalf("start must not touch buffer, got %q", tv.Text())
+	if tv.Text().Get() != "abc" {
+		t.Fatalf("start must not touch buffer, got %q", tv.Text().Get())
 	}
 	// Update: preview refreshed.
 	tv.OnEvent(Event{Kind: EventCompositionUpdate, Code: "ê"})
-	if tv.Composition != "ê" {
-		t.Fatalf("update: Composition=%q", tv.Composition)
+	if tv.composition != "ê" {
+		t.Fatalf("update: Composition=%q", tv.composition)
 	}
-	if tv.Text() != "abc" {
-		t.Fatalf("update must not touch buffer, got %q", tv.Text())
+	if tv.Text().Get() != "abc" {
+		t.Fatalf("update must not touch buffer, got %q", tv.Text().Get())
 	}
 	// End (cancel path): preview cleared, buffer unchanged.
 	tv.OnEvent(Event{Kind: EventCompositionEnd, Code: ""})
-	if tv.Composition != "" {
-		t.Fatalf("end: Composition should clear, got %q", tv.Composition)
+	if tv.composition != "" {
+		t.Fatalf("end: Composition should clear, got %q", tv.composition)
 	}
-	if tv.Text() != "abc" {
+	if tv.Text().Get() != "abc" {
 		t.Fatal("end (cancel) must not touch buffer")
 	}
 }
 
 func TestTextViewCompositionCommitViaEventChar(t *testing.T) {
 	tv := NewTextView("abc")
-	tv.CursorCol = 3
+	tv.CursorCol().Set(3)
 	// Preview.
 	tv.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
 	// Host now commits by delivering EventChar with the composed rune.
 	tv.OnEvent(Event{Kind: EventChar, Code: "ê"})
-	if tv.Composition != "" {
+	if tv.composition != "" {
 		t.Fatal("EventChar must clear the composition preview")
 	}
-	if tv.Text() != "abcê" {
-		t.Fatalf("commit: Text()=%q", tv.Text())
+	if tv.Text().Get() != "abcê" {
+		t.Fatalf("commit: Text()=%q", tv.Text().Get())
 	}
 }
 
@@ -1297,9 +1294,9 @@ func TestTextViewCompositionDrawPreview(t *testing.T) {
 	// path fires. No pixel-level assertion — the point is the branch
 	// gets covered.
 	tv := NewTextView("hi")
-	tv.CursorCol = 2
-	tv.Focused = true
-	tv.Composition = "^"
+	tv.CursorCol().Set(2)
+	tv.Focused().Set(true)
+	tv.composition = "^"
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 40})
 	tv.Draw(newP(makeSurface(120, 40), 120), DefaultLight())
 }

@@ -59,7 +59,7 @@ func (m *MarkdownEditor) Text() string {
 	if m.Source == nil {
 		return ""
 	}
-	return m.Source.Text()
+	return m.Source.Text().Get()
 }
 
 // SetText replaces the source-pane text + resyncs Preview.
@@ -78,7 +78,7 @@ func (m *MarkdownEditor) syncPreview() {
 	if m.Source == nil || m.Preview == nil {
 		return
 	}
-	m.Preview.Source = m.Source.Text()
+	m.Preview.Source = m.Source.Text().Get()
 }
 
 // split resolves the effective split fraction, defaulting to 0.5 for any

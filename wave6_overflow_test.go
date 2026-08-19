@@ -264,16 +264,17 @@ func TestCommandPaletteScrolls(t *testing.T) {
 // --- TextView --------------------------------------------------------------
 
 func wave6TextView(lines int) *TextView {
-	t := &TextView{Lines: make([]string, lines)}
-	for i := range t.Lines {
-		t.Lines[i] = "line" + itoa(i)
+	t := &TextView{}
+	t.lines = make([]string, lines)
+	for i := range t.lines {
+		t.lines[i] = "line" + itoa(i)
 	}
 	return t
 }
 
 func TestTextViewScrolls(t *testing.T) {
 	tv := wave6TextView(30)
-	tv.Focused = true
+	tv.Focused().Set(true)
 	// lineH = glyphHeight(7)+4 = 11; H=40 → visibleLines = (40-4)/11 = 3.
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 40})
 	if got := tv.visibleLines(); got != 3 {
@@ -281,49 +282,51 @@ func TestTextViewScrolls(t *testing.T) {
 	}
 	// Wheel down past the end clamps to maxScrollLine = 30-3 = 27.
 	tv.OnEvent(Event{Kind: EventScroll, Delta: 40})
-	if tv.ScrollLine != 27 {
-		t.Fatalf("wheel down clamp: ScrollLine=%d, want 27", tv.ScrollLine)
+	if tv.ScrollLine().Get() != 27 {
+		t.Fatalf("wheel down clamp: ScrollLine=%d, want 27", tv.ScrollLine().Get())
 	}
 	// Wheel up past the start clamps to 0.
 	tv.OnEvent(Event{Kind: EventScroll, Delta: -40})
-	if tv.ScrollLine != 0 {
-		t.Fatalf("wheel up clamp: ScrollLine=%d, want 0", tv.ScrollLine)
+	if tv.ScrollLine().Get() != 0 {
+		t.Fatalf("wheel up clamp: ScrollLine=%d, want 0", tv.ScrollLine().Get())
 	}
 	// ArrowDown past the visible window scrolls to keep the caret visible.
 	for i := 0; i < 20; i++ {
 		tv.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
 	}
-	if tv.CursorLine != 20 {
-		t.Fatalf("cursor line = %d, want 20", tv.CursorLine)
+	if tv.CursorLine().Get() != 20 {
+		t.Fatalf("cursor line = %d, want 20", tv.CursorLine().Get())
 	}
-	if tv.CursorLine < tv.ScrollLine || tv.CursorLine >= tv.ScrollLine+tv.visibleLines() {
-		t.Fatalf("caret line %d out of window [%d,%d)", tv.CursorLine, tv.ScrollLine, tv.ScrollLine+tv.visibleLines())
+	if tv.CursorLine().Get() < tv.ScrollLine().Get() || tv.CursorLine().Get() >= tv.ScrollLine().Get()+tv.visibleLines() {
+		t.Fatalf("caret line %d out of window [%d,%d)", tv.CursorLine().Get(), tv.ScrollLine().Get(), tv.ScrollLine().Get()+tv.visibleLines())
 	}
 	// A click after scrolling maps to the absolute line through the offset:
 	// viewport row 1 at ScrollLine s selects line s+1.
-	s := tv.ScrollLine
+	s := tv.ScrollLine().Get()
 	lineH := tv.glyphHeight() + 4
 	tv.OnEvent(Event{Kind: EventClick, X: 4, Y: 4 + 1*lineH + 1})
-	if tv.CursorLine != s+1 {
-		t.Fatalf("scrolled click: CursorLine=%d, want %d", tv.CursorLine, s+1)
+	if tv.CursorLine().Get() != s+1 {
+		t.Fatalf("scrolled click: CursorLine=%d, want %d", tv.CursorLine().Get(), s+1)
 	}
 	// ArrowUp back to the top scrolls the viewport up with the caret.
 	for i := 0; i < 30; i++ {
 		tv.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
 	}
-	if tv.CursorLine != 0 || tv.ScrollLine != 0 {
-		t.Fatalf("back to top: CursorLine=%d ScrollLine=%d, want 0/0", tv.CursorLine, tv.ScrollLine)
+	if tv.CursorLine().Get() != 0 || tv.ScrollLine().Get() != 0 {
+		t.Fatalf("back to top: CursorLine=%d ScrollLine=%d, want 0/0", tv.CursorLine().Get(), tv.ScrollLine().Get())
 	}
 	// Typing enough newlines pushes the caret down and follows it.
-	tv.CursorLine, tv.CursorCol, tv.ScrollLine = 0, 0, 0
+	tv.CursorLine().Set(0)
+	tv.CursorCol().Set(0)
+	tv.ScrollLine().Set(0)
 	for i := 0; i < 10; i++ {
 		tv.OnEvent(Event{Kind: EventChar, Code: "\n"})
 	}
-	if tv.ScrollLine == 0 {
-		t.Fatalf("typing newlines did not scroll (ScrollLine=%d)", tv.ScrollLine)
+	if tv.ScrollLine().Get() == 0 {
+		t.Fatalf("typing newlines did not scroll (ScrollLine=%d)", tv.ScrollLine().Get())
 	}
 	// Draw a scrolled buffer (exercises the window + break branch).
-	tv.ScrollLine = 20
+	tv.ScrollLine().Set(20)
 	tv.Draw(newP(makeSurface(200, 40), 200), DefaultLight())
 
 	// A viewport too short for even one line collapses visibleLines to 0 and

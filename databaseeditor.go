@@ -173,7 +173,7 @@ func NewDatabaseEditor(source DataSource) *DatabaseEditor {
 // selection (Tree().OnActivate) — e.g. to seed a "SELECT * FROM <table>" query.
 func (d *DatabaseEditor) Tree() *TreeView { return d.tree }
 
-// Editor is the SQL editor pane (top-right). A host reads Editor().Text() or
+// Editor is the SQL editor pane (top-right). A host reads Editor().Text().Get() or
 // seeds it with SetText. Swapping this TextView for a future CodeEditor widget
 // is a follow-up; the highlighter seam (SQLHighlight) already lives here.
 func (d *DatabaseEditor) Editor() *TextView { return d.editor }
@@ -191,7 +191,7 @@ func (d *DatabaseEditor) Toolbar() *Toolbar { return d.bar }
 func (d *DatabaseEditor) Err() error { return d.lastErr }
 
 // SQL returns the current text of the SQL editor.
-func (d *DatabaseEditor) SQL() string { return d.editor.Text() }
+func (d *DatabaseEditor) SQL() string { return d.editor.Text().Get() }
 
 // SetSQL replaces the SQL editor's text.
 func (d *DatabaseEditor) SetSQL(sql string) { d.editor.SetText(sql) }
@@ -215,7 +215,7 @@ func (d *DatabaseEditor) Refresh() error {
 // a success clears the error, replaces the grid's columns + rows and fires
 // OnQuery.
 func (d *DatabaseEditor) Run() {
-	cols, rows, err := d.source.Query(d.editor.Text())
+	cols, rows, err := d.source.Query(d.editor.Text().Get())
 	if err != nil {
 		d.setError(err)
 		return
@@ -237,7 +237,7 @@ func (d *DatabaseEditor) Exec() (affected int64, ok bool) {
 		d.setError(errNoExec)
 		return 0, false
 	}
-	n, err := ex.Exec(d.editor.Text())
+	n, err := ex.Exec(d.editor.Text().Get())
 	if err != nil {
 		d.setError(err)
 		return 0, false

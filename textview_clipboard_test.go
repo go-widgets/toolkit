@@ -44,8 +44,8 @@ func TestTextViewCutSelectionWritesGlobalClipboard(t *testing.T) {
 	if got := ClipboardText(); got != "hello" {
 		t.Fatalf("global clipboard after cut = %q, want hello", got)
 	}
-	if tv.Text() != " world" {
-		t.Fatalf("buffer after cut = %q", tv.Text())
+	if tv.Text().Get() != " world" {
+		t.Fatalf("buffer after cut = %q", tv.Text().Get())
 	}
 }
 
@@ -81,8 +81,8 @@ func TestTextViewCopyPasteRoundTripCrossWidget(t *testing.T) {
 
 	dst := NewTextView("world")
 	dst.Paste(ClipboardText())
-	if dst.Text() != "helloworld" {
-		t.Fatalf("cross-widget paste = %q, want helloworld", dst.Text())
+	if dst.Text().Get() != "helloworld" {
+		t.Fatalf("cross-widget paste = %q, want helloworld", dst.Text().Get())
 	}
 }
 
@@ -95,7 +95,7 @@ func TestTextViewCtrlCKeyCopiesSelectionToClipboard(t *testing.T) {
 	if got := ClipboardText(); got != "hello" {
 		t.Fatalf("Ctrl+C clipboard = %q, want hello", got)
 	}
-	if tv.Text() != "hello world" {
+	if tv.Text().Get() != "hello world" {
 		t.Fatal("Ctrl+C must not mutate the buffer")
 	}
 }
@@ -109,8 +109,8 @@ func TestTextViewCtrlXKeyCutsSelectionToClipboard(t *testing.T) {
 	if got := ClipboardText(); got != "hello" {
 		t.Fatalf("Ctrl+X clipboard = %q, want hello", got)
 	}
-	if tv.Text() != " world" {
-		t.Fatalf("Ctrl+X buffer = %q, want \" world\"", tv.Text())
+	if tv.Text().Get() != " world" {
+		t.Fatalf("Ctrl+X buffer = %q, want \" world\"", tv.Text().Get())
 	}
 }
 
@@ -119,10 +119,11 @@ func TestTextViewCtrlVKeyPastesFromClipboard(t *testing.T) {
 	SetClipboard(nil)
 	SetClipboardText("HEY")
 	tv := NewTextView("world")
-	tv.CursorLine, tv.CursorCol = 0, 0
+	tv.CursorLine().Set(0)
+	tv.CursorCol().Set(0)
 	tv.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+V"})
-	if tv.Text() != "HEYworld" {
-		t.Fatalf("Ctrl+V buffer = %q, want HEYworld", tv.Text())
+	if tv.Text().Get() != "HEYworld" {
+		t.Fatalf("Ctrl+V buffer = %q, want HEYworld", tv.Text().Get())
 	}
 }
 
@@ -131,8 +132,8 @@ func TestTextViewCtrlVKeyEmptyClipboardIsNoOp(t *testing.T) {
 	SetClipboard(nil)
 	tv := NewTextView("world")
 	tv.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+V"})
-	if tv.Text() != "world" {
-		t.Fatalf("Ctrl+V with empty clipboard = %q, want unchanged \"world\"", tv.Text())
+	if tv.Text().Get() != "world" {
+		t.Fatalf("Ctrl+V with empty clipboard = %q, want unchanged \"world\"", tv.Text().Get())
 	}
 	if len(tv.undo) != 0 {
 		t.Fatalf("no-op paste must not push undo, len=%d", len(tv.undo))

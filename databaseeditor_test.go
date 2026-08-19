@@ -504,7 +504,7 @@ func TestDBEditorEventRoutesToPanes(t *testing.T) {
 
 	// A click in the SQL editor focuses it (routed + translated into its space).
 	d.OnEvent(Event{Kind: EventClick, X: 300, Y: 60})
-	if !d.Editor().Focused {
+	if !d.Editor().Focused().Get() {
 		t.Fatal("click over the editor pane did not reach it")
 	}
 
