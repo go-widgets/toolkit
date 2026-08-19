@@ -656,3 +656,16 @@ func TestToggleButtonDrawPressedAndUnpressed(t *testing.T) {
 		t.Fatalf("unpressed face = %+v, want Surface", pixelAt(buf2, w, 5, 10))
 	}
 }
+
+func TestEntrySetText(t *testing.T) {
+	e := NewEntry("ab")
+	var got string
+	e.Text().Subscribe(func(s string) { got = s })
+	e.SetText("wörld")
+	if e.Text().Get() != "wörld" || got != "wörld" {
+		t.Fatalf("SetText: text=%q sub=%q", e.Text().Get(), got)
+	}
+	if e.cursor != 5 {
+		t.Fatalf("SetText must park caret at end: cursor=%d, want 5", e.cursor)
+	}
+}
