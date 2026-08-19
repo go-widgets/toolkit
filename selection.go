@@ -105,49 +105,48 @@ func DeleteSelection(lines []string, sel Selection) []string {
 
 // HasSelection reports whether the TextView's selection covers > 0
 // characters.
-func (t *TextView) HasSelection() bool { return !t.Selection.IsEmpty() }
+func (t *TextView) HasSelection() bool { return !t.Selection().Get().IsEmpty() }
 
 // SelectionText returns the selected substring, or "".
 func (t *TextView) SelectionText() string {
-	return SelectionText(t.Lines, t.Selection)
+	return SelectionText(t.lines, t.Selection().Get())
 }
 
 // ClearSelection collapses the selection to (CursorLine, CursorCol).
 func (t *TextView) ClearSelection() {
-	t.Selection = Selection{t.CursorLine, t.CursorCol, t.CursorLine, t.CursorCol}
+	cl, cc := t.CursorLine().Get(), t.CursorCol().Get()
+	t.Selection().Set(Selection{cl, cc, cl, cc})
 }
 
 // SetSelection records a new (start, end) selection without moving
 // the cursor.
-func (t *TextView) SetSelection(sel Selection) { t.Selection = sel }
+func (t *TextView) SetSelection(sel Selection) { t.Selection().Set(sel) }
 
 // SelectAll selects the entire buffer + parks the cursor at its end.
 func (t *TextView) SelectAll() {
-	n := len(t.Lines)
+	n := len(t.lines)
 	if n == 0 {
 		return
 	}
-	last := []rune(t.Lines[n-1])
-	t.Selection = Selection{0, 0, n - 1, len(last)}
-	t.CursorLine = n - 1
-	t.CursorCol = len(last)
+	last := []rune(t.lines[n-1])
+	t.Selection().Set(Selection{0, 0, n - 1, len(last)})
+	t.CursorLine().Set(n - 1)
+	t.CursorCol().Set(len(last))
 }
 
 // DeleteSelection removes the selected text + parks the cursor at
 // the deletion point. No-op when the selection is empty.
 func (t *TextView) DeleteSelection() {
-	if t.Selection.IsEmpty() {
+	sel := t.Selection().Get()
+	if sel.IsEmpty() {
 		return
 	}
 	t.pushUndo()
-	sel := t.Selection
-	t.Lines = DeleteSelection(t.Lines, sel)
-	t.CursorLine = sel.StartLine
-	t.CursorCol = sel.StartCol
+	t.lines = DeleteSelection(t.lines, sel)
+	t.CursorLine().Set(sel.StartLine)
+	t.CursorCol().Set(sel.StartCol)
 	t.ClearSelection()
-	if t.OnChange != nil {
-		t.OnChange()
-	}
+	t.sync()
 }
 
 // CopySelection returns the selected text and, when non-empty, writes

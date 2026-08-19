@@ -121,6 +121,13 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// set-once tab captions (layout config, not reactive state), so it is the
 	// sole allowlisted field.
 	"FolderTabs": {"Labels": true},
+	// TextView: the committed contents live on the Text() Observable and the
+	// caret line/col, the scroll offset, the selection range and the focus flag
+	// are each their own Observable accessor; the line buffer + IME preview are
+	// unexported internal editing state. Highlighter/RowBackground are func hooks
+	// (auto-allowed). Decorations (host-driven co-editor carets), ShowLineNumbers
+	// and GutterColor are set-once display config.
+	"TextView": {"Decorations": true, "ShowLineNumbers": true, "GutterColor": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the

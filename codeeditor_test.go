@@ -80,7 +80,7 @@ func TestNewCodeEditorDefaults(t *testing.T) {
 	if c.TextView.Highlighter == nil || c.TextView.RowBackground == nil {
 		t.Error("constructor must wire the TextView Highlighter + RowBackground hooks")
 	}
-	if got := c.Text(); got != "a\nb" { // promoted method
+	if got := c.Text().Get(); got != "a\nb" { // promoted method
 		t.Errorf("promoted Text() = %q, want %q", got, "a\nb")
 	}
 }
@@ -290,7 +290,7 @@ func TestCodeEditorCurrentLineBandExactPixels(t *testing.T) {
 	}
 
 	// Move the caret down one line: the band follows it.
-	c.CursorLine = 1
+	c.CursorLine().Set(1)
 	surf = drawInto(c, th, w, hgt)
 	if got := pixelAt(surf, w, probeX, 4); got == band {
 		t.Errorf("row-0 pixel after caret moved to row 1 = %+v, must not be band", got)

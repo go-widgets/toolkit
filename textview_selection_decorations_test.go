@@ -19,14 +19,14 @@ func TestTextViewPaintsSelectionBand(t *testing.T) {
 
 	bare := NewTextView("hello world\nsecond line")
 	bare.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	bare.Focused = true
+	bare.Focused().Set(true)
 	b0 := makeSurface(w, h)
 	bare.Draw(newP(b0, w), theme)
 
 	sel := NewTextView("hello world\nsecond line")
 	sel.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	sel.Focused = true
-	sel.Selection = Selection{StartLine: 0, StartCol: 0, EndLine: 0, EndCol: 5} // "hello"
+	sel.Focused().Set(true)
+	sel.Selection().Set(Selection{StartLine: 0, StartCol: 0, EndLine: 0, EndCol: 5}) // "hello"
 	b1 := makeSurface(w, h)
 	sel.Draw(newP(b1, w), theme)
 
@@ -36,7 +36,7 @@ func TestTextViewPaintsSelectionBand(t *testing.T) {
 
 	// Clearing the selection returns to the bare pixels: the band is the only
 	// difference.
-	sel.Selection = Selection{}
+	sel.Selection().Set(Selection{})
 	b2 := makeSurface(w, h)
 	sel.Draw(newP(b2, w), theme)
 	if !bytes.Equal(b0, b2) {
@@ -53,13 +53,13 @@ func TestTextViewPaintsMultiLineSelection(t *testing.T) {
 
 	single := NewTextView("aaaa\nbbbb\ncccc")
 	single.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	single.Selection = Selection{StartLine: 0, StartCol: 2, EndLine: 0, EndCol: 4}
+	single.Selection().Set(Selection{StartLine: 0, StartCol: 2, EndLine: 0, EndCol: 4})
 	bs := makeSurface(w, h)
 	single.Draw(newP(bs, w), theme)
 
 	multi := NewTextView("aaaa\nbbbb\ncccc")
 	multi.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	multi.Selection = Selection{StartLine: 0, StartCol: 2, EndLine: 2, EndCol: 2}
+	multi.Selection().Set(Selection{StartLine: 0, StartCol: 2, EndLine: 2, EndCol: 2})
 	bm := makeSurface(w, h)
 	multi.Draw(newP(bm, w), theme)
 
@@ -111,7 +111,7 @@ func TestTextViewDecorationCulling(t *testing.T) {
 	theme := DefaultDark()
 	v := NewTextView("l0\nl1\nl2\nl3\nl4\nl5")
 	v.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	v.ScrollLine = 3                                  // lines 0..2 are above the viewport
+	v.ScrollLine().Set(3)                             // lines 0..2 are above the viewport
 	white := RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF} // bright tag → black tag ink
 	v.Decorations = []Decoration{
 		{Label: "above", Color: RGBA{R: 1, A: 0xFF}, CursorLine: 0, CursorCol: 0},      // scrolled off the top

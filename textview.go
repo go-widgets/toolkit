@@ -4,11 +4,12 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
-
 import (
 	"strconv"
 	"strings"
+
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
 )
 
 // TextSpan is a coloured run within a single line, in half-open rune
@@ -24,39 +25,19 @@ type TextSpan struct {
 	Color      RGBA
 }
 
-// TextView is the multi-line cousin of Entry. Lines are stored as a
-// []string (one element per visible line); Cursor is a (line, col)
-// position in rune coordinates. Wraps Entry's keyboard model with an
-// added vertical axis (ArrowUp / ArrowDown / PageUp / PageDown).
+// TextView is the multi-line cousin of Entry. Its reactive state is MVVM-only:
+// the committed contents live on the Text() Observable (a host binds or
+// subscribes to it, and every edit Sets it — there is no OnChange callback),
+// and the caret line/col, the vertical scroll offset, the selection range and
+// the focus flag are each exposed through their own Observable accessor so a
+// host can bind or drive them without touching a field. The line buffer and the
+// in-flight IME preview are internal editing state.
 //
-// This is the foundation a native wasmdesk editor builds on top of:
-// syntax highlighting, search/replace and find can live above
-// TextView without it growing those concerns. v0.3 ships the raw
-// buffer; v0.4 will add a SelectionStart/End pair for range ops.
+// This is the foundation a native wasmdesk editor builds on top of: syntax
+// highlighting, search/replace and find can live above TextView without it
+// growing those concerns.
 type TextView struct {
 	Base
-	Lines      []string
-	CursorLine int
-	CursorCol  int
-	Focused    bool
-	OnChange   func()
-
-	// ScrollLine is the index of the buffer line painted at the top of the
-	// viewport — the vertical scroll offset that makes a buffer taller than the
-	// bounds reachable. Draw windows from here, the wheel (EventScroll) shifts
-	// it, and every cursor move scrolls it to keep the caret visible. Reads
-	// clamp on the fly (clampedScrollLine), so a stale value after the buffer
-	// shrank is harmless; at ScrollLine == 0 rendering is byte-identical to
-	// before scrolling existed.
-	ScrollLine int
-
-	// Selection is the (start, end) range the host paints highlighted
-	// + range-deletes via DeleteSelection / cut+paste via
-	// CopySelection / CutSelection / Paste. An empty selection (Start
-	// == End) means "no selection"; HasSelection() is the convenience
-	// predicate. Draw paints the selected range with a translucent accent
-	// band, so a keyboard- or mouse-made selection is visible.
-	Selection Selection
 
 	// Decorations are remote co-editors' carets + selections in a shared
 	// buffer, each painted in its own colour with a name tag (see the
@@ -64,16 +45,6 @@ type TextView struct {
 	// with the collaboration session. Painted on top of the local selection
 	// so a co-editor's presence is always visible.
 	Decorations []Decoration
-
-	// Composition holds the in-progress IME preview string (dead-key
-	// output, CJK candidate, …). Non-empty while an IME composition
-	// is active; cleared on EventCompositionEnd. The Draw method
-	// paints it in a muted colour at the cursor position — the
-	// preview is NOT part of the buffer until the host commits via
-	// EventChar. Widgets that read Lines/Text() see only committed
-	// text, so downstream logic (search, syntax, autosave) never
-	// operates on half-formed input.
-	Composition string
 
 	// Highlighter, when non-nil, turns each line into coloured runs at
 	// paint time: Draw calls Highlighter(lineIndex, line) and paints
@@ -108,6 +79,28 @@ type TextView struct {
 	// field existed.
 	RowBackground func(lineIndex int) (RGBA, bool)
 
+	// lines is the working buffer (one element per visible line). The Text()
+	// Observable mirrors strings.Join(lines, "\n"); edits mutate lines then
+	// sync(). It stays a plain slice (not an Observable) because slices are not
+	// comparable and the editing code splices individual lines in place.
+	lines []string
+	// text / curLine / curCol / scroll / sel / focus are the reactive state,
+	// each the single source of truth for its datum, reached through the
+	// Text()/CursorLine()/CursorCol()/ScrollLine()/Selection()/Focused()
+	// accessors. Lazily created so a bare &TextView{} works.
+	text    *mvvm.Observable[string]
+	curLine *mvvm.Observable[int]
+	curCol  *mvvm.Observable[int]
+	scroll  *mvvm.Observable[int]
+	sel     *mvvm.Observable[Selection]
+	focus   *mvvm.Observable[bool]
+	// composition holds the in-progress IME preview string (dead-key output, CJK
+	// candidate, …). Non-empty while an IME composition is active; cleared on
+	// EventCompositionEnd. Draw paints it in a muted colour at the cursor; the
+	// preview is NOT part of the buffer until the host commits via EventChar, so
+	// Text() sees only committed input.
+	composition string
+
 	// undo/redo hold point-in-time snapshots taken before each
 	// mutating edit (see pushUndo). Ports the go-widgets/tui
 	// TextEditor's undo model: one snapshot per mutation (no
@@ -117,10 +110,109 @@ type TextView struct {
 
 	// selAnchorLine/selAnchorCol remember where a mouse selection began: an
 	// EventClick records the caret it placed as the anchor, and each
-	// EventMouseDrag extends Selection from that anchor to the dragged-to
+	// EventMouseDrag extends the selection from that anchor to the dragged-to
 	// caret. Kept private -- callers drive programmatic selection through
 	// SetSelection/SelectAll instead.
 	selAnchorLine, selAnchorCol int
+}
+
+// Text is the committed contents as a shared [mvvm.Observable]: a host binds it
+// two-way (or subscribes) instead of touching a field, and every edit Sets it —
+// so a Set is the only way to change the text and there is no change callback.
+// A host that Sets it directly (a VM→widget push) reloads the line buffer.
+// Lazily created so a bare &TextView{} works.
+func (t *TextView) Text() *mvvm.Observable[string] {
+	if t.text == nil {
+		t.text = mvvm.NewObservable(strings.Join(t.lines, "\n"))
+		t.text.Subscribe(func(s string) {
+			// Only a host-driven Set diverges from the buffer; sync()'s own
+			// echo (join(lines) == s) is skipped so there is no loop.
+			if strings.Join(t.lines, "\n") != s {
+				t.adopt(s)
+			}
+		})
+	}
+	return t.text
+}
+
+// CursorLine is the caret's 0-based buffer line as a bindable Observable.
+func (t *TextView) CursorLine() *mvvm.Observable[int] {
+	if t.curLine == nil {
+		t.curLine = mvvm.NewObservable(0)
+	}
+	return t.curLine
+}
+
+// CursorCol is the caret's 0-based rune column on its line, bindable.
+func (t *TextView) CursorCol() *mvvm.Observable[int] {
+	if t.curCol == nil {
+		t.curCol = mvvm.NewObservable(0)
+	}
+	return t.curCol
+}
+
+// ScrollLine is the buffer line painted at the top of the viewport — the
+// vertical scroll offset — as a bindable Observable. Draw windows from here,
+// the wheel shifts it, and every cursor move scrolls it to keep the caret
+// visible. Reads clamp on the fly (clampedScrollLine), so a stale value after
+// the buffer shrank is harmless.
+func (t *TextView) ScrollLine() *mvvm.Observable[int] {
+	if t.scroll == nil {
+		t.scroll = mvvm.NewObservable(0)
+	}
+	return t.scroll
+}
+
+// Selection is the (start, end) range the host paints highlighted + range-deletes
+// via DeleteSelection / cut+paste via CopySelection / CutSelection / Paste, as a
+// bindable Observable. An empty selection (Start == End) means "no selection";
+// HasSelection() is the convenience predicate.
+func (t *TextView) Selection() *mvvm.Observable[Selection] {
+	if t.sel == nil {
+		t.sel = mvvm.NewObservable(Selection{})
+	}
+	return t.sel
+}
+
+// Focused reports (and drives) keyboard focus as a bindable Observable: Draw
+// paints the accent border + caret while it is true.
+func (t *TextView) Focused() *mvvm.Observable[bool] {
+	if t.focus == nil {
+		t.focus = mvvm.NewObservable(false)
+	}
+	return t.focus
+}
+
+// sync publishes the line buffer onto the Text() Observable, firing its
+// subscribers. Called at the end of every mutating edit — the OnChange
+// replacement. The Set is idempotent, so re-syncing an unchanged buffer is a
+// no-op.
+func (t *TextView) sync() { t.Text().Set(strings.Join(t.lines, "\n")) }
+
+// adopt reloads the line buffer from a host-set Text() value and clamps the
+// caret into the new bounds. It does NOT touch the Text() Observable (the caller
+// is that Observable's subscriber), so there is no feedback loop.
+func (t *TextView) adopt(s string) {
+	if s == "" {
+		t.lines = []string{""}
+	} else {
+		t.lines = strings.Split(s, "\n")
+	}
+	t.clampCursorToBuffer()
+}
+
+// clampCursorToBuffer pins the caret line into [0, len(lines)-1] and its column
+// into the resulting line, after the buffer was replaced under it.
+func (t *TextView) clampCursorToBuffer() {
+	cl := t.CursorLine().Get()
+	if cl > len(t.lines)-1 {
+		cl = len(t.lines) - 1
+	}
+	if cl < 0 {
+		cl = 0
+	}
+	t.CursorLine().Set(cl)
+	t.clampCol()
 }
 
 // maxUndo caps the undo history so a long editing session can't grow
@@ -138,16 +230,18 @@ type tvSnapshot struct {
 
 // snapshot captures the current buffer + cursor + selection.
 func (t *TextView) snapshot() tvSnapshot {
-	cp := make([]string, len(t.Lines))
-	copy(cp, t.Lines)
-	return tvSnapshot{lines: cp, line: t.CursorLine, col: t.CursorCol, sel: t.Selection}
+	cp := make([]string, len(t.lines))
+	copy(cp, t.lines)
+	return tvSnapshot{lines: cp, line: t.CursorLine().Get(), col: t.CursorCol().Get(), sel: t.Selection().Get()}
 }
 
-// restore replaces the buffer + cursor + selection with s.
+// restore replaces the buffer + cursor + selection with s. It does not publish;
+// Undo/Redo sync() after restoring.
 func (t *TextView) restore(s tvSnapshot) {
-	t.Lines = s.lines
-	t.CursorLine, t.CursorCol = s.line, s.col
-	t.Selection = s.sel
+	t.lines = s.lines
+	t.CursorLine().Set(s.line)
+	t.CursorCol().Set(s.col)
+	t.Selection().Set(s.sel)
 }
 
 // pushUndo records the current state before a mutation and drops any
@@ -175,9 +269,7 @@ func (t *TextView) Undo() {
 	last := t.undo[len(t.undo)-1]
 	t.undo = t.undo[:len(t.undo)-1]
 	t.restore(last)
-	if t.OnChange != nil {
-		t.OnChange()
-	}
+	t.sync()
 }
 
 // Redo re-applies the most recently undone mutation, pushing the
@@ -191,34 +283,33 @@ func (t *TextView) Redo() {
 	last := t.redo[len(t.redo)-1]
 	t.redo = t.redo[:len(t.redo)-1]
 	t.restore(last)
-	if t.OnChange != nil {
-		t.OnChange()
-	}
+	t.sync()
 }
 
 // NewTextView builds a TextView pre-loaded with initial text (split
 // on "\n"). Empty initial text creates a single empty line so the
 // cursor always has a row to live on.
 func NewTextView(initial string) *TextView {
+	t := &TextView{}
 	if initial == "" {
-		return &TextView{Lines: []string{""}}
+		t.lines = []string{""}
+	} else {
+		t.lines = strings.Split(initial, "\n")
 	}
-	return &TextView{Lines: strings.Split(initial, "\n")}
+	return t
 }
 
-// Text returns the buffer's concatenated content with "\n" line
-// terminators. Mirrors strings.Join(Lines, "\n").
-func (t *TextView) Text() string { return strings.Join(t.Lines, "\n") }
-
-// SetText replaces the entire buffer + parks the cursor at (0,0).
+// SetText replaces the entire buffer + parks the cursor at (0,0). It goes
+// through the Text() Observable, so bindings/subscribers fire.
 func (t *TextView) SetText(s string) {
 	if s == "" {
-		t.Lines = []string{""}
+		t.lines = []string{""}
 	} else {
-		t.Lines = strings.Split(s, "\n")
+		t.lines = strings.Split(s, "\n")
 	}
-	t.CursorLine = 0
-	t.CursorCol = 0
+	t.CursorLine().Set(0)
+	t.CursorCol().Set(0)
+	t.sync()
 }
 
 // Draw paints border + fill + every visible line + (when Focused) a
@@ -230,7 +321,7 @@ func (t *TextView) SetText(s string) {
 func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	border := theme.Border
-	if t.Focused {
+	if t.Focused().Get() {
 		border = theme.Accent
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
@@ -246,13 +337,14 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	// the bottom edge into a neighbour. At ScrollLine == 0 with a buffer that
 	// fits, start is 0 and every line is drawn exactly where it was before.
 	start := t.clampedScrollLine()
+	localSel := t.Selection().Get()
 	withClip(p, r, func() {
-		for i := start; i < len(t.Lines); i++ {
+		for i := start; i < len(t.lines); i++ {
 			y := r.Y + 4 + (i-start)*lineH
 			if y >= r.Y+r.H {
 				break // fully below the viewport
 			}
-			line := t.Lines[i]
+			line := t.lines[i]
 			// Full-width row band (current-line highlight, search match, diff
 			// row): painted first so the gutter number, ink and caret land on
 			// top. The band brackets the glyph box (2 px above) and spans one
@@ -265,7 +357,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 			// Selection bands, painted under the text so the glyphs stay
 			// legible: the local selection first (accent tint), then each
 			// remote co-editor's selection in its own tint on top.
-			t.paintSelectionBand(p, i, textX, y, lineH, r, t.Selection, tintBand(theme.Accent))
+			t.paintSelectionBand(p, i, textX, y, lineH, r, localSel, tintBand(theme.Accent))
 			for _, d := range t.Decorations {
 				t.paintSelectionBand(p, i, textX, y, lineH, r, d.Selection, tintBand(d.Color))
 			}
@@ -284,24 +376,24 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 			t.drawSpans(p, textX, y, line, t.Highlighter(i, line), theme.OnSurface)
 		}
 	})
-	if t.Focused {
-		cx := textX + t.CursorCol*t.glyphAdvance()
-		cy := r.Y + 4 + (t.CursorLine-start)*lineH
+	if t.Focused().Get() {
+		cx := textX + t.CursorCol().Get()*t.glyphAdvance()
+		cy := r.Y + 4 + (t.CursorLine().Get()-start)*lineH
 		fillRect(p, cx, cy-1, 1, t.glyphHeight()+2, theme.OnSurface)
 		// IME composition preview: render the pending string in the
 		// muted SurfaceAlt tone starting at the cursor, so the user
 		// sees dead-key / CJK candidates without them entering the
 		// buffer. Underlined by a 1-px SurfaceAlt strip beneath.
-		if t.Composition != "" {
-			cw := t.textWidth(t.Composition)
-			t.drawText(p, cx, cy, t.Composition, theme.SurfaceAlt)
+		if t.composition != "" {
+			cw := t.textWidth(t.composition)
+			t.drawText(p, cx, cy, t.composition, theme.SurfaceAlt)
 			fillRect(p, cx, cy+t.glyphHeight(), cw, 1, theme.SurfaceAlt)
 		}
 	}
 	// Remote co-editor carets + name tags, on top of everything, each in the
 	// co-editor's colour, so a collaborative session shows who is where.
 	for _, d := range t.Decorations {
-		if d.CursorLine < start || d.CursorLine >= len(t.Lines) {
+		if d.CursorLine < start || d.CursorLine >= len(t.lines) {
 			continue
 		}
 		cx := textX + d.CursorCol*t.glyphAdvance()
@@ -362,15 +454,17 @@ func tagInk(c RGBA) RGBA {
 func (t *TextView) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
-		t.Focused = true
-		if len(t.Lines) == 0 {
+		t.Focused().Set(true)
+		if len(t.lines) == 0 {
 			return
 		}
 		// Place the caret under the click (mapping ev.X/ev.Y back through
 		// Draw's line/col layout) and start a fresh, collapsed selection
 		// anchored there so a following drag can extend it.
-		t.CursorLine, t.CursorCol = t.caretAt(ev.X, ev.Y)
-		t.selAnchorLine, t.selAnchorCol = t.CursorLine, t.CursorCol
+		cl, cc := t.caretAt(ev.X, ev.Y)
+		t.CursorLine().Set(cl)
+		t.CursorCol().Set(cc)
+		t.selAnchorLine, t.selAnchorCol = cl, cc
 		t.ClearSelection()
 		t.scrollCaretIntoView()
 	case EventScroll:
@@ -379,13 +473,15 @@ func (t *TextView) OnEvent(ev Event) {
 		// content widget that gained native scroll in v0.98.0.
 		t.scrollBy(ev.Delta)
 	case EventMouseDrag:
-		if len(t.Lines) == 0 {
+		if len(t.lines) == 0 {
 			return
 		}
 		// Extend the selection from the click anchor to the caret under the
 		// dragged pointer, moving the cursor with it.
-		t.CursorLine, t.CursorCol = t.caretAt(ev.X, ev.Y)
-		t.Selection = SelectionRange(t.selAnchorLine, t.selAnchorCol, t.CursorLine, t.CursorCol)
+		cl, cc := t.caretAt(ev.X, ev.Y)
+		t.CursorLine().Set(cl)
+		t.CursorCol().Set(cc)
+		t.Selection().Set(SelectionRange(t.selAnchorLine, t.selAnchorCol, cl, cc))
 		t.scrollCaretIntoView()
 	case EventKeyDown:
 		t.handleKey(ev.Code)
@@ -394,30 +490,31 @@ func (t *TextView) OnEvent(ev Event) {
 		// If an IME composition was in flight, the incoming char is
 		// the commit result — clear the preview BEFORE inserting so
 		// the buffer + display stay consistent.
-		t.Composition = ""
+		t.composition = ""
 		if ev.Code != "" {
 			t.pushUndo()
 		}
 		t.insertText(ev.Code)
 		t.scrollCaretIntoView()
 	case EventCompositionStart, EventCompositionUpdate:
-		// Preview only — do NOT touch Lines. Repaint responsibility
+		// Preview only — do NOT touch the buffer. Repaint responsibility
 		// lies with the host, who typically calls the widget's Draw
 		// method after each composition event.
-		t.Composition = ev.Code
+		t.composition = ev.Code
 	case EventCompositionEnd:
 		// Cancel / commit-without-follow-up: drop the preview. When
 		// the host follows up with EventChar (commit path), the
 		// EventChar arm above will re-clear + insert.
-		t.Composition = ""
+		t.composition = ""
 	}
 }
 
 // handleKey runs the per-key navigation + delete operations.
 func (t *TextView) handleKey(code string) {
+	cl, cc := t.CursorLine().Get(), t.CursorCol().Get()
 	switch code {
 	case "Backspace":
-		if t.CursorCol > 0 || t.CursorLine > 0 {
+		if cc > 0 || cl > 0 {
 			t.pushUndo()
 		}
 		t.backspace()
@@ -439,19 +536,19 @@ func (t *TextView) handleKey(code string) {
 	case "ArrowRight":
 		t.cursorRight()
 	case "ArrowUp":
-		if t.CursorLine > 0 {
-			t.CursorLine--
+		if cl > 0 {
+			t.CursorLine().Set(cl - 1)
 			t.clampCol()
 		}
 	case "ArrowDown":
-		if t.CursorLine < len(t.Lines)-1 {
-			t.CursorLine++
+		if cl < len(t.lines)-1 {
+			t.CursorLine().Set(cl + 1)
 			t.clampCol()
 		}
 	case "Home":
-		t.CursorCol = 0
+		t.CursorCol().Set(0)
 	case "End":
-		t.CursorCol = len([]rune(t.Lines[t.CursorLine]))
+		t.CursorCol().Set(len([]rune(t.lines[cl])))
 	}
 }
 
@@ -465,77 +562,74 @@ func (t *TextView) insertText(s string) {
 			t.splitLine()
 			continue
 		}
-		runes := []rune(t.Lines[t.CursorLine])
-		runes = append(runes[:t.CursorCol], append([]rune{ch}, runes[t.CursorCol:]...)...)
-		t.Lines[t.CursorLine] = string(runes)
-		t.CursorCol++
+		cl, cc := t.CursorLine().Get(), t.CursorCol().Get()
+		runes := []rune(t.lines[cl])
+		runes = append(runes[:cc], append([]rune{ch}, runes[cc:]...)...)
+		t.lines[cl] = string(runes)
+		t.CursorCol().Set(cc + 1)
 	}
-	if t.OnChange != nil {
-		t.OnChange()
-	}
+	t.sync()
 }
 
 // splitLine breaks the current line at the cursor + moves the
 // cursor to col 0 of the new line.
 func (t *TextView) splitLine() {
-	cur := []rune(t.Lines[t.CursorLine])
-	left := string(cur[:t.CursorCol])
-	right := string(cur[t.CursorCol:])
-	t.Lines[t.CursorLine] = left
-	t.Lines = append(t.Lines[:t.CursorLine+1], append([]string{right}, t.Lines[t.CursorLine+1:]...)...)
-	t.CursorLine++
-	t.CursorCol = 0
-	if t.OnChange != nil {
-		t.OnChange()
-	}
+	cl, cc := t.CursorLine().Get(), t.CursorCol().Get()
+	cur := []rune(t.lines[cl])
+	left := string(cur[:cc])
+	right := string(cur[cc:])
+	t.lines[cl] = left
+	t.lines = append(t.lines[:cl+1], append([]string{right}, t.lines[cl+1:]...)...)
+	t.CursorLine().Set(cl + 1)
+	t.CursorCol().Set(0)
+	t.sync()
 }
 
 // backspace removes the char before the cursor (or merges lines).
 func (t *TextView) backspace() {
-	if t.CursorCol > 0 {
-		runes := []rune(t.Lines[t.CursorLine])
-		t.Lines[t.CursorLine] = string(append(runes[:t.CursorCol-1], runes[t.CursorCol:]...))
-		t.CursorCol--
-		if t.OnChange != nil {
-			t.OnChange()
-		}
+	cl, cc := t.CursorLine().Get(), t.CursorCol().Get()
+	if cc > 0 {
+		runes := []rune(t.lines[cl])
+		t.lines[cl] = string(append(runes[:cc-1], runes[cc:]...))
+		t.CursorCol().Set(cc - 1)
+		t.sync()
 		return
 	}
-	if t.CursorLine == 0 {
+	if cl == 0 {
 		return // at buffer start; nothing to delete
 	}
-	prev := []rune(t.Lines[t.CursorLine-1])
-	t.CursorCol = len(prev)
-	t.Lines[t.CursorLine-1] = string(prev) + t.Lines[t.CursorLine]
-	t.Lines = append(t.Lines[:t.CursorLine], t.Lines[t.CursorLine+1:]...)
-	t.CursorLine--
-	if t.OnChange != nil {
-		t.OnChange()
-	}
+	prev := []rune(t.lines[cl-1])
+	t.CursorCol().Set(len(prev))
+	t.lines[cl-1] = string(prev) + t.lines[cl]
+	t.lines = append(t.lines[:cl], t.lines[cl+1:]...)
+	t.CursorLine().Set(cl - 1)
+	t.sync()
 }
 
 // cursorLeft handles the wrap-to-previous-line case.
 func (t *TextView) cursorLeft() {
-	if t.CursorCol > 0 {
-		t.CursorCol--
+	cl, cc := t.CursorLine().Get(), t.CursorCol().Get()
+	if cc > 0 {
+		t.CursorCol().Set(cc - 1)
 		return
 	}
-	if t.CursorLine > 0 {
-		t.CursorLine--
-		t.CursorCol = len([]rune(t.Lines[t.CursorLine]))
+	if cl > 0 {
+		t.CursorLine().Set(cl - 1)
+		t.CursorCol().Set(len([]rune(t.lines[cl-1])))
 	}
 }
 
 // cursorRight handles the wrap-to-next-line case.
 func (t *TextView) cursorRight() {
-	line := []rune(t.Lines[t.CursorLine])
-	if t.CursorCol < len(line) {
-		t.CursorCol++
+	cl, cc := t.CursorLine().Get(), t.CursorCol().Get()
+	line := []rune(t.lines[cl])
+	if cc < len(line) {
+		t.CursorCol().Set(cc + 1)
 		return
 	}
-	if t.CursorLine < len(t.Lines)-1 {
-		t.CursorLine++
-		t.CursorCol = 0
+	if cl < len(t.lines)-1 {
+		t.CursorLine().Set(cl + 1)
+		t.CursorCol().Set(0)
 	}
 }
 
@@ -557,10 +651,10 @@ func (t *TextView) visibleLines() int {
 }
 
 // maxScrollLine is the highest ScrollLine that still leaves a full window of
-// lines on screen: len(Lines) - visibleLines(), floored at 0 so a buffer that
+// lines on screen: len(lines) - visibleLines(), floored at 0 so a buffer that
 // already fits never scrolls.
 func (t *TextView) maxScrollLine() int {
-	m := len(t.Lines) - t.visibleLines()
+	m := len(t.lines) - t.visibleLines()
 	if m < 0 {
 		m = 0
 	}
@@ -568,10 +662,10 @@ func (t *TextView) maxScrollLine() int {
 }
 
 // clampedScrollLine returns ScrollLine clamped to [0, maxScrollLine()] WITHOUT
-// mutating the field, so an out-of-range value (set directly, or left stale
-// after Lines shrank) never paints or hit-tests outside the valid window.
+// mutating the Observable, so an out-of-range value (set directly, or left stale
+// after the buffer shrank) never paints or hit-tests outside the valid window.
 func (t *TextView) clampedScrollLine() int {
-	s := t.ScrollLine
+	s := t.ScrollLine().Get()
 	if s < 0 {
 		s = 0
 	}
@@ -584,8 +678,8 @@ func (t *TextView) clampedScrollLine() int {
 // scrollBy shifts ScrollLine by delta lines (negative scrolls up), clamped to
 // [0, maxScrollLine()] and written back immediately.
 func (t *TextView) scrollBy(delta int) {
-	t.ScrollLine += delta
-	t.ScrollLine = t.clampedScrollLine()
+	t.ScrollLine().Set(t.ScrollLine().Get() + delta)
+	t.ScrollLine().Set(t.clampedScrollLine())
 }
 
 // scrollCaretIntoView nudges ScrollLine so the caret's line (CursorLine) stays
@@ -597,18 +691,16 @@ func (t *TextView) scrollCaretIntoView() {
 	if vis <= 0 {
 		return
 	}
-	if t.CursorLine < t.ScrollLine {
-		t.ScrollLine = t.CursorLine
-	} else if t.CursorLine >= t.ScrollLine+vis {
-		t.ScrollLine = t.CursorLine - vis + 1
+	cl := t.CursorLine().Get()
+	s := t.ScrollLine().Get()
+	if cl < s {
+		t.ScrollLine().Set(cl)
+	} else if cl >= s+vis {
+		t.ScrollLine().Set(cl - vis + 1)
 	}
-	t.ScrollLine = t.clampedScrollLine()
+	t.ScrollLine().Set(t.clampedScrollLine())
 }
 
-// gutterWidth is the pixel width reserved for the line-number gutter,
-// or 0 when ShowLineNumbers is false. It sizes to the widest number
-// (the last line's) plus 8 px of padding, so the number column never
-// jitters as the cursor moves between rows of different index widths.
 // gutterPadL is the breathing space from the widget's left edge to the line
 // numbers; gutterPadR the space between the numbers and the text. Both are
 // metric-scaled so the gutter stays airy at any resolution.
@@ -617,8 +709,12 @@ func (t *TextView) gutterPadR() int { return scaled(12) }
 
 // numbersWidth is the width of the widest line number (the last line's), which
 // every line number is right-justified within.
-func (t *TextView) numbersWidth() int { return t.textWidth(strconv.Itoa(len(t.Lines))) }
+func (t *TextView) numbersWidth() int { return t.textWidth(strconv.Itoa(len(t.lines))) }
 
+// gutterWidth is the pixel width reserved for the line-number gutter, or 0 when
+// ShowLineNumbers is false. It sizes to the widest number (the last line's) plus
+// padding, so the number column never jitters as the cursor moves between rows
+// of different index widths.
 func (t *TextView) gutterWidth() int {
 	if !t.ShowLineNumbers {
 		return 0
@@ -681,7 +777,7 @@ func (t *TextView) drawSpans(p painter.Painter, x, y int, line string, spans []T
 // column c at local x == 4+gutterW+c*glyphAdvance. The line is clamped to the
 // buffer and the column to that line's rune length; the column rounds to the
 // nearest gap so a click on a glyph's right half lands after it. Callers
-// guarantee len(Lines) > 0 before calling.
+// guarantee len(lines) > 0 before calling.
 func (t *TextView) caretAt(x, y int) (line, col int) {
 	lineH := t.glyphHeight() + 4 // > 0: glyphHeight is always positive
 	if y >= 4 {
@@ -690,15 +786,15 @@ func (t *TextView) caretAt(x, y int) (line, col int) {
 	// Map the viewport row back to an absolute buffer line through the scroll
 	// offset, so a click after scrolling lands on the line the user sees.
 	line += t.clampedScrollLine()
-	if line > len(t.Lines)-1 {
-		line = len(t.Lines) - 1
+	if line > len(t.lines)-1 {
+		line = len(t.lines) - 1
 	}
 	adv := t.glyphAdvance() // > 0 for every real font (Draw assumes the same)
 	col = (x - t.textLeftInset() + adv/2) / adv
 	if col < 0 {
 		col = 0
 	}
-	if maxCol := len([]rune(t.Lines[line])); col > maxCol {
+	if maxCol := len([]rune(t.lines[line])); col > maxCol {
 		col = maxCol
 	}
 	return line, col
@@ -720,8 +816,9 @@ func (t *TextView) CaretPixel(line, col int) (x, y int) {
 // clampCol clamps CursorCol to the current line's rune length, used
 // after ArrowUp / ArrowDown lands on a shorter line.
 func (t *TextView) clampCol() {
-	maxCol := len([]rune(t.Lines[t.CursorLine]))
-	if t.CursorCol > maxCol {
-		t.CursorCol = maxCol
+	cl := t.CursorLine().Get()
+	maxCol := len([]rune(t.lines[cl]))
+	if t.CursorCol().Get() > maxCol {
+		t.CursorCol().Set(maxCol)
 	}
 }

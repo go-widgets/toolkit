@@ -13,8 +13,8 @@ func TestNewMarkdownEditorSeedsBothPanes(t *testing.T) {
 	if me.Source == nil || me.Preview == nil {
 		t.Fatal("NewMarkdownEditor must build both panes")
 	}
-	if got := me.Source.Text(); got != "# Hi\n\nBody text." {
-		t.Errorf("Source.Text() = %q", got)
+	if got := me.Source.Text().Get(); got != "# Hi\n\nBody text." {
+		t.Errorf("Source.Text().Get() = %q", got)
 	}
 	if me.Preview.Source != "# Hi\n\nBody text." {
 		t.Errorf("Preview.Source = %q", me.Preview.Source)
@@ -32,11 +32,11 @@ func TestNewMarkdownEditorEmptyInitial(t *testing.T) {
 	// both panes (mirrors NewTextView / NewMarkdownView's own empty-input
 	// handling) and must not panic when drawn.
 	me := NewMarkdownEditor("")
-	if got := me.Source.Text(); got != "" {
-		t.Errorf("Source.Text() = %q, want empty", got)
+	if got := me.Source.Text().Get(); got != "" {
+		t.Errorf("Source.Text().Get() = %q, want empty", got)
 	}
-	if len(me.Source.Lines) != 1 || me.Source.Lines[0] != "" {
-		t.Errorf("Source.Lines = %v, want one empty line", me.Source.Lines)
+	if len(me.Source.lines) != 1 || me.Source.lines[0] != "" {
+		t.Errorf("Source.Lines = %v, want one empty line", me.Source.lines)
 	}
 	if me.Preview.Source != "" {
 		t.Errorf("Preview.Source = %q, want empty", me.Preview.Source)
@@ -77,8 +77,8 @@ func TestMarkdownEditorSetTextNilPreview(t *testing.T) {
 	// the Preview side this time.
 	me := &MarkdownEditor{Source: NewTextView("x")}
 	me.SetText("y")
-	if me.Source.Text() != "y" {
-		t.Errorf("Source.Text() = %q, want %q", me.Source.Text(), "y")
+	if me.Source.Text().Get() != "y" {
+		t.Errorf("Source.Text().Get() = %q, want %q", me.Source.Text().Get(), "y")
 	}
 }
 
@@ -205,16 +205,16 @@ func TestMarkdownEditorTypingUpdatesPreview(t *testing.T) {
 	// Non-click events (keyboard/char) always route to Source regardless of
 	// X/Y -- there is no other interactive pane to compete for them.
 	me.OnEvent(Event{Kind: EventChar, Code: "x", X: 999, Y: 999})
-	if me.Source.Text() != "x" {
-		t.Fatalf("Source.Text() = %q, want %q", me.Source.Text(), "x")
+	if me.Source.Text().Get() != "x" {
+		t.Fatalf("Source.Text().Get() = %q, want %q", me.Source.Text().Get(), "x")
 	}
 	if me.Preview.Source != "x" {
 		t.Errorf("Preview.Source = %q, want synced to %q", me.Preview.Source, "x")
 	}
 
 	me.OnEvent(Event{Kind: EventChar, Code: "y"})
-	if me.Source.Text() != "xy" {
-		t.Fatalf("Source.Text() = %q, want %q", me.Source.Text(), "xy")
+	if me.Source.Text().Get() != "xy" {
+		t.Fatalf("Source.Text().Get() = %q, want %q", me.Source.Text().Get(), "xy")
 	}
 	if me.Preview.Source != "xy" {
 		t.Errorf("Preview.Source = %q, want synced to %q", me.Preview.Source, "xy")
@@ -225,7 +225,7 @@ func TestMarkdownEditorClickInSourceFocuses(t *testing.T) {
 	me := NewMarkdownEditor("hello")
 	me.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60}) // source pane = x in [0,50)
 	me.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
-	if !me.Source.Focused {
+	if !me.Source.Focused().Get() {
 		t.Error("click inside the source pane should focus it")
 	}
 }
@@ -234,10 +234,10 @@ func TestMarkdownEditorClickInPreviewIsNoOp(t *testing.T) {
 	me := NewMarkdownEditor("hello")
 	me.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60}) // preview pane = x in [51,100)
 	me.OnEvent(Event{Kind: EventClick, X: 70, Y: 30})
-	if me.Source.Focused {
+	if me.Source.Focused().Get() {
 		t.Error("click inside the preview pane must not focus Source")
 	}
-	if me.Source.Text() != "hello" || me.Preview.Source != "hello" {
+	if me.Source.Text().Get() != "hello" || me.Preview.Source != "hello" {
 		t.Error("click inside the preview pane must not mutate either pane")
 	}
 }
@@ -246,7 +246,7 @@ func TestMarkdownEditorClickOnDividerIsNoOp(t *testing.T) {
 	me := NewMarkdownEditor("hello")
 	me.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60}) // divider at x == 50
 	me.OnEvent(Event{Kind: EventClick, X: 50, Y: 30})
-	if me.Source.Focused {
+	if me.Source.Focused().Get() {
 		t.Error("click on the divider must not focus Source")
 	}
 }
@@ -268,7 +268,7 @@ func TestMarkdownEditorOnEventNonZeroOrigin(t *testing.T) {
 	// Widget-local click (per the Widget.OnEvent contract) at (10,10) must
 	// land in the source pane even though Bounds() is offset.
 	me.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
-	if !me.Source.Focused {
+	if !me.Source.Focused().Get() {
 		t.Error("widget-local click inside source pane should focus it despite non-zero origin")
 	}
 }

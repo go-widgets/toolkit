@@ -157,22 +157,22 @@ func TestTextViewClickPlacesCaretAndDragSelects(t *testing.T) {
 
 	// Click line 1 ("world"), col 2.
 	tv.OnEvent(Event{Kind: EventClick, X: 4 + 2*adv, Y: 4 + 1*lineH})
-	if !tv.Focused {
+	if !tv.Focused().Get() {
 		t.Fatal("click did not focus")
 	}
-	if tv.CursorLine != 1 || tv.CursorCol != 2 {
-		t.Fatalf("caret = (%d,%d), want (1,2)", tv.CursorLine, tv.CursorCol)
+	if tv.CursorLine().Get() != 1 || tv.CursorCol().Get() != 2 {
+		t.Fatalf("caret = (%d,%d), want (1,2)", tv.CursorLine().Get(), tv.CursorCol().Get())
 	}
-	if !tv.Selection.IsEmpty() {
+	if !tv.Selection().Get().IsEmpty() {
 		t.Fatal("click should collapse the selection at the caret")
 	}
 	// Drag to line 2 col 3 extends the selection from the click anchor.
 	tv.OnEvent(Event{Kind: EventMouseDrag, X: 4 + 3*adv, Y: 4 + 2*lineH})
-	if tv.CursorLine != 2 || tv.CursorCol != 3 {
-		t.Fatalf("drag caret = (%d,%d), want (2,3)", tv.CursorLine, tv.CursorCol)
+	if tv.CursorLine().Get() != 2 || tv.CursorCol().Get() != 3 {
+		t.Fatalf("drag caret = (%d,%d), want (2,3)", tv.CursorLine().Get(), tv.CursorCol().Get())
 	}
-	if want := (SelectionRange(1, 2, 2, 3)); tv.Selection != want {
-		t.Fatalf("selection = %+v, want %+v", tv.Selection, want)
+	if want := (SelectionRange(1, 2, 2, 3)); tv.Selection().Get() != want {
+		t.Fatalf("selection = %+v, want %+v", tv.Selection().Get(), want)
 	}
 }
 
@@ -183,22 +183,22 @@ func TestTextViewCaretClampsAndEmptyGuard(t *testing.T) {
 	// Click far below the last line clamps to the last line; far right clamps to
 	// that line's length.
 	tv.OnEvent(Event{Kind: EventClick, X: 4 + 999*adv, Y: 4000})
-	if tv.CursorLine != 1 {
-		t.Fatalf("below-buffer click line = %d, want 1 (clamped)", tv.CursorLine)
+	if tv.CursorLine().Get() != 1 {
+		t.Fatalf("below-buffer click line = %d, want 1 (clamped)", tv.CursorLine().Get())
 	}
-	if tv.CursorCol != len([]rune("longerline")) {
-		t.Fatalf("far-right col = %d, want %d", tv.CursorCol, len([]rune("longerline")))
+	if tv.CursorCol().Get() != len([]rune("longerline")) {
+		t.Fatalf("far-right col = %d, want %d", tv.CursorCol().Get(), len([]rune("longerline")))
 	}
 	// A drag whose x maps left of column 0 clamps to col 0, and y < 4 → line 0.
 	tv.OnEvent(Event{Kind: EventMouseDrag, X: -50, Y: 0})
-	if tv.CursorLine != 0 || tv.CursorCol != 0 {
-		t.Fatalf("clamp-left caret = (%d,%d), want (0,0)", tv.CursorLine, tv.CursorCol)
+	if tv.CursorLine().Get() != 0 || tv.CursorCol().Get() != 0 {
+		t.Fatalf("clamp-left caret = (%d,%d), want (0,0)", tv.CursorLine().Get(), tv.CursorCol().Get())
 	}
 	// A zero-value TextView (no Lines): a click focuses but places no caret, and
 	// a drag is a safe no-op.
 	empty := &TextView{}
 	empty.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
-	if !empty.Focused {
+	if !empty.Focused().Get() {
 		t.Fatal("empty click should still focus")
 	}
 	empty.OnEvent(Event{Kind: EventMouseDrag, X: 5, Y: 5}) // must not panic
