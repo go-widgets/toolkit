@@ -78,7 +78,7 @@ func randomEdit(t *testing.T, r *CollabSheet, rng *rand.Rand) []crdt.PartOps {
 		}
 		return []crdt.PartOps{b}
 	}
-	switch rng.IntN(7) {
+	switch rng.IntN(9) {
 	case 0:
 		return one(r.AppendRow())
 	case 1:
@@ -102,6 +102,27 @@ func randomEdit(t *testing.T, r *CollabSheet, rng *rand.Rand) []crdt.PartOps {
 			return nil
 		}
 		return one(r.DeleteRow(rng.IntN(r.RowCount())))
+	case 6:
+		// Moving is the operation the axes became sequences for, so it belongs
+		// in the harness the convergence properties are checked with rather
+		// than only in a test of its own.
+		if r.RowCount() < 2 {
+			return nil
+		}
+		from, to := rng.IntN(r.RowCount()), rng.IntN(r.RowCount())
+		if from == to {
+			return nil
+		}
+		return one(r.MoveRow(from, to))
+	case 7:
+		if r.ColCount() < 2 {
+			return nil
+		}
+		from, to := rng.IntN(r.ColCount()), rng.IntN(r.ColCount())
+		if from == to {
+			return nil
+		}
+		return one(r.MoveCol(from, to))
 	default:
 		if r.ColCount() == 0 {
 			return nil
@@ -633,5 +654,142 @@ func TestSyncSpreadsheetClamp(t *testing.T) {
 	// The out-of-window value is simply not mirrored; the widget has no such cell.
 	if got := ss.CellRaw(1, 1); got == "outside" {
 		t.Fatal("out-of-window value leaked into the widget")
+	}
+}
+
+// A row can be dragged, which the axes were lists and could not be. The row
+// keeps its identity, so its cells come with it and nothing else in the sheet
+// moves — which is what makes this worth having over a delete and an insert.
+func TestCollabSheetMoveRowCarriesItsCells(t *testing.T) {
+	c := NewCollabSheet(1)
+	for range 3 {
+		if _, err := c.AppendRow(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := c.AppendCol(); err != nil {
+		t.Fatal(err)
+	}
+	for row, text := range []string{"a", "b", "c"} {
+		if _, err := c.SetCellText(0, row, text); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	if _, err := c.MoveRow(2, 0); err != nil {
+		t.Fatal(err)
+	}
+	for row, want := range []string{"c", "a", "b"} {
+		if got := c.CellText(0, row); got != want {
+			t.Fatalf("row %d reads %q, want %q", row, got, want)
+		}
+	}
+	if _, err := c.MoveCol(0, 0); err == nil {
+		t.Fatal("moving a column to where it is was accepted")
+	}
+	for _, tc := range []struct{ from, to int }{{-1, 0}, {0, -1}, {3, 0}, {0, 3}} {
+		if _, err := c.MoveRow(tc.from, tc.to); err == nil {
+			t.Fatalf("MoveRow(%d, %d) was accepted", tc.from, tc.to)
+		}
+	}
+}
+
+// Two replicas dragging the same row at once, which as a delete and an insert
+// would leave it twice over or not at all.
+func TestCollabSheetConcurrentRowMove(t *testing.T) {
+	a := NewCollabSheet(1)
+	for range 3 {
+		if _, err := a.AppendRow(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := a.AppendCol(); err != nil {
+		t.Fatal(err)
+	}
+	for row, text := range []string{"1", "2", "3"} {
+		if _, err := a.SetCellText(0, row, text); err != nil {
+			t.Fatal(err)
+		}
+	}
+	b, err := LoadCollabSheet(2, a.Snapshot())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	fromA, err := a.MoveRow(0, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	fromB, err := b.MoveRow(0, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := a.Apply(fromB); err != nil {
+		t.Fatal(err)
+	}
+	if err := b.Apply(fromA); err != nil {
+		t.Fatal(err)
+	}
+
+	if a.RowCount() != 3 || b.RowCount() != 3 {
+		t.Fatalf("the replicas hold %d and %d rows, want 3 each", a.RowCount(), b.RowCount())
+	}
+	for row := range 3 {
+		if a.CellText(0, row) != b.CellText(0, row) {
+			t.Fatalf("row %d reads %q on one replica and %q on the other",
+				row, a.CellText(0, row), b.CellText(0, row))
+		}
+	}
+	// Every row is still there, once.
+	seen := map[string]bool{}
+	for row := range 3 {
+		text := a.CellText(0, row)
+		if seen[text] {
+			t.Fatalf("row %q is read twice", text)
+		}
+		seen[text] = true
+	}
+}
+
+// A move has to reach a bound widget. Everything else here notifies, and a
+// silent move would leave a spreadsheet on screen showing the old order until
+// something else happened to redraw it.
+func TestCollabSheetMoveNotifies(t *testing.T) {
+	c := NewCollabSheet(1)
+	for range 2 {
+		if _, err := c.AppendRow(); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := c.AppendCol(); err != nil {
+			t.Fatal(err)
+		}
+	}
+
+	seen := 0
+	unsubscribe := c.Subscribe(func() { seen++ })
+	defer unsubscribe()
+
+	before := c.Rev()
+	if _, err := c.MoveRow(0, 1); err != nil {
+		t.Fatal(err)
+	}
+	if c.Rev() == before {
+		t.Fatal("moving a row did not raise the revision")
+	}
+	if seen != 1 {
+		t.Fatalf("a bound widget was told %d times about a row move, want once", seen)
+	}
+	if _, err := c.MoveCol(0, 1); err != nil {
+		t.Fatal(err)
+	}
+	if seen != 2 {
+		t.Fatalf("a bound widget was told %d times in all, want twice", seen)
+	}
+	// A refused move must not notify: nothing changed.
+	if _, err := c.MoveRow(0, 0); err == nil {
+		t.Fatal("moving a row to where it is was accepted")
+	}
+	if seen != 2 {
+		t.Fatalf("a refused move told a bound widget anyway (%d)", seen)
 	}
 }
