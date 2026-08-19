@@ -153,7 +153,7 @@ func (s *Spreadsheet) commitEdit() {
 	if s.editor == nil {
 		return
 	}
-	raw := s.editor.Text
+	raw := s.editor.Text().Get()
 	s.editor = nil
 	s.model.SetCell(s.cur, raw)
 	if s.OnCellChange != nil {

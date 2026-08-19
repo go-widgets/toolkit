@@ -587,7 +587,7 @@ func TestSyncSpreadsheet(t *testing.T) {
 	// A local widget edit must reach the collaborative model and thence the peer.
 	// The active cell defaults to A1 (0,0).
 	ss.BeginEdit()
-	ss.editor.Text = "typed"
+	ss.editor.Text().Set("typed")
 	ss.CommitEdit()
 	if got := m1.CellText(0, 0); got != "typed" {
 		t.Fatalf("model cell after widget edit = %q, want typed", got)

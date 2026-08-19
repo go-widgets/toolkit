@@ -34,10 +34,10 @@ func TestEntryPlaceholderAndMask(t *testing.T) {
 	}
 
 	// Caret clamp: a cursor past the end clamps to the run length.
-	m.Cursor = 999
+	m.cursor = 999
 	m.Draw(p, th)
-	if m.Cursor != 6 {
-		t.Fatalf("cursor should clamp to 6, got %d", m.Cursor)
+	if m.cursor != 6 {
+		t.Fatalf("cursor should clamp to 6, got %d", m.cursor)
 	}
 
 	// Mask == 0 → display is the text verbatim.

@@ -57,7 +57,7 @@ func NewFileChooser(root *TreeNode, listFiles func(dir *TreeNode) []string) *Fil
 		if f.ListFiles != nil {
 			f.list.Items = f.ListFiles(n)
 		}
-		f.pathEntry.Text = n.Label
+		f.pathEntry.Text().Set(n.Label)
 	}
 	f.list.OnActivate = func(i int) {
 		if i < 0 || i >= len(f.list.Items) {
@@ -68,11 +68,11 @@ func NewFileChooser(root *TreeNode, listFiles func(dir *TreeNode) []string) *Fil
 		if f.currentDir != nil {
 			dir = f.currentDir.Label
 		}
-		f.pathEntry.Text = dir + "/" + f.selectedFile
+		f.pathEntry.Text().Set(dir + "/" + f.selectedFile)
 	}
 	f.openButton.OnClick = func() {
 		if f.OnAccept != nil {
-			f.OnAccept(f.pathEntry.Text)
+			f.OnAccept(f.pathEntry.Text().Get())
 		}
 	}
 	f.cancelButton.OnClick = func() {
@@ -130,4 +130,4 @@ func (f *FileChooser) OnEvent(ev Event) {
 }
 
 // Path returns the entry text — the current effective selection.
-func (f *FileChooser) Path() string { return f.pathEntry.Text }
+func (f *FileChooser) Path() string { return f.pathEntry.Text().Get() }

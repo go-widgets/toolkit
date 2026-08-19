@@ -133,8 +133,8 @@ func TestSpreadsheetEditorOverlay(t *testing.T) {
 	s.SetCell(0, 0, "=1+2")
 	s.BeginEdit()
 	// The editor shows the raw formula while the cell still computes its value.
-	if s.editor.Text != "=1+2" {
-		t.Errorf("editor text = %q, want =1+2", s.editor.Text)
+	if s.editor.Text().Get() != "=1+2" {
+		t.Errorf("editor text = %q, want =1+2", s.editor.Text().Get())
 	}
 	if got := s.CellDisplay(0, 0); got != "3" {
 		t.Errorf("cell value during edit = %q, want 3", got)

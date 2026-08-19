@@ -20,7 +20,7 @@ func TestA11yInfoPerWidget(t *testing.T) {
 	}{
 		{"button", NewButton("OK", nil), A11yInfo{Role: RoleButton, Name: "OK"}},
 		{"label", NewLabel("Hello"), A11yInfo{Role: RoleText, Name: "Hello"}},
-		{"entry", &Entry{Text: "query"}, A11yInfo{Role: RoleTextbox, Value: "query"}},
+		{"entry", NewEntry("query"), A11yInfo{Role: RoleTextbox, Value: "query"}},
 		{"checkbox-on", check, A11yInfo{Role: RoleCheckbox, Name: "Enable", Value: "checked"}},
 		{"radio-off", radio, A11yInfo{Role: RoleRadio, Name: "Option", Value: ""}},
 		{"switch-on", sw, A11yInfo{Role: RoleSwitch, Value: "on"}},

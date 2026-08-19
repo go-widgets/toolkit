@@ -18,8 +18,8 @@ func TestEntryClickFocuses(t *testing.T) {
 
 func TestEntryConstructorParksCursorAtEnd(t *testing.T) {
 	e := NewEntry("hello")
-	if e.Cursor != 5 {
-		t.Fatalf("Cursor = %d, want 5", e.Cursor)
+	if e.cursor != 5 {
+		t.Fatalf("Cursor = %d, want 5", e.cursor)
 	}
 }
 
@@ -28,7 +28,7 @@ func TestEntryValueReturnsText(t *testing.T) {
 	if v := e.Value(); v != "hello" {
 		t.Fatalf("Value() = %q, want %q", v, "hello")
 	}
-	e.Text = "changed"
+	e.Text().Set("changed")
 	if v := e.Value(); v != "changed" {
 		t.Fatalf("Value() = %q, want %q", v, "changed")
 	}
@@ -37,18 +37,18 @@ func TestEntryValueReturnsText(t *testing.T) {
 func TestEntryBackspaceDeletesAndFiresOnChange(t *testing.T) {
 	changes := 0
 	e := NewEntry("abc")
-	e.OnChange = func(t string) { changes++ }
+	e.Text().Subscribe(func(t string) { changes++ })
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if e.Text != "ab" || e.Cursor != 2 || changes != 1 {
-		t.Fatalf("after Backspace: Text=%q Cursor=%d changes=%d", e.Text, e.Cursor, changes)
+	if e.Text().Get() != "ab" || e.cursor != 2 || changes != 1 {
+		t.Fatalf("after Backspace: Text=%q Cursor=%d changes=%d", e.Text().Get(), e.cursor, changes)
 	}
 }
 
 func TestEntryBackspaceAtStartNoOp(t *testing.T) {
 	e := NewEntry("ab")
-	e.Cursor = 0
+	e.cursor = 0
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if e.Text != "ab" || e.Cursor != 0 {
+	if e.Text().Get() != "ab" || e.cursor != 0 {
 		t.Fatalf("backspace at start should be no-op")
 	}
 }
@@ -56,37 +56,37 @@ func TestEntryBackspaceAtStartNoOp(t *testing.T) {
 func TestEntryArrowKeysMoveCursor(t *testing.T) {
 	e := NewEntry("ab")
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
-	if e.Cursor != 1 {
-		t.Fatalf("ArrowLeft: Cursor = %d, want 1", e.Cursor)
+	if e.cursor != 1 {
+		t.Fatalf("ArrowLeft: Cursor = %d, want 1", e.cursor)
 	}
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
-	if e.Cursor != 2 {
-		t.Fatalf("ArrowRight: Cursor = %d, want 2", e.Cursor)
+	if e.cursor != 2 {
+		t.Fatalf("ArrowRight: Cursor = %d, want 2", e.cursor)
 	}
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"}) // can't go past 0
-	if e.Cursor != 0 {
-		t.Fatalf("ArrowLeft clamp: Cursor = %d, want 0", e.Cursor)
+	if e.cursor != 0 {
+		t.Fatalf("ArrowLeft clamp: Cursor = %d, want 0", e.cursor)
 	}
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"}) // can't go past end
-	if e.Cursor != 2 {
-		t.Fatalf("ArrowRight clamp: Cursor = %d, want 2", e.Cursor)
+	if e.cursor != 2 {
+		t.Fatalf("ArrowRight clamp: Cursor = %d, want 2", e.cursor)
 	}
 }
 
 func TestEntryHomeEnd(t *testing.T) {
 	e := NewEntry("abc")
-	e.Cursor = 1
+	e.cursor = 1
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
-	if e.Cursor != 0 {
-		t.Fatalf("Home: Cursor = %d", e.Cursor)
+	if e.cursor != 0 {
+		t.Fatalf("Home: Cursor = %d", e.cursor)
 	}
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
-	if e.Cursor != 3 {
-		t.Fatalf("End: Cursor = %d", e.Cursor)
+	if e.cursor != 3 {
+		t.Fatalf("End: Cursor = %d", e.cursor)
 	}
 }
 
@@ -103,18 +103,18 @@ func TestEntryEnterFiresOnSubmit(t *testing.T) {
 func TestEntryCharInsertsAndFiresOnChange(t *testing.T) {
 	changes := 0
 	e := NewEntry("ab")
-	e.Cursor = 1
-	e.OnChange = func(t string) { changes++ }
+	e.cursor = 1
+	e.Text().Subscribe(func(t string) { changes++ })
 	e.OnEvent(Event{Kind: EventChar, Code: "X"})
-	if e.Text != "aXb" || e.Cursor != 2 || changes != 1 {
-		t.Fatalf("after Char: Text=%q Cursor=%d changes=%d", e.Text, e.Cursor, changes)
+	if e.Text().Get() != "aXb" || e.cursor != 2 || changes != 1 {
+		t.Fatalf("after Char: Text=%q Cursor=%d changes=%d", e.Text().Get(), e.cursor, changes)
 	}
 }
 
 func TestEntryEmptyCharIsNoOp(t *testing.T) {
 	e := NewEntry("ab")
 	e.OnEvent(Event{Kind: EventChar, Code: ""})
-	if e.Text != "ab" {
+	if e.Text().Get() != "ab" {
 		t.Fatal("empty Char should not mutate")
 	}
 }
@@ -122,7 +122,7 @@ func TestEntryEmptyCharIsNoOp(t *testing.T) {
 func TestEntryUnknownKeyIsNoOp(t *testing.T) {
 	e := NewEntry("ab")
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "F1"})
-	if e.Text != "ab" {
+	if e.Text().Get() != "ab" {
 		t.Fatal("F1 should not mutate")
 	}
 }
@@ -137,7 +137,7 @@ func TestEntryNilCallbacksNoPanic(t *testing.T) {
 func TestEntryIgnoredEventKind(t *testing.T) {
 	e := NewEntry("ab")
 	e.OnEvent(Event{Kind: EventKeyUp, Code: "x"})
-	if e.Text != "ab" {
+	if e.Text().Get() != "ab" {
 		t.Fatal("KeyUp should not mutate")
 	}
 }
@@ -172,26 +172,26 @@ func TestEntryCompositionStartUpdateEnd(t *testing.T) {
 	e := NewEntry("abc")
 	// Start: preview becomes visible; Text untouched.
 	e.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
-	if e.Composition != "^" {
-		t.Fatalf("start: Composition=%q", e.Composition)
+	if e.composition != "^" {
+		t.Fatalf("start: Composition=%q", e.composition)
 	}
-	if e.Text != "abc" {
-		t.Fatalf("start must not touch Text, got %q", e.Text)
+	if e.Text().Get() != "abc" {
+		t.Fatalf("start must not touch Text, got %q", e.Text().Get())
 	}
 	// Update: preview refreshed.
 	e.OnEvent(Event{Kind: EventCompositionUpdate, Code: "ê"})
-	if e.Composition != "ê" {
-		t.Fatalf("update: Composition=%q", e.Composition)
+	if e.composition != "ê" {
+		t.Fatalf("update: Composition=%q", e.composition)
 	}
-	if e.Text != "abc" {
-		t.Fatalf("update must not touch Text, got %q", e.Text)
+	if e.Text().Get() != "abc" {
+		t.Fatalf("update must not touch Text, got %q", e.Text().Get())
 	}
 	// End (cancel path): preview cleared, Text unchanged.
 	e.OnEvent(Event{Kind: EventCompositionEnd, Code: ""})
-	if e.Composition != "" {
-		t.Fatalf("end: Composition should clear, got %q", e.Composition)
+	if e.composition != "" {
+		t.Fatalf("end: Composition should clear, got %q", e.composition)
 	}
-	if e.Text != "abc" {
+	if e.Text().Get() != "abc" {
 		t.Fatal("end (cancel) must not touch Text")
 	}
 }
@@ -199,16 +199,16 @@ func TestEntryCompositionStartUpdateEnd(t *testing.T) {
 func TestEntryCompositionCommitViaEventChar(t *testing.T) {
 	changes := 0
 	e := NewEntry("abc")
-	e.OnChange = func(t string) { changes++ }
+	e.Text().Subscribe(func(t string) { changes++ })
 	// Preview.
 	e.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
 	// Host now commits by delivering EventChar with the composed rune.
 	e.OnEvent(Event{Kind: EventChar, Code: "ê"})
-	if e.Composition != "" {
+	if e.composition != "" {
 		t.Fatal("EventChar must clear the composition preview")
 	}
-	if e.Text != "abcê" || changes != 1 {
-		t.Fatalf("commit: Text=%q changes=%d", e.Text, changes)
+	if e.Text().Get() != "abcê" || changes != 1 {
+		t.Fatalf("commit: Text=%q changes=%d", e.Text().Get(), changes)
 	}
 }
 
@@ -218,11 +218,11 @@ func TestEntryCompositionCancelledDiscardsPreviewNoChar(t *testing.T) {
 	e.OnEvent(Event{Kind: EventCompositionUpdate, Code: "^a"})
 	// Cancelled: host does NOT send EventChar.
 	e.OnEvent(Event{Kind: EventCompositionEnd})
-	if e.Composition != "" {
-		t.Fatalf("cancelled composition should discard preview, got %q", e.Composition)
+	if e.composition != "" {
+		t.Fatalf("cancelled composition should discard preview, got %q", e.composition)
 	}
-	if e.Text != "abc" {
-		t.Fatalf("cancelled composition must not mutate Text, got %q", e.Text)
+	if e.Text().Get() != "abc" {
+		t.Fatalf("cancelled composition must not mutate Text, got %q", e.Text().Get())
 	}
 }
 
@@ -230,24 +230,24 @@ func TestEntryCompositionEmptyCharAfterStartStillClearsPreview(t *testing.T) {
 	e := NewEntry("ab")
 	e.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
 	e.OnEvent(Event{Kind: EventChar, Code: ""})
-	if e.Composition != "" {
+	if e.composition != "" {
 		t.Fatal("empty EventChar should still clear the composition preview")
 	}
-	if e.Text != "ab" {
+	if e.Text().Get() != "ab" {
 		t.Fatal("empty EventChar should not mutate Text")
 	}
 }
 
 func TestEntryCompositionInteractsWithCursorPosition(t *testing.T) {
 	e := NewEntry("ab")
-	e.Cursor = 1
+	e.cursor = 1
 	e.OnEvent(Event{Kind: EventCompositionStart, Code: "^"})
-	if e.Cursor != 1 {
-		t.Fatalf("composition start should not move the caret, Cursor=%d", e.Cursor)
+	if e.cursor != 1 {
+		t.Fatalf("composition start should not move the caret, Cursor=%d", e.cursor)
 	}
 	e.OnEvent(Event{Kind: EventChar, Code: "x"})
-	if e.Text != "axb" || e.Cursor != 2 {
-		t.Fatalf("commit at mid-string cursor: Text=%q Cursor=%d", e.Text, e.Cursor)
+	if e.Text().Get() != "axb" || e.cursor != 2 {
+		t.Fatalf("commit at mid-string cursor: Text=%q Cursor=%d", e.Text().Get(), e.cursor)
 	}
 }
 
@@ -256,7 +256,7 @@ func TestEntryDrawCompositionPreviewDistinctFromCommittedText(t *testing.T) {
 	theme := DefaultLight()
 	e := NewEntry("ab")
 	e.SetFocused(true)
-	e.Composition = "^"
+	e.composition = "^"
 	e.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(w, h)
 	e.Draw(newP(buf, w), theme)
@@ -295,7 +295,7 @@ func TestEntryCtrlCCopiesWholeValueToClipboard(t *testing.T) {
 	if got := ClipboardText(); got != "hello" {
 		t.Fatalf("Ctrl+C clipboard = %q, want hello", got)
 	}
-	if e.Text != "hello" {
+	if e.Text().Get() != "hello" {
 		t.Fatal("Ctrl+C must not mutate Text")
 	}
 }
@@ -316,13 +316,13 @@ func TestEntryCtrlXCutsWholeValueToClipboardAndClears(t *testing.T) {
 	SetClipboard(nil)
 	changes := 0
 	e := NewEntry("hello")
-	e.OnChange = func(t string) { changes++ }
+	e.Text().Subscribe(func(t string) { changes++ })
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+X"})
 	if got := ClipboardText(); got != "hello" {
 		t.Fatalf("Ctrl+X clipboard = %q, want hello", got)
 	}
-	if e.Text != "" || e.Cursor != 0 || changes != 1 {
-		t.Fatalf("after Ctrl+X: Text=%q Cursor=%d changes=%d", e.Text, e.Cursor, changes)
+	if e.Text().Get() != "" || e.cursor != 0 || changes != 1 {
+		t.Fatalf("after Ctrl+X: Text=%q Cursor=%d changes=%d", e.Text().Get(), e.cursor, changes)
 	}
 }
 
@@ -332,7 +332,7 @@ func TestEntryCtrlXEmptyTextIsNoOp(t *testing.T) {
 	SetClipboardText("previous")
 	changes := 0
 	e := NewEntry("")
-	e.OnChange = func(t string) { changes++ }
+	e.Text().Subscribe(func(t string) { changes++ })
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+X"})
 	if got := ClipboardText(); got != "previous" {
 		t.Fatalf("empty-value Ctrl+X must not clobber clipboard, got %q", got)
@@ -348,11 +348,11 @@ func TestEntryCtrlVPastesClipboardAtCursor(t *testing.T) {
 	SetClipboardText("XY")
 	changes := 0
 	e := NewEntry("ab")
-	e.Cursor = 1
-	e.OnChange = func(t string) { changes++ }
+	e.cursor = 1
+	e.Text().Subscribe(func(t string) { changes++ })
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+V"})
-	if e.Text != "aXYb" || e.Cursor != 3 || changes != 1 {
-		t.Fatalf("after Ctrl+V: Text=%q Cursor=%d changes=%d", e.Text, e.Cursor, changes)
+	if e.Text().Get() != "aXYb" || e.cursor != 3 || changes != 1 {
+		t.Fatalf("after Ctrl+V: Text=%q Cursor=%d changes=%d", e.Text().Get(), e.cursor, changes)
 	}
 }
 
@@ -361,10 +361,10 @@ func TestEntryCtrlVEmptyClipboardIsNoOp(t *testing.T) {
 	SetClipboard(nil)
 	changes := 0
 	e := NewEntry("ab")
-	e.OnChange = func(t string) { changes++ }
+	e.Text().Subscribe(func(t string) { changes++ })
 	e.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+V"})
-	if e.Text != "ab" || changes != 0 {
-		t.Fatalf("empty-clipboard Ctrl+V: Text=%q changes=%d", e.Text, changes)
+	if e.Text().Get() != "ab" || changes != 0 {
+		t.Fatalf("empty-clipboard Ctrl+V: Text=%q changes=%d", e.Text().Get(), changes)
 	}
 }
 
@@ -376,8 +376,8 @@ func TestEntryCopyThenPasteAcrossEntriesRoundTrip(t *testing.T) {
 
 	dst := NewEntry("")
 	dst.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+V"})
-	if dst.Text != "copied" {
-		t.Fatalf("cross-Entry paste = %q, want copied", dst.Text)
+	if dst.Text().Get() != "copied" {
+		t.Fatalf("cross-Entry paste = %q, want copied", dst.Text().Get())
 	}
 }
 

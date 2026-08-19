@@ -376,18 +376,18 @@ func TestAgendaSidebarRenameLifecycle(t *testing.T) {
 	if toggled != -1 {
 		t.Error("opening the editor must not fire OnToggle")
 	}
-	if s.editEntry.Text != "Home" || !s.editEntry.Focused() {
-		t.Errorf("editor seeded %q focused=%v, want \"Home\" focused", s.editEntry.Text, s.editEntry.Focused())
+	if s.editEntry.Text().Get() != "Home" || !s.editEntry.Focused() {
+		t.Errorf("editor seeded %q focused=%v, want \"Home\" focused", s.editEntry.Text().Get(), s.editEntry.Focused())
 	}
 
 	// Type: a character and a Backspace both reach the Entry.
 	s.OnEvent(Event{Kind: EventChar, Code: "X"})
-	if s.editEntry.Text != "HomeX" {
-		t.Errorf("after EventChar text = %q, want HomeX", s.editEntry.Text)
+	if s.editEntry.Text().Get() != "HomeX" {
+		t.Errorf("after EventChar text = %q, want HomeX", s.editEntry.Text().Get())
 	}
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if s.editEntry.Text != "Home" {
-		t.Errorf("after Backspace text = %q, want Home", s.editEntry.Text)
+	if s.editEntry.Text().Get() != "Home" {
+		t.Errorf("after Backspace text = %q, want Home", s.editEntry.Text().Get())
 	}
 	s.OnEvent(Event{Kind: EventChar, Code: "y"}) // -> "Homey"
 

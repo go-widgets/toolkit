@@ -232,7 +232,7 @@ func (a *Agenda) EditorKey(code string) {
 // OnEventEdited, and closes the editor. Guarded against a stale editing index.
 func (a *Agenda) commitEdit() {
 	if a.editing >= 0 && a.editing < len(a.Events) {
-		a.Events[a.editing].Title = a.editEntry.Text
+		a.Events[a.editing].Title = a.editEntry.Text().Get()
 		if a.OnEventEdited != nil {
 			a.OnEventEdited(a.editing)
 		}

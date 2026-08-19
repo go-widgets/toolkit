@@ -474,8 +474,8 @@ type CellEditor interface {
 // byte-identical to the pre-seam inline editor.
 type textCellEditor struct{ *Entry }
 
-func (e textCellEditor) CellValue() string     { return e.Text }
-func (e textCellEditor) SetCellValue(s string) { e.Text = s; e.Cursor = len([]rune(s)) }
+func (e textCellEditor) CellValue() string     { return e.Text().Get() }
+func (e textCellEditor) SetCellValue(s string) { e.Text().Set(s); e.cursor = len([]rune(s)) }
 func (e textCellEditor) OnCellSubmit(fn func()) {
 	e.Entry.OnSubmit = func(string) { fn() }
 }
