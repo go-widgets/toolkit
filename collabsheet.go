@@ -184,6 +184,32 @@ func (c *CollabSheet) DeleteCol(pos int) (crdt.PartOps, error) {
 	return ops, nil
 }
 
+// MoveRow moves the row at index from to index to and returns the operation to
+// broadcast. It is one operation, and the row keeps its identity, so its cells
+// and every formula naming them move with it and nothing else does.
+//
+// A position outside [0, RowCount) is an error, and so is moving a row to where
+// it already is.
+func (c *CollabSheet) MoveRow(from, to int) (crdt.PartOps, error) {
+	ops, err := c.sheet.MoveRow(from, to)
+	if err != nil {
+		return crdt.PartOps{}, err
+	}
+	c.notify()
+	return ops, nil
+}
+
+// MoveCol moves the column at index from to index to, on the same terms as
+// [CollabSheet.MoveRow].
+func (c *CollabSheet) MoveCol(from, to int) (crdt.PartOps, error) {
+	ops, err := c.sheet.MoveCol(from, to)
+	if err != nil {
+		return crdt.PartOps{}, err
+	}
+	c.notify()
+	return ops, nil
+}
+
 // ids resolves a positional (column, row) address to the stable identities the
 // CRDT stores a cell against, reporting whether the address is in range.
 func (c *CollabSheet) ids(col, row int) (structured.RowID, structured.ColID, bool) {
