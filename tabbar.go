@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // TabBar is a mobile bottom-navigation bar: a strip of equal-width items,
 // each an icon over an optional label, pinned to the bottom edge of a phone
@@ -42,12 +45,6 @@ type TabBar struct {
 	// order. Each carries an Icon glyph, an optional Label, and an optional
 	// Badge counter string.
 	Items []TabItem
-	// Selected is the index of the highlighted item. NewTabBar clamps it into
-	// range; OnEvent keeps it in range.
-	Selected int
-	// OnSelect fires with the newly-selected index whenever the selection
-	// changes via a tap, a swipe, or an arrow key. nil-safe.
-	OnSelect func(index int)
 	// SwipeNavigation opts the bar into horizontal-swipe navigation: a left
 	// swipe advances to the next item, a right swipe returns to the previous
 	// one (both clamped at the ends). It is false by default, so a plain
@@ -58,6 +55,22 @@ type TabBar struct {
 	// swipes. NewTabBar wires it; a caller may retune its thresholds
 	// (TapSlop, SwipeMinDist, ...) or leave the defaults.
 	Gestures *GestureRecognizer
+
+	// selected is the highlighted item index, reactive via the Selected()
+	// accessor. NewTabBar clamps it into range; OnEvent keeps it in range.
+	// Subscribers replace the old OnSelect callback.
+	selected *mvvm.Observable[int]
+}
+
+// Selected is the highlighted item index as a shared [mvvm.Observable]: a host
+// binds it (or subscribes for the old OnSelect notification) instead of reading
+// a field, and a tap / swipe / arrow key Sets it. Lazily created so a bare
+// &TabBar{} works.
+func (t *TabBar) Selected() *mvvm.Observable[int] {
+	if t.selected == nil {
+		t.selected = mvvm.NewObservable(0)
+	}
+	return t.selected
 }
 
 // TabItem is one destination in a TabBar: a short Icon glyph (rendered in the
@@ -105,7 +118,8 @@ func NewTabBar(items []TabItem, selected int) *TabBar {
 	case selected >= n:
 		selected = n - 1
 	}
-	t := &TabBar{Items: items, Selected: selected}
+	t := &TabBar{Items: items}
+	t.selected = mvvm.NewObservable(selected)
 	g := NewGestureRecognizer()
 	g.OnTap = func(x, _ int) { t.selectAt(x) }
 	g.OnSwipe = func(dir SwipeDir) {
@@ -211,7 +225,7 @@ func (t *TabBar) Draw(p painter.Painter, theme *Theme) {
 func (t *TabBar) drawItem(p painter.Painter, theme *Theme, i int) {
 	vr := t.ItemRect(i)
 	item := t.Items[i]
-	selected := i == t.Selected
+	selected := i == t.Selected().Get()
 
 	ink := theme.OnSurface
 	if selected {
@@ -340,13 +354,13 @@ func (t *TabBar) step(delta int) {
 	if n == 0 {
 		return
 	}
-	next := t.Selected + delta
+	next := t.Selected().Get() + delta
 	if next < 0 {
 		next = 0
 	} else if next >= n {
 		next = n - 1
 	}
-	if next == t.Selected {
+	if next == t.Selected().Get() {
 		return
 	}
 	t.setSelected(next)
@@ -355,10 +369,7 @@ func (t *TabBar) step(delta int) {
 // setSelected records idx as the selection and fires OnSelect (nil-safe) — the
 // shared mutate+callback path for a tap, a swipe and an arrow key.
 func (t *TabBar) setSelected(idx int) {
-	t.Selected = idx
-	if t.OnSelect != nil {
-		t.OnSelect(idx)
-	}
+	t.Selected().Set(idx)
 }
 
 // A11y reports the TabBar as a tablist named by its selected item's label
@@ -367,8 +378,8 @@ func (t *TabBar) setSelected(idx int) {
 // announces the bar as a tablist containing N tabs with one selected.
 func (t *TabBar) A11y() A11yInfo {
 	name := ""
-	if t.Selected >= 0 && t.Selected < len(t.Items) {
-		it := t.Items[t.Selected]
+	if t.Selected().Get() >= 0 && t.Selected().Get() < len(t.Items) {
+		it := t.Items[t.Selected().Get()]
 		if it.Label != "" {
 			name = it.Label
 		} else {
@@ -388,7 +399,7 @@ func (t *TabBar) A11y() A11yInfo {
 func (t *TabBar) Children() []Widget {
 	out := make([]Widget, 0, len(t.Items))
 	for i := range t.Items {
-		node := &tabItemNode{item: t.Items[i], selected: i == t.Selected}
+		node := &tabItemNode{item: t.Items[i], selected: i == t.Selected().Get()}
 		node.SetBounds(t.ItemRect(i))
 		out = append(out, node)
 	}
