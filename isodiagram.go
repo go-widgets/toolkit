@@ -114,6 +114,13 @@ type IsoDiagram struct {
 	Icons *IsoIconRegistry
 	// Mode selects the left-drag behaviour (move vs connect).
 	Mode IsoMode
+	// AnimationPeriod is the wall-clock length of one full animation cycle, in the
+	// same unit AnimationStep's dt is given in (seconds by convention). The global
+	// animation phase advances by dt/AnimationPeriod each step and wraps at 1. A
+	// non-positive value is treated as the default (isoDefaultAnimPeriod), so the
+	// zero value animates at the default rate. It is plain view state (like pan or
+	// zoom) and never enters the document.
+	AnimationPeriod float64
 
 	// OnSelect fires when the selected node changes; id is "" when the selection
 	// is cleared.
@@ -184,6 +191,14 @@ type IsoDiagram struct {
 	// widget.
 	viewRot *mvvm.Observable[int]
 	seq     int // monotonic id source for placed nodes/connectors/zones/texts
+	// animPhase is the global animation phase in [0, 1) shared by every animated
+	// icon in the diagram. It is advanced only by [IsoDiagram.AnimationStep] from
+	// the host's clock — never by an internal timer — so the rendering is a pure,
+	// deterministic function of the accumulated dt. It is LOCAL view state: it
+	// never enters the document or its CRDT, so two views of the same document may
+	// hold different phases without diverging the model. The zero value renders the
+	// rest frame, byte-identical to a diagram that has no animation at all.
+	animPhase float64
 
 	// interaction state
 	gesture     isoGesture
@@ -336,6 +351,68 @@ func (d *IsoDiagram) invalidate() {
 	if d.OnInvalidate != nil {
 		d.OnInvalidate()
 	}
+}
+
+// isoDefaultAnimPeriod is the fallback [IsoDiagram.AnimationPeriod]: the
+// wall-clock length of one animation cycle when the field is left non-positive.
+const isoDefaultAnimPeriod = 2.0
+
+// AnimationStep advances the diagram's global animation phase by dt (elapsed
+// wall-clock time, in AnimationPeriod's unit — seconds by convention) and, when
+// the document holds at least one node carrying an animated icon, requests a
+// repaint via OnInvalidate. The host owns the clock and calls this each frame;
+// the widget keeps no timer, so the rendering stays a deterministic function of
+// the accumulated dt — two diagrams stepped by the same dt sequence render
+// identically.
+//
+// The phase wraps into [0, 1) after each step, so a long dt (or many steps) folds
+// through the cycle correctly. A diagram whose nodes carry only still icons (or no
+// icon) still advances its phase but never invalidates — nothing on screen moves —
+// and a diagram that is never stepped renders the rest frame, byte-identical to
+// the pre-animation widget.
+func (d *IsoDiagram) AnimationStep(dt float64) {
+	period := d.AnimationPeriod
+	if period <= 0 {
+		period = isoDefaultAnimPeriod
+	}
+	p := d.animPhase + dt/period
+	d.animPhase = p - math.Floor(p)
+	if d.hasAnimatedNode() {
+		d.invalidate()
+	}
+}
+
+// AnimationPhase is the diagram's current global animation phase in [0, 1). A
+// host may read it to drive a synchronised affordance, or to snapshot/restore an
+// animation for a deterministic test.
+func (d *IsoDiagram) AnimationPhase() float64 { return d.animPhase }
+
+// hasAnimatedNode reports whether any node's resolved icon is an
+// [IsoAnimatedIcon], i.e. whether a phase change would change the rendering.
+func (d *IsoDiagram) hasAnimatedNode() bool {
+	reg := d.iconRegistry()
+	for _, n := range d.doc.Nodes() {
+		if n.Icon == "" {
+			continue
+		}
+		icon, _ := reg.Resolve(n.Icon)
+		if _, ok := icon.(IsoAnimatedIcon); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// renderIconAtPhase evaluates icon at the diagram's current animation phase: an
+// [IsoAnimatedIcon] is rendered at that phase, any other icon by its static
+// [IsoIcon.Render] (the phase has no effect). This is the single seam the phase
+// enters the draw path, so a still icon — and any diagram whose phase is 0 —
+// renders exactly as before.
+func (d *IsoDiagram) renderIconAtPhase(icon IsoIcon, x, y int, base stdcolor.RGBA) IsoIconDrawing {
+	if a, ok := icon.(IsoAnimatedIcon); ok {
+		return a.RenderAt(x, y, base, d.animPhase)
+	}
+	return icon.Render(x, y, base)
 }
 
 // SetBounds positions the widget and, until the user first pans or zooms,
@@ -779,7 +856,7 @@ func (d *IsoDiagram) addNodeShapes(sc *iso.Scene, theme *Theme, n IsoNode) {
 		return
 	}
 	icon, _ := d.iconRegistry().Resolve(n.Icon)
-	for _, sh := range icon.Render(n.X, n.Y, base).Shapes {
+	for _, sh := range d.renderIconAtPhase(icon, n.X, n.Y, base).Shapes {
 		sc.Add(d.rotShape(sh))
 	}
 }
@@ -824,7 +901,7 @@ func (d *IsoDiagram) drawSpritesWhere(img *raster.Image, theme *Theme, keep func
 			continue
 		}
 		icon, _ := d.iconRegistry().Resolve(n.Icon)
-		if sprite := icon.Render(n.X, n.Y, d.resolveColor(n, theme)).Sprite; sprite != nil {
+		if sprite := d.renderIconAtPhase(icon, n.X, n.Y, d.resolveColor(n, theme)).Sprite; sprite != nil {
 			blitSprite(img, d.spriteRect(n), sprite)
 		}
 	}
