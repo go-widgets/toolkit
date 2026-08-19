@@ -126,6 +126,12 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// the old OnSelect callback. Items (destinations), SwipeNavigation and the
 	// Gestures recognizer are set-once config.
 	"TabBar": {"Items": true, "SwipeNavigation": true, "Gestures": true},
+	// Breadcrumbs is stateless: Segments is the set-once path (config) and OnSelect
+	// is a func hook. Gating it locks out any future imperative state field.
+	"Breadcrumbs": {"Segments": true},
+	// Surface is a draw-only view: Frame/Elements/OnInput are all func hooks
+	// (auto-allowed), so it holds no reactive state at all.
+	"Surface": {},
 	// TextView: the committed contents live on the Text() Observable and the
 	// caret line/col, the scroll offset, the selection range and the focus flag
 	// are each their own Observable accessor; the line buffer + IME preview are
