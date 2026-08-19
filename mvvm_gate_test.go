@@ -141,6 +141,12 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// is a func hook. Cells/Items + IconSize/Empty are set-once config.
 	"IconGrid":    {"Cells": true, "IconSize": true, "Empty": true},
 	"GalleryView": {"Items": true, "Empty": true},
+	// RichEditor: the edited document lives on the Doc() Observable, and the
+	// caret / selection / focus / scroll offset are each their own Observable
+	// accessor; the pending-style, selection anchor, font caches and last theme
+	// are unexported internal state. It exposes no imperative state field, so the
+	// empty config set enforces that none is ever added.
+	"RichEditor": {},
 	// TextView: the committed contents live on the Text() Observable and the
 	// caret line/col, the scroll offset, the selection range and the focus flag
 	// are each their own Observable accessor; the line buffer + IME preview are
