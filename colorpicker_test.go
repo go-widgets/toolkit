@@ -171,17 +171,17 @@ func TestClampInt(t *testing.T) {
 func TestNewColorPickerSeedsFromRGBA(t *testing.T) {
 	cp := NewColorPicker(RGBA{R: 0, G: 128, B: 255, A: 77})
 	wantH, wantS, wantV := rgbToHSV(0, 128, 255)
-	if cp.H != wantH || cp.S != wantS || cp.V != wantV {
-		t.Errorf("NewColorPicker HSV = (%v,%v,%v), want (%v,%v,%v)", cp.H, cp.S, cp.V, wantH, wantS, wantV)
+	if cp.h != wantH || cp.s != wantS || cp.v != wantV {
+		t.Errorf("NewColorPicker HSV = (%v,%v,%v), want (%v,%v,%v)", cp.h, cp.s, cp.v, wantH, wantS, wantV)
 	}
-	if cp.Alpha != 77 {
-		t.Errorf("NewColorPicker Alpha = %d, want 77", cp.Alpha)
+	if cp.alpha != 77 {
+		t.Errorf("NewColorPicker Alpha = %d, want 77", cp.alpha)
 	}
 }
 
 func TestColorPickerColor(t *testing.T) {
-	cp := &ColorPicker{H: 210, S: 0.5, V: 0.8, Alpha: 200}
-	want := cp.Color()
+	cp := &ColorPicker{h: 210, s: 0.5, v: 0.8, alpha: 200}
+	want := cp.Color().Get()
 	r, g, b := hsvToRGB(210, 0.5, 0.8)
 	if want.R != r || want.G != g || want.B != b || want.A != 200 {
 		t.Errorf("Color() = %+v, want R=%d G=%d B=%d A=200", want, r, g, b)
@@ -192,15 +192,15 @@ func TestColorPickerSetColor(t *testing.T) {
 	cp := &ColorPicker{}
 	cp.SetColor(RGBA{R: 10, G: 200, B: 80, A: 55})
 	wantH, wantS, wantV := rgbToHSV(10, 200, 80)
-	if cp.H != wantH || cp.S != wantS || cp.V != wantV || cp.Alpha != 55 {
-		t.Errorf("SetColor -> (%v,%v,%v,%d), want (%v,%v,%v,55)", cp.H, cp.S, cp.V, cp.Alpha, wantH, wantS, wantV)
+	if cp.h != wantH || cp.s != wantS || cp.v != wantV || cp.alpha != 55 {
+		t.Errorf("SetColor -> (%v,%v,%v,%d), want (%v,%v,%v,55)", cp.h, cp.s, cp.v, cp.alpha, wantH, wantS, wantV)
 	}
 }
 
 // --- OnEvent: SV square ----------------------------------------------------
 
 func newTestColorPicker() *ColorPicker {
-	cp := &ColorPicker{H: 0, S: 0.5, V: 0.5, Alpha: 255}
+	cp := &ColorPicker{h: 0, s: 0.5, v: 0.5, alpha: 255}
 	cp.SetBounds(Rect{X: 7, Y: 11, W: ColorPickerWidth, H: ColorPickerHeight})
 	return cp
 }
@@ -209,22 +209,22 @@ func TestColorPickerSVSquareClickCorners(t *testing.T) {
 	cp := newTestColorPicker()
 	var got RGBA
 	calls := 0
-	cp.OnChange = func(c RGBA) { got = c; calls++ }
+	cp.Color().Subscribe(func(c RGBA) { got = c; calls++ })
 
 	cp.OnEvent(Event{Kind: EventClick, X: 0, Y: 0})
-	if cp.S != 0 || cp.V != 1 {
-		t.Errorf("top-left click: S=%v V=%v, want S=0 V=1", cp.S, cp.V)
+	if cp.s != 0 || cp.v != 1 {
+		t.Errorf("top-left click: S=%v V=%v, want S=0 V=1", cp.s, cp.v)
 	}
 	if calls != 1 {
 		t.Fatalf("OnChange calls = %d, want 1", calls)
 	}
-	if got != cp.Color() {
-		t.Errorf("OnChange payload = %+v, want %+v", got, cp.Color())
+	if got != cp.Color().Get() {
+		t.Errorf("OnChange payload = %+v, want %+v", got, cp.Color().Get())
 	}
 
 	cp.OnEvent(Event{Kind: EventClick, X: ColorPickerSquareSize - 1, Y: ColorPickerSquareSize - 1})
-	if cp.S != 1 || cp.V != 0 {
-		t.Errorf("bottom-right click: S=%v V=%v, want S=1 V=0", cp.S, cp.V)
+	if cp.s != 1 || cp.v != 0 {
+		t.Errorf("bottom-right click: S=%v V=%v, want S=1 V=0", cp.s, cp.v)
 	}
 }
 
@@ -233,8 +233,8 @@ func TestColorPickerSVSquareClickCenter(t *testing.T) {
 	cp.OnEvent(Event{Kind: EventClick, X: 60, Y: 60})
 	wantS := 60.0 / 119.0
 	wantV := 1 - 60.0/119.0
-	if math.Abs(cp.S-wantS) > 1e-9 || math.Abs(cp.V-wantV) > 1e-9 {
-		t.Errorf("centre click: S=%v V=%v, want S=%v V=%v", cp.S, cp.V, wantS, wantV)
+	if math.Abs(cp.s-wantS) > 1e-9 || math.Abs(cp.v-wantV) > 1e-9 {
+		t.Errorf("centre click: S=%v V=%v, want S=%v V=%v", cp.s, cp.v, wantS, wantV)
 	}
 }
 
@@ -244,12 +244,12 @@ func TestColorPickerSVSquareDragClamps(t *testing.T) {
 	cp.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
 	// ...then drag far outside the square: setSV must clamp both axes.
 	cp.OnEvent(Event{Kind: EventMouseDrag, X: -500, Y: -500})
-	if cp.S != 0 || cp.V != 1 {
-		t.Errorf("drag clamp (low): S=%v V=%v, want S=0 V=1", cp.S, cp.V)
+	if cp.s != 0 || cp.v != 1 {
+		t.Errorf("drag clamp (low): S=%v V=%v, want S=0 V=1", cp.s, cp.v)
 	}
 	cp.OnEvent(Event{Kind: EventMouseDrag, X: 5000, Y: 5000})
-	if cp.S != 1 || cp.V != 0 {
-		t.Errorf("drag clamp (high): S=%v V=%v, want S=1 V=0", cp.S, cp.V)
+	if cp.s != 1 || cp.v != 0 {
+		t.Errorf("drag clamp (high): S=%v V=%v, want S=1 V=0", cp.s, cp.v)
 	}
 }
 
@@ -260,22 +260,22 @@ func TestColorPickerHueStripClick(t *testing.T) {
 	hueX := ColorPickerSquareSize + ColorPickerGap + 5
 
 	cp.OnEvent(Event{Kind: EventClick, X: hueX, Y: 0})
-	if cp.H != 0 {
-		t.Errorf("hue strip top: H=%v, want 0", cp.H)
+	if cp.h != 0 {
+		t.Errorf("hue strip top: H=%v, want 0", cp.h)
 	}
 
 	cp.OnEvent(Event{Kind: EventClick, X: hueX, Y: 30})
 	want := 360 * 30.0 / 119.0
-	if math.Abs(cp.H-want) > 1e-9 {
-		t.Errorf("hue strip mid: H=%v, want %v", cp.H, want)
+	if math.Abs(cp.h-want) > 1e-9 {
+		t.Errorf("hue strip mid: H=%v, want %v", cp.h, want)
 	}
 
 	// The bottom edge maps to hue 360, which wraps to 0 (360 == 0 on the
 	// hue circle -- and matches the rendered pixel, which is fed h=360
 	// too and mods down to red).
 	cp.OnEvent(Event{Kind: EventClick, X: hueX, Y: ColorPickerSquareSize - 1})
-	if cp.H != 0 {
-		t.Errorf("hue strip bottom: H=%v, want 0 (wrap)", cp.H)
+	if cp.h != 0 {
+		t.Errorf("hue strip bottom: H=%v, want 0 (wrap)", cp.h)
 	}
 }
 
@@ -285,8 +285,8 @@ func TestColorPickerHueStripDrag(t *testing.T) {
 	cp.OnEvent(Event{Kind: EventClick, X: hueX, Y: 0})
 	cp.OnEvent(Event{Kind: EventMouseDrag, X: hueX, Y: 90})
 	want := 360 * 90.0 / 119.0
-	if math.Abs(cp.H-want) > 1e-9 {
-		t.Errorf("hue strip drag: H=%v, want %v", cp.H, want)
+	if math.Abs(cp.h-want) > 1e-9 {
+		t.Errorf("hue strip drag: H=%v, want %v", cp.h, want)
 	}
 }
 
@@ -297,18 +297,18 @@ func TestColorPickerAlphaSliderClick(t *testing.T) {
 	alphaY := ColorPickerSquareSize + ColorPickerGap + 1
 
 	cp.OnEvent(Event{Kind: EventClick, X: 0, Y: alphaY})
-	if cp.Alpha != 0 {
-		t.Errorf("alpha slider left: Alpha=%d, want 0", cp.Alpha)
+	if cp.alpha != 0 {
+		t.Errorf("alpha slider left: Alpha=%d, want 0", cp.alpha)
 	}
 
 	cp.OnEvent(Event{Kind: EventClick, X: ColorPickerWidth - 1, Y: alphaY})
-	if cp.Alpha != 255 {
-		t.Errorf("alpha slider right: Alpha=%d, want 255", cp.Alpha)
+	if cp.alpha != 255 {
+		t.Errorf("alpha slider right: Alpha=%d, want 255", cp.alpha)
 	}
 
 	cp.OnEvent(Event{Kind: EventClick, X: 73, Y: alphaY})
-	if cp.Alpha != 128 {
-		t.Errorf("alpha slider mid: Alpha=%d, want 128", cp.Alpha)
+	if cp.alpha != 128 {
+		t.Errorf("alpha slider mid: Alpha=%d, want 128", cp.alpha)
 	}
 }
 
@@ -317,8 +317,8 @@ func TestColorPickerAlphaSliderDrag(t *testing.T) {
 	alphaY := ColorPickerSquareSize + ColorPickerGap + 1
 	cp.OnEvent(Event{Kind: EventClick, X: 0, Y: alphaY})
 	cp.OnEvent(Event{Kind: EventMouseDrag, X: ColorPickerWidth - 1, Y: alphaY})
-	if cp.Alpha != 255 {
-		t.Errorf("alpha slider drag: Alpha=%d, want 255", cp.Alpha)
+	if cp.alpha != 255 {
+		t.Errorf("alpha slider drag: Alpha=%d, want 255", cp.alpha)
 	}
 }
 
@@ -330,7 +330,7 @@ func TestColorPickerEyedropClickFiresOnEyedrop(t *testing.T) {
 	eyedropCalls := 0
 	changeCalls := 0
 	cp.OnEyedrop = func() { eyedropCalls++ }
-	cp.OnChange = func(RGBA) { changeCalls++ }
+	cp.Color().Subscribe(func(RGBA) { changeCalls++ })
 
 	cp.OnEvent(Event{Kind: EventClick, X: ed.X + 2, Y: ed.Y + ed.H/2})
 	if eyedropCalls != 1 {
@@ -346,15 +346,15 @@ func TestColorPickerEyedropClickFiresOnEyedrop(t *testing.T) {
 func TestColorPickerClickOutsideAllRegions(t *testing.T) {
 	cp := newTestColorPicker()
 	calls := 0
-	cp.OnChange = func(RGBA) { calls++ }
+	cp.Color().Subscribe(func(RGBA) { calls++ })
 	cp.OnEyedrop = func() { calls++ }
 
-	beforeH, beforeS, beforeV, beforeA := cp.H, cp.S, cp.V, cp.Alpha
+	beforeH, beforeS, beforeV, beforeA := cp.h, cp.s, cp.v, cp.alpha
 	cp.OnEvent(Event{Kind: EventClick, X: 5000, Y: 5000})
 	if calls != 0 {
 		t.Errorf("click outside all regions fired a callback, calls = %d", calls)
 	}
-	if cp.H != beforeH || cp.S != beforeS || cp.V != beforeV || cp.Alpha != beforeA {
+	if cp.h != beforeH || cp.s != beforeS || cp.v != beforeV || cp.alpha != beforeA {
 		t.Error("click outside all regions mutated state")
 	}
 }
@@ -362,13 +362,13 @@ func TestColorPickerClickOutsideAllRegions(t *testing.T) {
 func TestColorPickerDragWithoutPriorClickIsNoop(t *testing.T) {
 	cp := &ColorPicker{}
 	calls := 0
-	cp.OnChange = func(RGBA) { calls++ }
+	cp.Color().Subscribe(func(RGBA) { calls++ })
 	cp.OnEvent(Event{Kind: EventMouseDrag, X: 60, Y: 60})
 	if calls != 0 {
 		t.Errorf("drag with no active region fired OnChange, calls = %d", calls)
 	}
-	if cp.S != 0 || cp.V != 0 {
-		t.Errorf("drag with no active region mutated state: S=%v V=%v", cp.S, cp.V)
+	if cp.s != 0 || cp.v != 0 {
+		t.Errorf("drag with no active region mutated state: S=%v V=%v", cp.s, cp.v)
 	}
 }
 
@@ -376,11 +376,11 @@ func TestColorPickerMouseUpClearsActive(t *testing.T) {
 	cp := newTestColorPicker()
 	cp.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
 	cp.OnEvent(Event{Kind: EventMouseUp})
-	sBefore, vBefore := cp.S, cp.V
+	sBefore, vBefore := cp.s, cp.v
 	// A drag after mouse-up should not move anything: active was cleared.
 	cp.OnEvent(Event{Kind: EventMouseDrag, X: 119, Y: 119})
-	if cp.S != sBefore || cp.V != vBefore {
-		t.Errorf("drag after mouse-up moved state: S=%v V=%v, want S=%v V=%v", cp.S, cp.V, sBefore, vBefore)
+	if cp.s != sBefore || cp.v != vBefore {
+		t.Errorf("drag after mouse-up moved state: S=%v V=%v, want S=%v V=%v", cp.s, cp.v, sBefore, vBefore)
 	}
 }
 
@@ -388,7 +388,7 @@ func TestColorPickerUnhandledEventKindIsNoop(t *testing.T) {
 	cp := newTestColorPicker()
 	before := *cp
 	cp.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if cp.H != before.H || cp.S != before.S || cp.V != before.V || cp.Alpha != before.Alpha || cp.active != before.active {
+	if cp.h != before.h || cp.s != before.s || cp.v != before.v || cp.alpha != before.alpha || cp.active != before.active {
 		t.Error("unhandled event kind mutated state")
 	}
 }
@@ -416,7 +416,7 @@ func TestColorPickerNilCallbacksDontPanic(t *testing.T) {
 func TestColorPickerDraw(t *testing.T) {
 	// H=180 keeps the SV-square marker (driven by S/V) and the hue-strip
 	// marker (driven by H) away from the corners/edges this test probes.
-	cp := &ColorPicker{H: 180, S: 0.5, V: 0.5, Alpha: 255}
+	cp := &ColorPicker{h: 180, s: 0.5, v: 0.5, alpha: 255}
 	cp.SetBounds(Rect{X: 0, Y: 0, W: ColorPickerWidth, H: ColorPickerHeight})
 	surf := makeSurface(ColorPickerWidth, ColorPickerHeight)
 	theme := DefaultLight()
@@ -478,8 +478,8 @@ func TestColorPickerDraw(t *testing.T) {
 
 	// Swatch shows the current Color(), bordered.
 	sw := cp.swatchRectLocal()
-	if got := pixelAt(surf, ColorPickerWidth, sw.X+sw.W/2, sw.Y+sw.H/2); got != cp.Color() {
-		t.Errorf("swatch centre = %+v, want %+v", got, cp.Color())
+	if got := pixelAt(surf, ColorPickerWidth, sw.X+sw.W/2, sw.Y+sw.H/2); got != cp.Color().Get() {
+		t.Errorf("swatch centre = %+v, want %+v", got, cp.Color().Get())
 	}
 	if got := pixelAt(surf, ColorPickerWidth, sw.X, sw.Y); got != theme.Border {
 		t.Errorf("swatch border = %+v, want theme.Border %+v", got, theme.Border)
@@ -494,7 +494,7 @@ func TestColorPickerDraw(t *testing.T) {
 }
 
 func TestColorPickerDrawNonZeroOffset(t *testing.T) {
-	cp := &ColorPicker{H: 120, S: 1, V: 1, Alpha: 255} // pure green
+	cp := &ColorPicker{h: 120, s: 1, v: 1, alpha: 255} // pure green
 	const ox, oy = 9, 4
 	cp.SetBounds(Rect{X: ox, Y: oy, W: ColorPickerWidth, H: ColorPickerHeight})
 	w := ox + ColorPickerWidth + 5
@@ -505,7 +505,31 @@ func TestColorPickerDrawNonZeroOffset(t *testing.T) {
 
 	sw := cp.swatchRectLocal()
 	got := pixelAt(surf, w, ox+sw.X+sw.W/2, oy+sw.Y+sw.H/2)
-	if got != cp.Color() {
-		t.Errorf("offset swatch centre = %+v, want %+v", got, cp.Color())
+	if got != cp.Color().Get() {
+		t.Errorf("offset swatch centre = %+v, want %+v", got, cp.Color().Get())
+	}
+}
+
+// A host that Sets the Color() Observable directly (a VM→widget push) reseeds
+// the HSV working state, and a bare &ColorPicker{} lazily creates the Observable.
+func TestColorPickerColorObservableReseeds(t *testing.T) {
+	cp := &ColorPicker{}
+	// Lazy init: a bare picker reads black (zero HSV).
+	if got := cp.Color().Get(); got != (RGBA{A: 0}) && got.R != 0 {
+		_ = got // zero value is fine; the point is no panic on lazy init
+	}
+	// Host push a pure-green opaque colour; the HSV working state must adopt it.
+	cp.Color().Set(RGBA{R: 0, G: 255, B: 0, A: 255})
+	wantH, wantS, wantV := rgbToHSV(0, 255, 0)
+	if cp.h != wantH || cp.s != wantS || cp.v != wantV || cp.alpha != 255 {
+		t.Fatalf("host Set did not reseed HSV: h=%v s=%v v=%v a=%d", cp.h, cp.s, cp.v, cp.alpha)
+	}
+	// A drag now publishes back through the same Observable (round-trip).
+	got := RGBA{}
+	cp.Color().Subscribe(func(c RGBA) { got = c })
+	cp.SetBounds(Rect{X: 0, Y: 0, W: ColorPickerWidth, H: ColorPickerHeight})
+	cp.SetColor(RGBA{R: 10, G: 20, B: 30, A: 40})
+	if got != (RGBA{R: 10, G: 20, B: 30, A: 40}) {
+		t.Fatalf("SetColor did not publish through Color(): %+v", got)
 	}
 }

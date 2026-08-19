@@ -141,7 +141,7 @@ func (c *ColorChooser) A11y() A11yInfo {
 // A11y reports the ColorPicker as a group carrying its current colour
 // (derived from the HSV+alpha state) as a "#RRGGBB" hex string.
 func (c *ColorPicker) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: hexColor(c.Color())}
+	return A11yInfo{Role: RoleGroup, Value: hexColor(c.rgba())}
 }
 
 // A11y reports the FontChooser as a combobox named by its currently-selected

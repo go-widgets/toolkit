@@ -81,13 +81,17 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// text and hover state are unexported behind accessors; the values below are
 	// set-once config (func hooks auto-allowed).
 	"ColorChooser": {},
-	"TimePicker":   {"MinuteStep": true, "Use12h": true},
-	"Calendar":     {"TodayY": true, "TodayM": true, "TodayD": true},
-	"DatePicker":   {"Cal": true},
-	"Wizard":       {"Steps": true, "PressFeedback": true},
-	"Agenda":       {"Events": true, "DayNames": true, "StartHour": true, "EndHour": true, "Calendars": true, "Year": true, "Month": true},
-	"SearchEntry":  {},
-	"Menu":         {"Items": true, "Scale": true},
+	// ColorPicker: the HSV working state + alpha + derived-RGBA mirror are all
+	// unexported; Color() is the bindable Observable and OnEyedrop a func hook,
+	// so there is no exported state field.
+	"ColorPicker": {},
+	"TimePicker":  {"MinuteStep": true, "Use12h": true},
+	"Calendar":    {"TodayY": true, "TodayM": true, "TodayD": true},
+	"DatePicker":  {"Cal": true},
+	"Wizard":      {"Steps": true, "PressFeedback": true},
+	"Agenda":      {"Events": true, "DayNames": true, "StartHour": true, "EndHour": true, "Calendars": true, "Year": true, "Month": true},
+	"SearchEntry": {},
+	"Menu":        {"Items": true, "Scale": true},
 	// Batch 6 (data/scroll + display): selection/scroll/sort/visibility/metric
 	// state is unexported behind accessors; the values below are config (data
 	// slices, layout flags, static captions; func hooks auto-allowed). ListBox is
