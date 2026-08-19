@@ -66,6 +66,28 @@ func strokeRoundRect(p painter.Painter, x, y, w, h, radius int, c RGBA) {
 	p.StrokeRoundRect(painter.Rect{X: x, Y: y, W: w, H: h}, radius, c, strokeWidth())
 }
 
+// fillTopRoundRect fills (x, y, w, h) with c but rounds ONLY the two TOP
+// corners to radius, leaving the bottom corners square: a fully rounded rect
+// over-painted along its bottom radius band. It is the primitive a folder-tab
+// body needs — rounded where it meets the air above the strip, square where it
+// sits flush on (or connects into) the pane below. The naming mirrors
+// fillRoundRect / fillRect so a widget's Draw reads uniformly. A radius below 1
+// (or a body shorter than the radius) degrades gracefully to a plain fillRect.
+func fillTopRoundRect(p painter.Painter, x, y, w, h, radius int, c RGBA) {
+	if w <= 0 || h <= 0 {
+		return
+	}
+	if radius < 1 {
+		fillRect(p, x, y, w, h, c)
+		return
+	}
+	fillRoundRect(p, x, y, w, h, radius, c)
+	if h > radius {
+		// Square off the bottom corners by over-painting the bottom radius band.
+		fillRect(p, x, y+h-radius, w, radius, c)
+	}
+}
+
 // drawLine paints a 1-unit-wide line from (x0, y0) to (x1, y1) with c using
 // Bresenham's algorithm over putPixel — the only primitive both back-ends
 // share for arbitrary slopes (on a CellPainter each pixel promotes to a filled

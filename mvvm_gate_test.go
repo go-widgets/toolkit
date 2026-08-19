@@ -116,6 +116,11 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// OnSubmit is an action func hook. Placeholder + Mask are set-once
 	// appearance config, so they are the only allowlisted fields.
 	"Entry": {"Placeholder": true, "Mask": true},
+	// FolderTabs: the active-tab index is unexported behind the Selected
+	// Observable accessor; OnSelect is a func hook (auto-allowed). Labels is the
+	// set-once tab captions (layout config, not reactive state), so it is the
+	// sole allowlisted field.
+	"FolderTabs": {"Labels": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
