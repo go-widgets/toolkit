@@ -132,6 +132,12 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// Surface is a draw-only view: Frame/Elements/OnInput are all func hooks
 	// (auto-allowed), so it holds no reactive state at all.
 	"Surface": {},
+	// RichEditor: the edited document lives on the Doc() Observable, and the
+	// caret / selection / focus / scroll offset are each their own Observable
+	// accessor; the pending-style, selection anchor, font caches and last theme
+	// are unexported internal state. It exposes no imperative state field, so the
+	// empty config set enforces that none is ever added.
+	"RichEditor": {},
 	// TextView: the committed contents live on the Text() Observable and the
 	// caret line/col, the scroll offset, the selection range and the focus flag
 	// are each their own Observable accessor; the line buffer + IME preview are
