@@ -7,6 +7,7 @@ package toolkit
 import (
 	"math"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -28,16 +29,17 @@ import (
 type ColorPicker struct {
 	Base
 
-	// H is the hue in [0, 360). S and V (saturation, value) are both in
-	// [0, 1].
-	H, S, V float64
+	// h is the hue in [0, 360); s and v (saturation, value) are both in [0, 1];
+	// alpha is the opacity channel, independent of the HSV triple. This is the
+	// working representation the SV square / hue strip / alpha slider edit; the
+	// bindable RGBA is derived and published through the Color() Observable.
+	h, s, v float64
+	alpha   uint8
 
-	// Alpha is the opacity channel, independent of the HSV triple.
-	Alpha uint8
-
-	// OnChange fires with the new RGBA whenever the SV square, hue strip,
-	// or alpha slider changes the colour.
-	OnChange func(c RGBA)
+	// color mirrors the derived RGBA as a shared Observable: a host binds it
+	// (or subscribes for the old OnChange notification), and every drag Sets it.
+	// A host Set reseeds the HSV working state (see Color()). Lazily created.
+	color *mvvm.Observable[RGBA]
 
 	// OnEyedrop fires when the eyedropper affordance is clicked. Actual
 	// pixel sampling is the host's responsibility -- see the type doc.
@@ -47,6 +49,36 @@ type ColorPicker struct {
 	// EventClick, consulted on EventMouseDrag, cleared on EventMouseUp.
 	active int
 }
+
+// Color is the picked colour as a shared [mvvm.Observable]: a host binds it two-way
+// (or subscribes instead of the old OnChange callback) rather than reading a
+// field, and each SV/hue/alpha drag Sets it. A host that Sets it directly
+// reseeds the HSV working state. Lazily created so a bare &ColorPicker{} works.
+func (c *ColorPicker) Color() *mvvm.Observable[RGBA] {
+	if c.color == nil {
+		c.color = mvvm.NewObservable(c.rgba())
+		c.color.Subscribe(func(rgba RGBA) {
+			// Only a host-driven Set diverges from the HSV state; sync()'s own
+			// echo (rgba == c.rgba()) is skipped so there is no loop.
+			if rgba != c.rgba() {
+				c.h, c.s, c.v = rgbToHSV(rgba.R, rgba.G, rgba.B)
+				c.alpha = rgba.A
+			}
+		})
+	}
+	return c.color
+}
+
+// rgba is the current HSV + alpha converted to RGBA (the derived value the
+// Color() Observable carries).
+func (c *ColorPicker) rgba() RGBA {
+	r, g, b := hsvToRGB(c.h, c.s, c.v)
+	return RGBA{R: r, G: g, B: b, A: c.alpha}
+}
+
+// sync publishes the current derived RGBA onto the Color() Observable, firing
+// its subscribers — the OnChange replacement. The Set is idempotent.
+func (c *ColorPicker) sync() { c.Color().Set(c.rgba()) }
 
 // active region identifiers for ColorPicker.active.
 const (
@@ -84,21 +116,19 @@ func ColorPickerNaturalSize() (w, h int) {
 // NewColorPicker builds a picker seeded from initial, converting its RGB to
 // HSV and carrying its alpha through unchanged.
 func NewColorPicker(initial RGBA) *ColorPicker {
-	h, s, v := rgbToHSV(initial.R, initial.G, initial.B)
-	return &ColorPicker{H: h, S: s, V: v, Alpha: initial.A}
+	hh, ss, vv := rgbToHSV(initial.R, initial.G, initial.B)
+	c := &ColorPicker{h: hh, s: ss, v: vv, alpha: initial.A}
+	c.color = mvvm.NewObservable(c.rgba())
+	return c
 }
 
-// Color returns the current HSV + Alpha converted back to RGBA.
-func (c *ColorPicker) Color() RGBA {
-	r, g, b := hsvToRGB(c.H, c.S, c.V)
-	return RGBA{R: r, G: g, B: b, A: c.Alpha}
-}
-
-// SetColor reseeds H/S/V/Alpha from an RGBA -- e.g. the host feeding back an
-// eyedropper sample or a sibling hex Entry's parsed value.
+// SetColor reseeds the HSV working state from an RGBA -- e.g. the host feeding
+// back an eyedropper sample or a sibling hex Entry's parsed value -- and
+// publishes it through Color().
 func (c *ColorPicker) SetColor(rgba RGBA) {
-	c.H, c.S, c.V = rgbToHSV(rgba.R, rgba.G, rgba.B)
-	c.Alpha = rgba.A
+	c.h, c.s, c.v = rgbToHSV(rgba.R, rgba.G, rgba.B)
+	c.alpha = rgba.A
+	c.sync()
 }
 
 // --- HSV <-> RGB -----------------------------------------------------------
@@ -264,12 +294,12 @@ func (c *ColorPicker) drawSVSquare(p painter.Painter, r Rect) {
 		vv := 1 - float64(y)/float64(hSpan)
 		for x := 0; x < sv.W; x++ {
 			ss := float64(x) / float64(wSpan)
-			rr, gg, bb := hsvToRGB(c.H, ss, vv)
+			rr, gg, bb := hsvToRGB(c.h, ss, vv)
 			putPixel(p, r.X+sv.X+x, r.Y+sv.Y+y, RGBA{R: rr, G: gg, B: bb, A: 0xFF})
 		}
 	}
-	mx := r.X + sv.X + int(clamp01(c.S)*float64(wSpan))
-	my := r.Y + sv.Y + int((1-clamp01(c.V))*float64(hSpan))
+	mx := r.X + sv.X + int(clamp01(c.s)*float64(wSpan))
+	my := r.Y + sv.Y + int((1-clamp01(c.v))*float64(hSpan))
 	drawPickerMarker(p, mx, my)
 }
 
@@ -286,7 +316,7 @@ func (c *ColorPicker) drawHueStrip(p painter.Painter, r Rect) {
 			putPixel(p, r.X+hr.X+x, r.Y+hr.Y+y, col)
 		}
 	}
-	my := r.Y + hr.Y + int(c.H/360*float64(hSpan))
+	my := r.Y + hr.Y + int(c.h/360*float64(hSpan))
 	strokeRect(p, r.X+hr.X-1, my-1, hr.W+2, 3, RGB(0, 0, 0))
 	strokeRect(p, r.X+hr.X, my, hr.W, 1, RGB(255, 255, 255))
 }
@@ -309,7 +339,7 @@ func (c *ColorPicker) drawAlphaSlider(p painter.Painter, r Rect, theme *Theme) {
 			putPixel(p, r.X+ar.X+x, r.Y+ar.Y+y, bg)
 		}
 	}
-	rr, gg, bb := hsvToRGB(c.H, c.S, c.V)
+	rr, gg, bb := hsvToRGB(c.h, c.s, c.v)
 	wSpan := max(ar.W-1, 1)
 	for x := 0; x < ar.W; x++ {
 		a := uint8(255 * x / wSpan)
@@ -319,14 +349,14 @@ func (c *ColorPicker) drawAlphaSlider(p painter.Painter, r Rect, theme *Theme) {
 		}
 	}
 	strokeRect(p, r.X+ar.X, r.Y+ar.Y, ar.W, ar.H, theme.Border)
-	mx := r.X + ar.X + int(float64(c.Alpha)/255*float64(wSpan))
+	mx := r.X + ar.X + int(float64(c.alpha)/255*float64(wSpan))
 	strokeRect(p, mx-1, r.Y+ar.Y-1, 3, ar.H+2, theme.OnSurface)
 }
 
 // drawSwatch paints a solid preview of Color() with a border.
 func (c *ColorPicker) drawSwatch(p painter.Painter, r Rect, theme *Theme) {
 	sw := c.swatchRectLocal()
-	fillRect(p, r.X+sw.X, r.Y+sw.Y, sw.W, sw.H, c.Color())
+	fillRect(p, r.X+sw.X, r.Y+sw.Y, sw.W, sw.H, c.rgba())
 	strokeRect(p, r.X+sw.X, r.Y+sw.Y, sw.W, sw.H, theme.Border)
 }
 
@@ -396,8 +426,8 @@ func (c *ColorPicker) setSV(x, y int) {
 	sv := c.svRectLocal()
 	x = clampInt(x, sv.X, sv.X+sv.W-1)
 	y = clampInt(y, sv.Y, sv.Y+sv.H-1)
-	c.S = float64(x-sv.X) / float64(max(sv.W-1, 1))
-	c.V = 1 - float64(y-sv.Y)/float64(max(sv.H-1, 1))
+	c.s = float64(x-sv.X) / float64(max(sv.W-1, 1))
+	c.v = 1 - float64(y-sv.Y)/float64(max(sv.H-1, 1))
 	c.fireChange()
 }
 
@@ -410,7 +440,7 @@ func (c *ColorPicker) setHue(y int) {
 	if h >= 360 {
 		h = 0
 	}
-	c.H = h
+	c.h = h
 	c.fireChange()
 }
 
@@ -420,16 +450,12 @@ func (c *ColorPicker) setAlpha(x int) {
 	ar := c.alphaRectLocal()
 	x = clampInt(x, ar.X, ar.X+ar.W-1)
 	frac := float64(x-ar.X) / float64(max(ar.W-1, 1))
-	c.Alpha = to8(frac)
+	c.alpha = to8(frac)
 	c.fireChange()
 }
 
-// fireChange invokes OnChange with the current Color(), if set.
-func (c *ColorPicker) fireChange() {
-	if c.OnChange != nil {
-		c.OnChange(c.Color())
-	}
-}
+// fireChange publishes the new colour through the Color() Observable.
+func (c *ColorPicker) fireChange() { c.sync() }
 
 // clampInt confines v to [lo, hi].
 func clampInt(v, lo, hi int) int {
