@@ -172,7 +172,18 @@ type IsoDiagram struct {
 	// value) disarms placement, so a diagram no host ever arms behaves exactly as
 	// it did before the palette existed.
 	placeIcon *mvvm.Observable[string]
-	seq       int // monotonic id source for placed nodes/connectors/zones/texts
+	// viewRot is the view-plane rotation in 90° quarter-turns (0..3), a LOCAL
+	// view state exactly like pan/zoom: it turns the whole rendered plane — grid,
+	// nodes, connectors, zones, texts — about the grid's vertical centre axis, and
+	// never enters the document or its CRDT, so two views (or two replicas) may
+	// hold different rotations without diverging the model. It is an
+	// mvvm.Observable so the rotation crosses the widget/host boundary the MVVM
+	// way — a host binds [IsoDiagram.ViewRotationObservable] into a toolbar view
+	// model — instead of the widget copying an int out every frame. The zero value
+	// is the unrotated view, whose rendering is byte-identical to the pre-rotation
+	// widget.
+	viewRot *mvvm.Observable[int]
+	seq     int // monotonic id source for placed nodes/connectors/zones/texts
 
 	// interaction state
 	gesture     isoGesture
@@ -238,7 +249,11 @@ func NewIsoDiagram(doc IsoDocument) *IsoDiagram {
 		selText:   mvvm.NewObservable(""),
 		selSet:    mvvm.NewObservableList[IsoEntityRef](),
 		placeIcon: mvvm.NewObservable(""),
+		viewRot:   mvvm.NewObservable(0),
 	}
+	// A view-rotation change only re-orients the local view (like a pan or zoom);
+	// it repaints and touches nothing in the document, so no edit is recorded.
+	d.viewRot.Subscribe(func(int) { d.invalidate() })
 	// Arming (or disarming) the click-to-place icon only changes the placement
 	// cursor's intent; a repaint keeps any host-drawn affordance in step.
 	d.placeIcon.Subscribe(func(string) { d.invalidate() })
@@ -400,11 +415,21 @@ func (d *IsoDiagram) topFacePoly(n IsoNode) []geometry.Point {
 	x0, y0 := float64(n.X), float64(n.Y)
 	x1, y1 := x0+1, y0+1
 	return []geometry.Point{
-		d.proj.Project(iso.V(x0, y0, z)),
-		d.proj.Project(iso.V(x1, y0, z)),
-		d.proj.Project(iso.V(x1, y1, z)),
-		d.proj.Project(iso.V(x0, y1, z)),
+		d.project(iso.V(x0, y0, z)),
+		d.project(iso.V(x1, y0, z)),
+		d.project(iso.V(x1, y1, z)),
+		d.project(iso.V(x0, y1, z)),
 	}
+}
+
+// nodeViewCorner is a node footprint's minimum corner in VIEW space (after the
+// current view rotation). The silhouette [IsoDiagram.pickPolys] tests must be
+// built there, not in model space, so their two visible sides are the ones the
+// projection actually shows front — the world +X and +Y faces are always the
+// screen-facing pair whatever the rotation.
+func (d *IsoDiagram) nodeViewCorner(n IsoNode) (float64, float64) {
+	pos, _ := d.rotBox(iso.V(float64(n.X), float64(n.Y), 0), iso.Dimension{W: 1, H: 1, D: d.nodeHeight(n)})
+	return pos.X, pos.Y
 }
 
 // pickPolys returns the projected silhouette polygons of a node (buffer-local),
@@ -413,7 +438,10 @@ func (d *IsoDiagram) topFacePoly(n IsoNode) []geometry.Point {
 // outline); for a pyramid the base square and the two visible triangles.
 func (d *IsoDiagram) pickPolys(n IsoNode) [][]geometry.Point {
 	z := d.nodeHeight(n)
-	x0, y0 := float64(n.X), float64(n.Y)
+	// Build the silhouette in VIEW space (the rotated footprint corner), projected
+	// by the raw projection, so the two visible sides are the world +X / +Y faces
+	// the projection always shows front — for any view rotation.
+	x0, y0 := d.nodeViewCorner(n)
 	x1, y1 := x0+1, y0+1
 	pj := d.proj.Project
 	// base square, shared by every shape
@@ -460,8 +488,8 @@ func pointInPoly(px, py float64, poly []geometry.Point) bool {
 func (d *IsoDiagram) nodeAtLocal(x, y int) (string, bool) {
 	nodes := d.doc.Nodes()
 	sort.SliceStable(nodes, func(i, j int) bool {
-		return d.proj.Depth(iso.V(float64(nodes[i].X), float64(nodes[i].Y), 0)) >
-			d.proj.Depth(iso.V(float64(nodes[j].X), float64(nodes[j].Y), 0))
+		return d.depth(iso.V(float64(nodes[i].X), float64(nodes[i].Y), 0)) >
+			d.depth(iso.V(float64(nodes[j].X), float64(nodes[j].Y), 0))
 	})
 	fx, fy := float64(x), float64(y)
 	for _, n := range nodes {
@@ -480,7 +508,7 @@ func (d *IsoDiagram) nodeAtLocal(x, y int) (string, bool) {
 // cellAtLocal maps widget-local (x, y) to the ground grid cell under it, by
 // unprojecting onto the z=0 plane and flooring.
 func (d *IsoDiagram) cellAtLocal(x, y int) (gx, gy int) {
-	w := d.proj.Unproject(geometry.Pt(float64(x), float64(y)), 0)
+	w := d.rotInv(d.proj.Unproject(geometry.Pt(float64(x), float64(y)), 0))
 	return int(math.Floor(w.X)), int(math.Floor(w.Y))
 }
 
@@ -524,23 +552,28 @@ func (d *IsoDiagram) connWidth(c IsoConnector) float64 {
 	return float64(scaled(w))
 }
 
-// faceAnchor returns the world point on node n's ground footprint edge nearest
-// the direction (dx, dy) (the vector from n toward its neighbour, in grid cells):
-// the midpoint of n's +X, -X, +Y or -Y ground edge at z=0. It is the grid-space
-// attachment point a routed connector leaves n from — "the side of the node
-// nearest the neighbour direction".
+// faceAnchor returns the CENTRE of node n's visible lateral face toward the
+// neighbour direction (dx, dy) (the vector from n toward its neighbour, in grid
+// cells): the midpoint of n's +X, -X, +Y or -Y footprint edge, raised to half the
+// solid's height so the point lands on the vertical middle of that face rather
+// than on the ground. For the vertical-sided solids (cube and box) that is the
+// exact geometric centre of the rectangular side face; a routed connector so
+// leaves and enters each node at the middle of the face it presents to its
+// neighbour, symmetric at both ends. It is a MODEL-space point — the caller
+// projects it through the view rotation.
 func (d *IsoDiagram) faceAnchor(n IsoNode, dx, dy float64) iso.Vec3 {
 	x0, y0 := float64(n.X), float64(n.Y)
+	zc := d.nodeHeight(n) / 2 // vertical centre of the lateral face
 	if math.Abs(dx) >= math.Abs(dy) {
 		if dx >= 0 {
-			return iso.V(x0+1, y0+0.5, 0) // +X edge
+			return iso.V(x0+1, y0+0.5, zc) // +X face centre
 		}
-		return iso.V(x0, y0+0.5, 0) // -X edge
+		return iso.V(x0, y0+0.5, zc) // -X face centre
 	}
 	if dy >= 0 {
-		return iso.V(x0+0.5, y0+1, 0) // +Y edge
+		return iso.V(x0+0.5, y0+1, zc) // +Y face centre
 	}
-	return iso.V(x0+0.5, y0, 0) // -Y edge
+	return iso.V(x0+0.5, y0, zc) // -Y face centre
 }
 
 // dedupPath drops consecutive duplicate points so a returned polyline has no
@@ -555,10 +588,13 @@ func dedupPath(pts []iso.Vec3) []iso.Vec3 {
 	return out
 }
 
-// routeTiles computes a routed connector's grid-orthogonal path in world space
-// (z=0): from a's face anchor to b's face anchor with one elbow, each face chosen
-// by the direction to the other node. The connector leaves each ±X face
-// horizontally and each ±Y face vertically, so the elbow lies on the grid axes.
+// routeTiles computes a routed connector's grid-orthogonal path from a's face
+// centre to b's face centre with one elbow, each face chosen by the direction to
+// the other node. The connector leaves each ±X face horizontally and each ±Y face
+// vertically, so the elbow lies on the grid axes; the elbow sits at the leaving
+// anchor's height, so when both nodes are the same height the whole L runs level
+// through their face centres (and the terminal segment still meets each face
+// centre exactly whatever the heights).
 func (d *IsoDiagram) routeTiles(a, b IsoNode) []iso.Vec3 {
 	acx, acy := float64(a.X)+0.5, float64(a.Y)+0.5
 	bcx, bcy := float64(b.X)+0.5, float64(b.Y)+0.5
@@ -566,9 +602,9 @@ func (d *IsoDiagram) routeTiles(a, b IsoNode) []iso.Vec3 {
 	pb := d.faceAnchor(b, acx-bcx, acy-bcy)
 	var corner iso.Vec3
 	if pa.X != acx { // a left on a ±X face → move along X first
-		corner = iso.V(pb.X, pa.Y, 0)
+		corner = iso.V(pb.X, pa.Y, pa.Z)
 	} else { // a left on a ±Y face → move along Y first
-		corner = iso.V(pa.X, pb.Y, 0)
+		corner = iso.V(pa.X, pb.Y, pa.Z)
 	}
 	return dedupPath([]iso.Vec3{pa, corner, pb})
 }
@@ -593,7 +629,7 @@ func (d *IsoDiagram) connectorPath(c IsoConnector) ([]iso.Vec3, bool) {
 func (d *IsoDiagram) projPath(pts []iso.Vec3) []geometry.Point {
 	out := make([]geometry.Point, len(pts))
 	for i, p := range pts {
-		out[i] = d.proj.Project(p)
+		out[i] = d.project(p)
 	}
 	return out
 }
@@ -623,6 +659,10 @@ func dashSpec(style IsoConnectorStyle) (dash, gap float64, dashed bool) {
 // dashed/dotted (so the dash cadence is uniform on screen whatever the segment's
 // world direction).
 func (d *IsoDiagram) addConnectorSegment(sc *iso.Scene, a, b iso.Vec3, col stdcolor.RGBA, w float64, style IsoConnectorStyle) {
+	// Rotate the segment's world endpoints into view space up front, so both the
+	// solid line and the dash sub-segments (and their screen-length projection)
+	// are computed in the frame the scene's raw projection draws through.
+	a, b = d.rotFwd(a), d.rotFwd(b)
 	dash, gap, dashed := dashSpec(style)
 	if !dashed {
 		sc.Add(iso.Line{From: a, To: b, Color: col, Width: w})
@@ -721,10 +761,10 @@ func (d *IsoDiagram) scene(theme *Theme) *iso.Scene {
 func (d *IsoDiagram) addGrid(sc *iso.Scene, theme *Theme) {
 	grid := stdColor(theme.Border)
 	for i := 0; i <= d.Cols; i++ {
-		sc.Add(iso.Line{From: iso.V(float64(i), 0, 0), To: iso.V(float64(i), float64(d.Rows), 0), Color: grid, Width: 1})
+		sc.Add(iso.Line{From: d.rotFwd(iso.V(float64(i), 0, 0)), To: d.rotFwd(iso.V(float64(i), float64(d.Rows), 0)), Color: grid, Width: 1})
 	}
 	for j := 0; j <= d.Rows; j++ {
-		sc.Add(iso.Line{From: iso.V(0, float64(j), 0), To: iso.V(float64(d.Cols), float64(j), 0), Color: grid, Width: 1})
+		sc.Add(iso.Line{From: d.rotFwd(iso.V(0, float64(j), 0)), To: d.rotFwd(iso.V(float64(d.Cols), float64(j), 0)), Color: grid, Width: 1})
 	}
 }
 
@@ -735,11 +775,13 @@ func (d *IsoDiagram) addGrid(sc *iso.Scene, theme *Theme) {
 func (d *IsoDiagram) addNodeShapes(sc *iso.Scene, theme *Theme, n IsoNode) {
 	base := d.resolveColor(n, theme)
 	if n.Icon == "" {
-		sc.Add(d.nodeSolid(n, base))
+		sc.Add(d.rotShape(d.nodeSolid(n, base)))
 		return
 	}
 	icon, _ := d.iconRegistry().Resolve(n.Icon)
-	sc.Add(icon.Render(n.X, n.Y, base).Shapes...)
+	for _, sh := range icon.Render(n.X, n.Y, base).Shapes {
+		sc.Add(d.rotShape(sh))
+	}
 }
 
 // addConnectorShapes adds a connector's stroked path segments to sc, or nothing
@@ -761,7 +803,7 @@ func (d *IsoDiagram) addConnectorShapes(sc *iso.Scene, theme *Theme, c IsoConnec
 // the node's cell, i.e. its bottom-centre sits on that ground point so the
 // sprite reads as planted on the tile.
 func (d *IsoDiagram) spriteRect(n IsoNode) Rect {
-	p := d.proj.Project(iso.V(float64(n.X)+0.5, float64(n.Y)+0.5, 0))
+	p := d.project(iso.V(float64(n.X)+0.5, float64(n.Y)+0.5, 0))
 	s := iround(d.proj.TileW)
 	return Rect{X: iround(p.X) - s/2, Y: iround(p.Y) - s, W: s, H: s}
 }
@@ -816,7 +858,7 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 	// rubber-band preview while connecting
 	if d.gesture == isoGestureConnect && d.moved {
 		if from, ok := d.doc.Node(d.connectFrom); ok {
-			a := d.proj.Project(d.nodeAnchor(from))
+			a := d.project(d.nodeAnchor(from))
 			drawLine(p, b.X+iround(a.X), b.Y+iround(a.Y), b.X+d.curX, b.Y+d.curY, theme.Accent)
 		}
 	}
@@ -837,7 +879,7 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 		if n.Label == "" || !d.layerVisible(n.Layer) {
 			continue
 		}
-		pt := d.proj.Project(d.nodeAnchor(n))
+		pt := d.project(d.nodeAnchor(n))
 		lx := b.X + iround(pt.X) - d.textWidth(n.Label)/2
 		ly := b.Y + iround(pt.Y) - d.glyphHeight()
 		d.drawText(p, lx, ly, n.Label, theme.OnSurface)
@@ -1716,7 +1758,7 @@ func (d *IsoDiagram) Children() []Widget {
 		if name == "" {
 			name = n.ID
 		}
-		pt := d.proj.Project(d.nodeAnchor(n))
+		pt := d.project(d.nodeAnchor(n))
 		sx := b.X + iround(pt.X)
 		sy := b.Y + iround(pt.Y)
 		tile := iround(d.proj.TileW)
