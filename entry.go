@@ -81,6 +81,17 @@ func (e *Entry) Text() *mvvm.Observable[string] {
 	return e.text
 }
 
+// SetText replaces the whole contents programmatically and parks the caret at
+// the end (the same place [NewEntry] leaves it), mirroring how a host that
+// drives the value itself expects the field to read next. It goes through the
+// Text() Observable — so subscribers/bindings fire — rather than touching a
+// field, keeping the widget MVVM-only. For interactive editing the host feeds
+// events to OnEvent instead; this is the programmatic-set seam.
+func (e *Entry) SetText(s string) {
+	e.cursor = len([]rune(s))
+	e.Text().Set(s)
+}
+
 // Value returns the entry's current text. It is the accessor
 // FormField.Value uses (via the unexported valueGetter interface) to
 // pull an Entry's contents without depending on the Text observable
