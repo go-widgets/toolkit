@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Highlighter turns a source buffer into per-line coloured spans. It is the
 // pluggable seam a CodeEditor uses for syntax highlighting, so the toolkit
@@ -73,6 +76,43 @@ type CodeEditor struct {
 	// lastTheme is the theme of the most recent Draw, consulted by the
 	// current-line band's tint when CurrentLineColor is unset.
 	lastTheme *Theme
+
+	// --- IntelliSense-style autocompletion (see completion.go) -------------
+
+	// CompletionSource, when non-nil, supplies the candidate list for the
+	// caret's context: the editor hands it the whole buffer + the caret
+	// (line, col) and it returns LSP-shaped CompletionItems. The WIDGET then
+	// prefix-filters those against the word before the caret and drives the
+	// popup — so a host feeds it from a language server (loom) or from a
+	// static list (the go-tex playground) without re-implementing the UI. A
+	// host that filters server-side returns already-filtered items (and sets
+	// FilterText to match). Nil (the zero value) disables completion
+	// entirely: the editor behaves exactly like a plain highlighted view.
+	CompletionSource func(doc []string, line, col int) []CompletionItem
+
+	// CompletionWordChar decides which runes form the "current word" the
+	// popup filters against (and which typed rune opens/refreshes it). Nil
+	// uses defaultWordChar (letters, digits, underscore) — the identifier
+	// rule for code. A LaTeX host sets it to also admit '\\' so a command
+	// like "\section" filters as one word.
+	CompletionWordChar func(r rune) bool
+
+	// compOpen (popup shown?) and compSel (highlighted row within the
+	// filtered list) are the reactive popup state, MVVM-only: they live in
+	// unexported Observables exposed via [CodeEditor.CompletionOpen] and
+	// [CodeEditor.CompletionSelection], so there is no settable field to
+	// drift out of the reactive layer (the DropDown/ListBox convention).
+	compOpen *mvvm.Observable[bool]
+	compSel  *mvvm.Observable[int]
+
+	// compItems is the current filtered candidate list (what the popup
+	// renders and CompletionItems returns); compWordStart is the column the
+	// word being completed begins at, so accept replaces [compWordStart,
+	// CursorCol); compScroll is the top visible row of the popup list (a
+	// plain offset, like DropDown.popScroll), clamped on read.
+	compItems     []CompletionItem
+	compWordStart int
+	compScroll    int
 }
 
 // NewCodeEditor builds a CodeEditor pre-loaded with initial source (split on
@@ -96,6 +136,9 @@ func (c *CodeEditor) Draw(p painter.Painter, theme *Theme) {
 	c.lastTheme = theme
 	c.refresh(theme)
 	c.TextView.Draw(p, theme)
+	// The completion popup floats over the editor at the caret; drawn last so
+	// it sits on top of the text it overlays. A no-op while the popup is closed.
+	c.drawCompletion(p, theme)
 }
 
 // A11y reports the editor as a textbox whose accessible name is the language
