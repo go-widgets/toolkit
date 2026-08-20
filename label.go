@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Align is a widget's horizontal text alignment within its bounds. The zero
 // value is AlignLeft, so an unset Align keeps the original left-aligned layout.
@@ -48,7 +51,8 @@ const (
 // should compose a Button with the text instead.
 type Label struct {
 	Base
-	Text  string
+	// text is the label's string, reactive via the Text() accessor.
+	text  *mvvm.Observable[string]
 	Align Align
 	// VAlign is the vertical alignment of the text within the Label's bounds
 	// height. The zero value VAuto keeps the original layout (centred when taller than the
@@ -85,7 +89,21 @@ type Label struct {
 }
 
 // NewLabel constructs a Label carrying text.
-func NewLabel(text string) *Label { return &Label{Text: text} }
+func NewLabel(text string) *Label {
+	l := &Label{}
+	l.text = mvvm.NewObservable(text)
+	return l
+}
+
+// Text is the label's string as a shared [mvvm.Observable]: a host binds it (or
+// subscribes) instead of touching a field, and updates go through Set — so
+// there is no settable Text field. Lazily created so a bare &Label{} works.
+func (l *Label) Text() *mvvm.Observable[string] {
+	if l.text == nil {
+		l.text = mvvm.NewObservable("")
+	}
+	return l.text
+}
 
 // SetFontSize sets the per-label pixel font size (see FontSize) and returns the
 // Label for fluent chaining. A non-positive size clears the override, restoring
@@ -131,10 +149,10 @@ func (l *Label) HitTest(_, _ int) bool { return false }
 // into a [TextSelection] (e.g. via [CollectRuns]). An empty label contributes
 // nothing.
 func (l *Label) TextRuns() []TextRun {
-	if l.Text == "" {
+	if l.Text().Get() == "" {
 		return nil
 	}
-	return []TextRun{{Text: l.Text, Bounds: l.Bounds(), Font: l.faceFor()}}
+	return []TextRun{{Text: l.Text().Get(), Bounds: l.Bounds(), Font: l.faceFor()}}
 }
 
 // Draw paints the Label's text with the toolkit's bitmap font. The text is
@@ -146,7 +164,7 @@ func (l *Label) Draw(p painter.Painter, theme *Theme) {
 	f := l.faceFor()
 	gh := f.Height()
 
-	text := l.Text
+	text := l.Text().Get()
 	if l.Ellipsis && f.Measure(text) > r.W {
 		text = ellipsize(f, text, r.W)
 	}

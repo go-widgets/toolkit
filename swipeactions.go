@@ -440,7 +440,7 @@ func (sa *SwipeActions) syncButtons(btns []*Button, set []SwipeAction, trailing 
 	full := len(set) * sa.actionWidth()
 	for i := range set {
 		b := btns[i]
-		b.Label = set[i].Label
+		b.Label().Set(set[i].Label)
 		b.Icon = set[i].Icon
 		if trailing {
 			b.SetBounds(sa.trailingLaneRect(i, -full))

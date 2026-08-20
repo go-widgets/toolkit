@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Button is a clickable rectangle with a centred label. Paints a
 // 1-pixel border in Theme.Border on a Theme.Surface body; hovered /
@@ -18,7 +21,8 @@ import "github.com/go-widgets/painter"
 type Button struct {
 	Base
 	focusState
-	Label   string
+	// label is the button caption, reactive via the Label() accessor.
+	label   *mvvm.Observable[string]
 	OnClick func()
 	Style   ButtonStyle // resting appearance; default is ButtonDefault
 
@@ -32,10 +36,11 @@ type Button struct {
 	// are unaffected and headless renders still show text.
 	Icon func(p painter.Painter, r Rect, ink RGBA)
 
-	// Selected is a sticky, app-managed "active" state (a pill in a selector, the
+	// selected is a sticky, app-managed "active" state (a pill in a selector, the
 	// current tab/provider): when true the button fills with Accent regardless of
-	// Style. The app sets it from its own model; the button never flips it itself.
-	Selected bool
+	// Style. The app drives it from its own model via the Selected() Observable;
+	// the button never flips it itself.
+	selected *mvvm.Observable[bool]
 
 	// PressFeedback shows the pressed face on EventClick (until EventMouseUp).
 	// NewButton enables it; set it false to opt a button out (e.g. one whose
@@ -92,7 +97,29 @@ func accentFg(theme *Theme) RGBA {
 // NewButton constructs a Button with the given label + click handler.
 // Handler may be nil (a no-op button is still rendered).
 func NewButton(label string, onClick func()) *Button {
-	return &Button{Label: label, OnClick: onClick, PressFeedback: true}
+	b := &Button{OnClick: onClick, PressFeedback: true}
+	b.label = mvvm.NewObservable(label)
+	return b
+}
+
+// Label is the button caption as a shared [mvvm.Observable]: a host binds it (or
+// subscribes) instead of touching a field. Lazily created so a bare &Button{}
+// works. When Icon is set it is drawn instead of the caption.
+func (b *Button) Label() *mvvm.Observable[string] {
+	if b.label == nil {
+		b.label = mvvm.NewObservable("")
+	}
+	return b.label
+}
+
+// Selected is the sticky app-managed "active" state as a shared [mvvm.Observable]:
+// the host drives it from its own model (true fills the button with Accent
+// regardless of Style); the button never flips it itself. Lazily created.
+func (b *Button) Selected() *mvvm.Observable[bool] {
+	if b.selected == nil {
+		b.selected = mvvm.NewObservable(false)
+	}
+	return b.selected
 }
 
 // SetHovered/SetPressed are wired by the parent container's mouse
@@ -123,7 +150,7 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 		ink, border = dangerInk, dangerInk
 	}
 	// A sticky selection fills with Accent regardless of style.
-	if b.Selected {
+	if b.Selected().Get() {
 		face, ink = theme.Accent, accentFg(theme)
 	}
 	// Interaction states override the resting fill.
@@ -158,11 +185,11 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	switch {
 	case b.Icon != nil:
 		b.Icon(p, r, ink)
-	case b.Label != "":
-		tw := b.textWidth(b.Label)
+	case b.Label().Get() != "":
+		tw := b.textWidth(b.Label().Get())
 		tx := r.X + (r.W-tw)/2
 		ty := r.Y + (r.H-b.glyphHeight())/2
-		b.drawText(p, tx, ty, b.Label, ink)
+		b.drawText(p, tx, ty, b.Label().Get(), ink)
 	}
 	b.drawFocusRing(p, theme, r)
 }

@@ -76,7 +76,7 @@ func TestEachWidgetFocusToggles(t *testing.T) {
 func TestFocusRingDrawnOnlyWhenFocused(t *testing.T) {
 	th := DefaultLight()
 	const w, h = 120, 40
-	b := &Button{Label: "OK"}
+	b := NewButton("OK", nil)
 	b.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 
 	unfocused := makeSurface(w, h)

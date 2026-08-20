@@ -15,7 +15,7 @@ func TestA11yButtonState(t *testing.T) {
 	}
 
 	selected := NewButton("Bold", nil)
-	selected.Selected = true
+	selected.Selected().Set(true)
 	if got := selected.A11y(); got != (A11yInfo{Role: RoleButton, Name: "Bold", Value: "selected"}) {
 		t.Errorf("selected Button A11y() = %+v", got)
 	}
@@ -28,7 +28,7 @@ func TestA11yButtonState(t *testing.T) {
 
 	// Selected wins over a concurrent transient press.
 	both := NewButton("Tab", nil)
-	both.Selected = true
+	both.Selected().Set(true)
 	both.pressed = true
 	if got := both.A11y().Value; got != "selected" {
 		t.Errorf("selected+pressed Button Value = %q, want selected", got)
