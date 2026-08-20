@@ -528,16 +528,16 @@ func TestMenuBarClickToggles(t *testing.T) {
 	b.AddMenu("Edit", NewMenu(nil))
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: MenuBarH + 200})
 	b.OnEvent(Event{Kind: EventClick, X: 5, Y: 5}) // open File
-	if b.Active != 0 {
-		t.Fatalf("after click File: Active = %d", b.Active)
+	if b.Active().Get() != 0 {
+		t.Fatalf("after click File: Active = %d", b.Active().Get())
 	}
 	b.OnEvent(Event{Kind: EventClick, X: 5, Y: 5}) // toggle off
-	if b.Active != -1 {
+	if b.Active().Get() != -1 {
 		t.Fatal("second click should toggle off")
 	}
 	b.OnEvent(Event{Kind: EventClick, X: 70, Y: 5}) // Edit (idx 1)
-	if b.Active != 1 {
-		t.Fatalf("after click Edit: Active = %d", b.Active)
+	if b.Active().Get() != 1 {
+		t.Fatalf("after click Edit: Active = %d", b.Active().Get())
 	}
 }
 
@@ -545,7 +545,7 @@ func TestMenuBarClickBelowBarIgnored(t *testing.T) {
 	b := NewMenuBar()
 	b.AddMenu("File", NewMenu(nil))
 	b.OnEvent(Event{Kind: EventClick, X: 5, Y: MenuBarH + 5})
-	if b.Active != -1 {
+	if b.Active().Get() != -1 {
 		t.Fatal("click below bar must not open a menu")
 	}
 }
@@ -554,7 +554,7 @@ func TestMenuBarClickOutOfRangeIgnored(t *testing.T) {
 	b := NewMenuBar()
 	b.AddMenu("File", NewMenu(nil))
 	b.OnEvent(Event{Kind: EventClick, X: 500, Y: 5})
-	if b.Active != -1 {
+	if b.Active().Get() != -1 {
 		t.Fatal("out-of-range click must not open a menu")
 	}
 }
@@ -562,7 +562,7 @@ func TestMenuBarClickOutOfRangeIgnored(t *testing.T) {
 func TestMenuBarIgnoresNonClick(t *testing.T) {
 	b := NewMenuBar()
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if b.Active != -1 {
+	if b.Active().Get() != -1 {
 		t.Fatal("KeyDown should not open a menu")
 	}
 }
@@ -573,7 +573,7 @@ func TestMenuBarDrawHighlightsActive(t *testing.T) {
 	b := NewMenuBar()
 	b.AddMenu("File", NewMenu(nil))
 	b.AddMenu("Edit", NewMenu(nil))
-	b.Active = 0
+	b.Active().Set(0)
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: MenuBarH})
 	b.Draw(newP(makeSurface(w, h), w), theme)
 }
@@ -1067,41 +1067,41 @@ func TestMenuBarAltLetter(t *testing.T) {
 
 	// Alt+F opens File (index 0).
 	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+F"})
-	if bar.Active != 0 {
-		t.Fatalf("Alt+F active=%d, want 0", bar.Active)
+	if bar.Active().Get() != 0 {
+		t.Fatalf("Alt+F active=%d, want 0", bar.Active().Get())
 	}
 	// Alt+e (lower-case) opens Edit (case-insensitive match).
 	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+e"})
-	if bar.Active != 1 {
-		t.Fatalf("Alt+e active=%d, want 1", bar.Active)
+	if bar.Active().Get() != 1 {
+		t.Fatalf("Alt+e active=%d, want 1", bar.Active().Get())
 	}
 	// Escape closes.
 	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
-	if bar.Active != -1 {
-		t.Fatalf("Escape active=%d, want -1", bar.Active)
+	if bar.Active().Get() != -1 {
+		t.Fatalf("Escape active=%d, want -1", bar.Active().Get())
 	}
 	// Alt+X (no match) leaves things alone.
 	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+X"})
-	if bar.Active != -1 {
-		t.Fatalf("Alt+X (miss) should not open a menu; got %d", bar.Active)
+	if bar.Active().Get() != -1 {
+		t.Fatalf("Alt+X (miss) should not open a menu; got %d", bar.Active().Get())
 	}
 	// Malformed Code (not "Alt+X") is dropped.
 	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+N"})
-	if bar.Active != -1 {
-		t.Fatalf("non-Alt code should not open; got %d", bar.Active)
+	if bar.Active().Get() != -1 {
+		t.Fatalf("non-Alt code should not open; got %d", bar.Active().Get())
 	}
 	// Empty name in Names is skipped (defensive branch).
 	bar.Names = []string{"", "File"}
 	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+F"})
-	if bar.Active != 1 {
-		t.Fatalf("Alt+F should skip empty name; got active=%d", bar.Active)
+	if bar.Active().Get() != 1 {
+		t.Fatalf("Alt+F should skip empty name; got active=%d", bar.Active().Get())
 	}
 	// Lower-case first letter in Names (case-insensitive match on that side too).
 	bar.Names = []string{"file"}
-	bar.Active = -1
+	bar.Active().Set(-1)
 	bar.OnEvent(Event{Kind: EventKeyDown, Code: "Alt+F"})
-	if bar.Active != 0 {
-		t.Fatalf("Alt+F should match lower-case 'file'; got active=%d", bar.Active)
+	if bar.Active().Get() != 0 {
+		t.Fatalf("Alt+F should match lower-case 'file'; got active=%d", bar.Active().Get())
 	}
 }
 
@@ -1341,23 +1341,23 @@ func TestMenuBarAutoSizeClickHitTest(t *testing.T) {
 	bar.SetBounds(Rect{X: 0, Y: 0, W: 400, H: MenuBarH})
 	// Click on "A" (index 0) at x=10, y=5.
 	bar.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
-	if bar.Active != 0 {
-		t.Fatalf("click on A: active=%d, want 0", bar.Active)
+	if bar.Active().Get() != 0 {
+		t.Fatalf("click on A: active=%d, want 0", bar.Active().Get())
 	}
 	// Click on "Long Menu Name" (index 1) at x=MenuBarItemW+5.
 	bar.OnEvent(Event{Kind: EventClick, X: MenuBarItemW + 5, Y: 5})
-	if bar.Active != 1 {
-		t.Fatalf("click on Long: active=%d, want 1", bar.Active)
+	if bar.Active().Get() != 1 {
+		t.Fatalf("click on Long: active=%d, want 1", bar.Active().Get())
 	}
 	// Click on "B" (index 2) — offset is MenuBarItemW + nameWidth(1).
 	bar.OnEvent(Event{Kind: EventClick, X: MenuBarItemW + bar.NameWidth(1) + 5, Y: 5})
-	if bar.Active != 2 {
-		t.Fatalf("click on B: active=%d, want 2", bar.Active)
+	if bar.Active().Get() != 2 {
+		t.Fatalf("click on B: active=%d, want 2", bar.Active().Get())
 	}
 	// Click past the last name: no-op, Active stays.
 	bar.OnEvent(Event{Kind: EventClick, X: 9999, Y: 5})
-	if bar.Active != 2 {
-		t.Fatalf("click past last: active=%d, want 2 (unchanged)", bar.Active)
+	if bar.Active().Get() != 2 {
+		t.Fatalf("click past last: active=%d, want 2 (unchanged)", bar.Active().Get())
 	}
 	// Draw exercises the auto-size render path.
 	bar.Draw(newP(makeSurface(400, MenuBarH), 400), DefaultLight())
@@ -1416,5 +1416,20 @@ func TestMenuBarHandleShortcut(t *testing.T) {
 	// Empty code → false (guard).
 	if bar.HandleShortcut("") {
 		t.Fatal("empty shortcut should return false")
+	}
+}
+
+// TestMenuBarZeroValueActiveDefault covers the Active() accessor's lazy-init path
+// on a literal MenuBar{} (no NewMenuBar): the first call must materialise the
+// Observable at -1 (no menu open), matching NewMenuBar's default.
+func TestMenuBarZeroValueActiveDefault(t *testing.T) {
+	var mb MenuBar // zero value, accessor never touched yet
+	if got := mb.Active().Get(); got != -1 {
+		t.Fatalf("zero-value MenuBar Active() = %d, want -1 (no menu open)", got)
+	}
+	// A second call returns the same materialised Observable (idempotent).
+	mb.Active().Set(2)
+	if got := mb.Active().Get(); got != 2 {
+		t.Fatalf("after Set(2), Active() = %d, want 2", got)
 	}
 }

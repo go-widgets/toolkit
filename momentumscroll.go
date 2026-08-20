@@ -81,8 +81,8 @@ func (s *MomentumScroller) TouchDown(ev Event) {
 	// gesture would otherwise land twice, scrolling at double speed.
 	s.View.SetScrollDriver(s)
 	s.syncBounds()
-	s.AxisX.SetOffset(float64(s.View.OffsetX))
-	s.AxisY.SetOffset(float64(s.View.OffsetY))
+	s.AxisX.SetOffset(float64(s.View.OffsetX().Get()))
+	s.AxisY.SetOffset(float64(s.View.OffsetY().Get()))
 	s.AxisX.BeginDrag()
 	s.AxisY.BeginDrag()
 	s.trackX.Reset()
@@ -139,6 +139,6 @@ func (s *MomentumScroller) Settling() bool {
 // live overscroll can show past the bound; the engines never rest past a bound,
 // so the resting offset is always in range.
 func (s *MomentumScroller) pushToView() {
-	s.View.OffsetX = s.AxisX.OffsetInt()
-	s.View.OffsetY = s.AxisY.OffsetInt()
+	s.View.OffsetX().Set(s.AxisX.OffsetInt())
+	s.View.OffsetY().Set(s.AxisY.OffsetInt())
 }

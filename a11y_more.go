@@ -148,8 +148,8 @@ func (c *ColorPicker) A11y() A11yInfo {
 // font option.
 func (f *FontChooser) A11y() A11yInfo {
 	name := ""
-	if f.Selected >= 0 && f.Selected < len(f.Options) {
-		name = f.Options[f.Selected].Name
+	if f.Selected().Get() >= 0 && f.Selected().Get() < len(f.Options) {
+		name = f.Options[f.Selected().Get()].Name
 	}
 	return A11yInfo{Role: RoleCombobox, Name: name}
 }
@@ -265,15 +265,15 @@ func (m *Menu) A11y() A11yInfo {
 // menu's name, if any.
 func (m *MenuBar) A11y() A11yInfo {
 	v := ""
-	if m.Active >= 0 && m.Active < len(m.Names) {
-		v = m.Names[m.Active]
+	if m.Active().Get() >= 0 && m.Active().Get() < len(m.Names) {
+		v = m.Names[m.Active().Get()]
 	}
 	return A11yInfo{Role: RoleMenuBar, Value: v}
 }
 
 // A11y reports the ContextMenu as a menu carrying its open/closed state.
 func (c *ContextMenu) A11y() A11yInfo {
-	return A11yInfo{Role: RoleMenu, Value: stateValue(c.Open, "open")}
+	return A11yInfo{Role: RoleMenu, Value: stateValue(c.Open().Get(), "open")}
 }
 
 // A11y reports the CommandPalette as a dialog carrying its typed query.
@@ -445,7 +445,7 @@ func (w *Wizard) A11y() A11yInfo {
 // A11y reports the FormField as a group named by its label, carrying its
 // error text (if any) as Value.
 func (f *FormField) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: f.Label, Value: f.Error}
+	return A11yInfo{Role: RoleGroup, Name: f.Label, Value: f.Error().Get()}
 }
 
 // A11y reports the Frame as a plain grouping container. Frame carries no

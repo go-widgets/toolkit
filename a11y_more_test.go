@@ -47,11 +47,11 @@ func TestA11yActionInputWidgets(t *testing.T) {
 
 func TestA11yFontChooser(t *testing.T) {
 	fc := NewFontChooser([]FontOption{{Name: "Regular"}, {Name: "Bold"}})
-	fc.Selected = 1
+	fc.Selected().Set(1)
 	if got := fc.A11y(); got != (A11yInfo{Role: RoleCombobox, Name: "Bold"}) {
 		t.Errorf("FontChooser in-range A11y() = %+v", got)
 	}
-	fc.Selected = 99 // out of range: Name stays empty
+	fc.Selected().Set(99) // out of range: Name stays empty
 	if got := fc.A11y(); got != (A11yInfo{Role: RoleCombobox, Name: ""}) {
 		t.Errorf("FontChooser out-of-range A11y() = %+v", got)
 	}
@@ -200,11 +200,11 @@ func TestA11yMenuBar(t *testing.T) {
 	mb := NewMenuBar()
 	mb.AddMenu("File", NewMenu(nil))
 	mb.AddMenu("Edit", NewMenu(nil))
-	mb.Active = 0
+	mb.Active().Set(0)
 	if got := mb.A11y(); got != (A11yInfo{Role: RoleMenuBar, Value: "File"}) {
 		t.Errorf("MenuBar active A11y() = %+v", got)
 	}
-	mb.Active = -1
+	mb.Active().Set(-1)
 	if got := mb.A11y(); got != (A11yInfo{Role: RoleMenuBar, Value: ""}) {
 		t.Errorf("MenuBar inactive A11y() = %+v", got)
 	}
@@ -212,11 +212,11 @@ func TestA11yMenuBar(t *testing.T) {
 
 func TestA11yContextMenuAndCommandPalette(t *testing.T) {
 	cm := NewContextMenu(NewMenu(nil))
-	cm.Open = true
+	cm.Open().Set(true)
 	if got := cm.A11y(); got != (A11yInfo{Role: RoleMenu, Value: "open"}) {
 		t.Errorf("ContextMenu open A11y() = %+v", got)
 	}
-	cm.Open = false
+	cm.Open().Set(false)
 	if got := cm.A11y(); got != (A11yInfo{Role: RoleMenu, Value: ""}) {
 		t.Errorf("ContextMenu closed A11y() = %+v", got)
 	}
@@ -283,7 +283,7 @@ func TestA11yChromeWidgets(t *testing.T) {
 	plainOverlay := NewOverlay(nil)
 
 	formWithError := NewFormField("Email", nil)
-	formWithError.Error = "required"
+	formWithError.Error().Set("required")
 
 	checkA11yCases(t, []a11yCase{
 		{"headerbar", NewHeaderBar("Inbox"), A11yInfo{Role: RoleBanner, Name: "Inbox"}},

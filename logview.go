@@ -180,7 +180,8 @@ func (lv *LogView) Clear() {
 	lv.ensure()
 	lv.entries = nil
 	lv.syncContent()
-	lv.sv.OffsetX, lv.sv.OffsetY = 0, 0
+	lv.sv.OffsetX().Set(0)
+	lv.sv.OffsetY().Set(0)
 }
 
 // evict drops the oldest entries once the history exceeds a positive MaxEntries.
@@ -198,7 +199,7 @@ func (lv *LogView) evict() {
 // condition under which Append follows the tail. A history that fits (max scroll
 // 0) is always "at bottom", so the first entries auto-follow.
 func (lv *LogView) atBottom() bool {
-	return lv.sv.OffsetY >= lv.sv.maxOffsetY()
+	return lv.sv.OffsetY().Get() >= lv.sv.maxOffsetY()
 }
 
 // scrollToBottom pins the viewport to the newest entry. Scroll clamps the
@@ -256,7 +257,7 @@ func (lv *LogView) Draw(p painter.Painter, theme *Theme) {
 // viewport's translate places each at the right on-screen position.
 func (lv *LogView) drawRows(p painter.Painter, theme *Theme, r Rect) {
 	rowH := lv.rowHeight()
-	off := lv.sv.OffsetY
+	off := lv.sv.OffsetY().Get()
 	vpH := lv.sv.viewport().H
 	first := off / rowH
 	last := (off+vpH)/rowH + 1

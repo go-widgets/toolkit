@@ -447,7 +447,7 @@ func TestContextMenuForwardsMove(t *testing.T) {
 	}
 	// A non-click, non-move event is ignored (not dismissed).
 	cm.OnEvent(Event{Kind: EventKeyDown, Code: "x"})
-	if !cm.Open {
+	if !cm.Open().Get() {
 		t.Fatal("keydown should not dismiss the context menu")
 	}
 	// Closed: a move is a no-op.

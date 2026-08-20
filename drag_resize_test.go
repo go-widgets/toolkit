@@ -11,30 +11,30 @@ import "testing"
 func TestPanedDragResizes(t *testing.T) {
 	p := NewHPaned(NewLabel("L"), NewLabel("R"))
 	p.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 100})
-	p.OnEvent(Event{Kind: EventClick, X: p.Position + 1, Y: 50}) // grab handle
+	p.OnEvent(Event{Kind: EventClick, X: p.Position().Get() + 1, Y: 50}) // grab handle
 	if !p.resizing {
 		t.Fatal("handle press did not start a resize")
 	}
 	p.OnEvent(Event{Kind: EventMouseDrag, X: 60, Y: 50})
-	if p.Position != 60 {
-		t.Fatalf("Position=%d, want 60", p.Position)
+	if p.Position().Get() != 60 {
+		t.Fatalf("Position=%d, want 60", p.Position().Get())
 	}
 	p.OnEvent(Event{Kind: EventMouseUp, X: 60, Y: 50})
 	if p.resizing {
 		t.Fatal("still resizing after mouse up")
 	}
-	before := p.Position
+	before := p.Position().Get()
 	p.OnEvent(Event{Kind: EventMouseDrag, X: 20, Y: 50}) // no grab → no-op
-	if p.Position != before {
+	if p.Position().Get() != before {
 		t.Fatal("drag without a grab moved the split")
 	}
 
 	v := NewVPaned(NewLabel("T"), NewLabel("B"))
 	v.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
-	v.OnEvent(Event{Kind: EventClick, X: 50, Y: v.Position + 1})
+	v.OnEvent(Event{Kind: EventClick, X: 50, Y: v.Position().Get() + 1})
 	v.OnEvent(Event{Kind: EventMouseDrag, X: 50, Y: 70})
-	if v.Position != 70 {
-		t.Fatalf("vertical Position=%d, want 70", v.Position)
+	if v.Position().Get() != 70 {
+		t.Fatalf("vertical Position=%d, want 70", v.Position().Get())
 	}
 }
 

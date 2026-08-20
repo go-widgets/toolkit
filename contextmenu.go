@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // ContextMenu is a right-click popup: a Menu that appears at an arbitrary point
 // (the cursor), auto-sizes to its items, clamps itself inside the surface so it
@@ -18,8 +21,16 @@ import "github.com/go-widgets/painter"
 type ContextMenu struct {
 	Base
 	Menu             *Menu
-	Open             bool
+	open             *mvvm.Observable[bool] // reactive via Open()
 	AnchorX, AnchorY int
+}
+
+// Open is reactive state as a shared [mvvm.Observable]; edits Set it. Lazily created.
+func (c *ContextMenu) Open() *mvvm.Observable[bool] {
+	if c.open == nil {
+		c.open = mvvm.NewObservable[bool](false)
+	}
+	return c.open
 }
 
 // ContextMenuMinW is the floor on a context menu's width so a menu of very
@@ -33,12 +44,12 @@ func NewContextMenu(menu *Menu) *ContextMenu { return &ContextMenu{Menu: menu} }
 // activating an item (or the menu closing itself) also closes the overlay.
 func (c *ContextMenu) Popup(x, y int) {
 	c.AnchorX, c.AnchorY = x, y
-	c.Open = true
-	c.Menu.OnClose = func() { c.Open = false }
+	c.Open().Set(true)
+	c.Menu.OnClose = func() { c.Open().Set(false) }
 }
 
 // Close hides the menu.
-func (c *ContextMenu) Close() { c.Open = false }
+func (c *ContextMenu) Close() { c.Open().Set(false) }
 
 // menuSize measures the popup: width is the widest row (label + shortcut or
 // submenu chevron) floored at ContextMenuMinW; height is the summed row heights
@@ -75,7 +86,7 @@ func (c *ContextMenu) MenuBounds() Rect {
 
 // Draw paints the Menu at its clamped bounds when open; nothing when closed.
 func (c *ContextMenu) Draw(p painter.Painter, theme *Theme) {
-	if !c.Open {
+	if !c.Open().Get() {
 		return
 	}
 	c.Menu.SetBounds(c.MenuBounds())
@@ -86,7 +97,7 @@ func (c *ContextMenu) Draw(p painter.Painter, theme *Theme) {
 // frame, so the hit row's Action fires and closes the overlay via OnClose); a
 // click anywhere outside dismisses the menu.
 func (c *ContextMenu) OnEvent(ev Event) {
-	if !c.Open {
+	if !c.Open().Get() {
 		return
 	}
 	mb := c.MenuBounds()
@@ -107,7 +118,7 @@ func (c *ContextMenu) OnEvent(ev Event) {
 	if ev.Kind == EventKeyDown {
 		// Keyboard drives the wrapped Menu directly: Up/Down move the hover,
 		// Enter/Space fire the hovered item, Escape closes (via the Menu's
-		// OnClose that Popup wired to clear c.Open).
+		// OnClose that Popup wired to clear c.Open().Get()).
 		c.Menu.SetBounds(mb)
 		c.Menu.OnEvent(ev)
 		return
@@ -129,5 +140,5 @@ func (c *ContextMenu) OnEvent(ev Event) {
 		c.Menu.OnEvent(Event{Kind: EventClick, X: ev.X - mb.X, Y: ev.Y - mb.Y})
 		return
 	}
-	c.Open = false // outside click → dismiss
+	c.Open().Set(false) // outside click → dismiss
 }

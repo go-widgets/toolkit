@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // formFieldLabelPad is the LOGICAL breathing space under the label glyph row,
 // scaled at use; identity at compact/1x.
@@ -63,10 +66,18 @@ var formFieldErrorInk = RGBA{R: 190, G: 60, B: 60, A: 255}
 type FormField struct {
 	Base
 	Label string
-	Help  string // optional dim caption below the child
-	Error string // optional error caption below the child (takes precedence)
-	Child Widget // the actual input; may be nil
-	Rules []Rule // optional validation rules run by Validate
+	Help  string                   // optional dim caption below the child
+	error *mvvm.Observable[string] // reactive via Error()
+	Child Widget                   // the actual input; may be nil
+	Rules []Rule                   // optional validation rules run by Validate
+}
+
+// Error is reactive state as a shared [mvvm.Observable]; edits Set it. Lazily created.
+func (f *FormField) Error() *mvvm.Observable[string] {
+	if f.error == nil {
+		f.error = mvvm.NewObservable[string]("")
+	}
+	return f.error
 }
 
 // NewFormField constructs a FormField wrapping child with a label
@@ -84,7 +95,7 @@ func (f *FormField) childRect() Rect {
 	padY := scaled(FormFieldPadY)
 	padX := scaled(FormFieldPadX)
 	captionH := 0
-	if f.Error != "" || f.Help != "" {
+	if f.Error().Get() != "" || f.Help != "" {
 		captionH = f.glyphHeight() + scaled(FormFieldHelpGap)
 	}
 	top := r.Y + padY + FormFieldLabelH() + scaled(FormFieldChildGap)
@@ -116,8 +127,8 @@ func (f *FormField) Draw(p painter.Painter, theme *Theme) {
 	}
 	// Caption row: Error > Help > nothing.
 	captionY := cr.Y + cr.H + scaled(FormFieldHelpGap)
-	if f.Error != "" {
-		f.drawText(p, r.X+padX, captionY, f.Error, formFieldErrorInk)
+	if f.Error().Get() != "" {
+		f.drawText(p, r.X+padX, captionY, f.Error().Get(), formFieldErrorInk)
 		return
 	}
 	if f.Help != "" {
@@ -181,9 +192,9 @@ func (f *FormField) Value() string {
 // caption row picks up the new Error.
 func (f *FormField) Validate() bool {
 	if err := Validate(f.Value(), f.Rules...); err != nil {
-		f.Error = err.Error()
+		f.Error().Set(err.Error())
 		return false
 	}
-	f.Error = ""
+	f.Error().Set("")
 	return true
 }

@@ -24,12 +24,12 @@ func TestChildOffsetIncludesTheRubberBand(t *testing.T) {
 		t.Fatalf("overscroll=%d, want a negative stretch past the start", over)
 	}
 	_, dy := sv.ChildOffset()
-	if want := -(sv.OffsetY + over); dy != want {
+	if want := -(sv.OffsetY().Get() + over); dy != want {
 		t.Fatalf("ChildOffset y = %d, want %d (offset %d + overscroll %d)",
-			dy, want, sv.OffsetY, over)
+			dy, want, sv.OffsetY().Get(), over)
 	}
 	// And it is not merely the offset, which is what the bug would look like.
-	if dy == -sv.OffsetY {
+	if dy == -sv.OffsetY().Get() {
 		t.Fatal("ChildOffset ignored the rubber band")
 	}
 }

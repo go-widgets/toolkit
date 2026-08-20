@@ -453,7 +453,7 @@ func (pv *PagedView) A11y() A11yInfo {
 // ScrollView's OffsetX / OffsetY.
 func (pv *PagedView) ScrollOffset() (x, y int) {
 	pv.ensure()
-	return pv.scroll.OffsetX, pv.scroll.OffsetY
+	return pv.scroll.OffsetX().Get(), pv.scroll.OffsetY().Get()
 }
 
 // naturalToContentY and contentYToNatural are the ONE page-y↔content-y mapping,
@@ -494,8 +494,8 @@ func (pv *PagedView) PageAt(x, y int) (page, localX, localY int, ok bool) {
 	}
 	// Widget-local → content-space: the pane starts at widget-local (0, tbH), and
 	// the ScrollView shows the content shifted up/left by its offset.
-	contentX := x + pv.scroll.OffsetX
-	contentY := (y - tbH) + pv.scroll.OffsetY
+	contentX := x + pv.scroll.OffsetX().Get()
+	contentY := (y - tbH) + pv.scroll.OffsetY().Get()
 	for k, card := range pv.lay.cards {
 		if contentX < card.X || contentX >= card.X+card.W ||
 			contentY < card.Y || contentY >= card.Y+card.H {
@@ -537,7 +537,7 @@ func (pv *PagedView) ScrollToPage(page, localY int) {
 		k = page - 1 // continuous cards are 1:1 with pages, in order
 	}
 	target := pv.naturalToContentY(k, localY)
-	pv.scroll.Scroll(0, target-pv.scroll.OffsetY) // Scroll clamps to [0, max]
+	pv.scroll.Scroll(0, target-pv.scroll.OffsetY().Get()) // Scroll clamps to [0, max]
 }
 
 // OnEvent drives the widget: a toolbar click routes to the button under it; a
@@ -593,8 +593,8 @@ func (pv *PagedView) forwardToScroll(ev Event) {
 // continuous mode (and for horizontal swipes) the wheel just scrolls the pane.
 func (pv *PagedView) onScroll(ev Event) {
 	if pv.Mode().Get() == PagedPaginated {
-		atTop := pv.scroll.OffsetY <= 0
-		atBottom := pv.scroll.OffsetY >= pv.scroll.maxOffsetY()
+		atTop := pv.scroll.OffsetY().Get() <= 0
+		atBottom := pv.scroll.OffsetY().Get() >= pv.scroll.maxOffsetY()
 		if ev.Delta > 0 && atBottom {
 			pv.setPage(pv.cur()+1, false)
 			return
@@ -672,7 +672,7 @@ func (pv *PagedView) setPage(n int, toBottom bool) {
 // of the pane, less the top margin. Scroll clamps at both ends.
 func (pv *PagedView) scrollCardIntoView(n int) {
 	card := pv.lay.cards[n-1]
-	pv.scroll.Scroll(0, card.Y-scaled(pagedMargin)-pv.scroll.OffsetY)
+	pv.scroll.Scroll(0, card.Y-scaled(pagedMargin)-pv.scroll.OffsetY().Get())
 }
 
 // zoomIn / zoomOut step the zoom by one increment; setZoom clamps + relays out.

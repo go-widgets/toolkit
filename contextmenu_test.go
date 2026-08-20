@@ -23,15 +23,15 @@ func newTestContextMenu() (*ContextMenu, *[]string) {
 
 func TestContextMenuPopupOpens(t *testing.T) {
 	cm, _ := newTestContextMenu()
-	if cm.Open {
+	if cm.Open().Get() {
 		t.Fatal("should start closed")
 	}
 	cm.Popup(30, 40)
-	if !cm.Open || cm.AnchorX != 30 || cm.AnchorY != 40 {
-		t.Fatalf("Popup did not open at anchor: open=%v (%d,%d)", cm.Open, cm.AnchorX, cm.AnchorY)
+	if !cm.Open().Get() || cm.AnchorX != 30 || cm.AnchorY != 40 {
+		t.Fatalf("Popup did not open at anchor: open=%v (%d,%d)", cm.Open().Get(), cm.AnchorX, cm.AnchorY)
 	}
 	cm.Close()
-	if cm.Open {
+	if cm.Open().Get() {
 		t.Fatal("Close did not hide")
 	}
 }
@@ -101,7 +101,7 @@ func TestContextMenuClickInsideFiresAndCloses(t *testing.T) {
 	if len(*fired) != 1 || (*fired)[0] != "Cut" {
 		t.Fatalf("expected Cut to fire, got %v", *fired)
 	}
-	if cm.Open {
+	if cm.Open().Get() {
 		t.Error("activating an item should close the menu (via OnClose)")
 	}
 }
@@ -112,7 +112,7 @@ func TestContextMenuClickOutsideDismisses(t *testing.T) {
 	mb := cm.MenuBounds()
 	// Click well outside the menu rect → dismiss, no action.
 	cm.OnEvent(Event{Kind: EventClick, X: mb.X + mb.W + 20, Y: mb.Y + mb.H + 20})
-	if cm.Open {
+	if cm.Open().Get() {
 		t.Error("outside click should dismiss")
 	}
 	if len(*fired) != 0 {
@@ -124,14 +124,14 @@ func TestContextMenuIgnoresWhenClosedOrNonClick(t *testing.T) {
 	cm, _ := newTestContextMenu()
 	// Closed: any event is a no-op.
 	cm.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
-	if cm.Open {
+	if cm.Open().Get() {
 		t.Error("event on a closed menu should not open it")
 	}
 	// Open but an event kind the context menu neither forwards nor treats as
 	// an outside-click (EventMouseUp): ignored, menu stays open.
 	cm.Popup(10, 10)
 	cm.OnEvent(Event{Kind: EventMouseUp})
-	if !cm.Open {
+	if !cm.Open().Get() {
 		t.Error("non-click event should not dismiss")
 	}
 }
