@@ -147,6 +147,16 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// are unexported internal state. It exposes no imperative state field, so the
 	// empty config set enforces that none is ever added.
 	"RichEditor": {},
+	// The following hold no exported reactive state — their selection/toggle/scroll
+	// state is unexported behind accessors or internal, and the exported fields are
+	// host-set config (data slices, layout metrics, mode/style enums) or func hooks
+	// (auto-allowed). Gating them locks out any future imperative state field.
+	"AgendaSidebar": {"Calendars": true, "Title": true},
+	"AppDock":       {"Items": true, "Magnify": true, "MaxScale": true, "Radius": true, "Style": true},
+	"Browser":       {"HideScrollbar": true, "Phase": true, "Scale": true, "HideChrome": true},
+	"ColumnBrowser": {"ColumnWidth": true},
+	"IsoDiagram":    {"DefaultShape": true, "Icons": true, "Mode": true, "AnimationPeriod": true, "Cols": true, "Rows": true},
+	"PropertyGrid":  {},
 	// Label: the string is unexported behind the Text() Observable; Align/VAlign/
 	// Ellipsis/Ink/FontSize are set-once appearance config.
 	"Label": {"Align": true, "VAlign": true, "Ellipsis": true, "Ink": true, "FontSize": true},
