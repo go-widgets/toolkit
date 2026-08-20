@@ -491,7 +491,7 @@ func (l *ListBox) OnEvent(ev Event) {
 // ignores every key. Selected doubles as the cursor, so the same Accent
 // highlight a mouse selection shows also tracks keyboard navigation.
 func (l *ListBox) handleKey(ev Event) {
-	if l.Disabled {
+	if l.Disabled().Get() {
 		return
 	}
 	switch ev.Code {

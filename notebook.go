@@ -325,7 +325,7 @@ func (n *Notebook) OnEvent(ev Event) {
 			return
 		}
 	}
-	if ev.Kind == EventKeyDown && !n.Disabled {
+	if ev.Kind == EventKeyDown && !n.Disabled().Get() {
 		// Arrow keys move the active tab along the strip, wrapping, Setting the
 		// Active Observable -- the tablist keyboard convention. Both axes are accepted
 		// so it works for a horizontal (Top/Bottom) or vertical (Left/Right) strip.

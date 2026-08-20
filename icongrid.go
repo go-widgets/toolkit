@@ -280,7 +280,7 @@ func (v *IconGrid) IndexAt(x, y int) int {
 // OnEvent scrolls on the wheel, selects on a click, activates on a second click
 // of the selected cell, and is inert while Disabled.
 func (v *IconGrid) OnEvent(ev Event) {
-	if v.Disabled {
+	if v.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

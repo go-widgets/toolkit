@@ -519,7 +519,7 @@ func TestGalleryEmptyState(t *testing.T) {
 func TestGalleryDisabledInert(t *testing.T) {
 	g := sampleGallery()
 	g.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
-	g.Disabled = true
+	g.Disabled().Set(true)
 	g.OnEvent(Event{Kind: EventClick, X: 284, Y: 340})
 	g.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
 	if g.Selected().Get() != 0 {

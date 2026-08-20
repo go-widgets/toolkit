@@ -282,7 +282,7 @@ func TestFolderTabsKeyboardWraps(t *testing.T) {
 func TestFolderTabsDisabledIgnoresInput(t *testing.T) {
 	ft := NewFolderTabs([]string{"A", "B"}, 0)
 	ft.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 30})
-	ft.Disabled = true
+	ft.Disabled().Set(true)
 	r1 := ft.TabRect(1)
 	ft.OnEvent(Event{Kind: EventClick, X: r1.X + r1.W/2, Y: r1.Y + r1.H/2})
 	ft.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})

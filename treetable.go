@@ -217,7 +217,7 @@ func (t *TreeTable) scrollToSelected() {
 // parent; Enter / Space select the cursor node like a click. A disabled
 // TreeTable, or an empty forest, ignores every key.
 func (t *TreeTable) handleKey(ev Event) {
-	if t.Disabled {
+	if t.Disabled().Get() {
 		return
 	}
 	t.flatten()

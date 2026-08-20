@@ -833,7 +833,7 @@ func (b *Browser) toolbarGroups() (nav, zoom *ButtonGroup, addr Rect) {
 		btn := &Button{Icon: b.btnIcon(k), OnClick: onClick, PressFeedback: true}
 		btn.Label().Set(b.btnLabel(k))
 		btn.SetFont(b.EffectiveFont())
-		btn.Disabled = !b.btnEnabled(k)
+		btn.Disabled().Set(!b.btnEnabled(k))
 		// Reflect the persistent press state so the pressed button keeps its
 		// pressed face across the per-frame rebuild until the release clears it.
 		if b.pressActive && b.pressKind == k {
@@ -1273,7 +1273,7 @@ func normalizeURL(s string) string {
 // field / page links, character + Backspace + Enter to the focused address
 // field, and wheel scroll to the content. It early-returns when Disabled.
 func (b *Browser) OnEvent(ev Event) {
-	if b.Disabled {
+	if b.Disabled().Get() {
 		return
 	}
 	r := b.Bounds()

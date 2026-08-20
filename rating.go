@@ -222,7 +222,7 @@ func (r *Rating) Draw(p painter.Painter, theme *Theme) {
 // past Max.
 func (r *Rating) OnEvent(ev Event) {
 	if ev.Kind == EventKeyDown {
-		if r.Disabled {
+		if r.Disabled().Get() {
 			return
 		}
 		// Left/Right adjust the rating by one star; Home clears it (0), End fills

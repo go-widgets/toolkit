@@ -1012,7 +1012,7 @@ func TestSwipeMouseDragPathOpens(t *testing.T) {
 func TestSwipeDisabledIgnoresEvents(t *testing.T) {
 	resetSwipeGlobals(t)
 	sa := newTrailSA(nil)
-	sa.Disabled = true
+	sa.Disabled().Set(true)
 	sa.OnEvent(touch(EventTouchStart, 200, 20))
 	sa.OnEvent(touch(EventTouchMove, 80, 20))
 	sa.OnEvent(touch(EventTouchEnd, 80, 20))

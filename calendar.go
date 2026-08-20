@@ -308,7 +308,7 @@ func (c *Calendar) OnEvent(ev Event) {
 // Sets it and notifies subscribers -- there is no separate Enter/Space commit.
 // A disabled calendar ignores every key.
 func (c *Calendar) onKey(code string) {
-	if c.Disabled {
+	if c.Disabled().Get() {
 		return
 	}
 	switch code {

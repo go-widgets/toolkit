@@ -172,7 +172,7 @@ func TestIconGridClickNilCallbacks(t *testing.T) {
 func TestIconGridDisabledInert(t *testing.T) {
 	g := sampleIconGrid()
 	g.SetBounds(Rect{X: 0, Y: 0, W: 240, H: 200})
-	g.Disabled = true
+	g.Disabled().Set(true)
 	g.OnEvent(Event{Kind: EventClick, X: 40, Y: 40})
 	if g.Selected().Get() != -1 {
 		t.Fatalf("disabled grid selected %d, want -1", g.Selected().Get())

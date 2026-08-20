@@ -370,7 +370,7 @@ func TestScrollbarDisabledZeroBoundsAndSilent(t *testing.T) {
 	d := NewScrollbar()
 	d.Total, d.Viewport = 200, 100
 	d.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
-	d.Disabled = true
+	d.Disabled().Set(true)
 	d.OnEvent(Event{Kind: EventClick, X: 4, Y: 10})
 	if d.drag.active {
 		t.Fatal("disabled scrollbar started a drag")
@@ -573,7 +573,7 @@ func TestMenuSubmenuKeyboard(t *testing.T) {
 	}
 	// A disabled menu ignores keys even with a submenu open.
 	p2.OnEvent(kd3b("ArrowRight")) // reopen (Hover still 2)
-	p2.Disabled = true
+	p2.Disabled().Set(true)
 	p2.OnEvent(kd3b("ArrowLeft"))
 	if p2.openSub != 2 {
 		t.Fatalf("disabled menu processed a key: openSub=%d", p2.openSub)

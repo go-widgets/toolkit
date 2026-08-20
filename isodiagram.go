@@ -1487,7 +1487,7 @@ func (d *IsoDiagram) openContextMenu(x, y int) {
 // drags update it, release commits it, the wheel zooms and Delete/undo/redo
 // keys act on the selection.
 func (d *IsoDiagram) OnEvent(ev Event) {
-	if d.Disabled {
+	if d.Disabled().Get() {
 		return
 	}
 	if d.menu.Open().Get() {

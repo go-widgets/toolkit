@@ -231,14 +231,14 @@ func (t *TabBar) drawItem(p painter.Painter, theme *Theme, i int) {
 	if selected {
 		ink = theme.Accent
 	}
-	if t.Disabled {
+	if t.Disabled().Get() {
 		ink = mutedInk(theme)
 	}
 
 	// Selected indicator: an accent bar along the item's top edge.
 	if selected {
 		indicator := theme.Accent
-		if t.Disabled {
+		if t.Disabled().Get() {
 			indicator = mutedInk(theme)
 		}
 		fillRect(p, vr.X, vr.Y, vr.W, scaled(TabBarIndicatorH), indicator)
@@ -307,7 +307,7 @@ func (t *TabBar) badgeSize(text string) (w, h int) {
 // and OnSwipe navigates when SwipeNavigation is on). A Disabled bar ignores
 // every kind.
 func (t *TabBar) OnEvent(ev Event) {
-	if t.Disabled {
+	if t.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

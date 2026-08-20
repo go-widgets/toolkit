@@ -418,7 +418,7 @@ func (p *IsoIconPalette) entryAt(x, y int) (IsoPaletteEntry, bool) {
 // body press selects an icon or grabs the scrollbar, drags advance the move or
 // the thumb, the wheel scrolls the list. A disabled panel ignores everything.
 func (p *IsoIconPalette) OnEvent(ev Event) {
-	if p.Disabled {
+	if p.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

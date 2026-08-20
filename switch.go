@@ -64,7 +64,7 @@ func (s *Switch) Draw(p painter.Painter, theme *Theme) {
 	// A disabled switch mutes its track, knob and borders so it reads as inert.
 	// Only taken when Disabled — the enabled draw is byte-identical.
 	border, knob := theme.Border, theme.Surface
-	if s.Disabled {
+	if s.Disabled().Get() {
 		track, border, knob = mutedFace(theme), mutedInk(theme), mutedFace(theme)
 	}
 	// Fully-rounded pill track + circular knob -- the iOS/macOS switch shape.
@@ -85,7 +85,7 @@ func (s *Switch) Draw(p painter.Painter, theme *Theme) {
 // OnEvent flips the On Observable on click. All other event kinds
 // pass through without effect (matches ToggleButton / CheckButton).
 func (s *Switch) OnEvent(ev Event) {
-	if s.Disabled {
+	if s.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

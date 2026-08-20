@@ -81,7 +81,7 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 	// mutes them all; only taken when Disabled so the enabled draw is unchanged.
 	bodyC, borderC, textC, btnC := theme.Surface, theme.Border, theme.OnSurface, theme.SurfaceAlt
 	glyphC := theme.OnSurface
-	if s.Disabled {
+	if s.Disabled().Get() {
 		bodyC, borderC, textC, btnC, glyphC = mutedFace(theme), mutedInk(theme), mutedInk(theme), mutedFace(theme), mutedInk(theme)
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, bodyC)
@@ -114,7 +114,7 @@ func (s *SpinButton) Draw(p painter.Painter, theme *Theme) {
 // OnEvent: click on the upper-right button increments; click on the
 // lower-right button decrements.
 func (s *SpinButton) OnEvent(ev Event) {
-	if s.Disabled {
+	if s.Disabled().Get() {
 		return
 	}
 	if ev.Kind == EventKeyDown {

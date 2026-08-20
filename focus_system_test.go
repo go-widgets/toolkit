@@ -178,7 +178,7 @@ func TestShiftTabTraversalBackwardWraps(t *testing.T) {
 func TestTabSkipsDisabledAndHidden(t *testing.T) {
 	a := newFocusW(0, 0, 100, 30)
 	b := newFocusW(0, 30, 100, 30)
-	b.Disabled = true               // Wave-1 disabled: skipped by traversal
+	b.Disabled().Set(true)          // Wave-1 disabled: skipped by traversal
 	hidden := newFocusW(0, 0, 0, 0) // empty bounds: skipped
 	c := newFocusW(0, 60, 100, 30)
 	// A nil-layout Container keeps each child's explicit bounds (no Arrange),

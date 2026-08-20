@@ -27,7 +27,7 @@ func TestButtonKeyActivates(t *testing.T) {
 		t.Fatalf("Enter/Space activations = %d, want 3", clicks)
 	}
 	// Disabled ignores the key.
-	b.Disabled = true
+	b.Disabled().Set(true)
 	b.OnEvent(kd("Enter"))
 	if clicks != 3 {
 		t.Fatalf("disabled button activated (clicks=%d)", clicks)
@@ -44,7 +44,7 @@ func TestIconButtonKeyActivates(t *testing.T) {
 	if fired != 2 {
 		t.Fatalf("activations = %d, want 2", fired)
 	}
-	ib.Disabled = true
+	ib.Disabled().Set(true)
 	ib.OnEvent(kd(" "))
 	if fired != 2 {
 		t.Fatalf("disabled icon button activated (fired=%d)", fired)
@@ -72,7 +72,7 @@ func TestSplitButtonKeyActivates(t *testing.T) {
 	}
 	// Disabled ignores keys.
 	s.Arrow = true
-	s.Disabled = true
+	s.Disabled().Set(true)
 	s.OnEvent(kd("Enter"))
 	s.OnEvent(kd("ArrowDown"))
 	if primary != 2 || arrow != 1 {
@@ -100,7 +100,7 @@ func TestCheckButtonKeyToggles(t *testing.T) {
 	if c.Checked().Get() || toggles != 2 || last {
 		t.Fatalf("enter: Checked=%v toggles=%d last=%v", c.Checked().Get(), toggles, last)
 	}
-	c.Disabled = true
+	c.Disabled().Set(true)
 	c.OnEvent(kd(" "))
 	if c.Checked().Get() || toggles != 2 {
 		t.Fatalf("disabled check toggled (Checked=%v toggles=%d)", c.Checked().Get(), toggles)
@@ -120,7 +120,7 @@ func TestSwitchKeyToggles(t *testing.T) {
 	if s.On().Get() || toggles != 2 {
 		t.Fatalf("space: On=%v toggles=%d", s.On().Get(), toggles)
 	}
-	s.Disabled = true
+	s.Disabled().Set(true)
 	s.OnEvent(kd("Enter"))
 	if s.On().Get() || toggles != 2 {
 		t.Fatalf("disabled switch toggled (On=%v)", s.On().Get())
@@ -140,7 +140,7 @@ func TestToggleButtonKeyToggles(t *testing.T) {
 	if tb.Pressed().Get() || toggles != 2 {
 		t.Fatalf("enter: Pressed=%v toggles=%d", tb.Pressed().Get(), toggles)
 	}
-	tb.Disabled = true
+	tb.Disabled().Set(true)
 	tb.OnEvent(kd(" "))
 	if tb.Pressed().Get() || toggles != 2 {
 		t.Fatalf("disabled toggle activated (Pressed=%v)", tb.Pressed().Get())
@@ -184,7 +184,7 @@ func TestRadioGroupArrowMovesChecked(t *testing.T) {
 		t.Fatalf("wrap ArrowRight: Active=%d", g.Active().Get())
 	}
 	// Disabled member ignores arrows.
-	members[0].Disabled = true
+	members[0].Disabled().Set(true)
 	members[0].OnEvent(kd("ArrowDown"))
 	if g.Active().Get() != 0 {
 		t.Fatalf("disabled radio moved selection (Active=%d)", g.Active().Get())
@@ -232,7 +232,7 @@ func TestCycleButtonKeySteps(t *testing.T) {
 	if c.Index().Get() != 2 || idx != 2 {
 		t.Fatalf("ArrowLeft wrap: Index=%d sub=%d", c.Index().Get(), idx)
 	}
-	c.Disabled = true
+	c.Disabled().Set(true)
 	c.OnEvent(kd("ArrowRight"))
 	if c.Index().Get() != 2 {
 		t.Fatalf("disabled cycle advanced (Index=%d)", c.Index().Get())
@@ -288,7 +288,7 @@ func TestScaleKeyMovesValue(t *testing.T) {
 		t.Fatalf("degenerate range moved (Value=%v)", deg.Value().Get())
 	}
 	// Disabled ignores keys.
-	s.Disabled = true
+	s.Disabled().Set(true)
 	s.OnEvent(kd("End"))
 	if s.Value().Get() != 0 {
 		t.Fatalf("disabled scale moved (Value=%v)", s.Value().Get())
@@ -340,7 +340,7 @@ func TestRangeSliderKeyMovesHandles(t *testing.T) {
 		t.Fatalf("high crossed low: Low=%v High=%v", s2.Low().Get(), s2.High().Get())
 	}
 	// Disabled ignores keys.
-	s2.Disabled = true
+	s2.Disabled().Set(true)
 	before := s2.Low().Get()
 	s2.OnEvent(kd("ArrowRight"))
 	if s2.Low().Get() != before {
@@ -386,7 +386,7 @@ func TestSpinButtonKeySteps(t *testing.T) {
 	if s.Value().Get() != 0 {
 		t.Fatalf("Home: Value=%d", s.Value().Get())
 	}
-	s.Disabled = true
+	s.Disabled().Set(true)
 	s.OnEvent(kd("End"))
 	if s.Value().Get() != 0 {
 		t.Fatalf("disabled spinbutton moved (Value=%d)", s.Value().Get())
@@ -426,7 +426,7 @@ func TestRatingKeyAdjusts(t *testing.T) {
 	if r.Value().Get() != 0 {
 		t.Fatalf("clamp at 0: Value=%d", r.Value().Get())
 	}
-	r.Disabled = true
+	r.Disabled().Set(true)
 	r.OnEvent(kd("End"))
 	if r.Value().Get() != 0 {
 		t.Fatalf("disabled rating moved (Value=%d)", r.Value().Get())
@@ -483,7 +483,7 @@ func TestDropDownKeyboard(t *testing.T) {
 
 	// Disabled ignores keys.
 	d3 := NewDropDown(opts, 0)
-	d3.Disabled = true
+	d3.Disabled().Set(true)
 	d3.OnEvent(kd(" "))
 	if d3.Open().Get() {
 		t.Fatal("disabled dropdown opened")
@@ -551,7 +551,7 @@ func TestComboBoxKeyboardHighlight(t *testing.T) {
 
 	// Disabled ignores keys.
 	c5 := NewComboBox([]string{"Apple"})
-	c5.Disabled = true
+	c5.Disabled().Set(true)
 	c5.OnEvent(kd("ArrowDown"))
 	if c5.Open().Get() {
 		t.Fatal("disabled combobox opened")
@@ -617,13 +617,13 @@ func TestNotebookKeyMovesTab(t *testing.T) {
 		t.Fatalf("ArrowDown wrap: Active=%d", n.Active().Get())
 	}
 	// Disabled ignores the tab-move key.
-	n.Disabled = true
+	n.Disabled().Set(true)
 	n.OnEvent(kd("ArrowRight"))
 	if n.Active().Get() != 0 {
 		t.Fatalf("disabled notebook moved tab (Active=%d)", n.Active().Get())
 	}
 	// Out-of-range active index is treated as 0 by stepTab; empty tabs are a no-op.
-	n.Disabled = false
+	n.Disabled().Set(false)
 	n.Active().Set(99)
 	n.OnEvent(kd("ArrowRight"))
 	if n.Active().Get() != 1 {
@@ -650,12 +650,12 @@ func TestViewSwitcherKeyMovesSegment(t *testing.T) {
 	if v.Current().Get() != 2 {
 		t.Fatalf("ArrowLeft wrap: Current=%d", v.Current().Get())
 	}
-	v.Disabled = true
+	v.Disabled().Set(true)
 	v.OnEvent(kd("ArrowRight"))
 	if v.Current().Get() != 2 {
 		t.Fatalf("disabled view switcher moved (Current=%d)", v.Current().Get())
 	}
-	v.Disabled = false
+	v.Disabled().Set(false)
 	v.Current().Set(99) // out of range -> treated as 0
 	v.OnEvent(kd("ArrowRight"))
 	if v.Current().Get() != 1 {
@@ -703,7 +703,7 @@ func TestPaginationKeyNavigates(t *testing.T) {
 	if p.Current().Get() != 1 || changes != before {
 		t.Fatalf("ArrowLeft below 1 fired (Current=%d changes=%d)", p.Current().Get(), changes)
 	}
-	p.Disabled = true
+	p.Disabled().Set(true)
 	p.OnEvent(kd("End"))
 	if p.Current().Get() != 1 {
 		t.Fatalf("disabled pagination moved (Current=%d)", p.Current().Get())
@@ -779,7 +779,7 @@ func TestCalendarKeyboard(t *testing.T) {
 		t.Fatalf("unhandled key moved the day (Day=%d)", c.Day().Get())
 	}
 	// Disabled ignores keys.
-	c.Disabled = true
+	c.Disabled().Set(true)
 	c.OnEvent(kd("ArrowRight"))
 	if c.Day().Get() != 11 {
 		t.Fatalf("disabled calendar moved (Day=%d)", c.Day().Get())
@@ -824,7 +824,7 @@ func TestAccordionKeyboard(t *testing.T) {
 		t.Fatalf("clamp first: Expanded=%d", a.Expanded().Get())
 	}
 	// Disabled ignores keys.
-	a.Disabled = true
+	a.Disabled().Set(true)
 	a.OnEvent(kd("ArrowDown"))
 	a.OnEvent(kd("Enter"))
 	if a.Expanded().Get() != 0 {
@@ -833,7 +833,7 @@ func TestAccordionKeyboard(t *testing.T) {
 	// Empty accordion is a no-op.
 	NewAccordion(nil).OnEvent(kd("Enter"))
 	// A non-click, non-keydown event is ignored.
-	a.Disabled = false
+	a.Disabled().Set(false)
 	a.OnEvent(Event{Kind: EventChar, Code: "a"})
 }
 
@@ -873,7 +873,7 @@ func TestExpanderKeyToggles(t *testing.T) {
 	if e.Expanded().Get() || expands != 2 {
 		t.Fatalf("Space: Expanded=%v expands=%d", e.Expanded().Get(), expands)
 	}
-	e.Disabled = true
+	e.Disabled().Set(true)
 	e.OnEvent(kd("Enter"))
 	if e.Expanded().Get() || expands != 2 {
 		t.Fatalf("disabled expander toggled (Expanded=%v)", e.Expanded().Get())
@@ -912,7 +912,7 @@ func TestCarouselKeyNavigates(t *testing.T) {
 		t.Fatalf("clamp at 0: Current=%d", c.Current().Get())
 	}
 	// Disabled ignores keys.
-	c.Disabled = true
+	c.Disabled().Set(true)
 	c.OnEvent(kd("ArrowRight"))
 	if c.Current().Get() != 0 {
 		t.Fatalf("disabled carousel moved (Current=%d)", c.Current().Get())

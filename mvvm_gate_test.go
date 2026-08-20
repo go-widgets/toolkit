@@ -240,6 +240,10 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"PieChart":     {"Values": true, "Colors": true},
 	"RadarChart":   {"Axes": true, "Series": true, "Max": true, "Colors": true},
 	"ScatterChart": {"Series": true, "Colors": true},
+	// Base is embedded by every widget: its Disabled inert-state flag is now the
+	// unexported `disabled` behind the Disabled() accessor (so `w.Disabled = x`
+	// fails to compile fleet-wide), leaving Font as the sole set-once config field.
+	"Base": {"Font": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the

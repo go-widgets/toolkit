@@ -67,7 +67,7 @@ func TestRangeSliderDrawBand(t *testing.T) {
 func TestRangeSliderDisabledMuted(t *testing.T) {
 	theme := DefaultLight()
 	s := newTestRangeSlider()
-	s.Disabled = true
+	s.Disabled().Set(true)
 	surf := makeSurface(200, scaleThumbSize)
 	s.Draw(newP(surf, 200), theme)
 

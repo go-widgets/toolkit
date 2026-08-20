@@ -339,12 +339,12 @@ func TestCodeMinimapOnEvent(t *testing.T) {
 		t.Fatalf("non-click/drag event fired OnScrollToLine (got %d)", got)
 	}
 	// Disabled: consumes the click without calling back.
-	m.Disabled = true
+	m.Disabled().Set(true)
 	m.OnEvent(Event{Kind: EventClick, X: 5, Y: 3})
 	if got != -1 {
 		t.Fatalf("disabled minimap fired OnScrollToLine (got %d)", got)
 	}
-	m.Disabled = false
+	m.Disabled().Set(false)
 
 	// Nil callback: a click must not panic.
 	m.OnScrollToLine = nil
