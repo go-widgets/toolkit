@@ -522,6 +522,40 @@ func TestToolbarSizeResolvers(t *testing.T) {
 	}
 }
 
+func TestToolbarMetricScaleDoublesSizes(t *testing.T) {
+	defer SetMetricScale(1) // restore the default for other tests
+
+	// Base (logical) sizes at scale 1.
+	SetMetricScale(1)
+	tb1 := NewRichEditorToolbar(nil)
+	tb1.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 28})
+	i1, s1, sep1 := tb1.iconSize(), tb1.spacing(), tb1.sepW()
+	w1, h1 := tb1.Measure(1000, 1000)
+	b1 := tb1.buttons[tbBold].Bounds().W
+
+	// The same widget built at 2x must double every metric, so a HiDPI panel
+	// gets a crisp strip in lockstep with the RichEditor above it.
+	SetMetricScale(2)
+	tb2 := NewRichEditorToolbar(nil)
+	tb2.SetBounds(Rect{X: 0, Y: 0, W: 800, H: 56})
+	if got, want := tb2.iconSize(), 2*i1; got != want {
+		t.Fatalf("iconSize at 2x = %d, want %d", got, want)
+	}
+	if got, want := tb2.spacing(), 2*s1; got != want {
+		t.Fatalf("spacing at 2x = %d, want %d", got, want)
+	}
+	if got, want := tb2.sepW(), 2*sep1; got != want {
+		t.Fatalf("sepW at 2x = %d, want %d", got, want)
+	}
+	if got, want := tb2.buttons[tbBold].Bounds().W, 2*b1; got != want {
+		t.Fatalf("Bold button width at 2x = %d, want %d", got, want)
+	}
+	w2, h2 := tb2.Measure(1000, 1000)
+	if w2 != 2*w1 || h2 != 2*h1 {
+		t.Fatalf("Measure at 2x = (%d,%d), want (%d,%d)", w2, h2, 2*w1, 2*h1)
+	}
+}
+
 func TestActiveInlineStylesNegativeStartBlock(t *testing.T) {
 	e := NewRichEditor(paraDoc("x"))
 	// A selection whose start block is negative: the read-only cell walk must
