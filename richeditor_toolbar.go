@@ -38,11 +38,14 @@ var _ Accessible = (*RichEditorToolbar)(nil)
 type RichEditorToolbar struct {
 	Base
 
-	// IconSize is the square edge, in pixels, of each icon button (set-once
-	// layout config). Zero is replaced by [RichEditorToolbarIconSize] at build.
+	// IconSize is the square edge, in LOGICAL pixels, of each icon button
+	// (set-once layout config); it is routed through the HiDPI metric scale (see
+	// [SetMetricScale]) at build, so the strip stays crisp at any DPI like every
+	// sibling widget. Zero is replaced by [RichEditorToolbarIconSize] at build.
 	IconSize int
-	// Spacing is the gap, in pixels, between adjacent buttons and around the
-	// group dividers (set-once layout config). Negative is clamped to 0.
+	// Spacing is the gap, in LOGICAL pixels, between adjacent buttons and around
+	// the group dividers (set-once layout config); it is metric-scaled at build.
+	// Negative is clamped to 0.
 	Spacing int
 
 	ed      *RichEditor
@@ -139,23 +142,25 @@ func NewRichEditorToolbar(ed *RichEditor) *RichEditorToolbar {
 	return t
 }
 
-// iconSize / sepW resolve the effective sizes, applying the defaults + clamps.
+// iconSize / sepW resolve the effective sizes, applying the defaults + clamps
+// and routing the base (logical-pixel) metric through the HiDPI [scaled] seam so
+// the toolbar doubles on a 2x panel in lockstep with the RichEditor above it.
 func (t *RichEditorToolbar) iconSize() int {
 	if t.IconSize > 0 {
-		return t.IconSize
+		return scaled(t.IconSize)
 	}
-	return RichEditorToolbarIconSize
+	return scaled(RichEditorToolbarIconSize)
 }
 
-func (t *RichEditorToolbar) sepW() int { return RichEditorToolbarSepW }
+func (t *RichEditorToolbar) sepW() int { return scaled(RichEditorToolbarSepW) }
 
 // spacing is the effective inter-child gap: the Spacing field with negatives
-// clamped to 0.
+// clamped to 0, then metric-scaled.
 func (t *RichEditorToolbar) spacing() int {
 	if t.Spacing < 0 {
 		return 0
 	}
-	return t.Spacing
+	return scaled(t.Spacing)
 }
 
 // iconInset is the margin between a button's edge and its icon glyph, so the
@@ -299,9 +304,11 @@ func (t *RichEditorToolbar) OnEvent(ev Event) { t.box.OnEvent(ev) }
 type reToolbarSeparator struct{ Base }
 
 // Draw paints a centred vertical divider inset from the top and bottom edges.
+// The stroke width and inset are metric-scaled so the hairline doubles on a 2x
+// panel instead of thinning to half its intended weight.
 func (s *reToolbarSeparator) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	x := r.X + r.W/2
-	inset := 3
-	fillRect(p, x, r.Y+inset, 1, r.H-2*inset, theme.Border)
+	inset := scaled(3)
+	fillRect(p, x, r.Y+inset, scaled(1), r.H-2*inset, theme.Border)
 }

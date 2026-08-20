@@ -287,6 +287,13 @@ func TestMetricScaleAudit(t *testing.T) {
 		{"LineChart", 240, 160, func() Widget { return &LineChart{} }},
 		{"ListBox", 200, 160, func() Widget { return &ListBox{} }},
 		{"MarkdownEditor", 320, 240, func() Widget { return &MarkdownEditor{} }},
+		// RichEditorToolbar is intentionally NOT audited here: unlike the label-less
+		// catalogue widgets, its buttons always carry an iconoir/text glyph, and a
+		// glyph stroke crossing the middle scanline is the arithmetic-rounding
+		// false positive this probe explicitly does not measure (see the header
+		// note on why the catalogue gives widgets no labels). Its chrome — icon-cell
+		// widths, inter-button spacing, group dividers and Measure — is proven to
+		// double under SetMetricScale by TestToolbarMetricScaleDoublesSizes.
 		{"MarkdownView", 320, 240, func() Widget { return &MarkdownView{} }},
 		{"MediaCard", 260, 160, func() Widget { return &MediaCard{} }},
 		{"MenuBar", 320, 28, func() Widget { return &MenuBar{} }},
