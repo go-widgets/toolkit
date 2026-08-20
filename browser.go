@@ -830,7 +830,8 @@ func (b *Browser) toolbarGroups() (nav, zoom *ButtonGroup, addr Rect) {
 	back, _, reload, zoomOut, _, fit, ad := b.toolbarLayout()
 	addr = ad
 	mk := func(k browserBtnKind, onClick func()) *Button {
-		btn := &Button{Label: b.btnLabel(k), Icon: b.btnIcon(k), OnClick: onClick, PressFeedback: true}
+		btn := &Button{Icon: b.btnIcon(k), OnClick: onClick, PressFeedback: true}
+		btn.Label().Set(b.btnLabel(k))
 		btn.SetFont(b.EffectiveFont())
 		btn.Disabled = !b.btnEnabled(k)
 		// Reflect the persistent press state so the pressed button keeps its

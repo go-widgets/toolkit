@@ -147,6 +147,12 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// are unexported internal state. It exposes no imperative state field, so the
 	// empty config set enforces that none is ever added.
 	"RichEditor": {},
+	// Label: the string is unexported behind the Text() Observable; Align/VAlign/
+	// Ellipsis/Ink/FontSize are set-once appearance config.
+	"Label": {"Align": true, "VAlign": true, "Ellipsis": true, "Ink": true, "FontSize": true},
+	// Button: the caption + sticky selection are unexported behind Label()/Selected()
+	// Observables; OnClick/Icon are func hooks; Style/PressFeedback/Flat are config.
+	"Button": {"Style": true, "PressFeedback": true, "Flat": true},
 	// TagField: the tag set + entry text are unexported behind Tags()/Text()
 	// Observable accessors; Placeholder is set-once config.
 	"TagField": {"Placeholder": true},

@@ -13,7 +13,7 @@ func TestButtonSelectedAndDanger(t *testing.T) {
 
 	// Selected fills with Accent — assert an accent pixel in the body.
 	sel := NewButton("Reddit", nil)
-	sel.Selected = true
+	sel.Selected().Set(true)
 	sel.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
 	buf := makeSurface(60, 20)
 	sel.Draw(newP(buf, 60), th)

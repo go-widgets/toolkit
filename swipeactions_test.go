@@ -701,7 +701,7 @@ func TestSwipeA11yStateValue(t *testing.T) {
 
 func TestSwipeChildrenExposeActionsAtHomeRects(t *testing.T) {
 	resetSwipeGlobals(t)
-	label := &Label{Text: "Row"}
+	label := NewLabel("Row")
 	sa := NewSwipeActions(label)
 	sa.SetBounds(Rect{W: swRowW, H: swRowH})
 	sa.Leading = []SwipeAction{{Label: "Archive"}}
@@ -769,8 +769,8 @@ func TestSwipeSyncButtonsRebuildAndRefresh(t *testing.T) {
 	}
 	sa.Trailing[0].Label = "Renamed"
 	sa.layout()
-	if sa.trailBtns[0].Label != "Renamed" {
-		t.Fatalf("button label not refreshed: %q", sa.trailBtns[0].Label)
+	if sa.trailBtns[0].Label().Get() != "Renamed" {
+		t.Fatalf("button label not refreshed: %q", sa.trailBtns[0].Label().Get())
 	}
 	// Count change rebuilds.
 	sa.Trailing = sa.Trailing[:2]

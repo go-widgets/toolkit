@@ -358,8 +358,8 @@ func (pv *PagedView) layoutToolbar(r Rect, tbH int) {
 // their range ends.
 func (pv *PagedView) syncButtonStates() {
 	mode := pv.Mode().Get()
-	pv.btnContinuous.Selected = mode == PagedContinuous
-	pv.btnPaginated.Selected = mode == PagedPaginated
+	pv.btnContinuous.Selected().Set(mode == PagedContinuous)
+	pv.btnPaginated.Selected().Set(mode == PagedPaginated)
 	z := pv.Zoom().Get()
 	pv.btnZoomOut.Disabled = z <= pagedZoomMin
 	pv.btnZoomIn.Disabled = z >= pagedZoomMax

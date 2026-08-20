@@ -111,16 +111,16 @@ func checkedValue(on bool) string {
 func (b *Button) A11y() A11yInfo {
 	v := ""
 	switch {
-	case b.Selected:
+	case b.Selected().Get():
 		v = "selected"
 	case b.pressed:
 		v = "pressed"
 	}
-	return A11yInfo{Role: RoleButton, Name: b.Label, Value: v}
+	return A11yInfo{Role: RoleButton, Name: b.Label().Get(), Value: v}
 }
 
 // A11y reports the Label as static text.
-func (l *Label) A11y() A11yInfo { return A11yInfo{Role: RoleText, Name: l.Text} }
+func (l *Label) A11y() A11yInfo { return A11yInfo{Role: RoleText, Name: l.Text().Get()} }
 
 // A11y reports the Entry as a textbox carrying its current text.
 func (e *Entry) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: e.Text().Get()} }

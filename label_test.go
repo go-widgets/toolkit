@@ -106,9 +106,9 @@ func drawLabel(w, h int, fn func(*Label)) []byte {
 func TestLabelVAlign(t *testing.T) {
 	const w, h = 120, 30 // h (30) comfortably exceeds glyphHeight (7)
 
-	top := drawLabel(w, h, func(l *Label) { l.Text = "Hi"; l.VAlign = VTop })
-	mid := drawLabel(w, h, func(l *Label) { l.Text = "Hi"; l.VAlign = VMiddle })
-	bot := drawLabel(w, h, func(l *Label) { l.Text = "Hi"; l.VAlign = VBottom })
+	top := drawLabel(w, h, func(l *Label) { l.Text().Set("Hi"); l.VAlign = VTop })
+	mid := drawLabel(w, h, func(l *Label) { l.Text().Set("Hi"); l.VAlign = VMiddle })
+	bot := drawLabel(w, h, func(l *Label) { l.Text().Set("Hi"); l.VAlign = VBottom })
 
 	topRow := labelTopRow(top, w, h)
 	midRow := labelTopRow(mid, w, h)
@@ -134,15 +134,15 @@ func TestLabelVAlign(t *testing.T) {
 
 	// The zero value VAuto keeps the original behaviour: centred when the box is
 	// taller than the text — identical to VMiddle here.
-	zero := drawLabel(w, h, func(l *Label) { l.Text = "Hi" })
+	zero := drawLabel(w, h, func(l *Label) { l.Text().Set("Hi") })
 	if !bytes.Equal(zero, mid) {
 		t.Fatal("zero-value VAuto must centre in a taller box (match VMiddle)")
 	}
 	// VAuto in a box no taller than the glyph height stays top-anchored.
 	tight := NewLabel("").glyphHeight()
 	if !bytes.Equal(
-		drawLabel(w, tight, func(l *Label) { l.Text = "Hi" }),
-		drawLabel(w, tight, func(l *Label) { l.Text = "Hi"; l.VAlign = VTop }),
+		drawLabel(w, tight, func(l *Label) { l.Text().Set("Hi") }),
+		drawLabel(w, tight, func(l *Label) { l.Text().Set("Hi"); l.VAlign = VTop }),
 	) {
 		t.Fatal("zero-value VAuto in a tight box must top-anchor (match VTop)")
 	}
@@ -155,8 +155,8 @@ func TestLabelEllipsis(t *testing.T) {
 	const w, h = 60, 12 // 60px == 10 glyphs (advance 6)
 	const long = "This is a very long line of text"
 
-	full := drawLabel(w, h, func(l *Label) { l.Text = long })                    // Ellipsis:false
-	clip := drawLabel(w, h, func(l *Label) { l.Text = long; l.Ellipsis = true }) // truncated
+	full := drawLabel(w, h, func(l *Label) { l.Text().Set(long) })                    // Ellipsis:false
+	clip := drawLabel(w, h, func(l *Label) { l.Text().Set(long); l.Ellipsis = true }) // truncated
 	if bytes.Equal(full, clip) {
 		t.Fatal("Ellipsis=true on an over-wide string must change the render")
 	}
@@ -175,15 +175,15 @@ func TestLabelEllipsis(t *testing.T) {
 	// With the bitmap font the ellipsis is 3 bytes (18px) and each glyph is 6px,
 	// so the widest prefix p with (len(p)+3)*6 <= 60 is 7 bytes: "This is". The
 	// truncated render must therefore equal "This is…" drawn directly.
-	want := drawLabel(w, h, func(l *Label) { l.Text = "This is…" })
+	want := drawLabel(w, h, func(l *Label) { l.Text().Set("This is…") })
 	if !bytes.Equal(clip, want) {
 		t.Fatal("truncated render must equal 'This is…' drawn directly")
 	}
 
 	// Ellipsis=true on text that already fits leaves it identical to the plain
 	// (non-ellipsis) render — the truncate branch is skipped.
-	fits := drawLabel(w, h, func(l *Label) { l.Text = "Hi" })
-	fitsEll := drawLabel(w, h, func(l *Label) { l.Text = "Hi"; l.Ellipsis = true })
+	fits := drawLabel(w, h, func(l *Label) { l.Text().Set("Hi") })
+	fitsEll := drawLabel(w, h, func(l *Label) { l.Text().Set("Hi"); l.Ellipsis = true })
 	if !bytes.Equal(fits, fitsEll) {
 		t.Fatal("Ellipsis on already-fitting text must not change the render")
 	}
@@ -221,8 +221,8 @@ func TestLabelEllipsisVisibleTTF(t *testing.T) {
 	const w, h = 90, 22
 	const long = "Truncate me because I am far too wide"
 
-	full := drawLabel(w, h, func(l *Label) { l.Text = long; l.SetFont(ttf) })
-	clip := drawLabel(w, h, func(l *Label) { l.Text = long; l.Ellipsis = true; l.SetFont(ttf) })
+	full := drawLabel(w, h, func(l *Label) { l.Text().Set(long); l.SetFont(ttf) })
+	clip := drawLabel(w, h, func(l *Label) { l.Text().Set(long); l.Ellipsis = true; l.SetFont(ttf) })
 
 	clipW := labelPaintedWidth(clip, w, h)
 	if clipW == 0 {
@@ -250,14 +250,14 @@ func TestLabelAlignWithTruncation(t *testing.T) {
 	// Centre + ellipsis: the truncated string (60px) fills the width, so its
 	// centred origin is the left edge (0). Right-align on the truncated text is
 	// likewise pinned to the left edge here.
-	center := drawLabel(w, h, func(l *Label) { l.Text = long; l.Align = AlignCenter; l.Ellipsis = true })
+	center := drawLabel(w, h, func(l *Label) { l.Text().Set(long); l.Align = AlignCenter; l.Ellipsis = true })
 	if labelTopRow(center, w, h) < 0 {
 		t.Fatal("centred truncated label painted nothing")
 	}
 
 	// Right-align without ellipsis: x = W - textWidth is far negative and must
 	// clamp to the left edge (row 0 painted starting at column 0).
-	right := drawLabel(w, h, func(l *Label) { l.Text = long; l.Align = AlignRight })
+	right := drawLabel(w, h, func(l *Label) { l.Text().Set(long); l.Align = AlignRight })
 	if pxRow := labelTopRow(right, w, h); pxRow < 0 {
 		t.Fatal("right-aligned overflow label painted nothing")
 	}
