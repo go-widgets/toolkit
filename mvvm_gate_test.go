@@ -147,6 +147,11 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// are unexported internal state. It exposes no imperative state field, so the
 	// empty config set enforces that none is ever added.
 	"RichEditor": {},
+	// RichEditorToolbar: the bound editor, button strip, child buttons + their
+	// predicates and the subscription handles are all unexported; each button's
+	// lit state lives on its own Selected() Observable. IconSize and Spacing are
+	// set-once layout config, the only exported fields.
+	"RichEditorToolbar": {"IconSize": true, "Spacing": true},
 	// The following hold no exported reactive state — their selection/toggle/scroll
 	// state is unexported behind accessors or internal, and the exported fields are
 	// host-set config (data slices, layout metrics, mode/style enums) or func hooks
