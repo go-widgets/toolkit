@@ -86,9 +86,9 @@ type disabledReporter interface {
 	isDisabled() bool
 }
 
-// isDisabled reports Base.Disabled so the focus walker can skip disabled
+// isDisabled reports Base.Disabled().Get() so the focus walker can skip disabled
 // widgets when enumerating focus candidates.
-func (b *Base) isDisabled() bool { return b.Disabled }
+func (b *Base) isDisabled() bool { return b.Disabled().Get() }
 
 // gatherFocusables appends every enabled, visible Focusable descendant of ce to
 // out, in visual (child) order, descending into nested containers so a focusable

@@ -144,7 +144,7 @@ func TestListBoxKeyDisabledAndEmptyAndNil(t *testing.T) {
 	// Disabled ignores keys.
 	lb := newCursorListBox()
 	lb.Selected().Set(5)
-	lb.Disabled = true
+	lb.Disabled().Set(true)
 	lb.OnEvent(kd3b("ArrowDown"))
 	lb.OnEvent(kd3b("Enter"))
 	if lb.Selected().Get() != 5 {
@@ -281,7 +281,7 @@ func TestTableKeyShiftExtendsSelection(t *testing.T) {
 func TestTableKeyDisabledEmptyAndNoCursorActivate(t *testing.T) {
 	tb := newCursorTable()
 	tb.Selected().Set(4)
-	tb.Disabled = true
+	tb.Disabled().Set(true)
 	tb.OnEvent(kd3b("ArrowDown"))
 	tb.OnEvent(kd3b("Enter"))
 	if tb.Selected().Get() != 4 {
@@ -494,7 +494,7 @@ func TestTreeViewKeyEdgeCases(t *testing.T) {
 	tv.OnEvent(kd3b("Enter"))
 
 	// Disabled ignores keys.
-	tv.Disabled = true
+	tv.Disabled().Set(true)
 	keep := tv.Selected().Get()
 	tv.OnEvent(kd3b("ArrowDown"))
 	if tv.Selected().Get() != keep {
@@ -657,7 +657,7 @@ func TestTreeTableKeyEdgeCases(t *testing.T) {
 		t.Fatalf("ArrowDown from invisible cursor: Selected=%v", tt.Selected().Get())
 	}
 	// Disabled ignores keys.
-	tt.Disabled = true
+	tt.Disabled().Set(true)
 	keep := tt.Selected().Get()
 	tt.OnEvent(kd3b("ArrowDown"))
 	if tt.Selected().Get() != keep {
@@ -775,7 +775,7 @@ func TestMenuKeyboardNoEnabledAndEmptyAndDisabled(t *testing.T) {
 	nc.OnEvent(kd3b("Escape"))
 	// Disabled menu ignores keys.
 	d, fired, _ := menuFixture()
-	d.Disabled = true
+	d.Disabled().Set(true)
 	d.OnEvent(kd3b("ArrowDown"))
 	d.OnEvent(kd3b("Enter"))
 	if d.Hover().Get() != -1 || fired[0]+fired[2] != 0 {
@@ -872,7 +872,7 @@ func TestMenuBarKeyboardDisabledAndNilMenu(t *testing.T) {
 	// Disabled ignores keys (including Alt/Escape).
 	b := newKeyMenuBar()
 	b.Active().Set(0)
-	b.Disabled = true
+	b.Disabled().Set(true)
 	b.OnEvent(kd3b("ArrowRight"))
 	if b.Active().Get() != 0 {
 		t.Fatalf("disabled bar moved Active=%d", b.Active().Get())

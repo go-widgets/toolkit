@@ -69,7 +69,7 @@ func (r *RadioButton) Draw(p painter.Painter, theme *Theme) {
 	// A disabled radio mutes its mark, dot and label; the enabled draw is
 	// unchanged (the branch is only taken when Disabled).
 	face, border, dot, labelInk := theme.Surface, theme.Border, theme.Accent, theme.OnBackground
-	if r.Disabled {
+	if r.Disabled().Get() {
 		face, border, dot, labelInk = mutedFace(theme), mutedInk(theme), mutedInk(theme), mutedInk(theme)
 	}
 	fillRect(p, b.X, boxY, scaled(radioBoxSize), scaled(radioBoxSize), face)
@@ -86,7 +86,7 @@ func (r *RadioButton) Draw(p painter.Painter, theme *Theme) {
 // OnEvent: on click, route through the group (if any) so siblings
 // clear; otherwise toggle Checked locally.
 func (r *RadioButton) OnEvent(ev Event) {
-	if r.Disabled {
+	if r.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

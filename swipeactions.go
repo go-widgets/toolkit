@@ -592,7 +592,7 @@ func (sa *SwipeActions) Tick(dt float64) bool {
 // tap. Escape closes an open row. Events the shut row does not use are forwarded
 // to the content.
 func (sa *SwipeActions) OnEvent(ev Event) {
-	if sa.Disabled {
+	if sa.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

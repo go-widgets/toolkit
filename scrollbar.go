@@ -151,7 +151,7 @@ func (s *Scrollbar) Draw(p painter.Painter, theme *Theme) {
 // Scrollbar drags exactly like an embedded one. A Disabled scrollbar ignores
 // input. Coordinates are widget-local.
 func (s *Scrollbar) OnEvent(ev Event) {
-	if s.Disabled {
+	if s.Disabled().Get() {
 		return
 	}
 	g, ok := s.geom()

@@ -361,11 +361,11 @@ func (pv *PagedView) syncButtonStates() {
 	pv.btnContinuous.Selected().Set(mode == PagedContinuous)
 	pv.btnPaginated.Selected().Set(mode == PagedPaginated)
 	z := pv.Zoom().Get()
-	pv.btnZoomOut.Disabled = z <= pagedZoomMin
-	pv.btnZoomIn.Disabled = z >= pagedZoomMax
+	pv.btnZoomOut.Disabled().Set(z <= pagedZoomMin)
+	pv.btnZoomIn.Disabled().Set(z >= pagedZoomMax)
 	cur, cnt := pv.cur(), pv.PageCount()
-	pv.btnPrev.Disabled = cur <= 1
-	pv.btnNext.Disabled = cur >= cnt
+	pv.btnPrev.Disabled().Set(cur <= 1)
+	pv.btnNext.Disabled().Set(cur >= cnt)
 }
 
 // toolbarButtons is the drawn / hit-tested button set for the current mode: the
@@ -545,7 +545,7 @@ func (pv *PagedView) ScrollToPage(page, localY int) {
 // other pointer event (drag / release for the pane's pan + scrollbars) forwards
 // to the inner ScrollView. A Disabled PagedView ignores everything.
 func (pv *PagedView) OnEvent(ev Event) {
-	if pv.Disabled {
+	if pv.Disabled().Get() {
 		return
 	}
 	pv.relayout()

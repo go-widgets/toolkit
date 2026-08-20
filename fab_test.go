@@ -693,7 +693,7 @@ func TestFabPrimaryTapFiresOnce(t *testing.T) {
 func TestFabDisabledIgnoresEvents(t *testing.T) {
 	tapped := 0
 	f := NewFab("+", func() { tapped++ })
-	f.Disabled = true
+	f.Disabled().Set(true)
 	f.SetBounds(Rect{X: 0, Y: 0, W: 56, H: 56})
 	f.OnEvent(Event{Kind: EventClick, X: 28, Y: 28})
 	if tapped != 0 {
@@ -879,7 +879,7 @@ func TestFabDrawPressedAndDisabledFaces(t *testing.T) {
 
 	// Disabled: a muted face, and (per drawButton) no shadow band below it.
 	g := NewFab("", nil)
-	g.Disabled = true
+	g.Disabled().Set(true)
 	g.SetBounds(Rect{X: 0, Y: 0, W: 56, H: 56})
 	buf = fabRender(g, 80, 80, theme)
 	if got := fabPx(buf, 80, 14, 28); got != mutedFace(theme) {

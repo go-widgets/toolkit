@@ -474,7 +474,7 @@ func TestPagedViewDisabledIgnoresEvents(t *testing.T) {
 	pv := NewPagedView([]*image.RGBA{solidPage(40, 40, pgRed), solidPage(40, 40, pgGreen)})
 	pv.Mode().Set(PagedPaginated)
 	pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 300})
-	pv.Disabled = true
+	pv.Disabled().Set(true)
 	pv.OnEvent(Event{Kind: EventKeyDown, Code: "PageDown"})
 	if pv.cur() != 1 {
 		t.Fatalf("disabled view navigated to %d", pv.cur())

@@ -1858,7 +1858,7 @@ func (t *Table) scrollToSelected() {
 // no rows, ignores every key. Selected doubles as the cursor, so the Accent
 // highlight tracks keyboard navigation exactly as it does a mouse selection.
 func (t *Table) handleKey(ev Event) {
-	if t.Disabled || len(t.Rows) == 0 {
+	if t.Disabled().Get() || len(t.Rows) == 0 {
 		return
 	}
 	switch ev.Code {

@@ -164,7 +164,7 @@ func (pg *Pagination) drawSlot(p painter.Painter, theme *Theme, x, y int, slot p
 // no-ops.
 func (pg *Pagination) OnEvent(ev Event) {
 	if ev.Kind == EventKeyDown {
-		if pg.Disabled || pg.Total <= 0 {
+		if pg.Disabled().Get() || pg.Total <= 0 {
 			return
 		}
 		// Left/Right step one page (like the prev/next buttons); Home/End jump to

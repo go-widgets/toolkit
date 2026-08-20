@@ -757,7 +757,7 @@ func TestBrowserDrawNoActiveTab(t *testing.T) {
 func TestBrowserDisabledSwallowsEvents(t *testing.T) {
 	b, _, _, changes := newTestBrowser()
 	b.Open("http://a", "")
-	b.Disabled = true
+	b.Disabled().Set(true)
 	before := *changes
 	b.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
 	b.OnEvent(Event{Kind: EventScroll, Delta: 3})

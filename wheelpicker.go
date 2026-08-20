@@ -299,7 +299,7 @@ func (w *WheelPicker) columnAt(localX int) int {
 // from where it actually sits. It arms the gesture; a following TouchMove pans
 // it. A press outside every column is ignored.
 func (w *WheelPicker) TouchDown(ev Event) {
-	if w.Disabled {
+	if w.Disabled().Get() {
 		return
 	}
 	col := w.columnAt(ev.X)
@@ -325,7 +325,7 @@ func (w *WheelPicker) TouchDown(ev Event) {
 // velocity for the eventual fling and fires OnChange as the drag crosses rows. A
 // move with no armed drag, or a zero row height, is a no-op.
 func (w *WheelPicker) TouchMove(ev Event, dt float64) {
-	if !w.dragging || w.Disabled {
+	if !w.dragging || w.Disabled().Get() {
 		return
 	}
 	rowH := w.rowHeight()
@@ -489,7 +489,7 @@ func (w *WheelPicker) Step(delta int) {
 // path is NOT here — it needs per-sample dt — and lives in TouchDown/TouchMove/
 // TouchUp/Tick instead. A disabled wheel ignores everything.
 func (w *WheelPicker) OnEvent(ev Event) {
-	if w.Disabled {
+	if w.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {
@@ -572,7 +572,7 @@ func (w *WheelPicker) onKey(ev Event) {
 func (w *WheelPicker) Draw(p painter.Painter, theme *Theme) {
 	r := w.Bounds()
 	surface := theme.Surface
-	if w.Disabled {
+	if w.Disabled().Get() {
 		surface = mutedFace(theme)
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, surface)
@@ -587,7 +587,7 @@ func (w *WheelPicker) Draw(p painter.Painter, theme *Theme) {
 	bandTop := r.Y + r.H/2 - rowH/2
 	bandBottom := bandTop + rowH
 	rule := theme.Accent
-	if w.Disabled {
+	if w.Disabled().Get() {
 		rule = mutedInk(theme)
 	}
 	fillRect(p, r.X, bandTop, r.W, strokeWidth(), rule)
@@ -632,7 +632,7 @@ func (w *WheelPicker) drawColumn(p painter.Painter, theme *Theme, j, rowH int) {
 
 	ink := theme.OnSurface
 	muted := blendRGBA(theme.OnSurface, theme.Surface, 0.55)
-	if w.Disabled {
+	if w.Disabled().Get() {
 		ink = mutedInk(theme)
 		muted = ink
 	}

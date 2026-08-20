@@ -353,13 +353,13 @@ func TestButtonIconReplacesLabel(t *testing.T) {
 		t.Fatal("Label glyphs drawn despite Icon being set")
 	}
 	// Disabled: the icon receives the muted ink.
-	b.Disabled = true
+	b.Disabled().Set(true)
 	b.Draw(newP(makeSurface(w, h), w), theme)
 	if gotInk != mutedInk(theme) {
 		t.Fatalf("disabled icon ink = %+v, want mutedInk", gotInk)
 	}
 	// Pressed: the icon receives the Background ink (inverted on the Accent face).
-	b.Disabled = false
+	b.Disabled().Set(false)
 	b.SetPressed(true)
 	b.Draw(newP(makeSurface(w, h), w), theme)
 	if gotInk != theme.Background {

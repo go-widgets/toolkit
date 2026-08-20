@@ -801,7 +801,7 @@ func TestPullToRefreshOnEventDisabled(t *testing.T) {
 	restoreDensity()
 	child := &eventChild{}
 	w := newPTR(child)
-	w.Disabled = true
+	w.Disabled().Set(true)
 	w.OnEvent(Event{Kind: EventClick, X: 1, Y: 1})
 	if child.gotAny {
 		t.Fatalf("disabled widget forwarded an event")

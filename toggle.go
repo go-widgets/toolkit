@@ -60,7 +60,7 @@ func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 		face = theme.SurfaceAlt
 	}
 	ink, border := theme.OnSurface, theme.Border
-	if t.Disabled {
+	if t.Disabled().Get() {
 		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
@@ -75,7 +75,7 @@ func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 // OnEvent: a click flips Pressed; a move tracks the hover face. A Disabled
 // toggle ignores every kind.
 func (t *ToggleButton) OnEvent(ev Event) {
-	if t.Disabled {
+	if t.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

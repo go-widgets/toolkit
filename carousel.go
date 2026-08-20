@@ -266,7 +266,7 @@ func (c *Carousel) Draw(p painter.Painter, theme *Theme) {
 // Carousel with no Slides are no-ops.
 func (c *Carousel) OnEvent(ev Event) {
 	if ev.Kind == EventKeyDown {
-		if c.Disabled || len(c.Slides) == 0 {
+		if c.Disabled().Get() || len(c.Slides) == 0 {
 			return
 		}
 		// Left/Right step to the previous/next slide, reusing Prev/Next (which

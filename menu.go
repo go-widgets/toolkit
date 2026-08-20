@@ -394,7 +394,7 @@ func (m *Menu) OnEvent(ev Event) {
 				return
 			}
 		case EventKeyDown:
-			if m.Disabled {
+			if m.Disabled().Get() {
 				return
 			}
 			switch ev.Code {
@@ -424,7 +424,7 @@ func (m *Menu) OnEvent(ev Event) {
 		}
 		return
 	case EventKeyDown:
-		if m.Disabled {
+		if m.Disabled().Get() {
 			return
 		}
 		switch ev.Code {
@@ -893,7 +893,7 @@ func (b *MenuBar) OnEvent(ev Event) {
 		// is open, ArrowLeft/ArrowRight move Active between top-level menus
 		// (wrapping) and ArrowDown enters the open menu's first item. A
 		// disabled MenuBar ignores keys. Any other Code is ignored.
-		if b.Disabled {
+		if b.Disabled().Get() {
 			return
 		}
 		if ev.Code == "Escape" {

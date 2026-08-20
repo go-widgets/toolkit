@@ -437,7 +437,7 @@ func TestIsoPaletteCollapsedBodyPressIgnored(t *testing.T) {
 func TestIsoPaletteDisabledIgnoresEvents(t *testing.T) {
 	p := NewIsoIconPalette(paletteTestRegistry())
 	p.SetBounds(Rect{X: 0, Y: 0, W: scaled(isoPalWidth), H: 2000})
-	p.Disabled = true
+	p.Disabled().Set(true)
 	x, y, _ := iconPointLocal(p, "alpha")
 	p.OnEvent(Event{Kind: EventClick, X: x, Y: y})
 	if p.SelectedIcon().Get() != "" {

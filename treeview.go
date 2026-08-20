@@ -264,7 +264,7 @@ func (t *TreeView) scrollToSelected() {
 // parent; Enter / Space activate the cursor node like a click. A disabled
 // TreeView, or an empty tree, ignores every key.
 func (t *TreeView) handleKey(ev Event) {
-	if t.Disabled {
+	if t.Disabled().Get() {
 		return
 	}
 	t.flatten()

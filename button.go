@@ -164,7 +164,7 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	// A disabled button ignores style + interaction and paints a muted face,
 	// so it reads as inert. Only taken when Disabled, so the enabled draw is
 	// byte-identical.
-	if b.Disabled {
+	if b.Disabled().Get() {
 		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
 	if b.Flat {
@@ -201,7 +201,7 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 // are ignored. (SetPressed remains for hosts that drive press state their own
 // way, e.g. enter/leave dispatch.)
 func (b *Button) OnEvent(ev Event) {
-	if b.Disabled {
+	if b.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

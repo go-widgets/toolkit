@@ -627,7 +627,7 @@ func TestIsoDrawWithOpenMenu(t *testing.T) {
 func TestIsoDisabledIgnoresEvents(t *testing.T) {
 	d := NewIsoDiagram(nil)
 	d.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
-	d.Disabled = true
+	d.Disabled().Set(true)
 	d.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
 	d.OnEvent(Event{Kind: EventMouseUp, X: 10, Y: 10})
 	if len(d.Doc().Nodes()) != 0 {

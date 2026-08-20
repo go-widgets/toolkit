@@ -222,7 +222,7 @@ func (t *FolderTabs) drawTab(p painter.Painter, theme *Theme, i int, face, ink R
 // strip, and every other event kind are no-ops; a Disabled strip ignores
 // everything.
 func (t *FolderTabs) OnEvent(ev Event) {
-	if t.Disabled {
+	if t.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

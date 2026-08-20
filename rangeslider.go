@@ -174,7 +174,7 @@ func (s *RangeSlider) Draw(p painter.Painter, theme *Theme) {
 	// Track / band / thumb / border colours. A disabled slider mutes them all so
 	// it reads as inert, exactly as Scale does; the enabled draw is unchanged.
 	trackC, bandC, thumbC, borderC := theme.SurfaceAlt, theme.Accent, theme.Surface, theme.Border
-	if s.Disabled {
+	if s.Disabled().Get() {
 		trackC, bandC, thumbC, borderC = mutedFace(theme), mutedInk(theme), mutedFace(theme), mutedInk(theme)
 	}
 	if s.Orientation == Vertical {
@@ -255,7 +255,7 @@ func (s *RangeSlider) OnEvent(ev Event) {
 	case EventMouseUp:
 		s.active = 0
 	case EventKeyDown:
-		if s.Disabled {
+		if s.Disabled().Get() {
 			return
 		}
 		// Home/End pick which handle the arrows move (Low / High); the arrows

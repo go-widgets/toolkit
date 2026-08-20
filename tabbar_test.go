@@ -490,7 +490,7 @@ func TestTabBarDisabledIgnoresInput(t *testing.T) {
 	b := NewTabBar(sampleItems(), 0)
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 56})
 	b.SwipeNavigation = true
-	b.Disabled = true
+	b.Disabled().Set(true)
 	b.Selected().Subscribe(func(int) { t.Fatal("disabled bar fired OnSelect") })
 	b.OnEvent(Event{Kind: EventClick, X: 125})
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
@@ -506,7 +506,7 @@ func TestTabBarDisabledDrawIsMuted(t *testing.T) {
 	theme := DefaultLight()
 	b := NewTabBar(sampleItems(), 1)
 	b.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	b.Disabled = true
+	b.Disabled().Set(true)
 	buf := makeSurface(w, h)
 	b.Draw(newP(buf, w), theme)
 	// No pure Accent anywhere: the indicator and selected ink are muted.

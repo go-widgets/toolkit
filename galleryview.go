@@ -424,7 +424,7 @@ func (g *GalleryView) drawThumb(p painter.Painter, theme *Theme, r Rect, i int) 
 // Enter/Return/Space, selects on a click, activates on a second click of the
 // selected thumbnail, and is inert while Disabled or empty.
 func (g *GalleryView) OnEvent(ev Event) {
-	if g.Disabled {
+	if g.Disabled().Get() {
 		return
 	}
 	n := len(g.Items)
