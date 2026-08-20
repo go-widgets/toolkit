@@ -59,6 +59,12 @@ func (i IsoProceduralAnimIcon) Render(x, y int, base stdcolor.RGBA) IsoIconDrawi
 // inputs wrap forward (e.g. -0.25 -> 0.75). A value that folds to exactly 1
 // (which math.Floor cannot produce here) would map to 0.
 func isoWrapPhase(phase float64) float64 {
+	// A non-finite phase (NaN / ±Inf a host may hand RenderAt directly) has no
+	// place on the cycle; fold it to the rest frame so an animated icon renders
+	// its phase-0 still rather than emitting NaN coordinates.
+	if math.IsNaN(phase) || math.IsInf(phase, 0) {
+		return 0
+	}
 	p := phase - math.Floor(phase)
 	if p >= 1 { // guards a float edge where phase-Floor rounds up to 1.0
 		p = 0

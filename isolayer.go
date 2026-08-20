@@ -101,19 +101,21 @@ func (d *IsoDiagram) blitHidden() bool {
 	return false
 }
 
-// drawContent composites the blit pipeline (zone floor, depth-sorted node /
-// connector scene, sprite overlay) into img, honouring layers.
+// drawContent composites the blit pipeline (zone floor, ground-grid floor,
+// depth-sorted node / connector scene, sprite overlay) into img, honouring
+// layers.
 //
 // The common case — a single layer order and nothing hidden, which is EVERY
 // pre-layers document — renders in one pass through the unchanged legacy
-// helpers, so its output is byte-identical. When entities span several layer
-// orders (or some are hidden) each order is composited back-to-front in its own
-// pass, so a higher-order layer draws over a lower one whatever the isometric
-// depth; the grid draws once, in the backmost pass.
+// helpers. When entities span several layer orders (or some are hidden) each
+// order is composited back-to-front in its own pass, so a higher-order layer
+// draws over a lower one whatever the isometric depth; the grid floor draws
+// once, in the backmost pass, under every solid.
 func (d *IsoDiagram) drawContent(img *raster.Image, theme *Theme) {
 	orders := d.contentOrders()
 	if len(orders) == 1 && !d.blitHidden() {
 		d.drawZones(img, theme)
+		d.drawGrid(img, theme)
 		d.scene(theme).Render(img)
 		d.drawSprites(img, theme)
 		return
@@ -122,10 +124,10 @@ func (d *IsoDiagram) drawContent(img *raster.Image, theme *Theme) {
 		d.drawZonesWhere(img, theme, func(z IsoZone) bool {
 			return d.layerVisible(z.Layer) && d.layerOrder(z.Layer) == ord
 		})
-		sc := iso.NewScene(d.proj)
 		if i == 0 {
-			d.addGrid(sc, theme)
+			d.drawGrid(img, theme)
 		}
+		sc := iso.NewScene(d.proj)
 		for _, n := range d.doc.Nodes() {
 			if d.layerVisible(n.Layer) && d.layerOrder(n.Layer) == ord {
 				d.addNodeShapes(sc, theme, n)

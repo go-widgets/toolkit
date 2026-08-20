@@ -13,6 +13,7 @@ import (
 	"github.com/go-gfx/gfx/geometry"
 	"github.com/go-gfx/gfx/iso"
 	"github.com/go-gfx/gfx/raster"
+	"github.com/go-gfx/gfx/vector"
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
@@ -376,6 +377,13 @@ func (d *IsoDiagram) AnimationStep(dt float64) {
 		period = isoDefaultAnimPeriod
 	}
 	p := d.animPhase + dt/period
+	// A non-finite step (a host handing a NaN or ±Inf dt) would fold to a NaN
+	// phase, which flows into every animated icon's trig and out as NaN shape
+	// coordinates — a blank or garbage frame. Leave the phase (and the frame)
+	// untouched in that case; a finite dt is unaffected.
+	if math.IsNaN(p) || math.IsInf(p, 0) {
+		return
+	}
 	d.animPhase = p - math.Floor(p)
 	if d.hasAnimatedNode() {
 		d.invalidate()
@@ -409,6 +417,14 @@ func (d *IsoDiagram) hasAnimatedNode() bool {
 // enters the draw path, so a still icon — and any diagram whose phase is 0 —
 // renders exactly as before.
 func (d *IsoDiagram) renderIconAtPhase(icon IsoIcon, x, y int, base stdcolor.RGBA) IsoIconDrawing {
+	// A nil icon can reach here when a host registers a nil under an id (or nils
+	// out the exported IsoFallbackIcon that an unknown id resolves to). Rendering
+	// it would dereference a nil interface and take the whole widget down; treat it
+	// as an icon that contributes nothing instead. addNodeShapes turns that empty
+	// drawing back into the node's plain solid, so the node still shows.
+	if icon == nil {
+		return IsoIconDrawing{}
+	}
 	if a, ok := icon.(IsoAnimatedIcon); ok {
 		return a.RenderAt(x, y, base, d.animPhase)
 	}
@@ -820,11 +836,12 @@ var isoArrowSpread = 30.0 * math.Pi / 180
 
 // --- rendering ----------------------------------------------------------
 
-// scene assembles the depth-sorted isometric scene: ground grid first, then a
-// solid per node, then a line per connector whose endpoints both exist.
+// scene assembles the depth-sorted isometric scene: a solid per node, then a
+// line per connector whose endpoints both exist. The ground grid is NOT part of
+// the scene — it is painted as a floor pass before the scene renders (see
+// [IsoDiagram.drawGrid]) so opaque solids occlude the cells they cover.
 func (d *IsoDiagram) scene(theme *Theme) *iso.Scene {
 	sc := iso.NewScene(d.proj)
-	d.addGrid(sc, theme)
 	for _, n := range d.doc.Nodes() {
 		d.addNodeShapes(sc, theme, n)
 	}
@@ -834,14 +851,46 @@ func (d *IsoDiagram) scene(theme *Theme) *iso.Scene {
 	return sc
 }
 
-// addGrid adds the ground grid's lines to sc in the theme's border colour.
-func (d *IsoDiagram) addGrid(sc *iso.Scene, theme *Theme) {
+// drawGrid strokes the ground grid straight into img in the theme's border
+// colour — the FLOOR pass, painted BEFORE the depth-sorted node/connector scene,
+// exactly where the zone floor is painted.
+//
+// The grid used to be added to the depth-sorted scene as one iso.Line per line.
+// The painter's algorithm sorts a shape by a single key (a line by its midpoint),
+// so a long grid line spanning the board — midpoint at the board centre — could
+// sort in FRONT of a nearer solid and paint over its face, letting the grid show
+// through solids that should occlude it. Painting the grid as an opaque floor,
+// then compositing the solids back-to-front over it, occludes every cell a solid
+// covers.
+//
+// This is geometrically exact for a ground-plane (z=0) grid under solids that
+// stand on the ground: a grid pixel a solid's screen footprint covers is
+// genuinely under or behind that solid, and a grid line on a free tile — even one
+// in front of a solid — keeps every pixel the solid does not cover, because such
+// a segment never projects onto the solid's body. Connectors STAY in the scene,
+// so one routed behind a solid is still occluded and one in front still shows.
+//
+// Each segment is stroked exactly as iso.Scene strokes an iso.Line (round cap,
+// width 1, flat composite through the same vector layer), so at rotation 0 an
+// unoccluded grid is pixel-identical to the pre-fix scene grid, and the grid
+// still turns with the view (rotFwd) and rides pan/zoom through d.project.
+func (d *IsoDiagram) drawGrid(img *raster.Image, theme *Theme) {
 	grid := stdColor(theme.Border)
+	rz := &vector.Rasterizer{}
+	seg := func(a, b iso.Vec3) {
+		pa, pb := d.project(a), d.project(b)
+		path := vector.NewPath().MoveTo(pa.X, pa.Y).LineTo(pb.X, pb.Y)
+		cov, ox, oy, w, h, ok := rz.Stroke(path, 1, img.W, img.H)
+		if !ok {
+			return
+		}
+		vector.Composite(img, cov, ox, oy, w, h, vector.SolidPaint{Color: grid})
+	}
 	for i := 0; i <= d.Cols; i++ {
-		sc.Add(iso.Line{From: d.rotFwd(iso.V(float64(i), 0, 0)), To: d.rotFwd(iso.V(float64(i), float64(d.Rows), 0)), Color: grid, Width: 1})
+		seg(iso.V(float64(i), 0, 0), iso.V(float64(i), float64(d.Rows), 0))
 	}
 	for j := 0; j <= d.Rows; j++ {
-		sc.Add(iso.Line{From: d.rotFwd(iso.V(0, float64(j), 0)), To: d.rotFwd(iso.V(float64(d.Cols), float64(j), 0)), Color: grid, Width: 1})
+		seg(iso.V(0, float64(j), 0), iso.V(float64(d.Cols), float64(j), 0))
 	}
 }
 
@@ -856,6 +905,13 @@ func (d *IsoDiagram) addNodeShapes(sc *iso.Scene, theme *Theme, n IsoNode) {
 		return
 	}
 	icon, _ := d.iconRegistry().Resolve(n.Icon)
+	// A resolved-nil icon (a host registered nil, or nilled the fallback an unknown
+	// id resolves to) would dereference a nil interface downstream: draw the bare
+	// solid instead, so the node is still visible and nothing crashes.
+	if icon == nil {
+		sc.Add(d.rotShape(d.nodeSolid(n, base)))
+		return
+	}
 	for _, sh := range d.renderIconAtPhase(icon, n.X, n.Y, base).Shapes {
 		sc.Add(d.rotShape(sh))
 	}
@@ -925,10 +981,10 @@ func (d *IsoDiagram) Draw(p painter.Painter, theme *Theme) {
 	}
 	img := raster.New(b.W, b.H)
 	fillRaster(img, theme.Surface)
-	// The blit pipeline (zone floor, depth-sorted node/connector scene, sprite
-	// overlay) is composited by layer order: see drawContent. With a single
-	// visible layer — every pre-layers document — this is one legacy pass and is
-	// byte-identical.
+	// The blit pipeline (zone floor, ground-grid floor, depth-sorted
+	// node/connector scene, sprite overlay) is composited by layer order: see
+	// drawContent. With a single visible layer — every pre-layers document — this
+	// is one legacy pass.
 	d.drawContent(img, theme)
 	blitImage(p, b, b, img.Pix, b.W, b.H)
 
