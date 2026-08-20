@@ -36,7 +36,7 @@ func (t *TreeTable) A11y() A11yInfo {
 // string -- the tokens are plain strings, not independent widgets, so the field
 // as a whole is the accessible unit.
 func (t *TagField) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: strings.Join(t.Tags, ", ")}
+	return A11yInfo{Role: RoleGroup, Value: strings.Join(t.Tags().Get(), ", ")}
 }
 
 // A11y reports the CycleButton as a button named by its currently-shown option

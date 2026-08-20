@@ -5,8 +5,10 @@
 package toolkit
 
 import (
+	"slices"
 	"strings"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -21,8 +23,8 @@ import (
 // rune to Text; Enter (or a comma) commits strings.TrimSpace(Text) as a
 // new tag, skipping blank + duplicate values; Backspace on an empty Text
 // removes the last tag; and a click on a token's "x" close slot removes
-// that specific tag. Every change to the tag set fires OnChange with the
-// current slice.
+// that specific tag. Every change to the tag set Sets the Tags()
+// [mvvm.Observable], so hosts subscribe / bind to it instead of a callback.
 //
 // Each token is rendered by reusing the Chip widget (Closable: true) so
 // the pill body, label + close "x" all match a standalone Chip exactly;
@@ -31,18 +33,42 @@ import (
 // and its click target never drift apart.
 type TagField struct {
 	Base
-	// Tags is the committed token set, in insertion order.
-	Tags []string
-	// Text is the in-progress input shown (with a caret) after the last tag.
-	Text string
+	// tags is the committed token set (in insertion order) as a shared
+	// [mvvm.Observable]; reached only through Tags() so a Set is the sole way
+	// to change it and every subscriber/binding fires.
+	tags *mvvm.Observable[[]string]
+	// text is the in-progress input (shown with a caret after the last tag) as
+	// a shared [mvvm.Observable]; reached only through Text().
+	text *mvvm.Observable[string]
 	// Placeholder is the muted hint drawn when there are no tags and no text.
 	Placeholder string
-	// OnChange fires whenever the tag set changes (commit / backspace / close).
-	OnChange func(tags []string)
 	// focusState carries the keyboard focus flag (set true on click) and draws
 	// the focus ring; it lets a host / container route subsequent keyboard input
 	// to the field.
 	focusState
+}
+
+// Tags is the committed token set (insertion order) as a shared
+// [mvvm.Observable]: a host binds it two-way (or subscribes) instead of
+// touching a field, and every commit / backspace / close Sets it — so a Set is
+// the only way to change the tag set and there is no separate change callback.
+// The Observable dedups with [slices.Equal], so Setting the current value
+// notifies nobody. Lazily created so a bare &TagField{} works.
+func (t *TagField) Tags() *mvvm.Observable[[]string] {
+	if t.tags == nil {
+		t.tags = mvvm.NewObservableEq(nil, func(a, b []string) bool { return slices.Equal(a, b) })
+	}
+	return t.tags
+}
+
+// Text is the in-progress input as a shared [mvvm.Observable]: character input
+// and commits go through it, so a Set is the only way to change it. Lazily
+// created so a bare &TagField{} works.
+func (t *TagField) Text() *mvvm.Observable[string] {
+	if t.text == nil {
+		t.text = mvvm.NewObservable("")
+	}
+	return t.text
 }
 
 // tagFieldHGap / tagFieldVGap are the pixel gaps between tokens on a row
@@ -57,7 +83,9 @@ const (
 // NewTagField builds a TagField seeded with the given tags (a nil / empty
 // slice is fine) and an empty in-progress Text.
 func NewTagField(tags ...string) *TagField {
-	return &TagField{Tags: tags}
+	t := &TagField{}
+	t.Tags().Set(tags)
+	return t
 }
 
 // HitRect is the TagField's field-level tap target: Bounds clamped up to the
@@ -86,7 +114,7 @@ func (t *TagField) layout(ox, oy int) (rects []Rect, endX, endY int) {
 	w := t.Bounds().W
 	rowH := t.glyphHeight() + 2*ChipPadY
 	x, y := ox, oy
-	for _, tag := range t.Tags {
+	for _, tag := range t.Tags().Get() {
 		cw := t.chipWidth(tag)
 		if x > ox && x+cw > ox+w {
 			x = ox
@@ -105,52 +133,46 @@ func (t *TagField) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	rowH := t.glyphHeight() + 2*ChipPadY
 	rects, x, y := t.layout(r.X, r.Y)
-	for i, tag := range t.Tags {
+	tags := t.Tags().Get()
+	for i, tag := range tags {
 		c := &Chip{Text: tag, Closable: true}
 		c.Font = t.Font
 		c.SetBounds(rects[i])
 		c.Draw(p, theme)
 	}
+	txt := t.Text().Get()
 	ty := y + (rowH-t.glyphHeight())/2
-	if len(t.Tags) == 0 && t.Text == "" {
+	if len(tags) == 0 && txt == "" {
 		if t.Placeholder != "" {
 			t.drawText(p, x, ty, t.Placeholder, theme.SurfaceAlt)
 		}
 	} else {
-		if t.Text != "" {
-			t.drawText(p, x, ty, t.Text, theme.OnSurface)
+		if txt != "" {
+			t.drawText(p, x, ty, txt, theme.OnSurface)
 		}
-		cx := x + t.textWidth(t.Text)
+		cx := x + t.textWidth(txt)
 		fillRect(p, cx, ty-1, 1, t.glyphHeight()+2, theme.OnSurface)
 	}
 	t.drawFocusRing(p, theme, r)
 }
 
 // commit clears the in-progress Text and, when it held a non-blank value
-// not already present, appends it as a new tag and fires OnChange. Blank
-// and duplicate inputs are dropped (Text is still cleared) without
-// firing.
+// not already present, appends it as a new tag by Setting Tags() (which
+// notifies subscribers). Blank and duplicate inputs are dropped (Text is
+// still cleared) without changing the tag set.
 func (t *TagField) commit() {
-	v := strings.TrimSpace(t.Text)
-	t.Text = ""
+	v := strings.TrimSpace(t.Text().Get())
+	t.Text().Set("")
 	if v == "" {
 		return
 	}
-	for _, existing := range t.Tags {
+	tags := t.Tags().Get()
+	for _, existing := range tags {
 		if existing == v {
 			return
 		}
 	}
-	t.Tags = append(t.Tags, v)
-	t.fire()
-}
-
-// fire invokes OnChange with the current tag set when a callback is wired
-// (nil-safe).
-func (t *TagField) fire() {
-	if t.OnChange != nil {
-		t.OnChange(t.Tags)
-	}
+	t.Tags().Set(append(slices.Clone(tags), v))
 }
 
 // OnEvent applies keyboard editing + click-to-remove. Character input
@@ -165,32 +187,32 @@ func (t *TagField) OnEvent(ev Event) {
 		if ev.Code == "," {
 			return
 		}
-		t.Text += ev.Code
+		t.Text().Set(t.Text().Get() + ev.Code)
 	case EventKeyDown:
 		switch ev.Code {
 		case "Enter", ",":
 			t.commit()
 		case "Backspace":
-			if t.Text == "" && len(t.Tags) > 0 {
-				t.Tags = t.Tags[:len(t.Tags)-1]
-				t.fire()
+			tags := t.Tags().Get()
+			if t.Text().Get() == "" && len(tags) > 0 {
+				t.Tags().Set(tags[: len(tags)-1 : len(tags)-1])
 			}
 		}
 	case EventClick:
 		t.focused = true
+		tags := t.Tags().Get()
 		rects, _, _ := t.layout(0, 0)
 		for i, rc := range rects {
 			if !rc.Contains(ev.X, ev.Y) {
 				continue
 			}
 			removed := false
-			c := &Chip{Text: t.Tags[i], Closable: true, OnClose: func() { removed = true }}
+			c := &Chip{Text: tags[i], Closable: true, OnClose: func() { removed = true }}
 			c.Font = t.Font
 			c.SetBounds(rc)
 			c.OnEvent(translateEvent(ev, Rect{}, rc))
 			if removed {
-				t.Tags = append(t.Tags[:i:i], t.Tags[i+1:]...)
-				t.fire()
+				t.Tags().Set(append(tags[:i:i], tags[i+1:]...))
 			}
 			return
 		}
