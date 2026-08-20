@@ -22,11 +22,30 @@ func painted(buf []byte) bool {
 
 func TestNewTagField(t *testing.T) {
 	tf := NewTagField("a", "b")
-	if !reflect.DeepEqual(tf.Tags, []string{"a", "b"}) {
-		t.Fatalf("Tags = %v", tf.Tags)
+	if !reflect.DeepEqual(tf.Tags().Get(), []string{"a", "b"}) {
+		t.Fatalf("Tags = %v", tf.Tags().Get())
 	}
-	if tf.Text != "" {
-		t.Fatalf("Text = %q, want empty", tf.Text)
+	if tf.Text().Get() != "" {
+		t.Fatalf("Text = %q, want empty", tf.Text().Get())
+	}
+}
+
+// TestTagFieldAccessorsLazyInit exercises both arms of each accessor on a bare
+// &TagField{}: the nil lazy-init pass (first call) and the return-existing pass
+// (second call returns the same Observable).
+func TestTagFieldAccessorsLazyInit(t *testing.T) {
+	tf := &TagField{}
+	if got := tf.Tags().Get(); got != nil {
+		t.Fatalf("fresh Tags() = %v, want nil", got)
+	}
+	if tf.Tags() != tf.Tags() {
+		t.Fatal("Tags() must return the same Observable on repeat calls")
+	}
+	if got := tf.Text().Get(); got != "" {
+		t.Fatalf("fresh Text() = %q, want empty", got)
+	}
+	if tf.Text() != tf.Text() {
+		t.Fatal("Text() must return the same Observable on repeat calls")
 	}
 }
 
@@ -83,7 +102,8 @@ func TestTagFieldDrawEmptyNoPlaceholder(t *testing.T) {
 
 // TestTagFieldDrawText covers the in-progress-Text-plus-caret branch.
 func TestTagFieldDrawText(t *testing.T) {
-	tf := &TagField{Text: "go"}
+	tf := &TagField{}
+	tf.Text().Set("go")
 	tf.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 16})
 	buf := makeSurface(120, 16)
 	tf.Draw(newP(buf, 120), DefaultLight())
@@ -97,92 +117,99 @@ func TestTagFieldCharAppends(t *testing.T) {
 	tf := &TagField{}
 	tf.OnEvent(Event{Kind: EventChar, Code: "g"})
 	tf.OnEvent(Event{Kind: EventChar, Code: "o"})
-	if tf.Text != "go" {
-		t.Fatalf("Text = %q, want %q", tf.Text, "go")
+	if tf.Text().Get() != "go" {
+		t.Fatalf("Text = %q, want %q", tf.Text().Get(), "go")
 	}
 	tf.OnEvent(Event{Kind: EventChar, Code: ","})
-	if tf.Text != "go" {
-		t.Fatalf("comma should be swallowed, Text = %q", tf.Text)
+	if tf.Text().Get() != "go" {
+		t.Fatalf("comma should be swallowed, Text = %q", tf.Text().Get())
 	}
 }
 
-// TestTagFieldCommitEnter commits via Enter and fires OnChange.
+// TestTagFieldCommitEnter commits via Enter and notifies Tags() subscribers.
 func TestTagFieldCommitEnter(t *testing.T) {
 	var got []string
-	tf := &TagField{Text: "  go  ", OnChange: func(tags []string) { got = tags }}
+	tf := &TagField{}
+	tf.Text().Set("  go  ")
+	tf.Tags().Subscribe(func(tags []string) { got = tags })
 	tf.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if !reflect.DeepEqual(tf.Tags, []string{"go"}) {
-		t.Fatalf("Tags = %v, want [go] (trimmed)", tf.Tags)
+	if !reflect.DeepEqual(tf.Tags().Get(), []string{"go"}) {
+		t.Fatalf("Tags = %v, want [go] (trimmed)", tf.Tags().Get())
 	}
-	if tf.Text != "" {
-		t.Fatalf("Text not cleared: %q", tf.Text)
+	if tf.Text().Get() != "" {
+		t.Fatalf("Text not cleared: %q", tf.Text().Get())
 	}
 	if !reflect.DeepEqual(got, []string{"go"}) {
-		t.Fatalf("OnChange got %v", got)
+		t.Fatalf("Tags subscriber got %v", got)
 	}
 }
 
 // TestTagFieldCommitComma commits via the comma key.
 func TestTagFieldCommitComma(t *testing.T) {
-	tf := &TagField{Text: "rust"}
+	tf := &TagField{}
+	tf.Text().Set("rust")
 	tf.OnEvent(Event{Kind: EventKeyDown, Code: ","})
-	if !reflect.DeepEqual(tf.Tags, []string{"rust"}) {
-		t.Fatalf("Tags = %v", tf.Tags)
+	if !reflect.DeepEqual(tf.Tags().Get(), []string{"rust"}) {
+		t.Fatalf("Tags = %v", tf.Tags().Get())
 	}
 }
 
 // TestTagFieldCommitBlankAndDuplicate covers the two skip paths in commit.
 func TestTagFieldCommitBlankAndDuplicate(t *testing.T) {
 	fired := 0
-	tf := &TagField{Tags: []string{"go"}, OnChange: func([]string) { fired++ }}
-	// blank: cleared, no add, no fire.
-	tf.Text = "   "
+	tf := NewTagField("go")
+	tf.Tags().Subscribe(func([]string) { fired++ })
+	// blank: cleared, no add, no notify.
+	tf.Text().Set("   ")
 	tf.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	// duplicate: cleared, no add, no fire.
-	tf.Text = "go"
+	// duplicate: cleared, no add, no notify.
+	tf.Text().Set("go")
 	tf.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if !reflect.DeepEqual(tf.Tags, []string{"go"}) {
-		t.Fatalf("Tags = %v, want unchanged [go]", tf.Tags)
+	if !reflect.DeepEqual(tf.Tags().Get(), []string{"go"}) {
+		t.Fatalf("Tags = %v, want unchanged [go]", tf.Tags().Get())
 	}
 	if fired != 0 {
-		t.Fatalf("OnChange fired %d times, want 0", fired)
+		t.Fatalf("Tags subscriber fired %d times, want 0", fired)
 	}
 }
 
 // TestTagFieldBackspaceRemovesLast covers backspace on empty Text.
 func TestTagFieldBackspaceRemovesLast(t *testing.T) {
 	var got []string
-	tf := &TagField{Tags: []string{"a", "b"}, OnChange: func(tags []string) { got = tags }}
+	tf := NewTagField("a", "b")
+	tf.Tags().Subscribe(func(tags []string) { got = tags })
 	tf.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if !reflect.DeepEqual(tf.Tags, []string{"a"}) {
-		t.Fatalf("Tags = %v, want [a]", tf.Tags)
+	if !reflect.DeepEqual(tf.Tags().Get(), []string{"a"}) {
+		t.Fatalf("Tags = %v, want [a]", tf.Tags().Get())
 	}
 	if !reflect.DeepEqual(got, []string{"a"}) {
-		t.Fatalf("OnChange got %v", got)
+		t.Fatalf("Tags subscriber got %v", got)
 	}
 }
 
 // TestTagFieldBackspaceNoop covers both false arms of the backspace guard:
 // non-empty Text (with tags) and empty Text (no tags).
 func TestTagFieldBackspaceNoop(t *testing.T) {
-	tf := &TagField{Tags: []string{"a"}, Text: "x"}
+	tf := NewTagField("a")
+	tf.Text().Set("x")
 	tf.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if !reflect.DeepEqual(tf.Tags, []string{"a"}) || tf.Text != "x" {
-		t.Fatalf("non-empty backspace mutated state: %v %q", tf.Tags, tf.Text)
+	if !reflect.DeepEqual(tf.Tags().Get(), []string{"a"}) || tf.Text().Get() != "x" {
+		t.Fatalf("non-empty backspace mutated state: %v %q", tf.Tags().Get(), tf.Text().Get())
 	}
 	empty := &TagField{}
 	empty.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	if len(empty.Tags) != 0 {
-		t.Fatalf("backspace on empty field mutated tags: %v", empty.Tags)
+	if len(empty.Tags().Get()) != 0 {
+		t.Fatalf("backspace on empty field mutated tags: %v", empty.Tags().Get())
 	}
 }
 
 // TestTagFieldKeyDownUnknown covers a keydown code with no matching case.
 func TestTagFieldKeyDownUnknown(t *testing.T) {
-	tf := &TagField{Text: "go"}
+	tf := &TagField{}
+	tf.Text().Set("go")
 	tf.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
-	if tf.Text != "go" {
-		t.Fatalf("unknown key mutated Text: %q", tf.Text)
+	if tf.Text().Get() != "go" {
+		t.Fatalf("unknown key mutated Text: %q", tf.Text().Get())
 	}
 }
 
@@ -190,7 +217,8 @@ func TestTagFieldKeyDownUnknown(t *testing.T) {
 // verifies exactly that tag is removed.
 func TestTagFieldClickRemovesTag(t *testing.T) {
 	var got []string
-	tf := &TagField{Tags: []string{"aa", "bb", "cc"}, OnChange: func(tags []string) { got = tags }}
+	tf := NewTagField("aa", "bb", "cc")
+	tf.Tags().Subscribe(func(tags []string) { got = tags })
 	tf.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 16})
 	rects, _, _ := tf.layout(0, 0)
 	// close slot of token index 1 ("bb"): local x in [W-Pad-CloseW, W-Pad).
@@ -198,11 +226,11 @@ func TestTagFieldClickRemovesTag(t *testing.T) {
 	cx := rc.X + rc.W - ChipPadX - ChipCloseW/2
 	cy := rc.Y + rc.H/2
 	tf.OnEvent(Event{Kind: EventClick, X: cx, Y: cy})
-	if !reflect.DeepEqual(tf.Tags, []string{"aa", "cc"}) {
-		t.Fatalf("Tags = %v, want [aa cc]", tf.Tags)
+	if !reflect.DeepEqual(tf.Tags().Get(), []string{"aa", "cc"}) {
+		t.Fatalf("Tags = %v, want [aa cc]", tf.Tags().Get())
 	}
 	if !reflect.DeepEqual(got, []string{"aa", "cc"}) {
-		t.Fatalf("OnChange got %v", got)
+		t.Fatalf("Tags subscriber got %v", got)
 	}
 	if !tf.Focused() {
 		t.Fatal("click should focus the field")
@@ -212,13 +240,13 @@ func TestTagFieldClickRemovesTag(t *testing.T) {
 // TestTagFieldClickBodyKeeps clicks a token's label area (not the close
 // slot): the tag stays, the field just focuses.
 func TestTagFieldClickBodyKeeps(t *testing.T) {
-	tf := &TagField{Tags: []string{"aa"}}
+	tf := NewTagField("aa")
 	tf.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 16})
 	rects, _, _ := tf.layout(0, 0)
 	rc := rects[0]
 	tf.OnEvent(Event{Kind: EventClick, X: rc.X + ChipPadX, Y: rc.Y + rc.H/2})
-	if len(tf.Tags) != 1 {
-		t.Fatalf("body click removed a tag: %v", tf.Tags)
+	if len(tf.Tags().Get()) != 1 {
+		t.Fatalf("body click removed a tag: %v", tf.Tags().Get())
 	}
 	if !tf.Focused() {
 		t.Fatal("click should focus the field")
@@ -228,40 +256,41 @@ func TestTagFieldClickBodyKeeps(t *testing.T) {
 // TestTagFieldClickOutside clicks past every token: nothing removed, but
 // the field focuses (loop runs to completion).
 func TestTagFieldClickOutside(t *testing.T) {
-	tf := &TagField{Tags: []string{"aa"}}
+	tf := NewTagField("aa")
 	tf.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 16})
 	tf.OnEvent(Event{Kind: EventClick, X: 390, Y: 8})
-	if len(tf.Tags) != 1 {
-		t.Fatalf("outside click removed a tag: %v", tf.Tags)
+	if len(tf.Tags().Get()) != 1 {
+		t.Fatalf("outside click removed a tag: %v", tf.Tags().Get())
 	}
 	if !tf.Focused() {
 		t.Fatal("click should focus the field")
 	}
 }
 
-// TestTagFieldOnChangeNilSafe drives every mutating path with a nil
-// OnChange to prove fire() is nil-safe.
-func TestTagFieldOnChangeNilSafe(t *testing.T) {
+// TestTagFieldNoSubscriberSafe drives every mutating path with no Tags()
+// subscriber to prove a Set with no observers is safe.
+func TestTagFieldNoSubscriberSafe(t *testing.T) {
 	tf := &TagField{}
 	tf.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 16})
-	tf.Text = "go"
-	tf.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"}) // commit + fire
+	tf.Text().Set("go")
+	tf.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"}) // commit + notify
 	tf.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	tf.Text = "go"
+	tf.Text().Set("go")
 	tf.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	rects, _, _ := tf.layout(0, 0)
 	rc := rects[0]
 	tf.OnEvent(Event{Kind: EventClick, X: rc.X + rc.W - ChipPadX - ChipCloseW/2, Y: rc.Y + rc.H/2})
-	if len(tf.Tags) != 0 {
-		t.Fatalf("expected all tags removed, got %v", tf.Tags)
+	if len(tf.Tags().Get()) != 0 {
+		t.Fatalf("expected all tags removed, got %v", tf.Tags().Get())
 	}
 }
 
 // TestTagFieldIgnoresOtherEvents covers the outer switch's no-match arm.
 func TestTagFieldIgnoresOtherEvents(t *testing.T) {
-	tf := &TagField{Text: "go"}
+	tf := &TagField{}
+	tf.Text().Set("go")
 	tf.OnEvent(Event{Kind: EventKeyUp, Code: "g"})
-	if tf.Text != "go" {
-		t.Fatalf("EventKeyUp mutated Text: %q", tf.Text)
+	if tf.Text().Get() != "go" {
+		t.Fatalf("EventKeyUp mutated Text: %q", tf.Text().Get())
 	}
 }
