@@ -481,9 +481,10 @@ func (d *DatePicker) A11y() A11yInfo {
 // A11y reports the DateRangePicker as a group carrying its "start..end"
 // date range.
 func (d *DateRangePicker) A11y() A11yInfo {
+	start, end := d.Start().Get(), d.End().Get()
 	return A11yInfo{
 		Role:  RoleGroup,
-		Value: isoDate(d.Start.Y, d.Start.M, d.Start.D) + ".." + isoDate(d.End.Y, d.End.M, d.End.D),
+		Value: isoDate(start.Y, start.M, start.D) + ".." + isoDate(end.Y, end.M, end.D),
 	}
 }
 

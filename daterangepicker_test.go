@@ -42,50 +42,53 @@ func cellFillAbs(rp *DateRangePicker, y, m, d int) (int, int) {
 
 func TestDateRangePickerSelectStartEnd(t *testing.T) {
 	rp := newTestRangePicker()
-	var gotStart, gotEnd Date
+	var gotEnd Date
 	fired := 0
-	rp.OnChange = func(s, e Date) { gotStart, gotEnd, fired = s, e, fired+1 }
+	// A host subscribes to End(): completing the range Sets End and notifies.
+	rp.End().Subscribe(func(e Date) { gotEnd, fired = e, fired+1 })
 
-	// First click sets Start, clears End, does not fire OnChange.
+	// First click sets Start, clears End (already unset -> no End notify).
 	clickDay(rp, 2026, 7, 5)
-	if (rp.Start != Date{Y: 2026, M: 7, D: 5}) {
-		t.Fatalf("Start = %+v, want 2026-07-05", rp.Start)
+	if got := rp.Start().Get(); (got != Date{Y: 2026, M: 7, D: 5}) {
+		t.Fatalf("Start = %+v, want 2026-07-05", got)
 	}
-	if !rp.End.isZero() {
-		t.Fatalf("End = %+v, want unset after first click", rp.End)
+	if !rp.End().Get().isZero() {
+		t.Fatalf("End = %+v, want unset after first click", rp.End().Get())
 	}
 	if fired != 0 {
-		t.Fatalf("OnChange fired %d times after first click, want 0", fired)
+		t.Fatalf("End notified %d times after first click, want 0", fired)
 	}
 
-	// Second click (>= Start) sets End and fires OnChange once.
+	// Second click (>= Start) sets End and notifies once.
 	clickDay(rp, 2026, 7, 20)
-	if (rp.End != Date{Y: 2026, M: 7, D: 20}) {
-		t.Fatalf("End = %+v, want 2026-07-20", rp.End)
+	if got := rp.End().Get(); (got != Date{Y: 2026, M: 7, D: 20}) {
+		t.Fatalf("End = %+v, want 2026-07-20", got)
 	}
 	if fired != 1 {
-		t.Fatalf("OnChange fired %d times, want 1", fired)
+		t.Fatalf("End notified %d times, want 1", fired)
 	}
-	if (gotStart != Date{Y: 2026, M: 7, D: 5}) || (gotEnd != Date{Y: 2026, M: 7, D: 20}) {
-		t.Fatalf("OnChange got (%+v, %+v), want (07-05, 07-20)", gotStart, gotEnd)
+	if (rp.Start().Get() != Date{Y: 2026, M: 7, D: 5}) || (gotEnd != Date{Y: 2026, M: 7, D: 20}) {
+		t.Fatalf("range = (%+v, %+v), want (07-05, 07-20)", rp.Start().Get(), gotEnd)
 	}
 }
 
 func TestDateRangePickerEndBeforeStartResets(t *testing.T) {
 	rp := newTestRangePicker()
 	fired := 0
-	rp.OnChange = func(s, e Date) { fired++ }
+	// End() is Set to a real date only on range completion, so a subscription
+	// to it is the MVVM equivalent of the old OnChange fire count.
+	rp.End().Subscribe(func(Date) { fired++ })
 
 	clickDay(rp, 2026, 7, 20) // Start = 20
 	clickDay(rp, 2026, 7, 5)  // earlier than Start -> resets Start, no fire
-	if (rp.Start != Date{Y: 2026, M: 7, D: 5}) {
-		t.Fatalf("Start = %+v, want reset to 2026-07-05", rp.Start)
+	if got := rp.Start().Get(); (got != Date{Y: 2026, M: 7, D: 5}) {
+		t.Fatalf("Start = %+v, want reset to 2026-07-05", got)
 	}
-	if !rp.End.isZero() {
-		t.Fatalf("End = %+v, want still unset", rp.End)
+	if !rp.End().Get().isZero() {
+		t.Fatalf("End = %+v, want still unset", rp.End().Get())
 	}
 	if fired != 0 {
-		t.Fatalf("OnChange fired %d times, want 0", fired)
+		t.Fatalf("End notified %d times, want 0", fired)
 	}
 }
 
@@ -133,17 +136,16 @@ func TestDateRangePickerDrawNoSelection(t *testing.T) {
 
 func TestDateRangePickerReselectAfterComplete(t *testing.T) {
 	rp := newTestRangePicker()
-	rp.OnChange = func(s, e Date) {}
 	clickDay(rp, 2026, 7, 5)
 	clickDay(rp, 2026, 7, 20) // complete range
 
 	// A click after a complete range begins a fresh selection.
 	clickDay(rp, 2026, 7, 12)
-	if (rp.Start != Date{Y: 2026, M: 7, D: 12}) {
-		t.Fatalf("Start = %+v, want fresh 2026-07-12", rp.Start)
+	if got := rp.Start().Get(); (got != Date{Y: 2026, M: 7, D: 12}) {
+		t.Fatalf("Start = %+v, want fresh 2026-07-12", got)
 	}
-	if !rp.End.isZero() {
-		t.Fatalf("End = %+v, want cleared after re-selection", rp.End)
+	if !rp.End().Get().isZero() {
+		t.Fatalf("End = %+v, want cleared after re-selection", rp.End().Get())
 	}
 }
 
@@ -151,15 +153,15 @@ func TestDateRangePickerMonthNav(t *testing.T) {
 	rp := newTestRangePicker()
 	// Preserve an in-progress selection to prove nav doesn't disturb it.
 	clickDay(rp, 2026, 7, 5)
-	start := rp.Start
+	start := rp.Start().Get()
 
 	// Prev arrow: July -> June (no wrap).
 	rp.OnEvent(Event{Kind: EventClick, X: CalendarCellW / 2, Y: CalendarHeaderH / 2})
 	if rp.Cal.Month().Get() != 6 || rp.Cal.Year().Get() != 2026 {
 		t.Fatalf("after prev: %d-%d, want 2026-6", rp.Cal.Year().Get(), rp.Cal.Month().Get())
 	}
-	if rp.Start != start || !rp.End.isZero() {
-		t.Fatalf("nav disturbed selection: Start=%+v End=%+v", rp.Start, rp.End)
+	if rp.Start().Get() != start || !rp.End().Get().isZero() {
+		t.Fatalf("nav disturbed selection: Start=%+v End=%+v", rp.Start().Get(), rp.End().Get())
 	}
 
 	// Next arrow twice: June -> July -> August (no wrap).
@@ -190,20 +192,36 @@ func TestDateRangePickerMonthNav(t *testing.T) {
 	}
 }
 
-func TestDateRangePickerOnChangeNilGuard(t *testing.T) {
-	rp := newTestRangePicker() // OnChange left nil
+func TestDateRangePickerCompleteNoSubscriber(t *testing.T) {
+	rp := newTestRangePicker() // no Start()/End() subscribers
 	clickDay(rp, 2026, 7, 5)
 	clickDay(rp, 2026, 7, 20) // completing the range must not panic
-	if (rp.End != Date{Y: 2026, M: 7, D: 20}) {
-		t.Fatalf("End = %+v, want 2026-07-20 with nil OnChange", rp.End)
+	if got := rp.End().Get(); (got != Date{Y: 2026, M: 7, D: 20}) {
+		t.Fatalf("End = %+v, want 2026-07-20 with no subscriber", got)
 	}
 }
 
 func TestDateRangePickerNonClickIgnored(t *testing.T) {
 	rp := newTestRangePicker()
 	rp.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if !rp.Start.isZero() || !rp.End.isZero() {
-		t.Fatalf("non-click event mutated state: Start=%+v End=%+v", rp.Start, rp.End)
+	if !rp.Start().Get().isZero() || !rp.End().Get().isZero() {
+		t.Fatalf("non-click event mutated state: Start=%+v End=%+v", rp.Start().Get(), rp.End().Get())
+	}
+}
+
+// TestDateRangePickerBareAccessors proves the Start()/End() accessors
+// lazy-init their Observable on a bare &DateRangePicker{} (nil fields).
+func TestDateRangePickerBareAccessors(t *testing.T) {
+	d := &DateRangePicker{}
+	if !d.Start().Get().isZero() {
+		t.Fatalf("bare Start() = %+v, want zero Date", d.Start().Get())
+	}
+	if !d.End().Get().isZero() {
+		t.Fatalf("bare End() = %+v, want zero Date", d.End().Get())
+	}
+	d.Start().Set(Date{Y: 2026, M: 3, D: 4})
+	if got := d.Start().Get(); (got != Date{Y: 2026, M: 3, D: 4}) {
+		t.Fatalf("Start() after Set = %+v", got)
 	}
 }
 
