@@ -147,6 +147,18 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// are unexported internal state. It exposes no imperative state field, so the
 	// empty config set enforces that none is ever added.
 	"RichEditor": {},
+	// TagField: the tag set + entry text are unexported behind Tags()/Text()
+	// Observable accessors; Placeholder is set-once config.
+	"TagField": {"Placeholder": true},
+	// DateRangePicker: the selected range is unexported behind Start()/End()
+	// Observable accessors; Cal is the composed *Calendar sub-widget (config).
+	"DateRangePicker": {"Cal": true},
+	// WheelPicker: the per-column selection lives in an unexported columns slice;
+	// OnChange is a func hook (auto-allowed). VisibleRows is set-once config.
+	"WheelPicker": {"VisibleRows": true},
+	// SourceList: the selected (section,row) is unexported; OnSelect/OnReorder are
+	// func hooks (auto-allowed). Sections is the set-once data (config).
+	"SourceList": {"Sections": true},
 	// TextView: the committed contents live on the Text() Observable and the
 	// caret line/col, the scroll offset, the selection range and the focus flag
 	// are each their own Observable accessor; the line buffer + IME preview are
