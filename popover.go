@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Popover is a Visible floating container for a single child widget,
 // modelled on GTK 4's Popover -- a rectangular panel with a border
@@ -23,9 +26,11 @@ import "github.com/go-widgets/painter"
 //     sees widget-local coords in its own frame.
 type Popover struct {
 	Base
-	Visible bool
-	Child   Widget
-	Title   string
+	Child Widget
+	Title string
+
+	// visible is the reactive show/hide toggle; see [Popover.Visible].
+	visible *mvvm.Observable[bool]
 }
 
 // Popover sizing constants. PopoverPadX / PopoverPadY are the inner
@@ -42,6 +47,16 @@ const (
 // NewPopover constructs a hidden Popover wrapping child. child may be
 // nil, in which case the Popover renders as an empty framed panel.
 func NewPopover(child Widget) *Popover { return &Popover{Child: child} }
+
+// Visible is the popover's reactive show/hide toggle as a shared
+// [mvvm.Observable]; the host Sets it to show or dismiss the panel. Lazily
+// created, defaulting to hidden.
+func (p *Popover) Visible() *mvvm.Observable[bool] {
+	if p.visible == nil {
+		p.visible = mvvm.NewObservable(false)
+	}
+	return p.visible
+}
 
 // headerH returns the vertical space consumed by the Title strip.
 // Zero when Title is empty so the child sits flush against the top pad.
@@ -70,7 +85,7 @@ func (p *Popover) childRect() Rect {
 // at the top-left inside PopoverPad, then draws Child (if non-nil)
 // into the inset child rect. Nothing drawn when !Visible.
 func (p *Popover) Draw(pnt painter.Painter, theme *Theme) {
-	if !p.Visible {
+	if !p.Visible().Get() {
 		return
 	}
 	r := p.Bounds()
@@ -89,7 +104,7 @@ func (p *Popover) Draw(pnt painter.Painter, theme *Theme) {
 // into the child's local frame. No-op when !Visible or Child is nil.
 // Mirrors the translateEvent pattern used by HBox / VBox / Grid.
 func (p *Popover) OnEvent(ev Event) {
-	if !p.Visible || p.Child == nil {
+	if !p.Visible().Get() || p.Child == nil {
 		return
 	}
 	p.Child.OnEvent(translateEvent(ev, p.Bounds(), p.Child.Bounds()))

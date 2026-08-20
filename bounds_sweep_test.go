@@ -37,8 +37,8 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"textview", func() Widget { return NewTextView("line one\nline two\nline three") }},
 		{"spinbutton", func() Widget { return NewSpinButton(0, 100, 42, 1) }},
 		{"scale", func() Widget { return NewScale(0, 100, 50) }},
-		{"progressbar", func() Widget { p := NewProgressBar(); p.Fraction = 0.6; return p }},
-		{"levelbar", func() Widget { l := NewLevelBar(10); l.Value = 7; return l }},
+		{"progressbar", func() Widget { p := NewProgressBar(); p.Fraction().Set(0.6); return p }},
+		{"levelbar", func() Widget { l := NewLevelBar(10); l.Value().Set(7); return l }},
 		{"progresscircle", func() Widget { pc := NewProgressCircle(); pc.Fraction().Set(0.6); return pc }},
 		{"spinner", func() Widget { s := NewSpinner(); s.Active().Set(true); return s }},
 		{"listbox", func() Widget { return NewListBox([]string{"a", "b", "c", "d", "e", "f", "g", "h"}) }},
@@ -116,7 +116,7 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 		{"headerbar", func() Widget { hb := NewHeaderBar("Files"); hb.Subtitle = "~/docs"; return hb }},
 		{"viewswitcher", func() Widget { return NewViewSwitcher([]string{"Day", "Week", "Month"}, 0) }},
 		{"markdownview", func() Widget { return NewMarkdownView("# Title\n\n- one\n- two\n\nparagraph") }},
-		{"loadmask", func() Widget { m := NewLoadMask("Loading…"); m.Active = true; return m }},
+		{"loadmask", func() Widget { m := NewLoadMask("Loading…"); m.Active().Set(true); return m }},
 		{"material-sidebar", func() Widget {
 			m := NewMaterial(MaterialSidebar)
 			src := make([]byte, 400*300*4)

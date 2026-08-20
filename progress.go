@@ -4,9 +4,12 @@
 
 package toolkit
 
-import "math"
+import (
+	"math"
 
-import "github.com/go-widgets/painter"
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // ProgressBar is a bar with a filled portion proportional to Fraction in [0,1].
 // Orientation picks the fill direction: Horizontal (default) fills left→right,
@@ -19,16 +22,28 @@ import "github.com/go-widgets/painter"
 // (a page fetch, an open-ended request).
 type ProgressBar struct {
 	Base
-	Fraction      float64
 	Label         string
 	Orientation   Orientation
 	Indeterminate bool
 	Phase         float64 // 0..1, only used when Indeterminate
+
+	// fraction is the reactive determinate fill in [0,1]; see [ProgressBar.Fraction].
+	fraction *mvvm.Observable[float64]
 }
 
 // NewProgressBar builds an empty (Fraction=0) ProgressBar with no
 // label.
 func NewProgressBar() *ProgressBar { return &ProgressBar{} }
+
+// Fraction is the determinate fill level in [0,1] as a shared [mvvm.Observable]:
+// SetFraction (or a direct Set) drives it and Draw reads it live. Lazily created,
+// defaulting to 0 (empty). Ignored while Indeterminate.
+func (pb *ProgressBar) Fraction() *mvvm.Observable[float64] {
+	if pb.fraction == nil {
+		pb.fraction = mvvm.NewObservable(0.0)
+	}
+	return pb.fraction
+}
 
 // Tick advances the indeterminate sweep by deltaSeconds, wrapping Phase modulo
 // 1 so it stays bounded. A determinate bar (the default) has no animation, so
@@ -55,7 +70,7 @@ func (p *ProgressBar) SetFraction(f float64) {
 	if f > 1 {
 		f = 1
 	}
-	p.Fraction = f
+	p.Fraction().Set(f)
 }
 
 // indetSpan returns the visible offset+length of the sliding chunk within a
@@ -112,7 +127,7 @@ func (pb *ProgressBar) Draw(p painter.Painter, theme *Theme) {
 		return
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
-	f := pb.Fraction
+	f := pb.Fraction().Get()
 	if f < 0 {
 		f = 0
 	}
@@ -157,7 +172,7 @@ func (pb *ProgressBar) Draw(p painter.Painter, theme *Theme) {
 //     the fill stays Theme.Accent.
 type LevelBar struct {
 	Base
-	Value, Max  int
+	Max         int
 	Orientation Orientation
 	// Label, when non-empty, is centred over the bar (horizontal only) in
 	// Theme.OnSurface ink. The zero value draws no caption (the original look).
@@ -165,6 +180,18 @@ type LevelBar struct {
 	// Thresholds recolour the filled cells by value band. Empty (the default)
 	// keeps the Accent fill, so an unset LevelBar is byte-identical to before.
 	Thresholds []LevelThreshold
+
+	// value is the reactive number of lit cells; see [LevelBar.Value].
+	value *mvvm.Observable[int]
+}
+
+// Value is the number of lit cells as a shared [mvvm.Observable]; edits Set it
+// and Draw reads it live. Lazily created, defaulting to 0 (empty).
+func (l *LevelBar) Value() *mvvm.Observable[int] {
+	if l.value == nil {
+		l.value = mvvm.NewObservable(0)
+	}
+	return l.value
 }
 
 // LevelThreshold recolours a LevelBar's fill once Value reaches Min. Several
@@ -192,7 +219,7 @@ func (l *LevelBar) fillColor(theme *Theme) RGBA {
 	chosen := false
 	bestMin := 0
 	for _, th := range l.Thresholds {
-		if l.Value >= th.Min && (!chosen || th.Min >= bestMin) {
+		if l.Value().Get() >= th.Min && (!chosen || th.Min >= bestMin) {
 			fill, bestMin, chosen = th.Color, th.Min, true
 		}
 	}
@@ -220,7 +247,7 @@ func (l *LevelBar) Draw(p painter.Painter, theme *Theme) {
 				break // no room above — stop (as do all higher cells)
 			}
 			fill := theme.SurfaceAlt
-			if i < l.Value {
+			if i < l.Value().Get() {
 				fill = lit
 			}
 			fillRect(p, r.X, y, r.W, cellH, fill)
@@ -238,7 +265,7 @@ func (l *LevelBar) Draw(p painter.Painter, theme *Theme) {
 			break // this cell would spill past the widget — stop (as do all after)
 		}
 		fill := theme.SurfaceAlt
-		if i < l.Value {
+		if i < l.Value().Get() {
 			fill = lit
 		}
 		fillRect(p, x, r.Y, cellW, r.H, fill)

@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // GroupCard is a collapsible summary card for a set of related items — a
 // multi-part post, a thread, a release split across files. Its header is always
@@ -47,8 +50,6 @@ type GroupCard struct {
 	Title string
 	// Meta is the muted summary line (e.g. "12 parts · 3 files · 40 MB").
 	Meta string
-	// Expanded reports whether the member list is shown below the header.
-	Expanded bool
 	// Members are the expanded part lines, one preformatted string per row.
 	Members []string
 	// Actionable enables the header affordance: a download checkbox and the Action
@@ -57,8 +58,11 @@ type GroupCard struct {
 	// Action is the pill label shown when Actionable (e.g. "Reconstruct"). Empty
 	// draws no pill but still reserves the checkbox when Actionable.
 	Action string
-	// Checked is the download checkbox state.
-	Checked bool
+
+	// expanded / checked are the reactive disclosure + download-checkbox state;
+	// see [GroupCard.Expanded] and [GroupCard.Checked].
+	expanded *mvvm.Observable[bool]
+	checked  *mvvm.Observable[bool]
 
 	// Per-element fonts, each optional (nil falls back to EffectiveFont). TitleFont
 	// sizes the headline, MetaFont the meta + member lines, PillFont the badges and
@@ -86,6 +90,24 @@ func NewGroupCard(pill, title, meta string) *GroupCard {
 	return &GroupCard{Pill: pill, Title: title, Meta: meta}
 }
 
+// Expanded is the reactive disclosure state as a shared [mvvm.Observable]: true
+// shows the member list below the header. Lazily created, defaulting to collapsed.
+func (c *GroupCard) Expanded() *mvvm.Observable[bool] {
+	if c.expanded == nil {
+		c.expanded = mvvm.NewObservable(false)
+	}
+	return c.expanded
+}
+
+// Checked is the reactive download-checkbox state as a shared [mvvm.Observable].
+// Lazily created, defaulting to unchecked.
+func (c *GroupCard) Checked() *mvvm.Observable[bool] {
+	if c.checked == nil {
+		c.checked = mvvm.NewObservable(false)
+	}
+	return c.checked
+}
+
 func (c *GroupCard) titleFont() Font { return orFont(c.TitleFont, c.EffectiveFont()) }
 func (c *GroupCard) metaFont() Font  { return orFont(c.MetaFont, c.EffectiveFont()) }
 func (c *GroupCard) pillFont() Font  { return orFont(c.PillFont, c.EffectiveFont()) }
@@ -109,7 +131,7 @@ func (c *GroupCard) headerContentH() int { return c.badgeRowH() + c.titleSlot() 
 
 // membersH is the total height the expanded member rows add (0 when collapsed).
 func (c *GroupCard) membersH() int {
-	if !c.Expanded {
+	if !c.Expanded().Get() {
 		return 0
 	}
 	return len(c.Members) * c.memberH()
@@ -240,7 +262,7 @@ func (c *GroupCard) assemble() {
 	c.metaLbl.SetBounds(Rect{X: cx, Y: metaY, W: metaW, H: c.metaH()})
 
 	c.memberLbls = nil
-	if c.Expanded {
+	if c.Expanded().Get() {
 		for i, mem := range c.Members {
 			mr := c.MemberRect(i)
 			lbl := NewLabel(mem)
@@ -284,7 +306,7 @@ func (c *GroupCard) Draw(p painter.Painter, theme *Theme) {
 
 	// Chevron, centred in its column.
 	chev := c.ChevronRect()
-	drawDisclosureChevron(p, chev.X+chev.W/2, chev.Y+chev.H/2, c.Expanded, theme.OnSurface)
+	drawDisclosureChevron(p, chev.X+chev.W/2, chev.Y+chev.H/2, c.Expanded().Get(), theme.OnSurface)
 
 	// Source + status pills on the badge row.
 	x := c.contentX(inner)
@@ -302,7 +324,7 @@ func (c *GroupCard) Draw(p painter.Painter, theme *Theme) {
 	// Header affordance: download checkbox + action pill.
 	if cr := c.CheckRect(); cr.W > 0 {
 		cb := &CheckButton{Size: cr.W}
-		cb.Checked().Set(c.Checked)
+		cb.Checked().Set(c.Checked().Get())
 		cb.SetBounds(cr)
 		cb.Draw(p, theme)
 	}

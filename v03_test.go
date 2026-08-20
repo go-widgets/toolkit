@@ -1129,12 +1129,12 @@ func TestMenuBarMnemonic(t *testing.T) {
 
 func TestNotificationShowHideTick(t *testing.T) {
 	n := NewNotification("hi")
-	if n.Visible {
+	if n.Visible().Get() {
 		t.Fatal("fresh Notification must be hidden")
 	}
 	n.SetBounds(Rect{X: 10, Y: 10, W: 0, H: 0})
 	n.Show("Saved!")
-	if !n.Visible {
+	if !n.Visible().Get() {
 		t.Fatal("Show must set Visible=true")
 	}
 	if n.Text != "Saved!" {
@@ -1153,7 +1153,7 @@ func TestNotificationShowHideTick(t *testing.T) {
 	for i := 0; i < NotificationLife+1; i++ {
 		n.Tick()
 	}
-	if n.Visible {
+	if n.Visible().Get() {
 		t.Fatal("Tick past Life must auto-hide")
 	}
 }
@@ -1173,8 +1173,8 @@ func TestNotificationHide(t *testing.T) {
 	n.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 30})
 	n.Show("here")
 	n.Hide()
-	if n.Visible || n.Life != 0 {
-		t.Fatalf("Hide must zero both: visible=%v life=%d", n.Visible, n.Life)
+	if n.Visible().Get() || n.Life != 0 {
+		t.Fatalf("Hide must zero both: visible=%v life=%d", n.Visible().Get(), n.Life)
 	}
 }
 

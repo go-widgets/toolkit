@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // LineChart plots one series of Y values as a polyline over a left+bottom axis
 // frame -- the full-size sibling of the inline Sparkline. Values are spread
@@ -23,8 +26,8 @@ type LineChart struct {
 	// a vertical rule at data point HoverIndex and a marker where it meets the
 	// curve. A host sets these from ValueAt on pointer motion; the zero value
 	// (Hover == false) draws no crosshair, so existing renders are unchanged.
-	Hover      bool
-	HoverIndex int
+	hover      *mvvm.Observable[bool]
+	hoverIndex *mvvm.Observable[int]
 }
 
 // ChartPad is the margin (painter units) reserved for the axes on the left and
@@ -33,6 +36,24 @@ const ChartPad = 6
 
 // NewLineChart builds a LineChart over the given series with auto Y bounds.
 func NewLineChart(series []float64) *LineChart { return &LineChart{Series: series} }
+
+// Hover is the reactive hover-highlight toggle as a shared [mvvm.Observable];
+// false draws no hover affordance. Lazily created, defaulting to off.
+func (c *LineChart) Hover() *mvvm.Observable[bool] {
+	if c.hover == nil {
+		c.hover = mvvm.NewObservable(false)
+	}
+	return c.hover
+}
+
+// HoverIndex is the reactive hovered index as a shared [mvvm.Observable].
+// Lazily created, defaulting to 0.
+func (c *LineChart) HoverIndex() *mvvm.Observable[int] {
+	if c.hoverIndex == nil {
+		c.hoverIndex = mvvm.NewObservable(0)
+	}
+	return c.hoverIndex
+}
 
 // bounds returns the effective (min, max) Y range: the explicit Min/Max when
 // they differ, else the data's own range (falling back to [v-1, v+1] for a
@@ -127,11 +148,11 @@ func (c *LineChart) Draw(p painter.Painter, theme *Theme) {
 // HoverIndex plus a marker where it meets the curve — when Hover is set and
 // HoverIndex is in range. The marker is clamped inside Bounds.
 func (c *LineChart) drawHover(p painter.Painter, theme *Theme, mn, mx float64) {
-	if !c.Hover || c.HoverIndex < 0 || c.HoverIndex >= len(c.Series) {
+	if !c.Hover().Get() || c.HoverIndex().Get() < 0 || c.HoverIndex().Get() >= len(c.Series) {
 		return
 	}
 	r, pl := c.Bounds(), c.plot()
-	hx, hy := c.pointAt(c.HoverIndex, mn, mx)
+	hx, hy := c.pointAt(c.HoverIndex().Get(), mn, mx)
 	drawLine(p, hx, r.Y, hx, pl.Y+pl.H-1, dimInk(theme))
 	fillRect(p, clampInt(hx-2, r.X, r.X+r.W-4), clampInt(hy-2, r.Y, r.Y+r.H-4), 4, 4, theme.Accent)
 }

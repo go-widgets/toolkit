@@ -158,11 +158,11 @@ func (s *Sparkline) A11y() A11yInfo {
 func (g *Gauge) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleMeter,
-		Value:    formatFloat(g.Value),
+		Value:    formatFloat(g.Value().Get()),
 		HasRange: true,
 		Min:      g.Min,
 		Max:      g.Max,
-		Now:      g.Value,
+		Now:      g.Value().Get(),
 	}
 }
 

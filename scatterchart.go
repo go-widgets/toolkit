@@ -7,6 +7,7 @@ package toolkit
 import (
 	"math"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -26,10 +27,11 @@ type ScatterChart struct {
 	Series [][]ScatterPoint
 	Colors []RGBA // optional per-series palette override; cycles by index
 
-	// Hover + HoverSeries/HoverPoint ring the hovered point. Opt-in; the zero
-	// value draws none.
-	Hover                   bool
-	HoverSeries, HoverPoint int
+	// hover + hoverSeries/hoverPoint ring the hovered point; see
+	// [ScatterChart.Hover] / [ScatterChart.HoverSeries] / [ScatterChart.HoverPoint].
+	hover       *mvvm.Observable[bool]
+	hoverSeries *mvvm.Observable[int]
+	hoverPoint  *mvvm.Observable[int]
 }
 
 // NearestPoint returns the point closest (in pixels) to widget-local (x, y) —
@@ -62,6 +64,33 @@ const ScatterDot = 2
 // NewScatterChart builds a ScatterChart over the given series.
 func NewScatterChart(series [][]ScatterPoint) *ScatterChart {
 	return &ScatterChart{Series: series}
+}
+
+// Hover is the reactive point-ring toggle as a shared [mvvm.Observable]; false
+// draws no ring. Lazily created, defaulting to off.
+func (c *ScatterChart) Hover() *mvvm.Observable[bool] {
+	if c.hover == nil {
+		c.hover = mvvm.NewObservable(false)
+	}
+	return c.hover
+}
+
+// HoverSeries is the reactive hovered series index as a shared [mvvm.Observable].
+// Lazily created, defaulting to 0.
+func (c *ScatterChart) HoverSeries() *mvvm.Observable[int] {
+	if c.hoverSeries == nil {
+		c.hoverSeries = mvvm.NewObservable(0)
+	}
+	return c.hoverSeries
+}
+
+// HoverPoint is the reactive hovered point index as a shared [mvvm.Observable].
+// Lazily created, defaulting to 0.
+func (c *ScatterChart) HoverPoint() *mvvm.Observable[int] {
+	if c.hoverPoint == nil {
+		c.hoverPoint = mvvm.NewObservable(0)
+	}
+	return c.hoverPoint
 }
 
 // plot is the drawable rectangle inside the axes (shared scaled(ChartPad) margin).
@@ -148,9 +177,9 @@ func (c *ScatterChart) Draw(p painter.Painter, theme *Theme) {
 			fillRect(p, x, y, scaled(ScatterDot), scaled(ScatterDot), col)
 		}
 	}
-	if c.Hover && c.HoverSeries >= 0 && c.HoverSeries < len(c.Series) &&
-		c.HoverPoint >= 0 && c.HoverPoint < len(c.Series[c.HoverSeries]) {
-		x, y := c.project(c.Series[c.HoverSeries][c.HoverPoint], xr, yr)
+	if c.Hover().Get() && c.HoverSeries().Get() >= 0 && c.HoverSeries().Get() < len(c.Series) &&
+		c.HoverPoint().Get() >= 0 && c.HoverPoint().Get() < len(c.Series[c.HoverSeries().Get()]) {
+		x, y := c.project(c.Series[c.HoverSeries().Get()][c.HoverPoint().Get()], xr, yr)
 		x = clampInt(x, r.X, r.X+r.W-scaled(ScatterDot))
 		y = clampInt(y, r.Y, r.Y+r.H-scaled(ScatterDot))
 		strokeRect(p, clampInt(x-2, r.X, r.X+r.W-6), clampInt(y-2, r.Y, r.Y+r.H-6), 6, 6, theme.OnSurface)

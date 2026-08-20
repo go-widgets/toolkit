@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Banner is a full-width persistent inline message strip, modelled on
 // GTK 4's AdwBanner. Distinct from Alert (persistent, coloured by
@@ -30,9 +33,11 @@ type Banner struct {
 	Base
 	Text        string
 	ButtonLabel string
-	Revealed    bool
 	OnAction    func()
 	Icon        func(p painter.Painter, r Rect, ink RGBA)
+
+	// revealed is the reactive reveal toggle; see [Banner.Revealed].
+	revealed *mvvm.Observable[bool]
 }
 
 // Banner sizing constants. BannerPadX/PadY are the internal margin
@@ -48,7 +53,20 @@ const (
 // true so a freshly-constructed banner is visible; ButtonLabel is
 // empty by default (no action slot rendered).
 func NewBanner(text string) *Banner {
-	return &Banner{Text: text, Revealed: true}
+	b := &Banner{Text: text}
+	b.revealed = mvvm.NewObservable(true)
+	return b
+}
+
+// Revealed is the banner's reactive reveal toggle as a shared [mvvm.Observable]:
+// the host Sets it false to dismiss and true to re-show without dropping the
+// widget from the tree. Lazily created, defaulting to hidden (the zero-value
+// Banner{}); NewBanner starts it revealed.
+func (b *Banner) Revealed() *mvvm.Observable[bool] {
+	if b.revealed == nil {
+		b.revealed = mvvm.NewObservable(false)
+	}
+	return b.revealed
 }
 
 // buttonRect returns the surface-coordinate rect of the action button
@@ -78,7 +96,7 @@ func (b *Banner) buttonRect() (Rect, bool) {
 // action button is drawn right-aligned inside BannerPadX of the trailing
 // edge. Nothing drawn when !Revealed.
 func (b *Banner) Draw(p painter.Painter, theme *Theme) {
-	if !b.Revealed {
+	if !b.Revealed().Get() {
 		return
 	}
 	r := b.Bounds()
@@ -107,7 +125,7 @@ func (b *Banner) Draw(p painter.Painter, theme *Theme) {
 // button (empty ButtonLabel) is dropped; a click with a nil OnAction
 // is dropped silently -- the button is drawable but inert.
 func (b *Banner) OnEvent(ev Event) {
-	if ev.Kind != EventClick || !b.Revealed {
+	if ev.Kind != EventClick || !b.Revealed().Get() {
 		return
 	}
 	br, ok := b.buttonRect()

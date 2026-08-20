@@ -33,7 +33,7 @@ func (s *popoverStubChild) OnEvent(ev Event) {
 func TestNewPopoverDefaults(t *testing.T) {
 	child := &popoverStubChild{}
 	p := NewPopover(child)
-	if p.Visible {
+	if p.Visible().Get() {
 		t.Fatal("fresh Popover must be hidden")
 	}
 	if p.Child != child {
@@ -69,7 +69,7 @@ func TestPopoverDrawHiddenNoOp(t *testing.T) {
 func TestPopoverDrawVisibleWithoutTitle(t *testing.T) {
 	child := &popoverStubChild{}
 	p := NewPopover(child)
-	p.Visible = true
+	p.Visible().Set(true)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	theme := DefaultLight()
 	buf := makeSurface(120, 60)
@@ -103,7 +103,7 @@ func TestPopoverDrawVisibleWithoutTitle(t *testing.T) {
 func TestPopoverDrawVisibleWithTitle(t *testing.T) {
 	child := &popoverStubChild{}
 	p := NewPopover(child)
-	p.Visible = true
+	p.Visible().Set(true)
 	p.Title = "Menu"
 	p.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 80})
 	theme := DefaultLight()
@@ -133,7 +133,7 @@ func TestPopoverDrawVisibleWithTitle(t *testing.T) {
 
 func TestPopoverDrawVisibleNilChild(t *testing.T) {
 	p := NewPopover(nil)
-	p.Visible = true
+	p.Visible().Set(true)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 40})
 	theme := DefaultLight()
 	buf := makeSurface(60, 40)
@@ -149,7 +149,7 @@ func TestPopoverDrawVisibleNilChild(t *testing.T) {
 func TestPopoverDrawZeroWidthBounds(t *testing.T) {
 	child := &popoverStubChild{}
 	p := NewPopover(child)
-	p.Visible = true
+	p.Visible().Set(true)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 40})
 	surf := makeSurface(20, 40)
 	before := make([]byte, len(surf))
@@ -180,7 +180,7 @@ func TestPopoverOnEventWhenHidden(t *testing.T) {
 
 func TestPopoverOnEventNilChild(t *testing.T) {
 	p := NewPopover(nil)
-	p.Visible = true
+	p.Visible().Set(true)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 40})
 	// Just prove it does not panic.
 	p.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
@@ -191,7 +191,7 @@ func TestPopoverOnEventNilChild(t *testing.T) {
 func TestPopoverOnEventForwardsToChild(t *testing.T) {
 	child := &popoverStubChild{}
 	p := NewPopover(child)
-	p.Visible = true
+	p.Visible().Set(true)
 	p.SetBounds(Rect{X: 100, Y: 200, W: 120, H: 60})
 	// After Draw the Popover lays out its child at inset bounds.
 	buf := makeSurface(300, 300)

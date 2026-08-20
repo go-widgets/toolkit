@@ -17,7 +17,7 @@ func TestNewBannerDefaults(t *testing.T) {
 	if b.Text != "heads up" {
 		t.Fatalf("Text = %q", b.Text)
 	}
-	if !b.Revealed {
+	if !b.Revealed().Get() {
 		t.Fatal("fresh Banner must be Revealed=true")
 	}
 	if b.ButtonLabel != "" {
@@ -32,7 +32,7 @@ func TestNewBannerDefaults(t *testing.T) {
 
 func TestBannerDrawWhenNotRevealedNoOp(t *testing.T) {
 	b := NewBanner("x")
-	b.Revealed = false
+	b.Revealed().Set(false)
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 30})
 	surf := makeSurface(200, 30)
 	before := make([]byte, len(surf))
@@ -309,7 +309,7 @@ func TestBannerOnEventNonClickIgnored(t *testing.T) {
 func TestBannerOnEventClickWhenNotRevealed(t *testing.T) {
 	b := NewBanner("hi")
 	b.ButtonLabel = "OK"
-	b.Revealed = false
+	b.Revealed().Set(false)
 	b.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 30})
 	fired := 0
 	b.OnAction = func() { fired++ }

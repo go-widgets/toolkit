@@ -39,7 +39,7 @@ func TestLoadMaskInactiveDrawsNothing(t *testing.T) {
 // TestLoadMaskEmptyBoundsNoOp: active but zero-size paints nothing.
 func TestLoadMaskEmptyBoundsNoOp(t *testing.T) {
 	m := NewLoadMask("x")
-	m.Active = true
+	m.Active().Set(true)
 	m.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 20})
 	buf := makeSurface(20, 20)
 	m.Draw(newP(buf, 20), DefaultLight())
@@ -54,7 +54,7 @@ func TestLoadMaskActiveDimsSpinsAndCaptions(t *testing.T) {
 	const w, h = 100, 80
 	theme := DefaultLight()
 	m := NewLoadMask("Loading…")
-	m.Active = true
+	m.Active().Set(true)
 	m.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	buf := makeSurface(w, h)
 	m.Draw(newP(buf, w), theme)
@@ -74,7 +74,7 @@ func TestLoadMaskActiveDimsSpinsAndCaptions(t *testing.T) {
 func TestLoadMaskNoMessageStillDraws(t *testing.T) {
 	const w, h = 100, 80
 	m := NewLoadMask("") // no message
-	m.Active = true
+	m.Active().Set(true)
 	m.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	buf := makeSurface(w, h)
 	m.Draw(newP(buf, w), DefaultLight())
@@ -88,7 +88,7 @@ func TestLoadMaskCustomScrim(t *testing.T) {
 	const w, h = 60, 40
 	red := RGBA{R: 255, A: 255}
 	m := NewLoadMask("")
-	m.Active = true
+	m.Active().Set(true)
 	m.Scrim = red
 	m.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	buf := makeSurface(w, h)
@@ -106,7 +106,7 @@ func TestLoadMaskHitTest(t *testing.T) {
 	if m.HitTest(10, 10) {
 		t.Fatal("inactive LoadMask must not catch events")
 	}
-	m.Active = true
+	m.Active().Set(true)
 	if !m.HitTest(10, 10) {
 		t.Fatal("active LoadMask must catch in-bounds events")
 	}

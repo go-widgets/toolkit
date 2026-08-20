@@ -29,8 +29,8 @@ func TestStackAddPageAutoVisible(t *testing.T) {
 	s := NewStack()
 	w1 := &recordingWidget{}
 	s.AddPage("main", w1)
-	if s.Visible != "main" {
-		t.Fatalf("Visible after first AddPage = %q, want main", s.Visible)
+	if s.Visible().Get() != "main" {
+		t.Fatalf("Visible after first AddPage = %q, want main", s.Visible().Get())
 	}
 }
 
@@ -38,8 +38,8 @@ func TestStackAddSecondPageKeepsFirstVisible(t *testing.T) {
 	s := NewStack()
 	s.AddPage("a", &recordingWidget{})
 	s.AddPage("b", &recordingWidget{})
-	if s.Visible != "a" {
-		t.Fatalf("Visible after 2nd AddPage = %q, want a", s.Visible)
+	if s.Visible().Get() != "a" {
+		t.Fatalf("Visible after 2nd AddPage = %q, want a", s.Visible().Get())
 	}
 }
 
@@ -48,12 +48,12 @@ func TestStackSetVisibleKnownAndUnknown(t *testing.T) {
 	s.AddPage("a", &recordingWidget{})
 	s.AddPage("b", &recordingWidget{})
 	s.SetVisible("b")
-	if s.Visible != "b" {
-		t.Fatalf("after SetVisible(b): Visible = %q", s.Visible)
+	if s.Visible().Get() != "b" {
+		t.Fatalf("after SetVisible(b): Visible = %q", s.Visible().Get())
 	}
 	s.SetVisible("ghost") // unknown — must NOT change Visible
-	if s.Visible != "b" {
-		t.Fatalf("after SetVisible(ghost): Visible changed to %q", s.Visible)
+	if s.Visible().Get() != "b" {
+		t.Fatalf("after SetVisible(ghost): Visible changed to %q", s.Visible().Get())
 	}
 }
 

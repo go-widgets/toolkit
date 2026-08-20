@@ -50,12 +50,12 @@ func TestGaugeValueColor(t *testing.T) {
 		t.Errorf("value 40: valueColor = %+v, want green %+v", got, green)
 	}
 	// Value 70 → middle band (yellow).
-	g.Value = 70
+	g.Value().Set(70)
 	if got := g.valueColor(th); got != yellow {
 		t.Errorf("value 70: valueColor = %+v, want yellow %+v", got, yellow)
 	}
 	// Value 130 → past every Upto → last band (red, fallthrough).
-	g.Value = 130
+	g.Value().Set(130)
 	if got := g.valueColor(th); got != red {
 		t.Errorf("value 130: valueColor = %+v, want red %+v (fallthrough)", got, red)
 	}
@@ -178,5 +178,18 @@ func TestGaugeTinyRadiusNoop(t *testing.T) {
 	g.Draw(newP(surf, 4), th)
 	if got := countInk(surf, 4, 4, th.SurfaceAlt); got != 0 {
 		t.Errorf("radius<1 painted %d pixels, want 0", got)
+	}
+}
+
+// TestGaugeZeroValueValueDefault covers the Value() accessor's lazy-init path on
+// a literal Gauge{} (no NewGauge): the first call materialises the Observable at 0.
+func TestGaugeZeroValueValueDefault(t *testing.T) {
+	var g Gauge
+	if got := g.Value().Get(); got != 0 {
+		t.Fatalf("zero-value Gauge Value() = %v, want 0", got)
+	}
+	g.Value().Set(42)
+	if got := g.Value().Get(); got != 42 {
+		t.Fatalf("after Set(42), Value() = %v, want 42", got)
 	}
 }

@@ -151,7 +151,8 @@ func TestChartHoverCrosshair(t *testing.T) {
 	// LineChart crosshair.
 	lc := NewLineChart([]float64{3, 7, 2, 8, 5})
 	lc.SetBounds(bounds)
-	lc.Hover, lc.HoverIndex = true, 2
+	lc.Hover().Set(true)
+	lc.HoverIndex().Set(2)
 	buf := makeSurface(w, h)
 	lc.Draw(newP(buf, w), DefaultLight())
 	inBounds("line", buf, bounds)
@@ -182,7 +183,8 @@ func TestChartHoverCrosshair(t *testing.T) {
 	}
 
 	// AreaChart crosshair.
-	ac.Hover, ac.HoverIndex = true, 3
+	ac.Hover().Set(true)
+	ac.HoverIndex().Set(3)
 	abuf := makeSurface(w, h)
 	ac.Draw(newP(abuf, w), DefaultLight())
 	inBounds("area", abuf, bounds)

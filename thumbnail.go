@@ -8,6 +8,7 @@ import (
 	"image"
 
 	"github.com/go-images/images"
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -53,13 +54,15 @@ type Thumbnail struct {
 	// Label — a filename shown as the caption, say, while the picture itself is
 	// worth describing. Empty falls back to Label.
 	Alt string
-	// Selected / Hover drive the border (see the type doc). Area selects the
-	// box-averaging downscale over the default nearest-neighbour.
-	Selected bool
-	Hover    bool
-	Area     bool
+	// Area selects the box-averaging downscale over nearest-neighbour.
+	Area bool
 	// OnClick fires on EventClick (nil-safe) so a container can select the tile.
 	OnClick func()
+
+	// selected / hover drive the border as reactive state (see the type doc and
+	// [Thumbnail.Selected] / [Thumbnail.Hover]).
+	selected *mvvm.Observable[bool]
+	hover    *mvvm.Observable[bool]
 
 	// areaCache holds the last Area downscale, valid for the source and the
 	// destination size recorded beside it.
@@ -67,6 +70,26 @@ type Thumbnail struct {
 	areaW, areaH       int
 	areaSrcW, areaSrcH int
 	areaSrcLen         int
+}
+
+// Selected is the tile's reactive selection state as a shared [mvvm.Observable]:
+// true draws the 2-px Accent border (a switcher's current choice). Lazily
+// created, defaulting to false.
+func (t *Thumbnail) Selected() *mvvm.Observable[bool] {
+	if t.selected == nil {
+		t.selected = mvvm.NewObservable(false)
+	}
+	return t.selected
+}
+
+// Hover is the tile's reactive hover state as a shared [mvvm.Observable]: true
+// draws the 1-px Accent border (the pointer is over the tile). Lazily created,
+// defaulting to false.
+func (t *Thumbnail) Hover() *mvvm.Observable[bool] {
+	if t.hover == nil {
+		t.hover = mvvm.NewObservable(false)
+	}
+	return t.hover
 }
 
 // SetPixels replaces the source image and drops any cached downscale.
@@ -131,10 +154,10 @@ func (t *Thumbnail) Draw(p painter.Painter, theme *Theme) {
 		t.drawText(p, tx, ty, t.Label, theme.OnSurface)
 	}
 	switch {
-	case t.Selected:
+	case t.Selected().Get():
 		strokeRect(p, r.X, r.Y, r.W, r.H, theme.Accent)
 		strokeRect(p, r.X+1, r.Y+1, r.W-2, r.H-2, theme.Accent)
-	case t.Hover:
+	case t.Hover().Get():
 		strokeRect(p, r.X, r.Y, r.W, r.H, theme.Accent)
 	default:
 		strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)

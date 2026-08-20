@@ -7,6 +7,7 @@ package toolkit
 import (
 	"math"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -23,10 +24,10 @@ type PieChart struct {
 	Values []float64
 	Colors []RGBA // optional per-slice palette override; cycles by index
 
-	// Hover + HoverIndex outline the hovered slice (its two boundary radii).
-	// Opt-in; the zero value draws none.
-	Hover      bool
-	HoverIndex int
+	// hover + hoverIndex outline the hovered slice; see [PieChart.Hover] /
+	// [PieChart.HoverIndex].
+	hover      *mvvm.Observable[bool]
+	hoverIndex *mvvm.Observable[int]
 }
 
 // SliceAt returns the slice under widget-local (x, y): its index, value and
@@ -58,7 +59,7 @@ func (c *PieChart) SliceAt(localX, localY int) (index int, value float64, ok boo
 // drawHover strokes the hovered slice's two boundary radii when Hover is set.
 func (c *PieChart) drawHover(p painter.Painter, theme *Theme) {
 	total := c.total()
-	if !c.Hover || total <= 0 || c.HoverIndex < 0 || c.HoverIndex >= len(c.Values) {
+	if !c.Hover().Get() || total <= 0 || c.HoverIndex().Get() < 0 || c.HoverIndex().Get() >= len(c.Values) {
 		return
 	}
 	r := c.Bounds()
@@ -66,10 +67,10 @@ func (c *PieChart) drawHover(p painter.Painter, theme *Theme) {
 	cx, cy := r.X+r.W/2, r.Y+r.H/2
 	cum := c.cumFractions(total)
 	a0 := 0.0
-	if c.HoverIndex > 0 {
-		a0 = cum[c.HoverIndex-1]
+	if c.HoverIndex().Get() > 0 {
+		a0 = cum[c.HoverIndex().Get()-1]
 	}
-	for _, frac := range []float64{a0, cum[c.HoverIndex]} {
+	for _, frac := range []float64{a0, cum[c.HoverIndex().Get()]} {
 		theta := frac * 2 * math.Pi
 		drawLine(p, cx, cy, cx+int(float64(radius)*math.Sin(theta)), cy-int(float64(radius)*math.Cos(theta)), theme.OnSurface)
 	}
@@ -88,6 +89,24 @@ var piePalette = []RGBA{
 
 // NewPieChart builds a PieChart over the given values with the default palette.
 func NewPieChart(values []float64) *PieChart { return &PieChart{Values: values} }
+
+// Hover is the reactive slice-outline toggle as a shared [mvvm.Observable];
+// false draws no outline. Lazily created, defaulting to off.
+func (c *PieChart) Hover() *mvvm.Observable[bool] {
+	if c.hover == nil {
+		c.hover = mvvm.NewObservable(false)
+	}
+	return c.hover
+}
+
+// HoverIndex is the reactive hovered slice index as a shared [mvvm.Observable].
+// Lazily created, defaulting to 0.
+func (c *PieChart) HoverIndex() *mvvm.Observable[int] {
+	if c.hoverIndex == nil {
+		c.hoverIndex = mvvm.NewObservable(0)
+	}
+	return c.hoverIndex
+}
 
 // total sums the positive values (negatives are treated as zero so a stray
 // sign can't invert a wedge).

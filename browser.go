@@ -1236,7 +1236,7 @@ func (b *Browser) drawProgress(p painter.Painter, theme *Theme, cr Rect, t *brow
 	pb := &ProgressBar{}
 	pb.SetBounds(Rect{X: cr.X, Y: cr.Y, W: cr.W, H: b.progressH()})
 	if t.hasProgress {
-		pb.Fraction = t.progress
+		pb.Fraction().Set(t.progress)
 	} else {
 		pb.Indeterminate = true
 		pb.Phase = b.Phase
