@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // FontChooser is a vertical picker of fonts: each option's name is drawn in
 // that very font, so the list doubles as a live size/style preview. Clicking a
@@ -18,8 +21,16 @@ import "github.com/go-widgets/painter"
 type FontChooser struct {
 	Base
 	Options  []FontOption
-	Selected int
+	selected *mvvm.Observable[int] // reactive via Selected()
 	OnChoose func(idx int, f Font)
+}
+
+// Selected is reactive state as a shared [mvvm.Observable]; edits Set it. Lazily created.
+func (fc *FontChooser) Selected() *mvvm.Observable[int] {
+	if fc.selected == nil {
+		fc.selected = mvvm.NewObservable[int](0)
+	}
+	return fc.selected
 }
 
 // FontOption is one named font in a FontChooser.
@@ -70,7 +81,7 @@ func (fc *FontChooser) Draw(p painter.Painter, theme *Theme) {
 	for i, opt := range fc.Options {
 		rh := fc.rowHeight(i)
 		ink := theme.OnSurface
-		if i == fc.Selected {
+		if i == fc.Selected().Get() {
 			fillRect(p, r.X+1, y, r.W-2, rh, theme.Accent)
 			ink = accentInk(theme)
 		}
@@ -104,7 +115,7 @@ func (fc *FontChooser) OnEvent(ev Event) {
 	if idx < 0 {
 		return
 	}
-	fc.Selected = idx
+	fc.Selected().Set(idx)
 	SetFont(fc.Options[idx].Font)
 	if fc.OnChoose != nil {
 		fc.OnChoose(idx, fc.Options[idx].Font)

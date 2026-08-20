@@ -14,6 +14,7 @@ import (
 
 	"github.com/go-crdt/collab"
 	"github.com/go-crdt/crdt"
+	"github.com/go-crdt/crdt/awareness"
 )
 
 // These tests drive two real collab sessions over an in-process WebSocket carrier
@@ -502,5 +503,40 @@ func TestRuneOffsetAndLineCol(t *testing.T) {
 	}
 	if l, c := lineCol(buf, 999); l != 2 || c != 0 {
 		t.Errorf("lineCol(past end) = (%d,%d), want (2,0)", l, c)
+	}
+}
+
+// TestPublishCursorSkipsWhileApplyingRemote deterministically covers the
+// applyingRemote guard in publishCursor. The end-to-end tests only hit it when a
+// remote apply happens to move the caret (idempotent Sets fire no subscriber), so
+// its coverage was timing/data-dependent and flaked the 100% gate. Driving the
+// guard directly makes it deterministic: with applyingRemote set, publishCursor
+// must return before touching the (nil here) editor/client — a caret notification
+// caused by our own remote application is never echoed back as presence.
+func TestPublishCursorSkipsWhileApplyingRemote(t *testing.T) {
+	c := &CollabText{applyingRemote: true}
+	c.publishCursor() // returns at the guard; a panic would mean it fell through
+}
+
+// TestRebuildDecorationsSkipsSelf deterministically covers the self-peer guard in
+// rebuildDecorations. awareness.Peers() includes self once this client has
+// published a cursor, and SetCursor seeds the local presence registry
+// synchronously — so after it, the client's own site is in Peers() with certainty
+// (the end-to-end tests only hit this branch when self-presence happens to have
+// landed, which flaked the 100% gate). rebuildDecorations must skip that self
+// entry, leaving no decoration for it.
+func TestRebuildDecorationsSkipsSelf(t *testing.T) {
+	url := serveCollab(t)
+	client := joinClient(t, url, "doc-selfdec", crdt.SiteID(1))
+	ed := NewCodeEditor("hello\nworld")
+	ct := &CollabText{ed: ed, client: client, self: client.Site()}
+
+	if err := client.SetCursor(awareness.Cursor{Anchor: 0, Head: 3}, map[string]string{}); err != nil {
+		t.Fatalf("SetCursor: %v", err)
+	}
+	// Self is now the sole entry in Peers(); it must be filtered out.
+	ct.rebuildDecorations("hello\nworld")
+	if len(ed.Decorations) != 0 {
+		t.Fatalf("self peer must be skipped, got %d decoration(s): %+v", len(ed.Decorations), ed.Decorations)
 	}
 }

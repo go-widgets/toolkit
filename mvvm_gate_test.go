@@ -182,6 +182,35 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// (auto-allowed). Decorations (host-driven co-editor carets), ShowLineNumbers
 	// and GutterColor are set-once display config.
 	"TextView": {"Decorations": true, "ShowLineNumbers": true, "GutterColor": true},
+	// Scroll/overlay/structural batch: each widget's reactive state is now unexported
+	// behind an Observable accessor — ScrollView's offsetX/offsetY, Scrollbar's offset,
+	// Paned's position, ContextMenu's open, CommandPalette's visible, DropZone's hover,
+	// FontChooser's selected, MenuBar's active, FormField's error. The fields below are
+	// set-once config: composed children/data slices, layout metrics and mode flags
+	// (func hooks like OnDrop/OnChoose/OnDismiss/OnPositionChanged are auto-allowed).
+	"ScrollView":     {"Child": true},
+	"Scrollbar":      {"Total": true, "Viewport": true, "Horizontal": true},
+	"Paned":          {"First": true, "Second": true, "Orientation": true},
+	"ContextMenu":    {"Menu": true, "AnchorX": true, "AnchorY": true},
+	"CommandPalette": {"Commands": true},
+	"DropZone":       {"Prompt": true},
+	"FontChooser":    {"Options": true},
+	"MenuBar":        {"Names": true, "Menus": true},
+	"FormField":      {"Label": true, "Help": true, "Child": true, "Rules": true},
+	// Builder/overlay widgets whose only reactive state (open/present/completion) is
+	// already unexported behind an Observable (ActionSheet.presented, Fab.expanded,
+	// CodeEditor.compOpen/compSel) or which are purely draw-only chrome with no
+	// reactive state at all (Border/Material/Overlay/Skeleton). Gating them locks out
+	// any future imperative state field; every exported field below is set-once
+	// composition/appearance/layout config (func hooks auto-allowed).
+	"ActionSheet":   {"Title": true, "Actions": true, "Cancel": true, "Content": true, "PreferredHeight": true, "Detents": true, "Draggable": true, "ShowHandle": true, "DismissFraction": true, "FlingVelocity": true, "SlideDuration": true, "FrameSeconds": true, "ScrimAlpha": true},
+	"Border":        {"North": true, "South": true, "East": true, "West": true, "Center": true, "NorthSize": true, "SouthSize": true, "EastSize": true, "WestSize": true, "NorthSplit": true, "SouthSplit": true, "EastSplit": true, "WestSplit": true},
+	"CodeEditor":    {"Language": true, "Syntax": true, "HighlightCurrentLine": true, "CurrentLineColor": true},
+	"Fab":           {"Icon": true, "Label": true, "Corner": true, "Margin": true, "Diameter": true, "Actions": true},
+	"Material":      {"Kind": true, "Blend": true, "Source": true, "SW": true, "SH": true, "Sigma": true, "Tint": true, "Child": true},
+	"Overlay":       {"Content": true, "Layers": true, "Modal": true},
+	"Skeleton":      {"Kind": true, "Lines": true, "LineH": true, "LineGap": true, "LastFrac": true, "Radius": true, "Animated": true, "Phase": true},
+	"SkeletonGroup": {"Animated": true, "Phase": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the

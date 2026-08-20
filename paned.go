@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Paned orientations.
 const (
@@ -24,12 +27,20 @@ type Paned struct {
 	Base
 	First, Second     Widget
 	Orientation       int
-	Position          int
+	position          *mvvm.Observable[int] // reactive via Position()
 	OnPositionChanged func(pos int)
 
 	// resizing is true between grabbing the handle (EventClick on it) and
 	// releasing it, so EventMouseDrag moves the split.
 	resizing bool
+}
+
+// Position is reactive state as a shared [mvvm.Observable]; edits Set it. Lazily created.
+func (p *Paned) Position() *mvvm.Observable[int] {
+	if p.position == nil {
+		p.position = mvvm.NewObservable[int](0)
+	}
+	return p.position
 }
 
 // PanedHandleW is the pixel thickness of the splitter handle.
@@ -50,11 +61,11 @@ func NewVPaned(first, second Widget) *Paned {
 // SetBounds lays out First/Second around the handle.
 func (p *Paned) SetBounds(r Rect) {
 	p.Base.SetBounds(r)
-	if p.Position == 0 { // first sizing -- centre.
+	if p.Position().Get() == 0 { // first sizing -- centre.
 		if p.Orientation == PanedHorizontal {
-			p.Position = r.W / 2
+			p.Position().Set(r.W / 2)
 		} else {
-			p.Position = r.H / 2
+			p.Position().Set(r.H / 2)
 		}
 	}
 	p.layout()
@@ -74,7 +85,7 @@ func (p *Paned) MoveHandle(pos int) {
 	if pos > total-10 {
 		pos = total - 10
 	}
-	p.Position = pos
+	p.Position().Set(pos)
 	p.layout()
 	if p.OnPositionChanged != nil {
 		p.OnPositionChanged(pos)
@@ -89,20 +100,20 @@ func (p *Paned) layout() {
 		return
 	}
 	if p.Orientation == PanedHorizontal {
-		p.First.SetBounds(Rect{X: r.X, Y: r.Y, W: p.Position, H: r.H})
+		p.First.SetBounds(Rect{X: r.X, Y: r.Y, W: p.Position().Get(), H: r.H})
 		p.Second.SetBounds(Rect{
-			X: r.X + p.Position + scaled(PanedHandleW),
+			X: r.X + p.Position().Get() + scaled(PanedHandleW),
 			Y: r.Y,
-			W: r.W - p.Position - scaled(PanedHandleW),
+			W: r.W - p.Position().Get() - scaled(PanedHandleW),
 			H: r.H,
 		})
 	} else {
-		p.First.SetBounds(Rect{X: r.X, Y: r.Y, W: r.W, H: p.Position})
+		p.First.SetBounds(Rect{X: r.X, Y: r.Y, W: r.W, H: p.Position().Get()})
 		p.Second.SetBounds(Rect{
 			X: r.X,
-			Y: r.Y + p.Position + scaled(PanedHandleW),
+			Y: r.Y + p.Position().Get() + scaled(PanedHandleW),
 			W: r.W,
-			H: r.H - p.Position - scaled(PanedHandleW),
+			H: r.H - p.Position().Get() - scaled(PanedHandleW),
 		})
 	}
 }
@@ -148,15 +159,15 @@ func (pd *Paned) Draw(p painter.Painter, theme *Theme) {
 	}
 	r := pd.Bounds()
 	if pd.Orientation == PanedHorizontal {
-		drawSplitterBar(p, Rect{X: r.X + pd.Position, Y: r.Y, W: scaled(PanedHandleW), H: r.H}, true, theme)
+		drawSplitterBar(p, Rect{X: r.X + pd.Position().Get(), Y: r.Y, W: scaled(PanedHandleW), H: r.H}, true, theme)
 	} else {
-		drawSplitterBar(p, Rect{X: r.X, Y: r.Y + pd.Position, W: r.W, H: scaled(PanedHandleW)}, false, theme)
+		drawSplitterBar(p, Rect{X: r.X, Y: r.Y + pd.Position().Get(), W: r.W, H: scaled(PanedHandleW)}, false, theme)
 	}
 }
 
 // OnEvent forwards to the appropriate child based on click position.
 func (p *Paned) OnEvent(ev Event) {
-	// ev is Paned-local; p.Position is a local offset, so the split test is
+	// ev is Paned-local; p.Position().Get() is a local offset, so the split test is
 	// local-vs-local. The child, however, sits at a non-zero offset within the
 	// Paned (First at the origin, Second past Position+handle), so the forwarded
 	// event MUST be translated to child-local coordinates — otherwise a click in
@@ -170,14 +181,14 @@ func (p *Paned) OnEvent(ev Event) {
 	case EventClick:
 		// A press on the handle grabs it for a resize; otherwise route to the
 		// pane under the pointer.
-		if pos >= p.Position && pos < p.Position+scaled(PanedHandleW) {
+		if pos >= p.Position().Get() && pos < p.Position().Get()+scaled(PanedHandleW) {
 			p.resizing = true
 			return
 		}
 		pr := p.Bounds()
-		if pos < p.Position && p.First != nil {
+		if pos < p.Position().Get() && p.First != nil {
 			p.First.OnEvent(translateEvent(ev, pr, p.First.Bounds()))
-		} else if pos >= p.Position+scaled(PanedHandleW) && p.Second != nil {
+		} else if pos >= p.Position().Get()+scaled(PanedHandleW) && p.Second != nil {
 			p.Second.OnEvent(translateEvent(ev, pr, p.Second.Bounds()))
 		}
 	case EventMouseDrag:

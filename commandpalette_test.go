@@ -29,7 +29,7 @@ func newTestPalette() (*CommandPalette, *[]string) {
 
 func TestNewCommandPaletteHiddenWithCommands(t *testing.T) {
 	cp, _ := newTestPalette()
-	if cp.Visible {
+	if cp.Visible().Get() {
 		t.Fatal("new palette should start hidden")
 	}
 	if len(cp.Commands) != 4 {
@@ -42,8 +42,8 @@ func TestOpenResetsState(t *testing.T) {
 	cp.query = "stale"
 	cp.selected = 3
 	cp.Open()
-	if !cp.Visible || cp.query != "" || cp.selected != 0 {
-		t.Fatalf("Open did not reset: visible=%v query=%q selected=%d", cp.Visible, cp.query, cp.selected)
+	if !cp.Visible().Get() || cp.query != "" || cp.selected != 0 {
+		t.Fatalf("Open did not reset: visible=%v query=%q selected=%d", cp.Visible().Get(), cp.query, cp.selected)
 	}
 }
 
@@ -55,8 +55,8 @@ func TestDismissResetsWithoutOnDismiss(t *testing.T) {
 	cp.query = "x"
 	cp.selected = 2
 	cp.Dismiss()
-	if cp.Visible || cp.query != "" || cp.selected != 0 {
-		t.Fatalf("Dismiss did not reset: visible=%v query=%q selected=%d", cp.Visible, cp.query, cp.selected)
+	if cp.Visible().Get() || cp.query != "" || cp.selected != 0 {
+		t.Fatalf("Dismiss did not reset: visible=%v query=%q selected=%d", cp.Visible().Get(), cp.query, cp.selected)
 	}
 	if calls != 0 {
 		t.Fatalf("Dismiss must not call OnDismiss itself, got %d calls", calls)
@@ -210,7 +210,7 @@ func TestUnknownKeyIsNoOp(t *testing.T) {
 	cp, _ := newTestPalette()
 	cp.Open()
 	cp.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
-	if !cp.Visible || cp.query != "" || cp.selected != 0 {
+	if !cp.Visible().Get() || cp.query != "" || cp.selected != 0 {
 		t.Fatal("unknown key mutated palette")
 	}
 }
@@ -225,8 +225,8 @@ func TestEnterRunsSelectedAndDismisses(t *testing.T) {
 	if len(*fired) != 1 || (*fired)[0] != "Save File" {
 		t.Fatalf("Enter fired %v, want [Save File]", *fired)
 	}
-	if cp.Visible || cp.query != "" || cp.selected != 0 {
-		t.Fatalf("Enter did not dismiss/reset: visible=%v query=%q selected=%d", cp.Visible, cp.query, cp.selected)
+	if cp.Visible().Get() || cp.query != "" || cp.selected != 0 {
+		t.Fatalf("Enter did not dismiss/reset: visible=%v query=%q selected=%d", cp.Visible().Get(), cp.query, cp.selected)
 	}
 }
 
@@ -235,7 +235,7 @@ func TestEnterNilActionNoPanicStillDismisses(t *testing.T) {
 	cp.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 300})
 	cp.Open()
 	cp.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if cp.Visible {
+	if cp.Visible().Get() {
 		t.Fatal("nil-Action Enter should still dismiss")
 	}
 }
@@ -248,7 +248,7 @@ func TestEnterEmptyFilteredNoPanic(t *testing.T) {
 	if len(*fired) != 0 {
 		t.Fatalf("Enter on empty filtered fired %v", *fired)
 	}
-	if cp.Visible {
+	if cp.Visible().Get() {
 		t.Fatal("Enter on empty filtered should still dismiss")
 	}
 }
@@ -261,7 +261,7 @@ func TestEscapeDismissesAndCallsOnDismiss(t *testing.T) {
 	cp.OnDismiss = func() { calls++ }
 	cp.Open()
 	cp.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
-	if cp.Visible {
+	if cp.Visible().Get() {
 		t.Fatal("Escape did not dismiss")
 	}
 	if calls != 1 {
@@ -273,7 +273,7 @@ func TestEscapeNilOnDismissNoPanic(t *testing.T) {
 	cp, _ := newTestPalette()
 	cp.Open()
 	cp.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
-	if cp.Visible {
+	if cp.Visible().Get() {
 		t.Fatal("Escape did not dismiss")
 	}
 }
@@ -295,7 +295,7 @@ func TestClickResultRowRunsIt(t *testing.T) {
 	if len(*fired) != 1 || (*fired)[0] != "Close Window" {
 		t.Fatalf("row click fired %v, want [Close Window]", *fired)
 	}
-	if cp.Visible {
+	if cp.Visible().Get() {
 		t.Fatal("row click should dismiss")
 	}
 }
@@ -306,8 +306,8 @@ func TestClickQueryRowIsNoOp(t *testing.T) {
 	pb := cp.panelBounds()
 	// Click inside the query row band.
 	cp.OnEvent(Event{Kind: EventClick, X: pb.X + PalettePadX, Y: pb.Y + palettePadY + PaletteRowH/2})
-	if !cp.Visible || len(*fired) != 0 {
-		t.Fatalf("query-row click: visible=%v fired=%v", cp.Visible, *fired)
+	if !cp.Visible().Get() || len(*fired) != 0 {
+		t.Fatalf("query-row click: visible=%v fired=%v", cp.Visible().Get(), *fired)
 	}
 }
 
@@ -317,8 +317,8 @@ func TestClickBelowResultsIsNoOp(t *testing.T) {
 	pb := cp.panelBounds()
 	// Bottom padding strip: inside the panel but past the last result row.
 	cp.OnEvent(Event{Kind: EventClick, X: pb.X + PalettePadX, Y: pb.Y + pb.H - 1})
-	if !cp.Visible || len(*fired) != 0 {
-		t.Fatalf("below-results click: visible=%v fired=%v", cp.Visible, *fired)
+	if !cp.Visible().Get() || len(*fired) != 0 {
+		t.Fatalf("below-results click: visible=%v fired=%v", cp.Visible().Get(), *fired)
 	}
 }
 
@@ -328,7 +328,7 @@ func TestClickOutsideDismissesAndCallsOnDismiss(t *testing.T) {
 	cp.OnDismiss = func() { calls++ }
 	cp.Open()
 	cp.OnEvent(Event{Kind: EventClick, X: 1, Y: 1}) // corner, outside centred panel
-	if cp.Visible {
+	if cp.Visible().Get() {
 		t.Fatal("outside click did not dismiss")
 	}
 	if calls != 1 {
@@ -343,7 +343,7 @@ func TestClickOutsideNilOnDismissNoPanic(t *testing.T) {
 	cp, _ := newTestPalette()
 	cp.Open()
 	cp.OnEvent(Event{Kind: EventClick, X: 1, Y: 1})
-	if cp.Visible {
+	if cp.Visible().Get() {
 		t.Fatal("outside click did not dismiss")
 	}
 }
@@ -353,8 +353,8 @@ func TestEventWhileHiddenIsIgnored(t *testing.T) {
 	// Not opened -> hidden.
 	cp.OnEvent(Event{Kind: EventChar, Code: "x"})
 	cp.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if cp.query != "" || cp.Visible {
-		t.Fatalf("hidden palette reacted: query=%q visible=%v", cp.query, cp.Visible)
+	if cp.query != "" || cp.Visible().Get() {
+		t.Fatalf("hidden palette reacted: query=%q visible=%v", cp.query, cp.Visible().Get())
 	}
 }
 

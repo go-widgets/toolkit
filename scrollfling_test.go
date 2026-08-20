@@ -37,16 +37,16 @@ func TestTouchScrollCoastsAndDecelerates(t *testing.T) {
 	if !sv.Animating() {
 		t.Fatal("a fast release should leave the view coasting")
 	}
-	at := sv.OffsetY
+	at := sv.OffsetY().Get()
 	sv.Tick(1.0 / 60)
-	if sv.OffsetY <= at {
-		t.Fatalf("the coast did not carry the view: OffsetY=%d, was %d", sv.OffsetY, at)
+	if sv.OffsetY().Get() <= at {
+		t.Fatalf("the coast did not carry the view: OffsetY=%d, was %d", sv.OffsetY().Get(), at)
 	}
 	last := 0
 	for i := 0; i < 4; i++ {
-		before := sv.OffsetY
+		before := sv.OffsetY().Get()
 		sv.Tick(1.0 / 60)
-		step := sv.OffsetY - before
+		step := sv.OffsetY().Get() - before
 		if last != 0 && step > last {
 			t.Fatalf("step %d grew to %d from %d: a coast must decelerate", i, step, last)
 		}
@@ -68,11 +68,11 @@ func TestPressCatchesACoastingView(t *testing.T) {
 		t.Fatal("setup: expected a coast")
 	}
 	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60})
-	at := sv.OffsetY
+	at := sv.OffsetY().Get()
 	sv.OnEvent(Event{Kind: EventMouseUp, X: 40, Y: 60})
 	sv.Tick(1.0 / 60)
-	if sv.OffsetY != at {
-		t.Fatalf("a caught view moved on: OffsetY=%d, want %d", sv.OffsetY, at)
+	if sv.OffsetY().Get() != at {
+		t.Fatalf("a caught view moved on: OffsetY=%d, want %d", sv.OffsetY().Get(), at)
 	}
 }
 
@@ -87,8 +87,8 @@ func TestOffsetNeverLeavesItsBounds(t *testing.T) {
 	// Drag far past the start, then far past the end.
 	for _, y := range []int{4000, -8000} {
 		sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: y})
-		if sv.OffsetY < 0 || sv.OffsetY > max {
-			t.Fatalf("OffsetY=%d escaped [0,%d]", sv.OffsetY, max)
+		if sv.OffsetY().Get() < 0 || sv.OffsetY().Get() > max {
+			t.Fatalf("OffsetY=%d escaped [0,%d]", sv.OffsetY().Get(), max)
 		}
 	}
 	if _, over := sv.Overscroll(); over == 0 {
@@ -96,8 +96,8 @@ func TestOffsetNeverLeavesItsBounds(t *testing.T) {
 	}
 	sv.OnEvent(Event{Kind: EventMouseUp, X: 40, Y: -8000})
 	settleScroll(t, sv)
-	if sv.OffsetY != max {
-		t.Fatalf("after springing home OffsetY=%d, want the bound %d", sv.OffsetY, max)
+	if sv.OffsetY().Get() != max {
+		t.Fatalf("after springing home OffsetY=%d, want the bound %d", sv.OffsetY().Get(), max)
 	}
 	if _, over := sv.Overscroll(); over != 0 {
 		t.Fatalf("overscroll=%d after settling, want 0", over)
@@ -108,10 +108,10 @@ func TestTickDuringADragOnlyMeasures(t *testing.T) {
 	sv := newPanScrollView()
 	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60})
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 30})
-	at := sv.OffsetY
+	at := sv.OffsetY().Get()
 	sv.Tick(1.0 / 60)
-	if sv.OffsetY != at {
-		t.Fatalf("Tick during a drag moved the view: OffsetY=%d, want %d", sv.OffsetY, at)
+	if sv.OffsetY().Get() != at {
+		t.Fatalf("Tick during a drag moved the view: OffsetY=%d, want %d", sv.OffsetY().Get(), at)
 	}
 	if !sv.Animating() {
 		t.Fatal("a view under the finger needs frames, to keep measuring")
@@ -120,11 +120,11 @@ func TestTickDuringADragOnlyMeasures(t *testing.T) {
 
 func TestTickIgnoresANonPositiveDelta(t *testing.T) {
 	sv := flick(60, 1.0/60)
-	at := sv.OffsetY
+	at := sv.OffsetY().Get()
 	sv.Tick(0)
 	sv.Tick(-1)
-	if sv.OffsetY != at {
-		t.Fatalf("a non-positive dt moved the view: OffsetY=%d, want %d", sv.OffsetY, at)
+	if sv.OffsetY().Get() != at {
+		t.Fatalf("a non-positive dt moved the view: OffsetY=%d, want %d", sv.OffsetY().Get(), at)
 	}
 }
 
@@ -134,7 +134,7 @@ func TestIdleViewAsksForNothing(t *testing.T) {
 		t.Fatal("an untouched view should not ask for frames")
 	}
 	sv.Tick(1.0 / 60)
-	if sv.OffsetY != 0 || sv.OffsetX != 0 {
+	if sv.OffsetY().Get() != 0 || sv.OffsetX().Get() != 0 {
 		t.Fatal("ticking an idle view should not move it")
 	}
 	if x, y := sv.Overscroll(); x != 0 || y != 0 {

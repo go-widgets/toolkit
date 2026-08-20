@@ -30,8 +30,8 @@ func TestLogViewAppendLenClear(t *testing.T) {
 	if lv.Len() != 0 {
 		t.Fatalf("Len after Clear = %d, want 0", lv.Len())
 	}
-	if lv.sv.OffsetX != 0 || lv.sv.OffsetY != 0 {
-		t.Fatalf("Clear left offset (%d,%d), want (0,0)", lv.sv.OffsetX, lv.sv.OffsetY)
+	if lv.sv.OffsetX().Get() != 0 || lv.sv.OffsetY().Get() != 0 {
+		t.Fatalf("Clear left offset (%d,%d), want (0,0)", lv.sv.OffsetX().Get(), lv.sv.OffsetY().Get())
 	}
 }
 
@@ -206,8 +206,8 @@ func TestLogViewAutoScrollFollowsAtBottom(t *testing.T) {
 	if lv.sv.maxOffsetY() == 0 {
 		t.Fatal("history did not overflow the viewport — test can't prove following")
 	}
-	if lv.sv.OffsetY != lv.sv.maxOffsetY() {
-		t.Fatalf("at-bottom Append did not follow: OffsetY=%d, max=%d", lv.sv.OffsetY, lv.sv.maxOffsetY())
+	if lv.sv.OffsetY().Get() != lv.sv.maxOffsetY() {
+		t.Fatalf("at-bottom Append did not follow: OffsetY=%d, max=%d", lv.sv.OffsetY().Get(), lv.sv.maxOffsetY())
 	}
 }
 
@@ -220,12 +220,12 @@ func TestLogViewHeldScrollNotFollowed(t *testing.T) {
 	}
 	// Scroll to the very top (a big negative wheel delta, clamped at 0).
 	lv.OnEvent(Event{Kind: EventScroll, Delta: -100})
-	if lv.sv.OffsetY != 0 {
-		t.Fatalf("expected scroll to top, OffsetY=%d", lv.sv.OffsetY)
+	if lv.sv.OffsetY().Get() != 0 {
+		t.Fatalf("expected scroll to top, OffsetY=%d", lv.sv.OffsetY().Get())
 	}
 	lv.Append(ts, LogError, "late line") // must NOT follow
-	if lv.sv.OffsetY != 0 {
-		t.Fatalf("held scroll was yanked down: OffsetY=%d, want 0", lv.sv.OffsetY)
+	if lv.sv.OffsetY().Get() != 0 {
+		t.Fatalf("held scroll was yanked down: OffsetY=%d, want 0", lv.sv.OffsetY().Get())
 	}
 	if lv.sv.maxOffsetY() == 0 {
 		t.Fatal("history should still overflow after the extra entry")
@@ -240,14 +240,14 @@ func TestLogViewWheelScroll(t *testing.T) {
 	for i := 0; i < 12; i++ {
 		lv.Append(ts, LogInfo, "line")
 	}
-	bottom := lv.sv.OffsetY // pinned at max
+	bottom := lv.sv.OffsetY().Get() // pinned at max
 	lv.OnEvent(Event{Kind: EventScroll, Delta: -2})
-	if lv.sv.OffsetY >= bottom {
-		t.Fatalf("wheel up did not scroll: OffsetY=%d, was %d", lv.sv.OffsetY, bottom)
+	if lv.sv.OffsetY().Get() >= bottom {
+		t.Fatalf("wheel up did not scroll: OffsetY=%d, was %d", lv.sv.OffsetY().Get(), bottom)
 	}
 	lv.OnEvent(Event{Kind: EventScroll, Delta: 10}) // back down, clamps at max
-	if lv.sv.OffsetY != bottom {
-		t.Fatalf("wheel down did not return to bottom: OffsetY=%d, want %d", lv.sv.OffsetY, bottom)
+	if lv.sv.OffsetY().Get() != bottom {
+		t.Fatalf("wheel down did not return to bottom: OffsetY=%d, want %d", lv.sv.OffsetY().Get(), bottom)
 	}
 }
 
@@ -262,8 +262,8 @@ func TestLogViewDragScroll(t *testing.T) {
 	lv.OnEvent(Event{Kind: EventClick, X: 40, Y: 20})
 	lv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 4}) // drag up → scroll down
 	lv.OnEvent(Event{Kind: EventMouseUp, X: 40, Y: 4})
-	if lv.sv.OffsetY < 0 || lv.sv.OffsetY > lv.sv.maxOffsetY() {
-		t.Fatalf("drag left OffsetY out of range: %d (max %d)", lv.sv.OffsetY, lv.sv.maxOffsetY())
+	if lv.sv.OffsetY().Get() < 0 || lv.sv.OffsetY().Get() > lv.sv.maxOffsetY() {
+		t.Fatalf("drag left OffsetY out of range: %d (max %d)", lv.sv.OffsetY().Get(), lv.sv.maxOffsetY())
 	}
 }
 
@@ -273,8 +273,8 @@ func TestLogViewHorizontalScroll(t *testing.T) {
 	lv.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 44})
 	lv.Append(ts, LogInfo, strings.Repeat("x", 120)) // far wider than the viewport
 	lv.OnEvent(Event{Kind: EventScroll, DeltaX: 3})
-	if lv.sv.OffsetX <= 0 {
-		t.Fatalf("horizontal wheel did not scroll: OffsetX=%d", lv.sv.OffsetX)
+	if lv.sv.OffsetX().Get() <= 0 {
+		t.Fatalf("horizontal wheel did not scroll: OffsetX=%d", lv.sv.OffsetX().Get())
 	}
 }
 

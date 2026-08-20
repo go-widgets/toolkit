@@ -187,31 +187,31 @@ func TestScrollViewHorizontalWheel(t *testing.T) {
 
 	// Horizontal swipe moves OffsetX and leaves OffsetY alone.
 	sv.OnEvent(Event{Kind: EventScroll, DeltaX: 2})
-	if sv.OffsetX != 2*line {
-		t.Fatalf("swipe right 2: OffsetX=%d, want %d", sv.OffsetX, 2*line)
+	if sv.OffsetX().Get() != 2*line {
+		t.Fatalf("swipe right 2: OffsetX=%d, want %d", sv.OffsetX().Get(), 2*line)
 	}
-	if sv.OffsetY != 0 {
-		t.Fatalf("horizontal swipe moved OffsetY=%d, want 0", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("horizontal swipe moved OffsetY=%d, want 0", sv.OffsetY().Get())
 	}
 	// Clamp at the right edge.
 	sv.OnEvent(Event{Kind: EventScroll, DeltaX: 1000})
-	if sv.OffsetX == 0 || sv.OffsetX != sv.maxOffsetX() {
-		t.Fatalf("swipe to right edge: OffsetX=%d, want %d", sv.OffsetX, sv.maxOffsetX())
+	if sv.OffsetX().Get() == 0 || sv.OffsetX().Get() != sv.maxOffsetX() {
+		t.Fatalf("swipe to right edge: OffsetX=%d, want %d", sv.OffsetX().Get(), sv.maxOffsetX())
 	}
 	// Clamp at the left edge.
 	sv.OnEvent(Event{Kind: EventScroll, DeltaX: -1000})
-	if sv.OffsetX != 0 {
-		t.Fatalf("swipe to left edge: OffsetX=%d, want 0", sv.OffsetX)
+	if sv.OffsetX().Get() != 0 {
+		t.Fatalf("swipe to left edge: OffsetX=%d, want 0", sv.OffsetX().Get())
 	}
 	// A pure vertical notch does not move OffsetX.
 	sv.OnEvent(Event{Kind: EventScroll, Delta: 1})
-	if sv.OffsetX != 0 {
-		t.Fatalf("vertical notch moved OffsetX=%d, want 0", sv.OffsetX)
+	if sv.OffsetX().Get() != 0 {
+		t.Fatalf("vertical notch moved OffsetX=%d, want 0", sv.OffsetX().Get())
 	}
 	// A diagonal swipe moves both axes together.
 	sv.OnEvent(Event{Kind: EventScroll, DeltaX: 1, Delta: 1})
-	if sv.OffsetX != line || sv.OffsetY != 2*line {
-		t.Fatalf("diagonal: OffsetX=%d OffsetY=%d, want %d,%d", sv.OffsetX, sv.OffsetY, line, 2*line)
+	if sv.OffsetX().Get() != line || sv.OffsetY().Get() != 2*line {
+		t.Fatalf("diagonal: OffsetX=%d OffsetY=%d, want %d,%d", sv.OffsetX().Get(), sv.OffsetY().Get(), line, 2*line)
 	}
 }
 
@@ -220,48 +220,48 @@ func TestScrollViewWheelAndKeyScroll(t *testing.T) {
 	line := GlyphHeight()
 
 	sv.OnEvent(Event{Kind: EventScroll, Delta: 2})
-	if sv.OffsetY != 2*line {
-		t.Fatalf("wheel down 2 lines: OffsetY=%d, want %d", sv.OffsetY, 2*line)
+	if sv.OffsetY().Get() != 2*line {
+		t.Fatalf("wheel down 2 lines: OffsetY=%d, want %d", sv.OffsetY().Get(), 2*line)
 	}
 	// Clamp at the bottom (content 400, viewport ~60 => maxY = 400-vp.H).
 	sv.OnEvent(Event{Kind: EventScroll, Delta: 1000})
-	if sv.OffsetY == 0 || sv.OffsetY != sv.contentH-sv.viewport().H {
-		t.Fatalf("wheel to bottom: OffsetY=%d, want %d", sv.OffsetY, sv.contentH-sv.viewport().H)
+	if sv.OffsetY().Get() == 0 || sv.OffsetY().Get() != sv.contentH-sv.viewport().H {
+		t.Fatalf("wheel to bottom: OffsetY=%d, want %d", sv.OffsetY().Get(), sv.contentH-sv.viewport().H)
 	}
 	sv.OnEvent(Event{Kind: EventScroll, Delta: -1000})
-	if sv.OffsetY != 0 {
-		t.Fatalf("wheel to top: OffsetY=%d, want 0", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("wheel to top: OffsetY=%d, want 0", sv.OffsetY().Get())
 	}
 
 	sv.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
-	if sv.OffsetY != line {
-		t.Fatalf("ArrowDown: %d, want %d", sv.OffsetY, line)
+	if sv.OffsetY().Get() != line {
+		t.Fatalf("ArrowDown: %d, want %d", sv.OffsetY().Get(), line)
 	}
 	sv.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp"})
-	if sv.OffsetY != 0 {
-		t.Fatalf("ArrowUp: %d, want 0", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("ArrowUp: %d, want 0", sv.OffsetY().Get())
 	}
 	sv.OnEvent(Event{Kind: EventKeyDown, Code: "PageDown"})
-	if sv.OffsetY != sv.viewport().H {
-		t.Fatalf("PageDown: %d, want %d", sv.OffsetY, sv.viewport().H)
+	if sv.OffsetY().Get() != sv.viewport().H {
+		t.Fatalf("PageDown: %d, want %d", sv.OffsetY().Get(), sv.viewport().H)
 	}
 	sv.OnEvent(Event{Kind: EventKeyDown, Code: "PageUp"})
-	if sv.OffsetY != 0 {
-		t.Fatalf("PageUp: %d, want 0", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("PageUp: %d, want 0", sv.OffsetY().Get())
 	}
 	sv.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
-	if sv.OffsetY != sv.contentH-sv.viewport().H {
-		t.Fatalf("End: %d, want %d", sv.OffsetY, sv.contentH-sv.viewport().H)
+	if sv.OffsetY().Get() != sv.contentH-sv.viewport().H {
+		t.Fatalf("End: %d, want %d", sv.OffsetY().Get(), sv.contentH-sv.viewport().H)
 	}
 	sv.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
-	if sv.OffsetY != 0 {
-		t.Fatalf("Home: %d, want 0", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("Home: %d, want 0", sv.OffsetY().Get())
 	}
 	// Non-scroll key + unhandled kind are ignored.
 	sv.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	sv.OnEvent(Event{Kind: EventClick})
-	if sv.OffsetY != 0 {
-		t.Fatalf("ignored events changed OffsetY: %d", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("ignored events changed OffsetY: %d", sv.OffsetY().Get())
 	}
 }
 

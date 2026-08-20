@@ -803,18 +803,18 @@ func TestContextMenuKeyboard(t *testing.T) {
 		t.Fatalf("context ArrowDown: Hover=%d", menu.Hover().Get())
 	}
 	cm.OnEvent(kd3b("Enter"))
-	if fired != 1 || cm.Open {
-		t.Fatalf("context Enter: fired=%d open=%v", fired, cm.Open)
+	if fired != 1 || cm.Open().Get() {
+		t.Fatalf("context Enter: fired=%d open=%v", fired, cm.Open().Get())
 	}
 	// Escape on an open context menu closes it (via the Menu's OnClose).
 	cm.Popup(20, 20)
 	cm.OnEvent(kd3b("Escape"))
-	if cm.Open {
+	if cm.Open().Get() {
 		t.Fatal("Escape did not close the context menu")
 	}
 	// A key on a closed context menu is a no-op.
 	cm.OnEvent(kd3b("ArrowDown"))
-	if cm.Open {
+	if cm.Open().Get() {
 		t.Fatal("key opened a closed context menu")
 	}
 }
@@ -834,27 +834,27 @@ func TestMenuBarKeyboardArrows(t *testing.T) {
 	b := newKeyMenuBar()
 	// Arrows do nothing while nothing is open.
 	b.OnEvent(kd3b("ArrowRight"))
-	if b.Active != -1 {
-		t.Fatalf("ArrowRight with nothing open: Active=%d", b.Active)
+	if b.Active().Get() != -1 {
+		t.Fatalf("ArrowRight with nothing open: Active=%d", b.Active().Get())
 	}
 	b.OnEvent(kd3b("ArrowDown"))
-	if b.Active != -1 {
-		t.Fatalf("ArrowDown with nothing open: Active=%d", b.Active)
+	if b.Active().Get() != -1 {
+		t.Fatalf("ArrowDown with nothing open: Active=%d", b.Active().Get())
 	}
 	// Open File (Alt+F), then ArrowRight/Left move Active with wrapping.
 	b.OnEvent(kd3b("Alt+F")) // Active 0
 	b.OnEvent(kd3b("ArrowRight"))
-	if b.Active != 1 {
-		t.Fatalf("ArrowRight: Active=%d, want 1", b.Active)
+	if b.Active().Get() != 1 {
+		t.Fatalf("ArrowRight: Active=%d, want 1", b.Active().Get())
 	}
 	b.OnEvent(kd3b("ArrowRight")) // 2
 	b.OnEvent(kd3b("ArrowRight")) // wrap -> 0
-	if b.Active != 0 {
-		t.Fatalf("ArrowRight wrap: Active=%d", b.Active)
+	if b.Active().Get() != 0 {
+		t.Fatalf("ArrowRight wrap: Active=%d", b.Active().Get())
 	}
 	b.OnEvent(kd3b("ArrowLeft")) // wrap -> 2
-	if b.Active != 2 {
-		t.Fatalf("ArrowLeft wrap: Active=%d", b.Active)
+	if b.Active().Get() != 2 {
+		t.Fatalf("ArrowLeft wrap: Active=%d", b.Active().Get())
 	}
 	// ArrowDown enters the open menu: its first item is highlighted.
 	b.OnEvent(kd3b("ArrowDown"))
@@ -863,32 +863,32 @@ func TestMenuBarKeyboardArrows(t *testing.T) {
 	}
 	// Escape still closes.
 	b.OnEvent(kd3b("Escape"))
-	if b.Active != -1 {
-		t.Fatalf("Escape: Active=%d", b.Active)
+	if b.Active().Get() != -1 {
+		t.Fatalf("Escape: Active=%d", b.Active().Get())
 	}
 }
 
 func TestMenuBarKeyboardDisabledAndNilMenu(t *testing.T) {
 	// Disabled ignores keys (including Alt/Escape).
 	b := newKeyMenuBar()
-	b.Active = 0
+	b.Active().Set(0)
 	b.Disabled = true
 	b.OnEvent(kd3b("ArrowRight"))
-	if b.Active != 0 {
-		t.Fatalf("disabled bar moved Active=%d", b.Active)
+	if b.Active().Get() != 0 {
+		t.Fatalf("disabled bar moved Active=%d", b.Active().Get())
 	}
 	// ArrowDown with a nil menu at Active is a safe no-op.
 	nb := NewMenuBar()
 	nb.Names = []string{"File"}
 	nb.Menus = []*Menu{nil}
 	nb.SetBounds(Rect{X: 0, Y: 0, W: 80, H: MenuBarH})
-	nb.Active = 0
+	nb.Active().Set(0)
 	nb.OnEvent(kd3b("ArrowDown")) // must not panic
 	// ArrowDown when Active is out of range (mismatched Names/Menus) is a no-op.
 	mb := NewMenuBar()
 	mb.Names = []string{"A", "B", "C"}
 	mb.Menus = []*Menu{NewMenu(nil), NewMenu(nil)} // shorter than Names
 	mb.SetBounds(Rect{X: 0, Y: 0, W: 200, H: MenuBarH})
-	mb.Active = 2                 // >= len(Menus)
+	mb.Active().Set(2)            // >= len(Menus)
 	mb.OnEvent(kd3b("ArrowDown")) // must not panic, no highlight
 }

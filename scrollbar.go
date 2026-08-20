@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // scrollbarMinThumb is the smallest thumb length (px) so it stays grabbable even
 // when the content dwarfs the viewport.
@@ -25,18 +28,23 @@ const scrollbarMinThumb = 24
 // it.
 type Scrollbar struct {
 	Base
-	Total      int  // total content length along the scroll axis
-	Viewport   int  // visible length
-	Offset     int  // scroll offset; clamped to [0, Total-Viewport]
-	Horizontal bool // false = vertical (the default for a scrollbar)
-	// OnScroll, when non-nil, fires with the new (clamped) Offset whenever a
-	// drag or track-page changes it. Nil keeps the scrollbar silent -- it still
-	// updates its own Offset, but reports nothing.
-	OnScroll func(offset int)
+	Total      int                   // total content length along the scroll axis
+	Viewport   int                   // visible length
+	offset     *mvvm.Observable[int] // scroll offset, reactive via Offset()
+	Horizontal bool                  // false = vertical (the default for a scrollbar)
 
 	// drag carries the in-progress thumb grab (see scrollDrag), shared with the
 	// same press/drag/release policy the embedded scrollbars use.
 	drag scrollDrag
+}
+
+// Offset is the scroll offset as a shared [mvvm.Observable]; a drag/click Sets it
+// (subscribers replace the old OnScroll callback). Lazily created.
+func (s *Scrollbar) Offset() *mvvm.Observable[int] {
+	if s.offset == nil {
+		s.offset = mvvm.NewObservable(0)
+	}
+	return s.offset
 }
 
 // NewScrollbar builds an empty vertical scrollbar.
@@ -64,7 +72,7 @@ func (s *Scrollbar) geom() (sbGeom, bool) {
 		view = total
 	}
 	maxOff := total - view
-	off := s.Offset
+	off := s.Offset().Get()
 	if off < 0 {
 		off = 0
 	}
@@ -158,7 +166,7 @@ func (s *Scrollbar) OnEvent(ev Event) {
 }
 
 // scrollBy nudges Offset by delta (a page step from a track click).
-func (s *Scrollbar) scrollBy(delta int) { s.setOffset(s.Offset + delta) }
+func (s *Scrollbar) scrollBy(delta int) { s.setOffset(s.Offset().Get() + delta) }
 
 // scrollTo sets Offset to off (a thumb-drag target; already clamped by
 // scrollForGrabStart, re-clamped here for safety).
@@ -178,13 +186,10 @@ func (s *Scrollbar) setOffset(off int) {
 	if off > maxOff {
 		off = maxOff
 	}
-	if off == s.Offset {
+	if off == s.Offset().Get() {
 		return
 	}
-	s.Offset = off
-	if s.OnScroll != nil {
-		s.OnScroll(off)
-	}
+	s.Offset().Set(off)
 }
 
 // scrollbarThumbMix is how far the thumb colour sits from the track toward the

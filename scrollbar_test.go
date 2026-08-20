@@ -13,28 +13,28 @@ func TestScrollbarThumbGeometry(t *testing.T) {
 	sb.Total, sb.Viewport = 200, 100
 	sb.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
 
-	sb.Offset = 0
+	sb.Offset().Set(0)
 	top := sb.ThumbRect()
 	if top.H != 50 || top.Y != 0 {
 		t.Fatalf("top thumb = %+v, want H=50 Y=0", top)
 	}
-	sb.Offset = 100 // max (Total-Viewport)
+	sb.Offset().Set(100) // max (Total-Viewport)
 	bot := sb.ThumbRect()
 	if bot.Y+bot.H != 100 {
 		t.Fatalf("bottom thumb should reach the track end: %+v", bot)
 	}
-	sb.Offset = 50 // middle
+	sb.Offset().Set(50) // middle
 	mid := sb.ThumbRect()
 	if !(mid.Y > top.Y && mid.Y < bot.Y) {
 		t.Fatalf("mid thumb %d not between %d and %d", mid.Y, top.Y, bot.Y)
 	}
 
 	// Over/under-shoot offsets clamp.
-	sb.Offset = -20
+	sb.Offset().Set(-20)
 	if sb.ThumbRect().Y != 0 {
 		t.Fatal("negative offset must clamp to the top")
 	}
-	sb.Offset = 9999
+	sb.Offset().Set(9999)
 	if r := sb.ThumbRect(); r.Y+r.H != 100 {
 		t.Fatalf("huge offset must clamp to the bottom: %+v", r)
 	}
@@ -65,7 +65,8 @@ func TestScrollbarEverythingFitsAndMinThumb(t *testing.T) {
 func TestScrollbarHorizontal(t *testing.T) {
 	sb := NewScrollbar()
 	sb.Horizontal = true
-	sb.Total, sb.Viewport, sb.Offset = 300, 100, 200
+	sb.Total, sb.Viewport = 300, 100
+	sb.Offset().Set(200)
 	sb.SetBounds(Rect{X: 10, Y: 0, W: 120, H: 8})
 	r := sb.ThumbRect()
 	if r.W >= 120 || r.X+r.W != 130 {
@@ -102,7 +103,8 @@ func TestScrollbarHorizontalDraw(t *testing.T) {
 	// A horizontal bar exercises the r.H < r.W radius branch in Draw.
 	sb := NewScrollbar()
 	sb.Horizontal = true
-	sb.Total, sb.Viewport, sb.Offset = 300, 100, 50
+	sb.Total, sb.Viewport = 300, 100
+	sb.Offset().Set(50)
 	sb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 8})
 	buf := makeSurface(120, 8)
 	sb.Draw(newP(buf, 120), DefaultLight())
@@ -120,7 +122,8 @@ func TestScrollbarHorizontalDraw(t *testing.T) {
 
 func TestScrollbarDrawAndInert(t *testing.T) {
 	sb := NewScrollbar()
-	sb.Total, sb.Viewport, sb.Offset = 200, 100, 40
+	sb.Total, sb.Viewport = 200, 100
+	sb.Offset().Set(40)
 	sb.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
 	buf := makeSurface(8, 100)
 	sb.Draw(newP(buf, 8), DefaultLight())

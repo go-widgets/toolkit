@@ -23,7 +23,7 @@ func TestDropZoneCustomPrompt(t *testing.T) {
 	if d.Prompt != "Drop images" {
 		t.Fatalf("custom prompt not preserved, got %q", d.Prompt)
 	}
-	if d.Hover {
+	if d.Hover().Get() {
 		t.Fatal("Hover should default to false")
 	}
 	if d.OnDrop != nil {
@@ -59,7 +59,7 @@ func TestDropZoneDrawHoverUsesSurfaceAlt(t *testing.T) {
 	const w, h = 40, 40
 	theme := DefaultLight()
 	d := NewDropZone("hi")
-	d.Hover = true
+	d.Hover().Set(true)
 	d.SetBounds(Rect{X: 2, Y: 2, W: 26, H: 26})
 	buf := makeSurface(w, h)
 	d.Draw(newP(buf, w), theme)
@@ -145,15 +145,15 @@ func TestDropZoneDrawWithExtraTheme(t *testing.T) {
 // state, so the toggle is symmetric.
 func TestDropZoneClickTogglesHover(t *testing.T) {
 	d := NewDropZone("x")
-	if d.Hover {
+	if d.Hover().Get() {
 		t.Fatal("initial Hover should be false")
 	}
 	d.OnEvent(Event{Kind: EventClick})
-	if !d.Hover {
+	if !d.Hover().Get() {
 		t.Fatal("first click should set Hover=true")
 	}
 	d.OnEvent(Event{Kind: EventClick})
-	if d.Hover {
+	if d.Hover().Get() {
 		t.Fatal("second click should return Hover=false")
 	}
 }
@@ -163,16 +163,16 @@ func TestDropZoneClickTogglesHover(t *testing.T) {
 func TestDropZoneDragLifecycle(t *testing.T) {
 	d := NewDropZone("x")
 	d.OnEvent(Event{Kind: EventDragStart, Code: "/a"})
-	if !d.Hover {
+	if !d.Hover().Get() {
 		t.Fatal("EventDragStart should raise Hover")
 	}
-	d.Hover = false
+	d.Hover().Set(false)
 	d.OnEvent(Event{Kind: EventDragMove, Code: "/a"})
-	if !d.Hover {
+	if !d.Hover().Get() {
 		t.Fatal("EventDragMove should raise Hover")
 	}
 	d.OnEvent(Event{Kind: EventDragLeave})
-	if d.Hover {
+	if d.Hover().Get() {
 		t.Fatal("EventDragLeave should clear Hover")
 	}
 }
@@ -183,12 +183,12 @@ func TestDropZoneDropDeliversItems(t *testing.T) {
 	var got []string
 	d := NewDropZone("x")
 	d.OnDrop = func(paths []string) { got = paths }
-	d.Hover = true
+	d.Hover().Set(true)
 	d.OnEvent(Event{Kind: EventDrop, Code: "/tmp/a.txt\n/tmp/b.txt"})
 	if len(got) != 2 || got[0] != "/tmp/a.txt" || got[1] != "/tmp/b.txt" {
 		t.Fatalf("OnDrop got %v, want two paths", got)
 	}
-	if d.Hover {
+	if d.Hover().Get() {
 		t.Fatal("EventDrop should clear Hover")
 	}
 }
@@ -197,9 +197,9 @@ func TestDropZoneDropDeliversItems(t *testing.T) {
 // must not panic when no callback is wired, and still clears Hover.
 func TestDropZoneDropNilCallbackNoPanic(t *testing.T) {
 	d := NewDropZone("x")
-	d.Hover = true
+	d.Hover().Set(true)
 	d.OnEvent(Event{Kind: EventDrop, Code: "/tmp/foo.txt"}) // must not panic
-	if d.Hover {
+	if d.Hover().Get() {
 		t.Fatal("EventDrop should clear Hover even with nil callback")
 	}
 }
@@ -223,13 +223,13 @@ func TestDropZoneIgnoresOtherKinds(t *testing.T) {
 	fires := 0
 	d := NewDropZone("x")
 	d.OnDrop = func(paths []string) { fires++ }
-	d.Hover = true
+	d.Hover().Set(true)
 	d.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if fires != 0 {
 		t.Fatalf("KeyDown fired OnDrop %d times, want 0", fires)
 	}
 	// Hover must be unchanged (was true, still true).
-	if !d.Hover {
+	if !d.Hover().Get() {
 		t.Fatal("KeyDown must not clobber Hover")
 	}
 }

@@ -33,8 +33,8 @@ func TestMomentumScrollerClaimsTheView(t *testing.T) {
 	}
 	ms.TouchMove(Event{Kind: EventMouseDrag, X: 40, Y: 30}, 1.0/60)
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 30})
-	if sv.OffsetY != 30 {
-		t.Fatalf("OffsetY=%d after one 30px sample, want 30 — the drag applied twice", sv.OffsetY)
+	if sv.OffsetY().Get() != 30 {
+		t.Fatalf("OffsetY=%d after one 30px sample, want 30 — the drag applied twice", sv.OffsetY().Get())
 	}
 
 	// And the view's own fling stays out of it: only the engine coasts.
@@ -43,10 +43,10 @@ func TestMomentumScrollerClaimsTheView(t *testing.T) {
 	if sv.Animating() {
 		t.Fatal("a driven view must not fling on its own")
 	}
-	at := sv.OffsetY
+	at := sv.OffsetY().Get()
 	sv.Tick(1.0 / 60)
-	if sv.OffsetY != at {
-		t.Fatalf("Tick moved a driven view: OffsetY=%d, want %d", sv.OffsetY, at)
+	if sv.OffsetY().Get() != at {
+		t.Fatalf("Tick moved a driven view: OffsetY=%d, want %d", sv.OffsetY().Get(), at)
 	}
 }
 
@@ -60,8 +60,8 @@ func TestScrollDriverCanBeHandedBack(t *testing.T) {
 	// It pans on its own again.
 	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60})
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 40})
-	if sv.OffsetY != 20 {
-		t.Fatalf("OffsetY=%d, want 20: an undriven view pans itself", sv.OffsetY)
+	if sv.OffsetY().Get() != 20 {
+		t.Fatalf("OffsetY=%d, want 20: an undriven view pans itself", sv.OffsetY().Get())
 	}
 }
 
