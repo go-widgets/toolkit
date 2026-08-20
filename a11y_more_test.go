@@ -357,8 +357,8 @@ func TestA11yDateWidgets(t *testing.T) {
 	}
 
 	rp := NewDateRangePicker(2026, 1)
-	rp.Start = Date{Y: 2026, M: 1, D: 1}
-	rp.End = Date{Y: 2026, M: 1, D: 31}
+	rp.Start().Set(Date{Y: 2026, M: 1, D: 1})
+	rp.End().Set(Date{Y: 2026, M: 1, D: 31})
 	if got := rp.A11y(); got != (A11yInfo{Role: RoleGroup, Value: "2026-01-01..2026-01-31"}) {
 		t.Errorf("DateRangePicker A11y() = %+v", got)
 	}

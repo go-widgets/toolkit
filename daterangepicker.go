@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Date is a plain (Year, Month, Day) triple — the same time-source-free
 // representation Calendar uses (see calendar.go, which takes year/month/day
@@ -53,11 +56,39 @@ func (a Date) isZero() bool { return a.M == 0 }
 // own selection logic) and adds a header with prev/next-month arrows that
 // Calendar lacks. The
 // range fill uses the theme's SurfaceAlt tone; the two endpoints use Accent.
+//
+// The two reactive endpoints are MVVM-only: each selected [Date] lives in an
+// unexported [mvvm.Observable] exposed via [DateRangePicker.Start] and
+// [DateRangePicker.End]. There are no settable Start/End fields and no OnChange
+// callback -- a host binds Start()/End() (Set / Subscribe / two-way) and a day
+// click Sets them, notifying subscribers on change.
 type DateRangePicker struct {
 	Base
-	Cal        *Calendar
-	Start, End Date
-	OnChange   func(start, end Date)
+	Cal *Calendar
+
+	start, end *mvvm.Observable[Date]
+}
+
+// Start is the range's lower endpoint as a shared [mvvm.Observable]: a host
+// binds it (Set / Subscribe / two-way) -- there is no settable Start field. The
+// zero Date{} means "unset". A day click Sets it; subscribers are notified on
+// change.
+func (d *DateRangePicker) Start() *mvvm.Observable[Date] {
+	if d.start == nil {
+		d.start = mvvm.NewObservable(Date{})
+	}
+	return d.start
+}
+
+// End is the range's upper endpoint as a shared [mvvm.Observable]: a host binds
+// it (Set / Subscribe / two-way) -- there is no settable End field. The zero
+// Date{} means "unset". Completing the range Sets it; subscribers are notified
+// on change.
+func (d *DateRangePicker) End() *mvvm.Observable[Date] {
+	if d.end == nil {
+		d.end = mvvm.NewObservable(Date{})
+	}
+	return d.end
 }
 
 // NewDateRangePicker builds a picker displaying (year, month) with no initial
@@ -75,23 +106,23 @@ func NewDateRangePicker(year, month int) *DateRangePicker {
 // hit-tested.
 func (rp *DateRangePicker) selectDay(y, m, d int) {
 	clicked := Date{Y: y, M: m, D: d}
-	if rp.Start.isZero() || !rp.End.isZero() {
-		// No start yet, or a complete range already exists: begin fresh.
-		rp.Start = clicked
-		rp.End = Date{}
+	if rp.Start().Get().isZero() || !rp.End().Get().isZero() {
+		// No start yet, or a complete range already exists: begin fresh. Set
+		// the endpoints so subscribers of Start()/End() observe the reset (the
+		// deduping Observable skips an already-unset End).
+		rp.Start().Set(clicked)
+		rp.End().Set(Date{})
 		return
 	}
 	// Start set, end not yet chosen.
-	if clicked.before(rp.Start) {
+	if clicked.before(rp.Start().Get()) {
 		// An earlier day resets the start; the end stays cleared.
-		rp.Start = clicked
+		rp.Start().Set(clicked)
 		return
 	}
-	// clicked >= start: complete the range and fire OnChange.
-	rp.End = clicked
-	if rp.OnChange != nil {
-		rp.OnChange(rp.Start, rp.End)
-	}
+	// clicked >= start: complete the range. Setting End notifies its
+	// subscribers; Start is unchanged so its Observable does not re-notify.
+	rp.End().Set(clicked)
 }
 
 // prevMonth moves the displayed grid back one month (wrapping the year),
@@ -120,19 +151,21 @@ func (rp *DateRangePicker) nextMonth() {
 
 // isEndpoint reports whether day is the selected start or end.
 func (rp *DateRangePicker) isEndpoint(day Date) bool {
-	if !rp.Start.isZero() && day.cmp(rp.Start) == 0 {
+	start, end := rp.Start().Get(), rp.End().Get()
+	if !start.isZero() && day.cmp(start) == 0 {
 		return true
 	}
-	return !rp.End.isZero() && day.cmp(rp.End) == 0
+	return !end.isZero() && day.cmp(end) == 0
 }
 
 // inRange reports whether day lies strictly between start and end (exclusive of
 // both endpoints), which requires a complete selection.
 func (rp *DateRangePicker) inRange(day Date) bool {
-	if rp.Start.isZero() || rp.End.isZero() {
+	start, end := rp.Start().Get(), rp.End().Get()
+	if start.isZero() || end.isZero() {
 		return false
 	}
-	return rp.Start.before(day) && day.before(rp.End)
+	return start.before(day) && day.before(end)
 }
 
 // Draw paints the header (prev arrow, month/year, next arrow), the weekday row,
