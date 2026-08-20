@@ -7,6 +7,7 @@ package toolkit
 import (
 	"math"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -54,15 +55,29 @@ type GaugeBand struct {
 type Gauge struct {
 	Base
 	Min, Max  float64
-	Value     float64
 	Bands     []GaugeBand
 	Caption   string
 	Thickness int
+
+	// value is the reactive needle position; see [Gauge.Value].
+	value *mvvm.Observable[float64]
 }
 
 // NewGauge constructs a Gauge over the range min..max at the given value.
 func NewGauge(min, max, value float64) *Gauge {
-	return &Gauge{Min: min, Max: max, Value: value}
+	g := &Gauge{Min: min, Max: max}
+	g.value = mvvm.NewObservable(value)
+	return g
+}
+
+// Value is the gauge's reactive needle position as a shared [mvvm.Observable];
+// edits Set it and Draw reads it live, clamped to [Min, Max]. Lazily created,
+// defaulting to 0.
+func (g *Gauge) Value() *mvvm.Observable[float64] {
+	if g.value == nil {
+		g.value = mvvm.NewObservable(0.0)
+	}
+	return g.value
 }
 
 // frac is the clamped fill fraction (Value-Min)/(Max-Min) in [0, 1]. A
@@ -73,7 +88,7 @@ func (g *Gauge) frac() float64 {
 	if span <= 0 {
 		return 0
 	}
-	f := (g.Value - g.Min) / span
+	f := (g.Value().Get() - g.Min) / span
 	if f < 0 {
 		return 0
 	}
@@ -92,7 +107,7 @@ func (g *Gauge) valueColor(theme *Theme) RGBA {
 		return theme.Accent
 	}
 	for _, b := range g.Bands {
-		if g.Value <= b.Upto {
+		if g.Value().Get() <= b.Upto {
 			return b.Color
 		}
 	}

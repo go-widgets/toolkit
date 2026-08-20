@@ -19,7 +19,7 @@ func TestGroupCardMeasure(t *testing.T) {
 		t.Fatalf("collapsed measure = %d, want 37", got)
 	}
 	// Expanded with 3 members: 37 + 3*GroupMemberH(20) = 97.
-	c.Expanded = true
+	c.Expanded().Set(true)
 	c.Members = []string{"a", "b", "c"}
 	if got := c.Measure(300); got != 97 {
 		t.Fatalf("expanded measure = %d, want 97", got)
@@ -113,7 +113,7 @@ func TestGroupCardChildren(t *testing.T) {
 		t.Fatalf("collapsed children = %d, want 2 (title, meta)", len(kids))
 	}
 	// Expanded: title + meta + each member.
-	c.Expanded = true
+	c.Expanded().Set(true)
 	c.Members = []string{"p1", "p2"}
 	if kids := c.Children(); len(kids) != 4 {
 		t.Fatalf("expanded children = %d, want 4", len(kids))
@@ -132,7 +132,7 @@ func TestGroupCardChildren(t *testing.T) {
 
 func TestGroupCardChildrenRuns(t *testing.T) {
 	c := NewGroupCard("Usenet", "release.base", "12 parts · 3 files")
-	c.Expanded = true
+	c.Expanded().Set(true)
 	c.Members = []string{"file.part1 (1/2) 1 MB", "file.part2 (2/2) 1 MB"}
 	r := Rect{X: 20, Y: 20, W: 260, H: c.Measure(260)}
 	c.SetBounds(r)
@@ -185,12 +185,12 @@ func TestGroupCardDrawFull(t *testing.T) {
 		StatusColor: RGBA{R: 0x2E, G: 0x7D, B: 0x32, A: 0xFF},
 		Title:       "release.base.name",
 		Meta:        "12 parts · 3 files · 40 MB",
-		Expanded:    true,
 		Members:     []string{"part one", "part two"},
 		Actionable:  true,
 		Action:      "Reconstruct",
-		Checked:     true,
 	}
+	c.Expanded().Set(true)
+	c.Checked().Set(true)
 	const pad = 12
 	h := c.Measure(280)
 	surfW, surfH := 280+2*pad, h+2*pad

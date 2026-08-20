@@ -471,11 +471,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	lc := NewLineChart([]float64{1, 4, 2, 5})
 	lc.SetBounds(bounds)
 	lc.OnEvent(inside)
-	if !lc.Hover {
+	if !lc.Hover().Get() {
 		t.Fatal("line move should set Hover")
 	}
 	lc.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5})
-	if lc.Hover {
+	if lc.Hover().Get() {
 		t.Fatal("line move off should clear Hover")
 	}
 	emptyBounded(NewLineChart(nil))
@@ -483,11 +483,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	ac := NewAreaChart([][]float64{{1, 4, 2, 5}})
 	ac.SetBounds(bounds)
 	ac.OnEvent(inside)
-	if !ac.Hover {
+	if !ac.Hover().Get() {
 		t.Fatal("area move should set Hover")
 	}
 	ac.OnEvent(Event{Kind: EventMouseMove, X: 500, Y: 40})
-	if ac.Hover {
+	if ac.Hover().Get() {
 		t.Fatal("area move off should clear Hover")
 	}
 	emptyBounded(NewAreaChart(nil))
@@ -495,11 +495,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	bc := NewBarChart([]float64{4, 7, 2})
 	bc.SetBounds(bounds)
 	bc.OnEvent(inside)
-	if !bc.Hover {
+	if !bc.Hover().Get() {
 		t.Fatal("bar move should set Hover")
 	}
 	bc.OnEvent(Event{Kind: EventMouseMove, X: -1, Y: 40})
-	if bc.Hover {
+	if bc.Hover().Get() {
 		t.Fatal("bar move off should clear Hover")
 	}
 	emptyBounded(NewBarChart(nil))
@@ -522,11 +522,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	px, py := sc.project(sc.Series[0][1], xr, yr)
 	r := sc.Bounds()
 	sc.OnEvent(Event{Kind: EventMouseMove, X: px - r.X, Y: py - r.Y})
-	if !sc.Hover {
+	if !sc.Hover().Get() {
 		t.Fatal("scatter move should set Hover")
 	}
 	sc.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5})
-	if sc.Hover {
+	if sc.Hover().Get() {
 		t.Fatal("scatter move off should clear Hover")
 	}
 	emptyBounded(NewScatterChart(nil))
@@ -534,16 +534,17 @@ func TestChartsHoverOnMove(t *testing.T) {
 	pc := NewPieChart([]float64{3, 5, 2})
 	pc.SetBounds(Rect{X: 10, Y: 10, W: 100, H: 100})
 	pc.OnEvent(Event{Kind: EventMouseMove, X: 52, Y: 30}) // just clockwise of 12 o'clock
-	if !pc.Hover {
+	if !pc.Hover().Get() {
 		t.Fatal("pie move should set Hover")
 	}
 	pc.OnEvent(Event{Kind: EventMouseMove, X: 0, Y: 0}) // corner: inside bounds but outside the disc
-	if pc.Hover {
+	if pc.Hover().Get() {
 		t.Fatal("pie move off the disc should clear Hover")
 	}
-	pc.HoverIndex, pc.Hover = 1, true
+	pc.HoverIndex().Set(1)
+	pc.Hover().Set(true)
 	pc.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5}) // off the widget entirely
-	if pc.Hover {
+	if pc.Hover().Get() {
 		t.Fatal("pie move off the widget should clear Hover")
 	}
 	emptyBounded(NewPieChart(nil))
@@ -551,11 +552,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	rc := NewRadarChart([]string{"A", "B", "C"}, [][]float64{{8, 6, 7}})
 	rc.SetBounds(bounds)
 	rc.OnEvent(Event{Kind: EventMouseMove, X: 65, Y: 50}) // near centre → axis 0
-	if !rc.Hover {
+	if !rc.Hover().Get() {
 		t.Fatal("radar move should set Hover")
 	}
 	rc.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5})
-	if rc.Hover {
+	if rc.Hover().Get() {
 		t.Fatal("radar move off should clear Hover")
 	}
 	emptyBounded(NewRadarChart(nil, nil))

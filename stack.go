@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Stack holds N named pages (Widgets) but shows only ONE at a time --
 // the page named by Visible. Use AddPage / SetVisible to navigate.
@@ -15,20 +18,32 @@ import "github.com/go-widgets/painter"
 // transition.
 type Stack struct {
 	Base
-	Pages   map[string]Widget
-	Visible string
+	Pages map[string]Widget
+
+	// visible names the shown page as reactive state; see [Stack.Visible].
+	visible *mvvm.Observable[string]
 }
 
 // NewStack builds an empty Stack with no pages + no visible name.
 func NewStack() *Stack { return &Stack{Pages: map[string]Widget{}} }
+
+// Visible names the currently-shown page as a shared [mvvm.Observable]:
+// AddPage/SetVisible Set it, and Draw/OnEvent read it live. Lazily created,
+// defaulting to no visible page (the empty name).
+func (s *Stack) Visible() *mvvm.Observable[string] {
+	if s.visible == nil {
+		s.visible = mvvm.NewObservable("")
+	}
+	return s.visible
+}
 
 // AddPage registers a page under name. If this is the first page,
 // it auto-becomes Visible so an unconfigured Stack still draws
 // something.
 func (s *Stack) AddPage(name string, w Widget) {
 	s.Pages[name] = w
-	if s.Visible == "" {
-		s.Visible = name
+	if s.Visible().Get() == "" {
+		s.Visible().Set(name)
 	}
 }
 
@@ -36,7 +51,7 @@ func (s *Stack) AddPage(name string, w Widget) {
 // silently ignored so the caller can SetVisible blind.
 func (s *Stack) SetVisible(name string) {
 	if _, ok := s.Pages[name]; ok {
-		s.Visible = name
+		s.Visible().Set(name)
 	}
 }
 
@@ -45,14 +60,14 @@ func (s *Stack) SetVisible(name string) {
 // brings them forward -- they re-bound at draw time.
 func (s *Stack) SetBounds(r Rect) {
 	s.Base.SetBounds(r)
-	if p, ok := s.Pages[s.Visible]; ok {
+	if p, ok := s.Pages[s.Visible().Get()]; ok {
 		p.SetBounds(r)
 	}
 }
 
 // Draw paints only the visible page.
 func (s *Stack) Draw(p painter.Painter, theme *Theme) {
-	if page, ok := s.Pages[s.Visible]; ok {
+	if page, ok := s.Pages[s.Visible().Get()]; ok {
 		page.SetBounds(s.Bounds())
 		page.Draw(p, theme)
 	}
@@ -60,7 +75,7 @@ func (s *Stack) Draw(p painter.Painter, theme *Theme) {
 
 // OnEvent routes to the visible page.
 func (s *Stack) OnEvent(ev Event) {
-	if p, ok := s.Pages[s.Visible]; ok {
+	if p, ok := s.Pages[s.Visible().Get()]; ok {
 		p.OnEvent(ev)
 	}
 }

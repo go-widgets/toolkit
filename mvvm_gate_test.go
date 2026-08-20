@@ -216,6 +216,30 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Overlay":       {"Content": true, "Layers": true, "Modal": true},
 	"Skeleton":      {"Kind": true, "Lines": true, "LineH": true, "LineGap": true, "LastFrac": true, "Radius": true, "Animated": true, "Phase": true},
 	"SkeletonGroup": {"Animated": true, "Phase": true},
+	// Reactive-tail batch: the last widgets holding exported reactive state now
+	// keep it on unexported *mvvm.Observable behind accessors — LoadMask.Active,
+	// Notification/Popover.Visible, Banner.Revealed, Stack.Visible, Gauge/LevelBar
+	// .Value, ProgressBar.Fraction, Thumbnail.Selected/Hover, GroupCard.Checked/
+	// Expanded, and every chart's Hover + hovered-index. The fields below are
+	// set-once config (data series, ranges, labels, palettes, layout metrics; func
+	// hooks like OnDrop/OnAction/OnClick auto-allowed). ProgressBar.Phase and the
+	// chart hover-index observables mirror the Spinner.Phase animation precedent.
+	"LoadMask":     {"Message": true, "Scrim": true},
+	"Notification": {"Text": true, "Life": true},
+	"Popover":      {"Child": true, "Title": true},
+	"Banner":       {"Text": true, "ButtonLabel": true},
+	"Stack":        {"Pages": true},
+	"Gauge":        {"Min": true, "Max": true, "Bands": true, "Caption": true, "Thickness": true},
+	"LevelBar":     {"Max": true, "Orientation": true, "Label": true, "Thresholds": true},
+	"ProgressBar":  {"Label": true, "Orientation": true, "Indeterminate": true, "Phase": true},
+	"Thumbnail":    {"Pixels": true, "IW": true, "IH": true, "Label": true, "Alt": true, "Area": true},
+	"GroupCard":    {"Pill": true, "PillColor": true, "PillInk": true, "Status": true, "StatusColor": true, "StatusInk": true, "Title": true, "Meta": true, "Members": true, "Actionable": true, "Action": true, "TitleFont": true, "MetaFont": true, "PillFont": true},
+	"AreaChart":    {"Series": true, "Min": true, "Max": true, "Colors": true},
+	"BarChart":     {"Values": true, "Max": true},
+	"LineChart":    {"Series": true, "Min": true, "Max": true},
+	"PieChart":     {"Values": true, "Colors": true},
+	"RadarChart":   {"Axes": true, "Series": true, "Max": true, "Colors": true},
+	"ScatterChart": {"Series": true, "Colors": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the

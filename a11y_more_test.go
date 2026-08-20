@@ -230,11 +230,11 @@ func TestA11yContextMenuAndCommandPalette(t *testing.T) {
 
 func TestA11yFeedbackWidgets(t *testing.T) {
 	pb := NewProgressBar()
-	pb.Fraction = 0.42
+	pb.Fraction().Set(0.42)
 	pc := NewProgressCircle()
 	pc.Fraction().Set(0.5)
 	lvl := NewLevelBar(10)
-	lvl.Value = 4
+	lvl.Value().Set(4)
 	activeSpinner := NewSpinner()
 	activeSpinner.Active().Set(true)
 	idleSpinner := NewSpinner()

@@ -146,7 +146,7 @@ func TestLoadMaskAnimatingAndTick(t *testing.T) {
 	if m.Animating() {
 		t.Fatal("fresh LoadMask Animating = true, want false")
 	}
-	m.Active = true
+	m.Active().Set(true)
 	if !m.Animating() {
 		t.Fatal("active LoadMask Animating = false, want true")
 	}

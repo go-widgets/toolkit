@@ -21,13 +21,14 @@ func (c *LineChart) OnEvent(ev Event) {
 		return
 	}
 	if !c.localInBounds(ev.X, ev.Y) {
-		c.Hover = false
+		c.Hover().Set(false)
 		return
 	}
 	if i, _, ok := c.ValueAt(ev.X); ok {
-		c.Hover, c.HoverIndex = true, i
+		c.Hover().Set(true)
+		c.HoverIndex().Set(i)
 	} else {
-		c.Hover = false
+		c.Hover().Set(false)
 	}
 }
 
@@ -37,13 +38,14 @@ func (c *AreaChart) OnEvent(ev Event) {
 		return
 	}
 	if !c.localInBounds(ev.X, ev.Y) {
-		c.Hover = false
+		c.Hover().Set(false)
 		return
 	}
 	if i, _, ok := c.ValueAt(ev.X); ok {
-		c.Hover, c.HoverIndex = true, i
+		c.Hover().Set(true)
+		c.HoverIndex().Set(i)
 	} else {
-		c.Hover = false
+		c.Hover().Set(false)
 	}
 }
 
@@ -53,13 +55,14 @@ func (c *BarChart) OnEvent(ev Event) {
 		return
 	}
 	if !c.localInBounds(ev.X, ev.Y) {
-		c.Hover = false
+		c.Hover().Set(false)
 		return
 	}
 	if i, _, ok := c.ValueAt(ev.X); ok {
-		c.Hover, c.HoverIndex = true, i
+		c.Hover().Set(true)
+		c.HoverIndex().Set(i)
 	} else {
-		c.Hover = false
+		c.Hover().Set(false)
 	}
 }
 
@@ -86,13 +89,15 @@ func (c *ScatterChart) OnEvent(ev Event) {
 		return
 	}
 	if !c.localInBounds(ev.X, ev.Y) {
-		c.Hover = false
+		c.Hover().Set(false)
 		return
 	}
 	if si, pi, _, ok := c.NearestPoint(ev.X, ev.Y); ok {
-		c.Hover, c.HoverSeries, c.HoverPoint = true, si, pi
+		c.Hover().Set(true)
+		c.HoverSeries().Set(si)
+		c.HoverPoint().Set(pi)
 	} else {
-		c.Hover = false
+		c.Hover().Set(false)
 	}
 }
 
@@ -102,13 +107,14 @@ func (c *PieChart) OnEvent(ev Event) {
 		return
 	}
 	if !c.localInBounds(ev.X, ev.Y) {
-		c.Hover = false
+		c.Hover().Set(false)
 		return
 	}
 	if i, _, ok := c.SliceAt(ev.X, ev.Y); ok {
-		c.Hover, c.HoverIndex = true, i
+		c.Hover().Set(true)
+		c.HoverIndex().Set(i)
 	} else {
-		c.Hover = false
+		c.Hover().Set(false)
 	}
 }
 
@@ -119,12 +125,13 @@ func (c *RadarChart) OnEvent(ev Event) {
 		return
 	}
 	if !c.localInBounds(ev.X, ev.Y) {
-		c.Hover = false
+		c.Hover().Set(false)
 		return
 	}
 	if a, ok := c.AxisAt(ev.X, ev.Y); ok {
-		c.Hover, c.HoverAxis = true, a
+		c.Hover().Set(true)
+		c.HoverAxis().Set(a)
 	} else {
-		c.Hover = false
+		c.Hover().Set(false)
 	}
 }

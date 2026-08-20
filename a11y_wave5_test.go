@@ -65,7 +65,7 @@ func TestA11yRangeControls(t *testing.T) {
 	}
 
 	lvl := NewLevelBar(10)
-	lvl.Value = 4
+	lvl.Value().Set(4)
 	if got := lvl.A11y(); got != (A11yInfo{Role: RoleMeter, Value: "4/10", HasRange: true, Min: 0, Max: 10, Now: 4}) {
 		t.Errorf("LevelBar A11y() = %+v", got)
 	}

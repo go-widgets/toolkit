@@ -299,11 +299,11 @@ func (n *Notification) A11y() A11yInfo { return A11yInfo{Role: RoleStatus, Name:
 func (p *ProgressBar) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleProgressbar,
-		Value:    percent(p.Fraction),
+		Value:    percent(p.Fraction().Get()),
 		HasRange: true,
 		Min:      0,
 		Max:      1,
-		Now:      p.Fraction,
+		Now:      p.Fraction().Get(),
 	}
 }
 
@@ -312,11 +312,11 @@ func (p *ProgressBar) A11y() A11yInfo {
 func (l *LevelBar) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleMeter,
-		Value:    strconv.Itoa(l.Value) + "/" + strconv.Itoa(l.Max),
+		Value:    strconv.Itoa(l.Value().Get()) + "/" + strconv.Itoa(l.Max),
 		HasRange: true,
 		Min:      0,
 		Max:      float64(l.Max),
-		Now:      float64(l.Value),
+		Now:      float64(l.Value().Get()),
 	}
 }
 

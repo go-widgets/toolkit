@@ -70,7 +70,8 @@ func TestSparklineValueAtAndHover(t *testing.T) {
 func TestBarChartHover(t *testing.T) {
 	bc := NewBarChart([]float64{4, 7, 2, 8, 5})
 	bc.SetBounds(Rect{X: 10, Y: 10, W: 130, H: 90})
-	bc.Hover, bc.HoverIndex = true, 4 // last bar → exercises the clamp
+	bc.Hover().Set(true)
+	bc.HoverIndex().Set(4) // last bar → exercises the clamp
 	drawInBounds(t, "barchart", bc)
 }
 
@@ -91,7 +92,9 @@ func TestScatterNearestPointAndHover(t *testing.T) {
 	if _, _, _, ok := NewScatterChart(nil).NearestPoint(5, 5); ok {
 		t.Fatal("empty ScatterChart.NearestPoint should be ok=false")
 	}
-	sc.Hover, sc.HoverSeries, sc.HoverPoint = true, 0, 1
+	sc.Hover().Set(true)
+	sc.HoverSeries().Set(0)
+	sc.HoverPoint().Set(1)
 	drawInBounds(t, "scatter", sc)
 }
 
@@ -118,9 +121,10 @@ func TestPieSliceAtAndHover(t *testing.T) {
 	if _, _, ok := tinyPie.SliceAt(0, 0); ok {
 		t.Fatal("sub-pixel PieChart.SliceAt should be ok=false")
 	}
-	pc.Hover, pc.HoverIndex = true, 2
+	pc.Hover().Set(true)
+	pc.HoverIndex().Set(2)
 	drawInBounds(t, "pie", pc)
-	pc.HoverIndex = 0 // first slice → a0 == 0 branch
+	pc.HoverIndex().Set(0) // first slice → a0 == 0 branch
 	drawInBounds(t, "pie0", pc)
 }
 
@@ -146,6 +150,7 @@ func TestRadarAxisAtAndHover(t *testing.T) {
 	if angleNorm(3*math.Pi) > math.Pi || angleNorm(-3*math.Pi) <= -math.Pi {
 		t.Fatal("angleNorm did not wrap into (-π, π]")
 	}
-	rc.Hover, rc.HoverAxis = true, 2
+	rc.Hover().Set(true)
+	rc.HoverAxis().Set(2)
 	drawInBounds(t, "radar", rc)
 }
