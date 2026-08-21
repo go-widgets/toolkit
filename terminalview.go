@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // TermCell is one character cell in a TerminalView grid: a single
 // rune plus its foreground and background colours. A zero Rune (or a
@@ -34,11 +37,14 @@ type TerminalView struct {
 	Cols, Rows int
 	Cells      []TermCell
 
-	// CursorCol / CursorRow are the block cursor's cell position, and
-	// the next write position for Write / Put. CursorVisible gates
-	// whether Draw paints the (inverted) block cursor.
-	CursorCol, CursorRow int
-	CursorVisible        bool
+	// cursorCol / cursorRow are the block cursor's cell position (and the
+	// next write position for Write / Put); cursorVisible gates whether Draw
+	// paints the (inverted) block cursor. All three are reactive state behind
+	// the CursorCol() / CursorRow() / CursorVisible() accessors — the emulator's
+	// own write-head over its grid document, but exposed through MVVM so a host
+	// reads/drives it the same way as any other widget.
+	cursorCol, cursorRow *mvvm.Observable[int]
+	cursorVisible        *mvvm.Observable[bool]
 
 	// DefaultFG / DefaultBG are the pen colours Write / Put stamp into
 	// new cells and the fallback Draw uses for cells whose own colour is
@@ -88,6 +94,34 @@ func NewTerminalView(cols, rows int) *TerminalView {
 	}
 }
 
+// CursorCol is the block cursor's column (and the next write column) as a shared
+// [mvvm.Observable]; Write/Put advance it and Draw reads it. Lazily created,
+// defaulting to 0.
+func (t *TerminalView) CursorCol() *mvvm.Observable[int] {
+	if t.cursorCol == nil {
+		t.cursorCol = mvvm.NewObservable(0)
+	}
+	return t.cursorCol
+}
+
+// CursorRow is the block cursor's row (and the next write row) as a shared
+// [mvvm.Observable]. Lazily created, defaulting to 0.
+func (t *TerminalView) CursorRow() *mvvm.Observable[int] {
+	if t.cursorRow == nil {
+		t.cursorRow = mvvm.NewObservable(0)
+	}
+	return t.cursorRow
+}
+
+// CursorVisible gates whether Draw paints the inverted block cursor, as a shared
+// [mvvm.Observable]. Lazily created, defaulting to false.
+func (t *TerminalView) CursorVisible() *mvvm.Observable[bool] {
+	if t.cursorVisible == nil {
+		t.cursorVisible = mvvm.NewObservable(false)
+	}
+	return t.cursorVisible
+}
+
 // Resize reshapes the grid to newCols×newRows, preserving the top-left
 // rectangle that still fits and blanking any newly exposed cells. The
 // cursor is clamped into the new bounds. A non-positive dimension
@@ -113,11 +147,11 @@ func (t *TerminalView) Resize(newCols, newRows int) {
 	t.Cells = out
 	t.Cols = newCols
 	t.Rows = newRows
-	if t.CursorCol >= t.Cols {
-		t.CursorCol = t.Cols - 1
+	if t.CursorCol().Get() >= t.Cols {
+		t.CursorCol().Set(t.Cols - 1)
 	}
-	if t.CursorRow >= t.Rows {
-		t.CursorRow = t.Rows - 1
+	if t.CursorRow().Get() >= t.Rows {
+		t.CursorRow().Set(t.Rows - 1)
 	}
 }
 
@@ -161,13 +195,13 @@ func (t *TerminalView) Write(s string) {
 	for _, ru := range s {
 		switch ru {
 		case '\r':
-			t.CursorCol = 0
+			t.CursorCol().Set(0)
 		case '\n':
 			t.newline()
 		default:
-			t.Cells[t.CursorRow*t.Cols+t.CursorCol] = TermCell{Rune: ru, FG: t.DefaultFG, BG: t.DefaultBG}
-			t.CursorCol++
-			if t.CursorCol >= t.Cols {
+			t.Cells[t.CursorRow().Get()*t.Cols+t.CursorCol().Get()] = TermCell{Rune: ru, FG: t.DefaultFG, BG: t.DefaultBG}
+			t.CursorCol().Set(t.CursorCol().Get() + 1)
+			if t.CursorCol().Get() >= t.Cols {
 				t.newline()
 			}
 		}
@@ -177,11 +211,11 @@ func (t *TerminalView) Write(s string) {
 // newline moves the cursor to column 0 of the next row, scrolling one
 // row up when it would leave the bottom.
 func (t *TerminalView) newline() {
-	t.CursorCol = 0
-	t.CursorRow++
-	if t.CursorRow >= t.Rows {
+	t.CursorCol().Set(0)
+	t.CursorRow().Set(t.CursorRow().Get() + 1)
+	if t.CursorRow().Get() >= t.Rows {
 		t.ScrollUp(1)
-		t.CursorRow = t.Rows - 1
+		t.CursorRow().Set(t.Rows - 1)
 	}
 }
 
@@ -295,7 +329,7 @@ func (t *TerminalView) Draw(p painter.Painter, theme *Theme) {
 			if bg.A == 0 {
 				bg = defBG
 			}
-			if t.CursorVisible && col == t.CursorCol && row == t.CursorRow {
+			if t.CursorVisible().Get() && col == t.CursorCol().Get() && row == t.CursorRow().Get() {
 				fg, bg = bg, fg
 			}
 			x := r.X + col*t.cellW

@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // markdownEditorDividerW is the pixel thickness of the 1-px divider Draw
 // paints between the source pane and the preview pane.
@@ -28,16 +31,33 @@ type MarkdownEditor struct {
 	// Preview is the read-only rendered pane, kept in sync with Source.
 	Preview *MarkdownView
 
-	// Split is the fraction (0..1, exclusive) of Bounds given to Source
-	// along the split axis; the remainder (minus the divider) goes to
-	// Preview. A value outside (0, 1) -- including the zero value, so a
-	// struct literal built without NewMarkdownEditor behaves sanely --
-	// falls back to 0.5.
-	Split float64
+	// splitFrac (fraction 0..1 of Bounds given to Source along the split axis;
+	// a value outside (0,1), including the zero value, falls back to 0.5 via
+	// split()) and sideBySide (true = Source left / Preview right; false =
+	// stacked) are reactive view config behind the Split() / SideBySide()
+	// accessors.
+	splitFrac  *mvvm.Observable[float64]
+	sideBySide *mvvm.Observable[bool]
+}
 
-	// SideBySide selects the split axis: true lays Source left / Preview
-	// right; false stacks Source above Preview.
-	SideBySide bool
+// Split is the fraction (0..1, exclusive) of Bounds given to the Source pane
+// along the split axis, as a shared [mvvm.Observable]; a value outside (0,1)
+// falls back to 0.5. Lazily created, defaulting to 0 (so split() yields 0.5).
+func (m *MarkdownEditor) Split() *mvvm.Observable[float64] {
+	if m.splitFrac == nil {
+		m.splitFrac = mvvm.NewObservable(0.0)
+	}
+	return m.splitFrac
+}
+
+// SideBySide selects the split axis as a shared [mvvm.Observable]: true lays
+// Source left / Preview right, false stacks Source above Preview. Lazily
+// created, defaulting to false (stacked); NewMarkdownEditor starts it true.
+func (m *MarkdownEditor) SideBySide() *mvvm.Observable[bool] {
+	if m.sideBySide == nil {
+		m.sideBySide = mvvm.NewObservable(false)
+	}
+	return m.sideBySide
 }
 
 // NewMarkdownEditor builds a MarkdownEditor seeded with initial Markdown
@@ -46,12 +66,13 @@ type MarkdownEditor struct {
 // MarkdownView already rendering that same text. Split defaults to 0.5 and
 // SideBySide defaults to true (left/right).
 func NewMarkdownEditor(initial string) *MarkdownEditor {
-	return &MarkdownEditor{
-		Source:     NewTextView(initial),
-		Preview:    NewMarkdownView(initial),
-		Split:      0.5,
-		SideBySide: true,
+	m := &MarkdownEditor{
+		Source:  NewTextView(initial),
+		Preview: NewMarkdownView(initial),
 	}
+	m.Split().Set(0.5)
+	m.SideBySide().Set(true)
+	return m
 }
 
 // Text returns the current source-pane text, or "" when Source is nil.
@@ -84,10 +105,10 @@ func (m *MarkdownEditor) syncPreview() {
 // split resolves the effective split fraction, defaulting to 0.5 for any
 // value outside the open interval (0, 1).
 func (m *MarkdownEditor) split() float64 {
-	if m.Split <= 0 || m.Split >= 1 {
+	if m.Split().Get() <= 0 || m.Split().Get() >= 1 {
 		return 0.5
 	}
-	return m.Split
+	return m.Split().Get()
 }
 
 // sourceRect is Source's placement within Bounds: the leading share (by
@@ -95,7 +116,7 @@ func (m *MarkdownEditor) split() float64 {
 func (m *MarkdownEditor) sourceRect() Rect {
 	r := m.Bounds()
 	frac := m.split()
-	if m.SideBySide {
+	if m.SideBySide().Get() {
 		return Rect{X: r.X, Y: r.Y, W: int(float64(r.W) * frac), H: r.H}
 	}
 	return Rect{X: r.X, Y: r.Y, W: r.W, H: int(float64(r.H) * frac)}
@@ -106,7 +127,7 @@ func (m *MarkdownEditor) sourceRect() Rect {
 func (m *MarkdownEditor) previewRect() Rect {
 	r := m.Bounds()
 	sr := m.sourceRect()
-	if m.SideBySide {
+	if m.SideBySide().Get() {
 		x := sr.X + sr.W + markdownEditorDividerW
 		return Rect{X: x, Y: r.Y, W: r.X + r.W - x, H: r.H}
 	}
@@ -128,7 +149,7 @@ func (m *MarkdownEditor) Draw(p painter.Painter, theme *Theme) {
 		m.Preview.SetBounds(pr)
 		m.Preview.Draw(p, theme)
 	}
-	if m.SideBySide {
+	if m.SideBySide().Get() {
 		fillRect(p, sr.X+sr.W, r.Y, markdownEditorDividerW, r.H, theme.Border)
 	} else {
 		fillRect(p, r.X, sr.Y+sr.H, r.W, markdownEditorDividerW, theme.Border)

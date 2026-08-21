@@ -17,7 +17,7 @@ func TestNewTerminalView(t *testing.T) {
 	if len(v.Cells) != 12 {
 		t.Fatalf("len(Cells) = %d, want 12", len(v.Cells))
 	}
-	if v.CursorCol != 0 || v.CursorRow != 0 {
+	if v.CursorCol().Get() != 0 || v.CursorRow().Get() != 0 {
 		t.Fatal("cursor not homed at (0,0)")
 	}
 }
@@ -72,8 +72,8 @@ func TestTerminalViewWrite(t *testing.T) {
 	if v.Cell(0, 0).Rune != 'a' || v.Cell(1, 0).Rune != 'b' || v.Cell(0, 1).Rune != 'c' {
 		t.Fatal("Write did not wrap correctly")
 	}
-	if v.CursorCol != 1 || v.CursorRow != 1 {
-		t.Fatalf("cursor = (%d,%d), want (1,1)", v.CursorCol, v.CursorRow)
+	if v.CursorCol().Get() != 1 || v.CursorRow().Get() != 1 {
+		t.Fatalf("cursor = (%d,%d), want (1,1)", v.CursorCol().Get(), v.CursorRow().Get())
 	}
 }
 
@@ -100,8 +100,8 @@ func TestTerminalViewWriteScrolls(t *testing.T) {
 		t.Fatalf("after scroll row0 = %q%q, want cd",
 			v.Cell(0, 0).Rune, v.Cell(1, 0).Rune)
 	}
-	if v.CursorRow != 1 {
-		t.Fatalf("cursor row = %d, want 1", v.CursorRow)
+	if v.CursorRow().Get() != 1 {
+		t.Fatalf("cursor row = %d, want 1", v.CursorRow().Get())
 	}
 }
 
@@ -131,7 +131,8 @@ func TestTerminalViewResizePreservesAndClamps(t *testing.T) {
 	v := NewTerminalView(2, 2)
 	v.SetCell(0, 0, 'a', RGBA{A: 0xFF}, RGBA{})
 	v.SetCell(1, 1, 'd', RGBA{A: 0xFF}, RGBA{})
-	v.CursorCol, v.CursorRow = 1, 1
+	v.CursorCol().Set(1)
+	v.CursorRow().Set(1)
 
 	// Grow: the top-left rectangle is preserved, new cells blank.
 	v.Resize(4, 4)
@@ -146,10 +147,11 @@ func TestTerminalViewResizePreservesAndClamps(t *testing.T) {
 	}
 
 	// Shrink below the cursor: content clipped, cursor clamped in.
-	v.CursorCol, v.CursorRow = 3, 3
+	v.CursorCol().Set(3)
+	v.CursorRow().Set(3)
 	v.Resize(2, 2)
-	if v.CursorCol != 1 || v.CursorRow != 1 {
-		t.Fatalf("cursor not clamped: (%d,%d)", v.CursorCol, v.CursorRow)
+	if v.CursorCol().Get() != 1 || v.CursorRow().Get() != 1 {
+		t.Fatalf("cursor not clamped: (%d,%d)", v.CursorCol().Get(), v.CursorRow().Get())
 	}
 	if v.Cell(0, 0).Rune != 'a' {
 		t.Fatal("shrink did not preserve the top-left cell")
@@ -197,8 +199,9 @@ func TestTerminalViewDrawThemeFallbackAndInvert(t *testing.T) {
 	bg := RGBA{R: 0x00, G: 0x00, B: 0xFF, A: 0xFF}
 	v.SetCell(0, 0, 'A', fg, bg) // explicit colours
 	v.SetCell(0, 1, ' ', fg, bg) // space: bg only, no glyph
-	v.CursorVisible = true
-	v.CursorCol, v.CursorRow = 1, 1 // invert an empty, unset cell
+	v.CursorVisible().Set(true)
+	v.CursorCol().Set(1)
+	v.CursorRow().Set(1) // invert an empty, unset cell
 	v.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	buf := makeSurface(w, h)
 	v.Draw(newP(buf, w), theme)
@@ -317,8 +320,9 @@ func TestTerminalViewDrawBackgroundFastPathPixelIdentical(t *testing.T) {
 		v.SetCell(1, 0, 'y', RGBA{}, RGBA{})                                 // all default (skipped)
 		v.SetCell(2, 0, ' ', RGBA{}, RGBA{B: 0x90, A: 0xFF})                 // blank + custom bg
 		// (0,1),(1,1) left blank/default; (2,1) is the cursor cell.
-		v.CursorVisible = true
-		v.CursorCol, v.CursorRow = 2, 1
+		v.CursorVisible().Set(true)
+		v.CursorCol().Set(2)
+		v.CursorRow().Set(1)
 		v.SetBounds(Rect{X: 3, Y: 5, W: w - 6, H: h - 10})
 		return v
 	}
@@ -347,7 +351,7 @@ func TestTerminalViewDrawBackgroundFastPathPixelIdentical(t *testing.T) {
 				if bg.A == 0 {
 					bg = defBG
 				}
-				if v.CursorVisible && col == v.CursorCol && row == v.CursorRow {
+				if v.CursorVisible().Get() && col == v.CursorCol().Get() && row == v.CursorRow().Get() {
 					fg, bg = bg, fg
 				}
 				x := r.X + col*v.CellWidth()
