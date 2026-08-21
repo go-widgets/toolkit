@@ -22,7 +22,7 @@ require (
 	github.com/go-crdt/crdt v0.25.0
 	github.com/go-gfx/gfx v0.6.0
 	github.com/go-iconoir/iconoir v0.2.0
-	github.com/go-richdoc/richdoc v0.1.0
+	github.com/go-richdoc/richdoc v0.2.0
 )
 
 require (

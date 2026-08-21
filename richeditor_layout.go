@@ -42,10 +42,13 @@ type reLine struct {
 // nCells is how many caret cells the line holds.
 func (l reLine) nCells() int { return len(l.cellX) - 1 }
 
-// reRun is one drawable run of uniform styling on a line.
+// reRun is one drawable run of uniform styling on a line. dy is a vertical
+// offset from the line baseline, negative to raise the run (a footnote marker is
+// drawn as a superscript this way); it is 0 for ordinary text.
 type reRun struct {
 	text      string
 	x         int
+	dy        int
 	font      Font
 	ink       RGBA
 	underline bool
@@ -123,22 +126,38 @@ func (e *RichEditor) buildLayout(theme *Theme) reLayout {
 }
 
 // reBuilder accumulates lines + chrome while walking the document top-to-bottom.
+// fnSeq is the running footnote counter, so each footnote marker paints its
+// document-order number.
 type reBuilder struct {
 	e           *RichEditor
 	theme       *Theme
 	left, right int
 	y           int
+	fnSeq       int
 	lines       []reLine
 	chrome      []reChrome
+}
+
+// flatten flattens inlines for layout and numbers every footnote atom in
+// document order, so its superscript marker paints a stable sequence number.
+func (b *reBuilder) flatten(inlines []richdoc.Inline) []styledRune {
+	rs := flattenInlines(inlines)
+	for i := range rs {
+		if rs[i].atom == atomFootnote {
+			b.fnSeq++
+			rs[i].fnNum = b.fnSeq
+		}
+	}
+	return rs
 }
 
 // layoutBlock dispatches one top-level block to its specific layout routine.
 func (b *reBuilder) layoutBlock(idx int, blk richdoc.Block, indentX int) {
 	switch n := blk.(type) {
 	case richdoc.Heading:
-		b.layoutInlines(idx, flattenInlines(n.Inlines), clampLevel(n.Level), indentX, true)
+		b.layoutInlines(idx, b.flatten(n.Inlines), clampLevel(n.Level), indentX, true)
 	case richdoc.Paragraph:
-		b.layoutInlines(idx, flattenInlines(n.Inlines), 0, indentX, true)
+		b.layoutInlines(idx, b.flatten(n.Inlines), 0, indentX, true)
 	case richdoc.CodeBlock:
 		b.layoutCode(idx, n, indentX)
 	case richdoc.List:
@@ -237,10 +256,10 @@ func (b *reBuilder) emitLine(idx, indentX int, rs []styledRune, startOff int, ha
 			i++
 			continue
 		}
-		st, link := sr.style, sr.link
+		st, link, ref := sr.style, sr.link, sr.refActive
 		var sb strings.Builder
 		runX := x
-		for i < len(rs) && rs[i].atom == atomNone && rs[i].style == st && rs[i].link == link {
+		for i < len(rs) && rs[i].atom == atomNone && rs[i].style == st && rs[i].link == link && rs[i].refActive == ref {
 			sb.WriteRune(rs[i].r)
 			x += b.e.cellWidth(rs[i], level)
 			cellX = append(cellX, x)
@@ -248,7 +267,7 @@ func (b *reBuilder) emitLine(idx, indentX int, rs []styledRune, startOff int, ha
 		}
 		line.runs = append(line.runs, reRun{
 			text: sb.String(), x: runX, font: b.e.fontFor(st, level),
-			ink: b.inkFor(st, link), underline: link != "", strike: st&styStrike != 0,
+			ink: b.inkFor(st, link, ref), underline: link != "", strike: st&styStrike != 0,
 		})
 	}
 	line.cellX = cellX
@@ -257,8 +276,9 @@ func (b *reBuilder) emitLine(idx, indentX int, rs []styledRune, startOff int, ha
 }
 
 // emitAtom draws a non-text inline as a placeholder: an image gets a framed box
-// with its alt label, math its TeX, a raw inline its verbatim text; a hard break
-// consumes its cell silently.
+// with its alt label, math its TeX, a raw inline its verbatim text; a footnote a
+// raised superscript number; an inline-less CrossRef its resolved label/cite; a
+// point Anchor a faint target tick; a hard break consumes its cell silently.
 func (b *reBuilder) emitAtom(line *reLine, sr styledRune, x, w, level int) {
 	switch sr.atom {
 	case atomLineBreak:
@@ -272,6 +292,14 @@ func (b *reBuilder) emitAtom(line *reLine, sr styledRune, x, w, level int) {
 		line.runs = append(line.runs, reRun{text: sr.payload.(richdoc.Math).TeX, x: x, font: b.e.baseFont(), ink: b.theme.Accent})
 	case atomRaw:
 		line.runs = append(line.runs, reRun{text: sr.payload.(richdoc.RawInline).Text, x: x, font: b.e.baseFont(), ink: b.dim()})
+	case atomFootnote:
+		line.runs = append(line.runs, reRun{text: footnoteMark(sr), x: x, dy: -b.e.footnoteRise(), font: b.e.superscriptFont(), ink: b.theme.Accent})
+	case atomXRef:
+		line.runs = append(line.runs, reRun{text: xrefText(sr.payload.(richdoc.CrossRef)), x: x, font: b.e.baseFont(), ink: b.theme.Accent})
+	case atomAnchor:
+		// Invisible label: a faint full-height tick marks that a target exists,
+		// without changing the surrounding text metrics.
+		b.chrome = append(b.chrome, reChrome{r: Rect{X: x, Y: line.textY, W: strokeWidth(), H: b.e.sizedFont(level).Height()}, c: b.dim()})
 	}
 }
 
@@ -307,7 +335,7 @@ func (b *reBuilder) layoutList(idx int, l richdoc.List, indentX int) {
 		for bi, blk := range item.Blocks {
 			primary := ii == 0 && bi == fpi
 			if p, ok := blk.(richdoc.Paragraph); ok {
-				b.layoutInlines(idx, flattenInlines(p.Inlines), 0, itemX, primary)
+				b.layoutInlines(idx, b.flatten(p.Inlines), 0, itemX, primary)
 			} else if sub, ok := blk.(richdoc.List); ok {
 				b.layoutList(idx, sub, itemX)
 			} else {
@@ -330,7 +358,7 @@ func (b *reBuilder) layoutQuote(idx int, q richdoc.BlockQuote, indentX int) {
 	for bi, blk := range q.Blocks {
 		primary := bi == fpi
 		if p, ok := blk.(richdoc.Paragraph); ok {
-			b.layoutInlines(idx, flattenInlines(p.Inlines), 0, inX, primary)
+			b.layoutInlines(idx, b.flatten(p.Inlines), 0, inX, primary)
 		} else {
 			b.layoutBlock(idx, blk, inX)
 		}
@@ -414,10 +442,11 @@ func (b *reBuilder) layoutBox(idx int, text string, indentX int, ink RGBA) {
 	b.chrome = append(b.chrome, reChrome{r: band, c: b.theme.SurfaceAlt})
 }
 
-// inkFor is the text colour for a run: links in the accent, inline code dimmed to
-// read as monospace, everything else the surface ink.
-func (b *reBuilder) inkFor(st styleBits, link string) RGBA {
-	if link != "" {
+// inkFor is the text colour for a run: links and cross-reference text in the
+// accent, inline code dimmed to read as monospace, everything else the surface
+// ink.
+func (b *reBuilder) inkFor(st styleBits, link string, ref bool) RGBA {
+	if link != "" || ref {
 		return b.theme.Accent
 	}
 	if st&styCode != 0 {
@@ -436,6 +465,24 @@ func imageLabel(img richdoc.Image) string {
 		return "[" + img.Alt + "]"
 	}
 	return "[image]"
+}
+
+// footnoteMark is the superscript reference marker for a footnote atom: its
+// document-order number (assigned by [reBuilder.flatten]).
+func footnoteMark(sr styledRune) string { return strconv.Itoa(sr.fnNum) }
+
+// xrefText is the visible text of an inline-less CrossRef: the resolved target
+// key (or "?" when it is empty), bracketed for a citation to read as [key] the
+// way a bibliography does, bare for a label reference.
+func xrefText(x richdoc.CrossRef) string {
+	label := x.Target
+	if label == "" {
+		label = "?"
+	}
+	if x.Kind == richdoc.RefCite {
+		return "[" + label + "]"
+	}
+	return label
 }
 
 // firstParagraphIndex returns the index of the first Paragraph in blocks, or -1.
