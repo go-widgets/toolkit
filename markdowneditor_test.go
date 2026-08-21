@@ -19,10 +19,10 @@ func TestNewMarkdownEditorSeedsBothPanes(t *testing.T) {
 	if me.Preview.Source != "# Hi\n\nBody text." {
 		t.Errorf("Preview.Source = %q", me.Preview.Source)
 	}
-	if me.Split != 0.5 {
-		t.Errorf("Split = %v, want 0.5", me.Split)
+	if me.Split().Get() != 0.5 {
+		t.Errorf("Split = %v, want 0.5", me.Split().Get())
 	}
-	if !me.SideBySide {
+	if !me.SideBySide().Get() {
 		t.Error("SideBySide should default true")
 	}
 }
@@ -96,7 +96,8 @@ func TestMarkdownEditorSplitFallback(t *testing.T) {
 		{"in range kept", 0.25, 0.25},
 	}
 	for _, c := range cases {
-		me := &MarkdownEditor{Split: c.in}
+		me := &MarkdownEditor{}
+		me.Split().Set(c.in)
 		if got := me.split(); got != c.want {
 			t.Errorf("%s: split() = %v, want %v", c.name, got, c.want)
 		}
@@ -107,11 +108,11 @@ func TestMarkdownEditorSplitFallback(t *testing.T) {
 
 func TestMarkdownEditorLayoutSideBySide(t *testing.T) {
 	me := &MarkdownEditor{
-		Source:     NewTextView(""),
-		Preview:    NewMarkdownView(""),
-		Split:      0.5,
-		SideBySide: true,
+		Source:  NewTextView(""),
+		Preview: NewMarkdownView(""),
 	}
+	me.Split().Set(0.5)
+	me.SideBySide().Set(true)
 	me.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 
 	wantSrc := Rect{X: 0, Y: 0, W: 50, H: 60}
@@ -142,7 +143,9 @@ func TestMarkdownEditorLayoutStackedOffsetOrigin(t *testing.T) {
 	// Rect math must respect a non-zero origin, matching how every other
 	// container in the toolkit (Paned, Notebook, ...) computes child rects
 	// relative to its own Bounds().
-	me := &MarkdownEditor{Split: 0.25, SideBySide: false}
+	me := &MarkdownEditor{}
+	me.Split().Set(0.25)
+	me.SideBySide().Set(false)
 	me.SetBounds(Rect{X: 5, Y: 5, W: 80, H: 40})
 
 	wantSrc := Rect{X: 5, Y: 5, W: 80, H: 10}
@@ -157,11 +160,11 @@ func TestMarkdownEditorLayoutStackedOffsetOrigin(t *testing.T) {
 
 func TestMarkdownEditorLayoutStackedDraw(t *testing.T) {
 	me := &MarkdownEditor{
-		Source:     NewTextView(""),
-		Preview:    NewMarkdownView(""),
-		Split:      0.25,
-		SideBySide: false,
+		Source:  NewTextView(""),
+		Preview: NewMarkdownView(""),
 	}
+	me.Split().Set(0.25)
+	me.SideBySide().Set(false)
 	me.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 40})
 
 	wantSrc := Rect{X: 0, Y: 0, W: 80, H: 10}
@@ -183,14 +186,18 @@ func TestMarkdownEditorLayoutStackedDraw(t *testing.T) {
 // --- Draw nil-child guards ---------------------------------------------------
 
 func TestMarkdownEditorDrawNilSource(t *testing.T) {
-	me := &MarkdownEditor{Preview: NewMarkdownView("hi"), Split: 0.5, SideBySide: true}
+	me := &MarkdownEditor{Preview: NewMarkdownView("hi")}
+	me.Split().Set(0.5)
+	me.SideBySide().Set(true)
 	me.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 20})
 	surf := makeSurface(40, 20)
 	me.Draw(newP(surf, 40), DefaultLight()) // must not panic
 }
 
 func TestMarkdownEditorDrawNilPreview(t *testing.T) {
-	me := &MarkdownEditor{Source: NewTextView("hi"), Split: 0.5, SideBySide: false}
+	me := &MarkdownEditor{Source: NewTextView("hi")}
+	me.Split().Set(0.5)
+	me.SideBySide().Set(false)
 	me.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 20})
 	surf := makeSurface(40, 20)
 	me.Draw(newP(surf, 40), DefaultLight()) // must not panic
