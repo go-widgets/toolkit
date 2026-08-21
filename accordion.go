@@ -211,7 +211,7 @@ func (a *Accordion) OnEvent(ev Event) {
 		return
 	}
 	if ev.Kind == EventKeyDown {
-		if a.Disabled || len(a.Sections) == 0 {
+		if a.Disabled().Get() || len(a.Sections) == 0 {
 			return
 		}
 		switch ev.Code {

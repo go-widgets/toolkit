@@ -126,7 +126,7 @@ func (v *ViewSwitcher) Draw(p painter.Painter, theme *Theme) {
 // clicks that fall outside every segment are all no-ops.
 func (v *ViewSwitcher) OnEvent(ev Event) {
 	if ev.Kind == EventKeyDown {
-		if v.Disabled {
+		if v.Disabled().Get() {
 			return
 		}
 		// Left/Right (or Up/Down) move the active segment, wrapping, notifying the

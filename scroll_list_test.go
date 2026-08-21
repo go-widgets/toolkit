@@ -70,8 +70,8 @@ func TestScrollViewClampNegativeOffsets(t *testing.T) {
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	sv.SetContentSize(200, 300)
 	sv.Scroll(-50, -50) // both negative
-	if sv.OffsetX != 0 || sv.OffsetY != 0 {
-		t.Fatalf("negatives must clamp to 0; got OffsetX=%d OffsetY=%d", sv.OffsetX, sv.OffsetY)
+	if sv.OffsetX().Get() != 0 || sv.OffsetY().Get() != 0 {
+		t.Fatalf("negatives must clamp to 0; got OffsetX=%d OffsetY=%d", sv.OffsetX().Get(), sv.OffsetY().Get())
 	}
 }
 
@@ -89,11 +89,11 @@ func TestScrollViewClampsToMax(t *testing.T) {
 	viewH := 60 - scrollGutter()
 	wantY := 300 - viewH
 	wantX := 200 - viewW
-	if sv.OffsetY != wantY {
-		t.Fatalf("OffsetY clamp: got %d, want %d", sv.OffsetY, wantY)
+	if sv.OffsetY().Get() != wantY {
+		t.Fatalf("OffsetY clamp: got %d, want %d", sv.OffsetY().Get(), wantY)
 	}
-	if sv.OffsetX != wantX {
-		t.Fatalf("OffsetX clamp: got %d, want %d", sv.OffsetX, wantX)
+	if sv.OffsetX().Get() != wantX {
+		t.Fatalf("OffsetX clamp: got %d, want %d", sv.OffsetX().Get(), wantX)
 	}
 }
 
@@ -118,7 +118,7 @@ func TestScrollViewHorizontalScrollbar(t *testing.T) {
 	}
 	// Scrolling right moves the offset (clamped), i.e. horizontal scroll works.
 	sv.Scroll(1000, 0)
-	if sv.OffsetX == 0 {
+	if sv.OffsetX().Get() == 0 {
 		t.Fatal("horizontal scroll did not move OffsetX")
 	}
 }
@@ -149,8 +149,8 @@ func TestScrollViewClampWhenContentSmallerThanViewport(t *testing.T) {
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	sv.SetContentSize(50, 30) // smaller than viewport
 	sv.Scroll(100, 100)
-	if sv.OffsetX != 0 || sv.OffsetY != 0 {
-		t.Fatalf("offsets should stay 0 when content fits; got %d %d", sv.OffsetX, sv.OffsetY)
+	if sv.OffsetX().Get() != 0 || sv.OffsetY().Get() != 0 {
+		t.Fatalf("offsets should stay 0 when content fits; got %d %d", sv.OffsetX().Get(), sv.OffsetY().Get())
 	}
 }
 

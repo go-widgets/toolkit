@@ -292,7 +292,7 @@ func (cv *ColumnBrowser) drawCentered(p painter.Painter, r Rect, y int, s string
 // OnEvent routes a click/scroll to the column under the pointer, translating the
 // widget-local pointer X into that column's own local space; inert while Disabled.
 func (cv *ColumnBrowser) OnEvent(ev Event) {
-	if cv.Disabled {
+	if cv.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

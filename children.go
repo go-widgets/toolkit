@@ -148,7 +148,7 @@ func (s *ScrollView) Children() []Widget { return nonNil(s.Child) }
 // bridges read this between frames, and the whole reason this method exists is
 // that they must not be lied to about where a control is.
 func (s *ScrollView) ChildOffset() (int, int) {
-	return -(s.OffsetX + s.overscrollX), -(s.OffsetY + s.overscrollY)
+	return -(s.OffsetX().Get() + s.overscrollX), -(s.OffsetY().Get() + s.overscrollY)
 }
 
 // Children yields the window's body.

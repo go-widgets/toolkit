@@ -35,19 +35,19 @@ func TestLevelBarThresholdBandSelected(t *testing.T) {
 	}
 	// Value 5 -> amber band (4 <= 5 < 8).
 	l := mk()
-	l.Value = 5
+	l.Value().Set(5)
 	if got := firstCellColor(t, l, 120, 12); got != lvlAmber {
 		t.Fatalf("Value=5 fill = %+v, want amber", got)
 	}
 	// Value 9 -> green band (highest Min 8 <= 9).
 	l = mk()
-	l.Value = 9
+	l.Value().Set(9)
 	if got := firstCellColor(t, l, 120, 12); got != lvlGreen {
 		t.Fatalf("Value=9 fill = %+v, want green", got)
 	}
 	// Value 2 -> red band (Min 0).
 	l = mk()
-	l.Value = 2
+	l.Value().Set(2)
 	if got := firstCellColor(t, l, 120, 12); got != lvlRed {
 		t.Fatalf("Value=2 fill = %+v, want red", got)
 	}
@@ -59,7 +59,7 @@ func TestLevelBarThresholdUnorderedAndUnmatched(t *testing.T) {
 	// Unordered thresholds: {8,green} first still wins for Value=9.
 	l := NewLevelBar(10)
 	l.Thresholds = []LevelThreshold{{8, lvlGreen}, {0, lvlRed}, {4, lvlAmber}}
-	l.Value = 9
+	l.Value().Set(9)
 	if got := firstCellColor(t, l, 120, 12); got != lvlGreen {
 		t.Fatalf("unordered thresholds fill = %+v, want green", got)
 	}
@@ -67,13 +67,13 @@ func TestLevelBarThresholdUnorderedAndUnmatched(t *testing.T) {
 	theme := DefaultLight()
 	l2 := NewLevelBar(10)
 	l2.Thresholds = []LevelThreshold{{5, lvlGreen}}
-	l2.Value = 3
+	l2.Value().Set(3)
 	if got := firstCellColor(t, l2, 120, 12); got != theme.Accent {
 		t.Fatalf("no-match fill = %+v, want Accent %+v", got, theme.Accent)
 	}
 	// No thresholds at all -> Accent (backward compat).
 	l3 := NewLevelBar(10)
-	l3.Value = 3
+	l3.Value().Set(3)
 	if got := firstCellColor(t, l3, 120, 12); got != theme.Accent {
 		t.Fatalf("no-threshold fill = %+v, want Accent", got)
 	}
@@ -86,13 +86,13 @@ func TestLevelBarLabelDrawn(t *testing.T) {
 	theme := DefaultLight()
 
 	plain := NewLevelBar(10)
-	plain.Value = 7
+	plain.Value().Set(7)
 	plain.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	plainBuf := makeSurface(w, h)
 	plain.Draw(newP(plainBuf, w), theme)
 
 	labelled := NewLevelBar(10)
-	labelled.Value = 7
+	labelled.Value().Set(7)
 	labelled.Label = "70%"
 	labelled.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	labBuf := makeSurface(w, h)

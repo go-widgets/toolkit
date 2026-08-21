@@ -466,7 +466,7 @@ func (f *Fab) HitTest(px, py int) bool {
 // everything. Touch events feed the gesture recognizer so a touch-only host
 // gets tap + long-press without an EventClick.
 func (f *Fab) OnEvent(ev Event) {
-	if f.Disabled {
+	if f.Disabled().Get() {
 		return
 	}
 	f.ensureGest()
@@ -531,7 +531,7 @@ func (f *Fab) activatePrimary() {
 // raised disc with its elevation shadow, icon and focus ring. A Disabled Fab
 // paints only a muted, shadow-less disc.
 func (f *Fab) Draw(p painter.Painter, theme *Theme) {
-	if f.Disabled {
+	if f.Disabled().Get() {
 		f.drawButton(p, theme)
 		return
 	}
@@ -580,7 +580,7 @@ func (f *Fab) drawButton(p painter.Painter, theme *Theme) {
 		return
 	}
 	radius := d / 2
-	if !f.Disabled {
+	if !f.Disabled().Get() {
 		el := scaled(FabElevation)
 		fillRoundRect(p, b.X, b.Y+el, d, d, radius, fabShadowColor)
 	}
@@ -589,7 +589,7 @@ func (f *Fab) drawButton(p painter.Painter, theme *Theme) {
 	if f.pressed {
 		face = blendRGBA(theme.Accent, theme.Background, 0.25)
 	}
-	if f.Disabled {
+	if f.Disabled().Get() {
 		face, ink = mutedFace(theme), mutedInk(theme)
 	}
 	fillRoundRect(p, b.X, b.Y, d, d, radius, face)

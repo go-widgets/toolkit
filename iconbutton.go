@@ -72,7 +72,7 @@ func (i *IconButton) Draw(p painter.Painter, theme *Theme) {
 	case i.hovered:
 		face = theme.SurfaceAlt
 	}
-	if i.Disabled {
+	if i.Disabled().Get() {
 		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
@@ -91,7 +91,7 @@ func (i *IconButton) Draw(p painter.Painter, theme *Theme) {
 // tracks the hover face. A Disabled button ignores every kind. OnClick is
 // nil-safe.
 func (i *IconButton) OnEvent(ev Event) {
-	if i.Disabled {
+	if i.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

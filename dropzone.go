@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // DropZone is an inline "drag files here" target rendered as a
 // bordered rectangle with a centred prompt string. It is the passive
@@ -23,8 +26,16 @@ import "github.com/go-widgets/painter"
 type DropZone struct {
 	Base
 	Prompt string
-	Hover  bool
+	hover  *mvvm.Observable[bool] // reactive via Hover()
 	OnDrop func(paths []string)
+}
+
+// Hover is the drag-over highlight state as a shared [mvvm.Observable]. Lazily created.
+func (d *DropZone) Hover() *mvvm.Observable[bool] {
+	if d.hover == nil {
+		d.hover = mvvm.NewObservable(false)
+	}
+	return d.hover
 }
 
 // DropZone is a DropTarget.
@@ -68,7 +79,7 @@ func (d *DropZone) Draw(p painter.Painter, theme *Theme) {
 	r := d.Bounds()
 	face := theme.Surface
 	border := theme.Border
-	if d.Hover {
+	if d.Hover().Get() {
 		face = theme.SurfaceAlt
 		border = theme.Accent
 	}
@@ -106,15 +117,15 @@ func (d *DropZone) Draw(p painter.Painter, theme *Theme) {
 func (d *DropZone) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventDragStart, EventDragMove:
-		d.Hover = true
+		d.Hover().Set(true)
 	case EventDragLeave:
-		d.Hover = false
+		d.Hover().Set(false)
 	case EventDrop:
-		d.Hover = false
+		d.Hover().Set(false)
 		if d.OnDrop != nil {
 			d.OnDrop(SplitDropPayload(ev.Code))
 		}
 	case EventClick:
-		d.Hover = !d.Hover
+		d.Hover().Set(!d.Hover().Get())
 	}
 }

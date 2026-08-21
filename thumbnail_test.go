@@ -78,7 +78,7 @@ func TestThumbnailLabelStripAndSelectedBorder(t *testing.T) {
 	p := painter.NewPixelPainter(buf, W, H)
 	th := NewThumbnail(gradBuf(4, 4), 4, 4)
 	th.Label = "Win"
-	th.Selected = true
+	th.Selected().Set(true)
 	th.SetBounds(Rect{X: 0, Y: 0, W: W, H: H})
 	th.Draw(p, DefaultLight())
 	tm := DefaultLight()
@@ -101,7 +101,7 @@ func TestThumbnailHoverBorder(t *testing.T) {
 	buf := make([]byte, W*H*4)
 	p := painter.NewPixelPainter(buf, W, H)
 	th := NewThumbnail(gradBuf(2, 2), 2, 2)
-	th.Hover = true // not selected
+	th.Hover().Set(true) // not selected
 	th.SetBounds(Rect{X: 0, Y: 0, W: W, H: H})
 	th.Draw(p, DefaultLight())
 	tm := DefaultLight()

@@ -456,7 +456,7 @@ func (w *PullToRefresh) ChildOffset() (int, int) { return 0, w.PullInt() }
 // is drawn. This lets a wrapped view keep its wheel/keyboard/mouse behaviour
 // untouched while the container adds pull-to-refresh on top.
 func (w *PullToRefresh) OnEvent(ev Event) {
-	if w.Disabled {
+	if w.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

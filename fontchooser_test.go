@@ -29,7 +29,7 @@ func TestFontChooserCustomOptions(t *testing.T) {
 func TestFontChooserDrawSelectedBand(t *testing.T) {
 	defer SetFont(nil)
 	fc := NewFontChooser(nil)
-	fc.Selected = 1
+	fc.Selected().Set(1)
 	fc.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 100})
 	surf := makeSurface(120, 100)
 	fc.Draw(newP(surf, 120), DefaultLight())
@@ -51,8 +51,8 @@ func TestFontChooserClickSelectsAndAppliesFont(t *testing.T) {
 	yRow1 := FontChooserPad + fc.rowHeight(0) + FontChooserRowPad
 	fc.OnEvent(Event{Kind: EventClick, X: 10, Y: yRow1})
 
-	if fc.Selected != 1 || chosenIdx != 1 {
-		t.Fatalf("Selected=%d chosenIdx=%d, want 1", fc.Selected, chosenIdx)
+	if fc.Selected().Get() != 1 || chosenIdx != 1 {
+		t.Fatalf("Selected=%d chosenIdx=%d, want 1", fc.Selected().Get(), chosenIdx)
 	}
 	// The active font is now the chosen one → GlyphHeight doubled.
 	if GlyphHeight() != 2*baseGlyphHeight {
@@ -71,8 +71,8 @@ func TestFontChooserClickInPaddingIgnored(t *testing.T) {
 	// row is past the last → both rowAt=-1, a no-op.
 	fc.OnEvent(Event{Kind: EventClick, X: 10, Y: 0})
 	fc.OnEvent(Event{Kind: EventClick, X: 10, Y: 5000})
-	if fc.Selected != 0 {
-		t.Errorf("padding click changed Selected to %d", fc.Selected)
+	if fc.Selected().Get() != 0 {
+		t.Errorf("padding click changed Selected to %d", fc.Selected().Get())
 	}
 }
 
@@ -81,7 +81,7 @@ func TestFontChooserNonClickIgnored(t *testing.T) {
 	fc := NewFontChooser(nil)
 	fc.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 200})
 	fc.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if fc.Selected != 0 {
+	if fc.Selected().Get() != 0 {
 		t.Error("non-click event changed selection")
 	}
 }

@@ -330,7 +330,7 @@ func TestScrollbarThumbDragAndTrackPage(t *testing.T) {
 	sb.Total, sb.Viewport = 200, 100 // thumb half the 100px track (H=50)
 	sb.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
 	var got []int
-	sb.OnScroll = func(o int) { got = append(got, o) }
+	sb.Offset().Subscribe(func(o int) { got = append(got, o) })
 
 	// Grab the thumb (top half) and drag to the bottom → Offset clamps to 100.
 	sb.OnEvent(Event{Kind: EventClick, X: 4, Y: 10})
@@ -338,14 +338,14 @@ func TestScrollbarThumbDragAndTrackPage(t *testing.T) {
 		t.Fatal("press on thumb did not start a drag")
 	}
 	sb.OnEvent(Event{Kind: EventMouseDrag, X: 4, Y: 60})
-	if sb.Offset != 100 {
-		t.Fatalf("thumb drag Offset = %d, want 100", sb.Offset)
+	if sb.Offset().Get() != 100 {
+		t.Fatalf("thumb drag Offset = %d, want 100", sb.Offset().Get())
 	}
 	// A further drag past the end stays pinned (off == Offset → no extra callback).
 	n := len(got)
 	sb.OnEvent(Event{Kind: EventMouseDrag, X: 4, Y: 200})
-	if sb.Offset != 100 || len(got) != n {
-		t.Fatalf("over-drag changed state: Offset=%d callbacks=%d", sb.Offset, len(got))
+	if sb.Offset().Get() != 100 || len(got) != n {
+		t.Fatalf("over-drag changed state: Offset=%d callbacks=%d", sb.Offset().Get(), len(got))
 	}
 	sb.OnEvent(Event{Kind: EventMouseUp})
 	if sb.drag.active {
@@ -353,15 +353,15 @@ func TestScrollbarThumbDragAndTrackPage(t *testing.T) {
 	}
 
 	// Track paging: from the top, a click below the thumb pages down one viewport.
-	sb.Offset = 0
+	sb.Offset().Set(0)
 	sb.OnEvent(Event{Kind: EventClick, X: 4, Y: 70})
-	if sb.Offset != 100 { // 0 + Viewport(100), clamped to max
-		t.Fatalf("page-down Offset = %d, want 100", sb.Offset)
+	if sb.Offset().Get() != 100 { // 0 + Viewport(100), clamped to max
+		t.Fatalf("page-down Offset = %d, want 100", sb.Offset().Get())
 	}
 	// From the bottom, a click above the thumb pages up.
 	sb.OnEvent(Event{Kind: EventClick, X: 4, Y: 10})
-	if sb.Offset != 0 {
-		t.Fatalf("page-up Offset = %d, want 0", sb.Offset)
+	if sb.Offset().Get() != 0 {
+		t.Fatalf("page-up Offset = %d, want 0", sb.Offset().Get())
 	}
 }
 
@@ -370,7 +370,7 @@ func TestScrollbarDisabledZeroBoundsAndSilent(t *testing.T) {
 	d := NewScrollbar()
 	d.Total, d.Viewport = 200, 100
 	d.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
-	d.Disabled = true
+	d.Disabled().Set(true)
 	d.OnEvent(Event{Kind: EventClick, X: 4, Y: 10})
 	if d.drag.active {
 		t.Fatal("disabled scrollbar started a drag")
@@ -385,8 +385,8 @@ func TestScrollbarDisabledZeroBoundsAndSilent(t *testing.T) {
 	s.Total, s.Viewport = 200, 100
 	s.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
 	s.OnEvent(Event{Kind: EventClick, X: 4, Y: 70}) // page down
-	if s.Offset != 100 {
-		t.Fatalf("silent scrollbar Offset = %d, want 100", s.Offset)
+	if s.Offset().Get() != 100 {
+		t.Fatalf("silent scrollbar Offset = %d, want 100", s.Offset().Get())
 	}
 }
 
@@ -573,7 +573,7 @@ func TestMenuSubmenuKeyboard(t *testing.T) {
 	}
 	// A disabled menu ignores keys even with a submenu open.
 	p2.OnEvent(kd3b("ArrowRight")) // reopen (Hover still 2)
-	p2.Disabled = true
+	p2.Disabled().Set(true)
 	p2.OnEvent(kd3b("ArrowLeft"))
 	if p2.openSub != 2 {
 		t.Fatalf("disabled menu processed a key: openSub=%d", p2.openSub)
@@ -653,18 +653,18 @@ func TestScrollbarSetOffsetClamps(t *testing.T) {
 	s := NewScrollbar()
 	s.Total, s.Viewport = 200, 100 // maxOff = 100
 	s.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
-	s.Offset = 50
+	s.Offset().Set(50)
 	s.scrollBy(-999) // underflow clamps to 0
-	if s.Offset != 0 {
-		t.Fatalf("underflow Offset = %d, want 0", s.Offset)
+	if s.Offset().Get() != 0 {
+		t.Fatalf("underflow Offset = %d, want 0", s.Offset().Get())
 	}
 	s.scrollBy(999) // overflow clamps to maxOff
-	if s.Offset != 100 {
-		t.Fatalf("overflow Offset = %d, want 100", s.Offset)
+	if s.Offset().Get() != 100 {
+		t.Fatalf("overflow Offset = %d, want 100", s.Offset().Get())
 	}
 	s.scrollTo(100) // unchanged: early return, no work
-	if s.Offset != 100 {
-		t.Fatalf("no-op scrollTo changed Offset to %d", s.Offset)
+	if s.Offset().Get() != 100 {
+		t.Fatalf("no-op scrollTo changed Offset to %d", s.Offset().Get())
 	}
 
 	// Everything fits (Viewport >= Total): maxOff is negative and clamps to 0, so
@@ -672,10 +672,10 @@ func TestScrollbarSetOffsetClamps(t *testing.T) {
 	fits := NewScrollbar()
 	fits.Total, fits.Viewport = 50, 100
 	fits.SetBounds(Rect{X: 0, Y: 0, W: 8, H: 100})
-	fits.Offset = 5
+	fits.Offset().Set(5)
 	fits.scrollBy(1)
-	if fits.Offset != 0 {
-		t.Fatalf("fits-case Offset = %d, want 0", fits.Offset)
+	if fits.Offset().Get() != 0 {
+		t.Fatalf("fits-case Offset = %d, want 0", fits.Offset().Get())
 	}
 }
 

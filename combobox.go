@@ -208,7 +208,7 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 	// A disabled combobox mutes its face, border, text/placeholder, caret and
 	// chevron; only taken when Disabled so the enabled draw is byte-identical.
 	face, ink, placeholderInk := theme.Surface, theme.OnSurface, theme.SurfaceAlt
-	if c.Disabled {
+	if c.Disabled().Get() {
 		face, border, ink, placeholderInk = mutedFace(theme), mutedInk(theme), mutedInk(theme), mutedInk(theme)
 	}
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, buttonRadius, face)
@@ -256,7 +256,7 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 // field toggles Open; a click on a listed option selects it; Enter selects the
 // first filtered option.
 func (c *ComboBox) OnEvent(ev Event) {
-	if c.Disabled {
+	if c.Disabled().Get() {
 		return
 	}
 	r := c.Bounds()

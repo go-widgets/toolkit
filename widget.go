@@ -21,7 +21,10 @@
 //     hit-testing + offset adjustment).
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Rect is an axis-aligned rectangle in pixel coordinates. X/Y is the
 // top-left corner; W/H are width/height. Aliased to painter.Rect so
@@ -250,13 +253,22 @@ type Base struct {
 	// Font, when non-nil, overrides the global active font for this widget
 	// only. nil means "inherit the active font" (the default).
 	Font Font
-	// Disabled, when true, makes an interactive widget inert: its OnEvent
-	// early-returns (no click / drag / scroll / hover / key effect) and its
-	// Draw paints a muted, greyed face. The zero value (false) is the normal
-	// interactive state, so every widget is enabled by default and existing
-	// renders are unchanged. Inherited by every widget that embeds Base, so a
-	// caller disables any control with `w.Disabled = true`.
-	Disabled bool
+	// disabled is the reactive inert-state flag; see [Base.Disabled().Get()].
+	disabled *mvvm.Observable[bool]
+}
+
+// Disabled is the widget's reactive inert-state flag as a shared
+// [mvvm.Observable]: true makes an interactive widget inert (its OnEvent
+// early-returns — no click / drag / scroll / hover / key effect — and its Draw
+// paints a muted, greyed face), false is the normal interactive state. Inherited
+// by every widget that embeds Base, so a caller disables any control with
+// `w.Disabled().Set(true)`. Lazily created, defaulting to enabled (false), so
+// every widget is interactive by default.
+func (b *Base) Disabled() *mvvm.Observable[bool] {
+	if b.disabled == nil {
+		b.disabled = mvvm.NewObservable(false)
+	}
+	return b.disabled
 }
 
 func (b *Base) Bounds() Rect            { return b.rect }

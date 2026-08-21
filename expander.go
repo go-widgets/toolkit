@@ -104,7 +104,7 @@ func (e *Expander) Draw(p painter.Painter, theme *Theme) {
 // the header (same path as a header click).
 func (e *Expander) OnEvent(ev Event) {
 	if ev.Kind == EventKeyDown {
-		if e.Disabled {
+		if e.Disabled().Get() {
 			return
 		}
 		switch ev.Code {

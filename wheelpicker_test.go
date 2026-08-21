@@ -363,7 +363,7 @@ func TestWheelPickerDisabledIgnoresTouch(t *testing.T) {
 	resetMetrics(t)
 	w := NewWheelPicker(months())
 	w.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 140})
-	w.Disabled = true
+	w.Disabled().Set(true)
 	w.TouchDown(Event{Kind: EventTouchStart, X: 10, Y: 50})
 	if w.dragging {
 		t.Fatalf("disabled wheel armed a drag")
@@ -485,7 +485,7 @@ func TestWheelPickerUnknownKeyIgnored(t *testing.T) {
 func TestWheelPickerDisabledIgnoresOnEvent(t *testing.T) {
 	resetMetrics(t)
 	w := NewWheelPicker(months())
-	w.Disabled = true
+	w.Disabled().Set(true)
 	w.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
 	w.OnEvent(Event{Kind: EventScroll, X: 5, Y: 5, Delta: 3})
 	if w.SelectedIndex(0) != 0 {
@@ -786,7 +786,7 @@ func TestWheelPickerDrawVariants(t *testing.T) {
 	w.Draw(p, th)
 
 	// Disabled face.
-	w.Disabled = true
+	w.Disabled().Set(true)
 	w.Draw(p, th)
 
 	// Empty wheel: draws only its frame, no columns, no separators.

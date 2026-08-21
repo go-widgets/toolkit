@@ -342,12 +342,12 @@ func TestScrollViewVerticalScrollbarDrag(t *testing.T) {
 		t.Fatal("pressing the vertical thumb should begin a drag")
 	}
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 34, Y: 10})
-	if !(sv.OffsetY > 0 && sv.OffsetY < clamp) {
-		t.Fatalf("mid drag OffsetY = %d, want strictly between 0 and %d", sv.OffsetY, clamp)
+	if !(sv.OffsetY().Get() > 0 && sv.OffsetY().Get() < clamp) {
+		t.Fatalf("mid drag OffsetY = %d, want strictly between 0 and %d", sv.OffsetY().Get(), clamp)
 	}
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 34, Y: 40})
-	if sv.OffsetY != clamp {
-		t.Fatalf("drag past the end OffsetY = %d, want %d (clamped)", sv.OffsetY, clamp)
+	if sv.OffsetY().Get() != clamp {
+		t.Fatalf("drag past the end OffsetY = %d, want %d (clamped)", sv.OffsetY().Get(), clamp)
 	}
 	sv.OnEvent(Event{Kind: EventMouseUp})
 	if sv.sbV.active {
@@ -355,10 +355,10 @@ func TestScrollViewVerticalScrollbarDrag(t *testing.T) {
 	}
 
 	// Track press below the thumb pages down one viewport.
-	sv.OffsetY = 0
+	sv.OffsetY().Set(0)
 	sv.OnEvent(Event{Kind: EventClick, X: 34, Y: 20})
-	if sv.OffsetY != viewport {
-		t.Fatalf("vertical page-down OffsetY = %d, want %d", sv.OffsetY, viewport)
+	if sv.OffsetY().Get() != viewport {
+		t.Fatalf("vertical page-down OffsetY = %d, want %d", sv.OffsetY().Get(), viewport)
 	}
 }
 
@@ -372,8 +372,8 @@ func TestScrollViewHorizontalScrollbarDrag(t *testing.T) {
 		t.Fatal("pressing the horizontal thumb should begin a drag")
 	}
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 34})
-	if sv.OffsetX != clamp {
-		t.Fatalf("drag past the end OffsetX = %d, want %d (clamped)", sv.OffsetX, clamp)
+	if sv.OffsetX().Get() != clamp {
+		t.Fatalf("drag past the end OffsetX = %d, want %d (clamped)", sv.OffsetX().Get(), clamp)
 	}
 	sv.OnEvent(Event{Kind: EventMouseUp})
 	if sv.sbH.active {
@@ -381,10 +381,10 @@ func TestScrollViewHorizontalScrollbarDrag(t *testing.T) {
 	}
 
 	// Track press right of the thumb pages right one viewport.
-	sv.OffsetX = 0
+	sv.OffsetX().Set(0)
 	sv.OnEvent(Event{Kind: EventClick, X: 20, Y: 34})
-	if sv.OffsetX != viewport {
-		t.Fatalf("horizontal page-right OffsetX = %d, want %d", sv.OffsetX, viewport)
+	if sv.OffsetX().Get() != viewport {
+		t.Fatalf("horizontal page-right OffsetX = %d, want %d", sv.OffsetX().Get(), viewport)
 	}
 }
 
@@ -393,20 +393,20 @@ func TestScrollViewScrollbarPassiveAndInertCases(t *testing.T) {
 	// A press in the content area (on neither bar) is a no-op: ScrollView stays
 	// passive for content clicks.
 	sv.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
-	if sv.sbV.active || sv.sbH.active || sv.OffsetX != 0 || sv.OffsetY != 0 {
+	if sv.sbV.active || sv.sbH.active || sv.OffsetX().Get() != 0 || sv.OffsetY().Get() != 0 {
 		t.Fatalf("content press must not scroll or grab: %+v", sv)
 	}
 	// A drag with no active grab is a no-op.
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 34, Y: 20})
-	if sv.OffsetY != 0 {
-		t.Fatalf("drag without a grab must not scroll, OffsetY=%d", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("drag without a grab must not scroll, OffsetY=%d", sv.OffsetY().Get())
 	}
 	// A grab that goes stale (content shrinks to fit) drags to nothing.
 	sv.OnEvent(Event{Kind: EventClick, X: 34, Y: 3}) // grab vertical thumb
 	sv.SetContentSize(10, 10)                        // now everything fits
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 34, Y: 30})
-	if sv.OffsetY != 0 {
-		t.Fatalf("dragging a stale grab must not scroll, OffsetY=%d", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("dragging a stale grab must not scroll, OffsetY=%d", sv.OffsetY().Get())
 	}
 	sv.OnEvent(Event{Kind: EventMouseUp})
 }

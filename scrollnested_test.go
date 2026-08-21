@@ -36,8 +36,8 @@ func TestNestedScrollViewPans(t *testing.T) {
 	midY := b.Y + b.H/2
 	box.OnEvent(Event{Kind: EventClick, X: 100, Y: midY})
 	box.OnEvent(Event{Kind: EventMouseDrag, X: 100, Y: midY - 40})
-	if sv.OffsetY != 40 {
-		t.Fatalf("OffsetY=%d after a 40 px drag, want 40 — a nested view must pan too", sv.OffsetY)
+	if sv.OffsetY().Get() != 40 {
+		t.Fatalf("OffsetY=%d after a 40 px drag, want 40 — a nested view must pan too", sv.OffsetY().Get())
 	}
 	// And it still coasts after the release.
 	sv.Tick(1.0 / 60)
@@ -53,7 +53,7 @@ func TestNestedScrollViewIgnoresAPressOutsideIt(t *testing.T) {
 	box, sv := nestedScrollView(t)
 	box.OnEvent(Event{Kind: EventClick, X: 100, Y: 10}) // in the label above
 	box.OnEvent(Event{Kind: EventMouseDrag, X: 100, Y: 0})
-	if sv.OffsetY != 0 {
-		t.Fatalf("OffsetY=%d: a press outside the scroll view must not pan it", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("OffsetY=%d: a press outside the scroll view must not pan it", sv.OffsetY().Get())
 	}
 }

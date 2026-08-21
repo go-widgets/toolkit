@@ -171,7 +171,9 @@ func TestContentWidgetsDescribeThemselves(t *testing.T) {
 		t.Fatalf("PagingToolbar Value = %q", got)
 	}
 	// A LoadMask says it is busy only while it actually is.
-	if got := (&LoadMask{Active: true}).A11y().Value; got != "busy" {
+	busyMask := &LoadMask{}
+	busyMask.Active().Set(true)
+	if got := busyMask.A11y().Value; got != "busy" {
 		t.Fatalf("active LoadMask Value = %q, want busy", got)
 	}
 	if got := (&LoadMask{}).A11y().Value; got != "" {

@@ -151,7 +151,7 @@ func TestSourceListSetSelectedValidation(t *testing.T) {
 func TestSourceListDisabledIsInert(t *testing.T) {
 	sl := sampleSourceList()
 	sl.SetBounds(Rect{X: 0, Y: 0, W: 180, H: 400})
-	sl.Disabled = true
+	sl.Disabled().Set(true)
 	sl.OnEvent(Event{Kind: EventClick, Y: 40})
 	if s, r := sl.Selected(); s != -1 || r != -1 {
 		t.Fatalf("disabled list selected (%d,%d), want (-1,-1)", s, r)

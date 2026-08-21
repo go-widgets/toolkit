@@ -27,8 +27,8 @@ func TestMomentumScrollerFlingDrivesViewOffset(t *testing.T) {
 	sc.TouchDown(Event{X: 40, Y: 60})
 	sc.TouchMove(Event{X: 40, Y: 40}, 1) // finger up 20 -> offset +20, v sample 20
 	sc.TouchMove(Event{X: 40, Y: 20}, 1) // finger up 20 more -> offset 40, v 20
-	if sv.OffsetY != 40 {
-		t.Fatalf("after drag: OffsetY=%d, want 40", sv.OffsetY)
+	if sv.OffsetY().Get() != 40 {
+		t.Fatalf("after drag: OffsetY=%d, want 40", sv.OffsetY().Get())
 	}
 	sc.TouchUp() // fling AxisY at +20 px/s
 
@@ -47,11 +47,11 @@ func TestMomentumScrollerFlingDrivesViewOffset(t *testing.T) {
 	if sc.Settling() {
 		t.Fatalf("Settling() true after settle")
 	}
-	if sv.OffsetY != 59 {
-		t.Fatalf("flung OffsetY=%d, want 59 (drag 40 + coast ~19)", sv.OffsetY)
+	if sv.OffsetY().Get() != 59 {
+		t.Fatalf("flung OffsetY=%d, want 59 (drag 40 + coast ~19)", sv.OffsetY().Get())
 	}
-	if sv.OffsetX != 0 {
-		t.Fatalf("OffsetX=%d, want 0 (no horizontal flick)", sv.OffsetX)
+	if sv.OffsetX().Get() != 0 {
+		t.Fatalf("OffsetX=%d, want 0 (no horizontal flick)", sv.OffsetX().Get())
 	}
 }
 
@@ -61,8 +61,8 @@ func TestMomentumScrollerMoveBeforeDownIsNoOp(t *testing.T) {
 	sv := newMomentumScrollView()
 	sc := NewMomentumScroller(sv)
 	sc.TouchMove(Event{X: 10, Y: 10}, 1)
-	if sv.OffsetX != 0 || sv.OffsetY != 0 {
-		t.Fatalf("move before down scrolled: (%d,%d)", sv.OffsetX, sv.OffsetY)
+	if sv.OffsetX().Get() != 0 || sv.OffsetY().Get() != 0 {
+		t.Fatalf("move before down scrolled: (%d,%d)", sv.OffsetX().Get(), sv.OffsetY().Get())
 	}
 	if sc.Settling() {
 		t.Fatalf("Settling() true with no interaction")
@@ -106,9 +106,9 @@ func TestMomentumScrollerLeavesDefaultPathUnchanged(t *testing.T) {
 		plain.OnEvent(ev)
 		wrapped.OnEvent(ev)
 	}
-	if plain.OffsetX != wrapped.OffsetX || plain.OffsetY != wrapped.OffsetY {
+	if plain.OffsetX().Get() != wrapped.OffsetX().Get() || plain.OffsetY().Get() != wrapped.OffsetY().Get() {
 		t.Fatalf("wrapping changed default behaviour: plain=(%d,%d) wrapped=(%d,%d)",
-			plain.OffsetX, plain.OffsetY, wrapped.OffsetX, wrapped.OffsetY)
+			plain.OffsetX().Get(), plain.OffsetY().Get(), wrapped.OffsetX().Get(), wrapped.OffsetY().Get())
 	}
 }
 
@@ -121,7 +121,7 @@ func TestMomentumScrollerReleaseOverscrolledSpringsHome(t *testing.T) {
 	sc.TouchDown(Event{X: 40, Y: 40})
 	// Drag the content DOWN hard (finger moving down) -> offset below 0, rubber.
 	sc.TouchMove(Event{X: 40, Y: 240}, 1)
-	if sv.OffsetY >= 0 {
+	if sv.OffsetY().Get() >= 0 {
 		// Overscrolled at the top: engine offset is negative; rounded view
 		// offset should be <= 0. (Exactly 0 only if resistance rounded there.)
 		if sc.AxisY.Offset() >= 0 {
@@ -139,7 +139,7 @@ func TestMomentumScrollerReleaseOverscrolledSpringsHome(t *testing.T) {
 	if !settled {
 		t.Fatalf("spring never settled")
 	}
-	if sv.OffsetY != 0 {
-		t.Fatalf("sprung OffsetY=%d, want exactly 0 (home)", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("sprung OffsetY=%d, want exactly 0 (home)", sv.OffsetY().Get())
 	}
 }

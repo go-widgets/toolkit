@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // AreaChart plots one or more series of Y values as polylines whose region down
 // to the baseline is filled with a semi-transparent tint of the series colour --
@@ -23,10 +26,10 @@ type AreaChart struct {
 	Min, Max float64 // shared Y bounds; when equal, taken from the data
 	Colors   []RGBA  // optional per-series palette override; cycles by index
 
-	// Hover + HoverIndex drive a hover crosshair on the first series, like
-	// LineChart. Zero value (Hover == false) draws none.
-	Hover      bool
-	HoverIndex int
+	// hover + hoverIndex drive a hover crosshair on the first series, like
+	// LineChart; see [AreaChart.Hover] / [AreaChart.HoverIndex].
+	hover      *mvvm.Observable[bool]
+	hoverIndex *mvvm.Observable[int]
 }
 
 // AreaFillAlpha is the opacity (0..255) of the shaded band under each series,
@@ -35,6 +38,24 @@ const AreaFillAlpha = 90
 
 // NewAreaChart builds an AreaChart over the given series with auto Y bounds.
 func NewAreaChart(series [][]float64) *AreaChart { return &AreaChart{Series: series} }
+
+// Hover is the reactive hover-crosshair toggle as a shared [mvvm.Observable];
+// false draws no crosshair. Lazily created, defaulting to off.
+func (c *AreaChart) Hover() *mvvm.Observable[bool] {
+	if c.hover == nil {
+		c.hover = mvvm.NewObservable(false)
+	}
+	return c.hover
+}
+
+// HoverIndex is the reactive hovered sample index on the first series as a shared
+// [mvvm.Observable]. Lazily created, defaulting to 0.
+func (c *AreaChart) HoverIndex() *mvvm.Observable[int] {
+	if c.hoverIndex == nil {
+		c.hoverIndex = mvvm.NewObservable(0)
+	}
+	return c.hoverIndex
+}
 
 // yRange returns the effective (min, max) Y range: the explicit Min/Max when
 // they differ, else the combined data range across every series (falling back to
@@ -170,11 +191,11 @@ func (c *AreaChart) Draw(p painter.Painter, theme *Theme) {
 // a marker where it meets that band's polyline, when Hover is set and the index
 // is in range. The marker is clamped inside Bounds.
 func (c *AreaChart) drawHover(p painter.Painter, theme *Theme, mn, mx float64) {
-	if !c.Hover || len(c.Series) == 0 || c.HoverIndex < 0 || c.HoverIndex >= len(c.Series[0]) {
+	if !c.Hover().Get() || len(c.Series) == 0 || c.HoverIndex().Get() < 0 || c.HoverIndex().Get() >= len(c.Series[0]) {
 		return
 	}
 	r, pl := c.Bounds(), c.plot()
-	hx, hy := c.pointAt(c.Series[0], c.HoverIndex, mn, mx)
+	hx, hy := c.pointAt(c.Series[0], c.HoverIndex().Get(), mn, mx)
 	drawLine(p, hx, r.Y, hx, pl.Y+pl.H-1, dimInk(theme))
 	fillRect(p, clampInt(hx-2, r.X, r.X+r.W-4), clampInt(hy-2, r.Y, r.Y+r.H-4), 4, 4, theme.OnSurface)
 }

@@ -29,8 +29,8 @@ func TestStackAddPageAutoVisible(t *testing.T) {
 	s := NewStack()
 	w1 := &recordingWidget{}
 	s.AddPage("main", w1)
-	if s.Visible != "main" {
-		t.Fatalf("Visible after first AddPage = %q, want main", s.Visible)
+	if s.Visible().Get() != "main" {
+		t.Fatalf("Visible after first AddPage = %q, want main", s.Visible().Get())
 	}
 }
 
@@ -38,8 +38,8 @@ func TestStackAddSecondPageKeepsFirstVisible(t *testing.T) {
 	s := NewStack()
 	s.AddPage("a", &recordingWidget{})
 	s.AddPage("b", &recordingWidget{})
-	if s.Visible != "a" {
-		t.Fatalf("Visible after 2nd AddPage = %q, want a", s.Visible)
+	if s.Visible().Get() != "a" {
+		t.Fatalf("Visible after 2nd AddPage = %q, want a", s.Visible().Get())
 	}
 }
 
@@ -48,12 +48,12 @@ func TestStackSetVisibleKnownAndUnknown(t *testing.T) {
 	s.AddPage("a", &recordingWidget{})
 	s.AddPage("b", &recordingWidget{})
 	s.SetVisible("b")
-	if s.Visible != "b" {
-		t.Fatalf("after SetVisible(b): Visible = %q", s.Visible)
+	if s.Visible().Get() != "b" {
+		t.Fatalf("after SetVisible(b): Visible = %q", s.Visible().Get())
 	}
 	s.SetVisible("ghost") // unknown — must NOT change Visible
-	if s.Visible != "b" {
-		t.Fatalf("after SetVisible(ghost): Visible changed to %q", s.Visible)
+	if s.Visible().Get() != "b" {
+		t.Fatalf("after SetVisible(ghost): Visible changed to %q", s.Visible().Get())
 	}
 }
 
@@ -271,8 +271,8 @@ func TestPanedHorizontalLayout(t *testing.T) {
 	p := NewHPaned(a, b)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
 	// Default Position = 100 (centre).
-	if p.Position != 100 {
-		t.Fatalf("default position = %d, want 100", p.Position)
+	if p.Position().Get() != 100 {
+		t.Fatalf("default position = %d, want 100", p.Position().Get())
 	}
 	ab := a.Bounds()
 	bb := b.Bounds()
@@ -286,8 +286,8 @@ func TestPanedVerticalLayout(t *testing.T) {
 	b := &recordingWidget{}
 	p := NewVPaned(a, b)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
-	if p.Position != 40 {
-		t.Fatalf("default position = %d, want 40", p.Position)
+	if p.Position().Get() != 40 {
+		t.Fatalf("default position = %d, want 40", p.Position().Get())
 	}
 	bb := b.Bounds()
 	if bb.Y != 46 || bb.H != 34 {
@@ -299,12 +299,12 @@ func TestPanedMoveHandleClamps(t *testing.T) {
 	p := NewHPaned(&recordingWidget{}, &recordingWidget{})
 	p.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
 	p.MoveHandle(5)
-	if p.Position != 10 {
-		t.Fatalf("clamp low: Position = %d, want 10", p.Position)
+	if p.Position().Get() != 10 {
+		t.Fatalf("clamp low: Position = %d, want 10", p.Position().Get())
 	}
 	p.MoveHandle(500)
-	if p.Position != 190 {
-		t.Fatalf("clamp high: Position = %d, want 190", p.Position)
+	if p.Position().Get() != 190 {
+		t.Fatalf("clamp high: Position = %d, want 190", p.Position().Get())
 	}
 }
 
@@ -312,8 +312,8 @@ func TestPanedMoveHandleVerticalClamps(t *testing.T) {
 	p := NewVPaned(&recordingWidget{}, &recordingWidget{})
 	p.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
 	p.MoveHandle(500)
-	if p.Position != 70 {
-		t.Fatalf("vertical high clamp = %d, want 70", p.Position)
+	if p.Position().Get() != 70 {
+		t.Fatalf("vertical high clamp = %d, want 70", p.Position().Get())
 	}
 }
 
@@ -473,7 +473,8 @@ func TestPanedNilFirstSecondLayoutNoOp(t *testing.T) {
 
 func TestPanedNilFirstEventRoutingNoCrash(t *testing.T) {
 	b := &recordingWidget{}
-	p := &Paned{First: nil, Second: b, Orientation: PanedHorizontal, Position: 50}
+	p := &Paned{First: nil, Second: b, Orientation: PanedHorizontal}
+	p.Position().Set(50)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
 	p.OnEvent(Event{Kind: EventClick, X: 20, Y: 10})  // left -> nil first
 	p.OnEvent(Event{Kind: EventClick, X: 180, Y: 10}) // right -> Second
@@ -484,7 +485,8 @@ func TestPanedNilFirstEventRoutingNoCrash(t *testing.T) {
 
 func TestPanedNilSecondVerticalNoCrash(t *testing.T) {
 	a := &recordingWidget{}
-	p := &Paned{First: a, Second: nil, Orientation: PanedVertical, Position: 30}
+	p := &Paned{First: a, Second: nil, Orientation: PanedVertical}
+	p.Position().Set(30)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
 	p.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
 	p.OnEvent(Event{Kind: EventClick, X: 5, Y: 70}) // would go to nil second

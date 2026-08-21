@@ -69,7 +69,7 @@ func (c *CheckButton) Draw(p painter.Painter, theme *Theme) {
 	// A disabled checkbox mutes the box, border, checkmark and label so it
 	// reads as inert. Only taken when Disabled — the enabled draw is unchanged.
 	border, tick, labelInk := theme.Border, theme.Background, theme.OnBackground
-	if c.Disabled {
+	if c.Disabled().Get() {
 		fill, border, tick, labelInk = mutedFace(theme), mutedInk(theme), mutedInk(theme), mutedInk(theme)
 	}
 	fillRect(p, r.X, boxY, box, box, fill)
@@ -116,7 +116,7 @@ func drawCheckmark(p painter.Painter, x, y, b int, ink RGBA) {
 // OnEvent flips the Checked Observable on click. A Disabled checkbox ignores
 // every kind.
 func (c *CheckButton) OnEvent(ev Event) {
-	if c.Disabled {
+	if c.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

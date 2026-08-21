@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // ScrollView is a viewport over a child widget whose content may be
 // larger than the visible area. The child's own Bounds is logical
@@ -18,7 +21,7 @@ import "github.com/go-widgets/painter"
 type ScrollView struct {
 	Base
 	Child            Widget
-	OffsetX, OffsetY int
+	offsetX, offsetY *mvvm.Observable[int] // scroll offsets, reactive via OffsetX()/OffsetY()
 	contentW         int
 	contentH         int
 
@@ -41,6 +44,21 @@ type ScrollView struct {
 	// driver, when set, is whatever owns this view's touch scrolling; the
 	// view then does not pan or fling on its own. See SetScrollDriver.
 	driver any
+}
+
+// OffsetX/OffsetY are the scroll offsets as shared [mvvm.Observable]s; the wheel
+// and clamping Set them. Lazily created.
+func (s *ScrollView) OffsetX() *mvvm.Observable[int] {
+	if s.offsetX == nil {
+		s.offsetX = mvvm.NewObservable(0)
+	}
+	return s.offsetX
+}
+func (s *ScrollView) OffsetY() *mvvm.Observable[int] {
+	if s.offsetY == nil {
+		s.offsetY = mvvm.NewObservable(0)
+	}
+	return s.offsetY
 }
 
 // contentPan is a drag of the scrolled content — the gesture that scrolls a
@@ -155,8 +173,8 @@ func (s *ScrollView) SetContentSize(w, h int) {
 // [0, contentSize - viewportSize] so the thumb never falls off the
 // track. Negative offsets are clamped to 0.
 func (s *ScrollView) Scroll(dx, dy int) {
-	s.OffsetX += dx
-	s.OffsetY += dy
+	s.OffsetX().Set(s.OffsetX().Get() + dx)
+	s.OffsetY().Set(s.OffsetY().Get() + dy)
 	vp := s.viewport()
 	maxX := s.contentW - vp.W
 	if maxX < 0 {
@@ -166,17 +184,17 @@ func (s *ScrollView) Scroll(dx, dy int) {
 	if maxY < 0 {
 		maxY = 0
 	}
-	if s.OffsetX < 0 {
-		s.OffsetX = 0
+	if s.OffsetX().Get() < 0 {
+		s.OffsetX().Set(0)
 	}
-	if s.OffsetX > maxX {
-		s.OffsetX = maxX
+	if s.OffsetX().Get() > maxX {
+		s.OffsetX().Set(maxX)
 	}
-	if s.OffsetY < 0 {
-		s.OffsetY = 0
+	if s.OffsetY().Get() < 0 {
+		s.OffsetY().Set(0)
 	}
-	if s.OffsetY > maxY {
-		s.OffsetY = maxY
+	if s.OffsetY().Get() > maxY {
+		s.OffsetY().Set(maxY)
 	}
 }
 
@@ -200,7 +218,7 @@ func (s *ScrollView) vscrollGeom() (sbGeom, bool) {
 		crossW:     scrollbarTrack(),
 		trackStart: 0,
 		trackLen:   vp.H,
-		thumbStart: s.OffsetY * (vp.H - thumbH) / maxOff,
+		thumbStart: s.OffsetY().Get() * (vp.H - thumbH) / maxOff,
 		thumbLen:   thumbH,
 		travelNum:  vp.H - thumbH,
 		travelDen:  maxOff,
@@ -228,7 +246,7 @@ func (s *ScrollView) hscrollGeom() (sbGeom, bool) {
 		crossW:     scrollbarTrack(),
 		trackStart: 0,
 		trackLen:   vp.W,
-		thumbStart: s.OffsetX * (vp.W - thumbW) / maxOff,
+		thumbStart: s.OffsetX().Get() * (vp.W - thumbW) / maxOff,
 		thumbLen:   thumbW,
 		travelNum:  vp.W - thumbW,
 		travelDen:  maxOff,
@@ -275,9 +293,9 @@ func (s *ScrollView) OnEvent(ev Event) {
 		}
 	case EventMouseDrag:
 		gv, okv := s.vscrollGeom()
-		s.sbV.drag(gv, okv, ev, func(target int) { s.Scroll(0, target-s.OffsetY) })
+		s.sbV.drag(gv, okv, ev, func(target int) { s.Scroll(0, target-s.OffsetY().Get()) })
 		gh, okh := s.hscrollGeom()
-		s.sbH.drag(gh, okh, ev, func(target int) { s.Scroll(target-s.OffsetX, 0) })
+		s.sbH.drag(gh, okh, ev, func(target int) { s.Scroll(target-s.OffsetX().Get(), 0) })
 		// A grabbed thumb owns the drag; the content only pans when neither
 		// scrollbar is being dragged, so one gesture never moves the view
 		// twice.
@@ -340,7 +358,7 @@ func (s *ScrollView) Draw(p painter.Painter, theme *Theme) {
 		// The rubber band rides ON TOP of the offset, and only here: it moves
 		// the painted content without moving the scroll position anything else
 		// reads. At rest it is zero and this is the offset alone.
-		px, py := s.OffsetX+s.overscrollX, s.OffsetY+s.overscrollY
+		px, py := s.OffsetX().Get()+s.overscrollX, s.OffsetY().Get()+s.overscrollY
 		tr, canTranslate := p.(painter.Translator)
 		if canTranslate {
 			s.Child.SetBounds(Rect{X: r.X, Y: r.Y, W: cb.W, H: cb.H})
@@ -418,8 +436,8 @@ func (s *ScrollView) syncEngines() {
 	x, y := s.axis(&s.momX), s.axis(&s.momY)
 	x.SetBounds(0, float64(s.maxOffsetX()))
 	y.SetBounds(0, float64(s.maxOffsetY()))
-	x.SetOffset(float64(s.OffsetX))
-	y.SetOffset(float64(s.OffsetY))
+	x.SetOffset(float64(s.OffsetX().Get()))
+	y.SetOffset(float64(s.OffsetY().Get()))
 }
 
 // beginTouchScroll arms both engines for a content drag.
@@ -452,8 +470,12 @@ func (s *ScrollView) endTouchScroll() {
 // pushEngines writes the engines' positions back to the view, splitting each
 // into the clamped offset and the overscroll beyond it.
 func (s *ScrollView) pushEngines() {
-	s.OffsetX, s.overscrollX = splitOverscroll(s.axis(&s.momX).OffsetInt(), s.maxOffsetX())
-	s.OffsetY, s.overscrollY = splitOverscroll(s.axis(&s.momY).OffsetInt(), s.maxOffsetY())
+	ox, overX := splitOverscroll(s.axis(&s.momX).OffsetInt(), s.maxOffsetX())
+	s.OffsetX().Set(ox)
+	s.overscrollX = overX
+	oy, overY := splitOverscroll(s.axis(&s.momY).OffsetInt(), s.maxOffsetY())
+	s.OffsetY().Set(oy)
+	s.overscrollY = overY
 }
 
 // splitOverscroll divides an engine position into the part a scroll offset may

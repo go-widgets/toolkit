@@ -61,7 +61,7 @@ func (c *CycleButton) Value() string {
 func (c *CycleButton) Draw(p painter.Painter, theme *Theme) {
 	r := c.Bounds()
 	face, ink, border := theme.Surface, theme.OnSurface, theme.Border
-	if c.Disabled {
+	if c.Disabled().Get() {
 		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
 	// buttonRadius routes through scaled so the corner grows with HiDPI and touch
@@ -80,7 +80,7 @@ func (c *CycleButton) Draw(p painter.Painter, theme *Theme) {
 // OnEvent advances to the next option on a click (wrapping), Setting the Index
 // Observable. A Disabled cycle button ignores every kind.
 func (c *CycleButton) OnEvent(ev Event) {
-	if c.Disabled {
+	if c.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

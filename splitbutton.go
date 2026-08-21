@@ -75,7 +75,7 @@ func (s *SplitButton) Draw(p painter.Painter, theme *Theme) {
 	if s.hovered {
 		face = brighter(theme.Accent)
 	}
-	if s.Disabled {
+	if s.Disabled().Get() {
 		face, ink = mutedFace(theme), mutedInk(theme)
 	}
 	// Main slot fill.
@@ -104,7 +104,7 @@ func (s *SplitButton) Draw(p painter.Painter, theme *Theme) {
 // the right SplitButtonArrowW pixels fires OnArrow, otherwise OnClick.
 // Both callbacks are nil-safe. Non-click event kinds are ignored.
 func (s *SplitButton) OnEvent(ev Event) {
-	if s.Disabled {
+	if s.Disabled().Get() {
 		return
 	}
 	if ev.Kind == EventMouseMove {

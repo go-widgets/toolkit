@@ -252,7 +252,7 @@ func (m *CodeMinimap) Draw(p painter.Painter, theme *Theme) {
 // (Bounds().Y + ev.Y) for LineAt. Every other event kind is ignored, and a
 // disabled minimap consumes nothing.
 func (m *CodeMinimap) OnEvent(ev Event) {
-	if m.Disabled {
+	if m.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

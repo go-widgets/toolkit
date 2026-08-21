@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // Notification is a transient toast — an auto-dismissing banner that
 // slides in over the app's normal frame, holds for a few ticks, then
@@ -21,8 +24,10 @@ import "github.com/go-widgets/painter"
 // call Show(text) to re-arm it with a fresh Life budget.
 type Notification struct {
 	Base
-	Text    string
-	Visible bool
+	Text string
+
+	// visible is the reactive show/hide state; see [Notification.Visible].
+	visible *mvvm.Observable[bool]
 
 	// Life is the number of Tick() calls remaining before the
 	// notification auto-hides. NotificationLife (~180 ≈ 3 s at 60 Hz)
@@ -52,6 +57,15 @@ func NewNotification(text string) *Notification {
 	return &Notification{Text: text, Life: NotificationLife}
 }
 
+// Visible is the notification's reactive show/hide state as a shared
+// [mvvm.Observable]; Show/Hide Set it. Lazily created, defaulting to hidden.
+func (n *Notification) Visible() *mvvm.Observable[bool] {
+	if n.visible == nil {
+		n.visible = mvvm.NewObservable(false)
+	}
+	return n.visible
+}
+
 // Show makes the notification visible + resets Life to
 // NotificationLife. Bounds are auto-sized to the text width + the
 // standard padding; the host is responsible for positioning
@@ -59,7 +73,7 @@ func NewNotification(text string) *Notification {
 // match the current Text.
 func (n *Notification) Show(text string) {
 	n.Text = text
-	n.Visible = true
+	n.Visible().Set(true)
 	n.Life = NotificationLife
 	r := n.Bounds()
 	r.W = n.textWidth(text) + 2*NotificationPadX
@@ -79,7 +93,7 @@ func (n *Notification) AnchorIn(host Rect, corner Corner) {
 
 // Hide dismisses the notification immediately (independent of Life).
 func (n *Notification) Hide() {
-	n.Visible = false
+	n.Visible().Set(false)
 	n.Life = 0
 }
 
@@ -89,7 +103,7 @@ func (n *Notification) Hide() {
 // Callers wanting a paused notification (freeze on user hover) just
 // skip the Tick during the pause.
 func (n *Notification) Tick() {
-	if !n.Visible {
+	if !n.Visible().Get() {
 		return
 	}
 	n.Life--
@@ -102,7 +116,7 @@ func (n *Notification) Tick() {
 // 1-px Border stroke, Text in the Background ink (inverted for
 // contrast). Nothing drawn when hidden.
 func (n *Notification) Draw(p painter.Painter, theme *Theme) {
-	if !n.Visible {
+	if !n.Visible().Get() {
 		return
 	}
 	r := n.Bounds()

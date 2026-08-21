@@ -230,7 +230,7 @@ func TestPagedViewKeyNavContinuous(t *testing.T) {
 	if pv.cur() != 2 {
 		t.Fatalf("continuous PageDown → %d, want 2", pv.cur())
 	}
-	if pv.scroll.OffsetY <= 0 {
+	if pv.scroll.OffsetY().Get() <= 0 {
 		t.Fatal("continuous nav did not scroll the card into view")
 	}
 }
@@ -395,17 +395,17 @@ func TestPagedViewWheelScrollWithinThenFlip(t *testing.T) {
 	if pv.cur() != 1 {
 		t.Fatalf("scroll-within advanced the page to %d", pv.cur())
 	}
-	if pv.scroll.OffsetY <= 0 {
+	if pv.scroll.OffsetY().Get() <= 0 {
 		t.Fatal("scroll-within did not move the offset")
 	}
 	// Pin to the bottom, then a downward notch flips to the next page (top).
-	pv.scroll.OffsetY = pv.scroll.maxOffsetY()
+	pv.scroll.OffsetY().Set(pv.scroll.maxOffsetY())
 	pv.OnEvent(Event{Kind: EventScroll, Delta: 1})
 	if pv.cur() != 2 {
 		t.Fatalf("edge flip → %d, want 2", pv.cur())
 	}
-	if pv.scroll.OffsetY != 0 {
-		t.Fatalf("next page did not land at top (offset %d)", pv.scroll.OffsetY)
+	if pv.scroll.OffsetY().Get() != 0 {
+		t.Fatalf("next page did not land at top (offset %d)", pv.scroll.OffsetY().Get())
 	}
 }
 
@@ -415,13 +415,13 @@ func TestPagedViewWheelUpNotAtTopScrolls(t *testing.T) {
 	pv := NewPagedView([]*image.RGBA{solidPage(60, 800, pgRed), solidPage(60, 800, pgGreen)})
 	pv.Mode().Set(PagedPaginated)
 	pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 150})
-	pv.scroll.OffsetY = pv.scroll.maxOffsetY() // away from the top
-	start := pv.scroll.OffsetY
+	pv.scroll.OffsetY().Set(pv.scroll.maxOffsetY()) // away from the top
+	start := pv.scroll.OffsetY().Get()
 	pv.OnEvent(Event{Kind: EventScroll, Delta: -1})
 	if pv.cur() != 1 {
 		t.Fatalf("up-scroll flipped page to %d", pv.cur())
 	}
-	if pv.scroll.OffsetY >= start {
+	if pv.scroll.OffsetY().Get() >= start {
 		t.Fatal("up-scroll did not move within the page")
 	}
 }
@@ -433,14 +433,14 @@ func TestPagedViewWheelUpEdgeFlipToBottom(t *testing.T) {
 	pv.Mode().Set(PagedPaginated)
 	pv.CurrentPage().Set(2)
 	pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 150})
-	pv.scroll.OffsetY = 0 // at the top of page 2
+	pv.scroll.OffsetY().Set(0) // at the top of page 2
 	pv.OnEvent(Event{Kind: EventScroll, Delta: -1})
 	if pv.cur() != 1 {
 		t.Fatalf("up-flip → %d, want 1", pv.cur())
 	}
-	if pv.scroll.OffsetY != pv.scroll.maxOffsetY() {
+	if pv.scroll.OffsetY().Get() != pv.scroll.maxOffsetY() {
 		t.Fatalf("prev page did not land at bottom (offset %d, max %d)",
-			pv.scroll.OffsetY, pv.scroll.maxOffsetY())
+			pv.scroll.OffsetY().Get(), pv.scroll.maxOffsetY())
 	}
 }
 
@@ -449,7 +449,7 @@ func TestPagedViewContinuousWheelScrolls(t *testing.T) {
 	pv := NewPagedView([]*image.RGBA{solidPage(60, 400, pgRed), solidPage(60, 400, pgGreen)})
 	pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 150})
 	pv.OnEvent(Event{Kind: EventScroll, Delta: 3})
-	if pv.scroll.OffsetY <= 0 {
+	if pv.scroll.OffsetY().Get() <= 0 {
 		t.Fatal("continuous wheel did not scroll the stack")
 	}
 	if pv.cur() != 1 {
@@ -474,7 +474,7 @@ func TestPagedViewDisabledIgnoresEvents(t *testing.T) {
 	pv := NewPagedView([]*image.RGBA{solidPage(40, 40, pgRed), solidPage(40, 40, pgGreen)})
 	pv.Mode().Set(PagedPaginated)
 	pv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 300})
-	pv.Disabled = true
+	pv.Disabled().Set(true)
 	pv.OnEvent(Event{Kind: EventKeyDown, Code: "PageDown"})
 	if pv.cur() != 1 {
 		t.Fatalf("disabled view navigated to %d", pv.cur())
@@ -761,10 +761,10 @@ func TestPagedViewPageAtScrollToPageRoundTrip(t *testing.T) {
 			if mode == PagedContinuous {
 				k = 1
 			}
-			pv.scroll.Scroll(0, pv.lay.cards[k].Y-pv.scroll.OffsetY)
+			pv.scroll.Scroll(0, pv.lay.cards[k].Y-pv.scroll.OffsetY().Get())
 
 			card := pv.lay.cards[k]
-			px := card.X + card.W/2 - pv.scroll.OffsetX
+			px := card.X + card.W/2 - pv.scroll.OffsetX().Get()
 			py := tbH + 50
 
 			page, _, localY, ok := pv.PageAt(px, py)

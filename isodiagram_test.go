@@ -553,7 +553,7 @@ func TestIsoContextMenuOnNode(t *testing.T) {
 	n, _ := d.Doc().Node("a")
 	px, py := nodeCenterLocal(d, n)
 	d.OnEvent(Event{Kind: EventSecondaryClick, X: px, Y: py})
-	if !d.menu.Open {
+	if !d.menu.Open().Get() {
 		t.Fatal("secondary click did not open the menu")
 	}
 	if d.Selected() != "a" {
@@ -598,14 +598,14 @@ func TestIsoOpenMenuConsumesInput(t *testing.T) {
 	n, _ := d.Doc().Node("a")
 	px, py := nodeCenterLocal(d, n)
 	d.OnEvent(Event{Kind: EventSecondaryClick, X: px, Y: py})
-	if !d.menu.Open {
+	if !d.menu.Open().Get() {
 		t.Fatal("menu not open")
 	}
 	// A click far outside the menu is routed to the menu and dismisses it,
 	// rather than reaching the canvas (no new node is placed).
 	before := len(d.Doc().Nodes())
 	d.OnEvent(Event{Kind: EventClick, X: 399, Y: 399})
-	if d.menu.Open {
+	if d.menu.Open().Get() {
 		t.Fatal("outside click did not close the menu")
 	}
 	if len(d.Doc().Nodes()) != before {
@@ -627,7 +627,7 @@ func TestIsoDrawWithOpenMenu(t *testing.T) {
 func TestIsoDisabledIgnoresEvents(t *testing.T) {
 	d := NewIsoDiagram(nil)
 	d.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 400})
-	d.Disabled = true
+	d.Disabled().Set(true)
 	d.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
 	d.OnEvent(Event{Kind: EventMouseUp, X: 10, Y: 10})
 	if len(d.Doc().Nodes()) != 0 {

@@ -8,6 +8,7 @@ import (
 	"math"
 	"sort"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -31,10 +32,10 @@ type RadarChart struct {
 	Max    float64 // normalisation max; when <= 0, taken from the data
 	Colors []RGBA  // optional per-series palette override; cycles by index
 
-	// Hover + HoverAxis highlight the hovered axis spoke. Opt-in; the zero
-	// value draws none.
-	Hover     bool
-	HoverAxis int
+	// hover + hoverAxis highlight the hovered axis spoke; see [RadarChart.Hover]
+	// and [RadarChart.HoverAxis].
+	hover     *mvvm.Observable[bool]
+	hoverAxis *mvvm.Observable[int]
 }
 
 // AxisAt returns the axis whose spoke is nearest (in angle) to widget-local
@@ -74,13 +75,13 @@ func angleNorm(a float64) float64 {
 // drawHover highlights the hovered axis's spoke + tip when Hover is set.
 func (c *RadarChart) drawHover(p painter.Painter, theme *Theme) {
 	n := len(c.Axes)
-	if !c.Hover || n == 0 || c.HoverAxis < 0 || c.HoverAxis >= n {
+	if !c.Hover().Get() || n == 0 || c.HoverAxis().Get() < 0 || c.HoverAxis().Get() >= n {
 		return
 	}
 	r := c.Bounds()
 	radius := min(r.W, r.H)/2 - scaled(ChartPad) - 2*c.glyphHeight()
 	cx, cy := r.X+r.W/2, r.Y+r.H/2
-	x, y := vertex(cx, cy, radius, c.HoverAxis, n, 1)
+	x, y := vertex(cx, cy, radius, c.HoverAxis().Get(), n, 1)
 	drawLine(p, cx, cy, x, y, theme.Accent)
 	fillRect(p, clampInt(x-2, r.X, r.X+r.W-4), clampInt(y-2, r.Y, r.Y+r.H-4), 4, 4, theme.Accent)
 }
@@ -92,6 +93,24 @@ const RadarRings = 4
 // NewRadarChart builds a RadarChart over the given axis labels and series.
 func NewRadarChart(axes []string, series [][]float64) *RadarChart {
 	return &RadarChart{Axes: axes, Series: series}
+}
+
+// Hover is the reactive spoke-highlight toggle as a shared [mvvm.Observable];
+// false draws no highlight. Lazily created, defaulting to off.
+func (c *RadarChart) Hover() *mvvm.Observable[bool] {
+	if c.hover == nil {
+		c.hover = mvvm.NewObservable(false)
+	}
+	return c.hover
+}
+
+// HoverAxis is the reactive hovered axis index as a shared [mvvm.Observable].
+// Lazily created, defaulting to 0.
+func (c *RadarChart) HoverAxis() *mvvm.Observable[int] {
+	if c.hoverAxis == nil {
+		c.hoverAxis = mvvm.NewObservable(0)
+	}
+	return c.hoverAxis
 }
 
 // top returns the effective normalisation maximum: the explicit Max when

@@ -209,7 +209,7 @@ func TestColumnBrowserClickMissAndScroll(t *testing.T) {
 
 func TestColumnBrowserDisabledInert(t *testing.T) {
 	cv := newSampleBrowser(700, 300)
-	cv.Disabled = true
+	cv.Disabled().Set(true)
 	cv.OnEvent(Event{Kind: EventClick, X: 50, Y: 10}) // would open Docs if enabled
 	if cv.ColumnCount() != 1 {
 		t.Fatalf("disabled browser drilled: %d columns", cv.ColumnCount())

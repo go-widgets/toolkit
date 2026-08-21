@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // BarChart plots one series of non-negative Values as vertical bars over a
 // left+bottom axis frame -- the categorical companion to LineChart. Bars share
@@ -20,8 +23,8 @@ type BarChart struct {
 
 	// Hover + HoverIndex outline the hovered bar's column. Opt-in; the zero
 	// value draws none.
-	Hover      bool
-	HoverIndex int
+	hover      *mvvm.Observable[bool]
+	hoverIndex *mvvm.Observable[int]
 }
 
 // BarGutter is the horizontal gap (painter units) between adjacent bars.
@@ -29,6 +32,24 @@ const BarGutter = 1
 
 // NewBarChart builds a BarChart over the given values with an auto Y max.
 func NewBarChart(values []float64) *BarChart { return &BarChart{Values: values} }
+
+// Hover is the reactive hover-highlight toggle as a shared [mvvm.Observable];
+// false draws no hover affordance. Lazily created, defaulting to off.
+func (c *BarChart) Hover() *mvvm.Observable[bool] {
+	if c.hover == nil {
+		c.hover = mvvm.NewObservable(false)
+	}
+	return c.hover
+}
+
+// HoverIndex is the reactive hovered index as a shared [mvvm.Observable].
+// Lazily created, defaulting to 0.
+func (c *BarChart) HoverIndex() *mvvm.Observable[int] {
+	if c.hoverIndex == nil {
+		c.hoverIndex = mvvm.NewObservable(0)
+	}
+	return c.hoverIndex
+}
 
 // top returns the effective Y-axis maximum: the explicit Max when positive,
 // else the largest value (min 1 so a zero/empty series still has a scale).
@@ -115,9 +136,9 @@ func (c *BarChart) Draw(p painter.Painter, theme *Theme) {
 			bx := pl.X + 1 + i*slot
 			fillRect(p, bx, baseY-bh, bw, bh, theme.Accent)
 		}
-		if c.Hover && c.HoverIndex >= 0 && c.HoverIndex < n {
+		if c.Hover().Get() && c.HoverIndex().Get() >= 0 && c.HoverIndex().Get() < n {
 			hw := bw + 2
-			hx := clampInt(pl.X+c.HoverIndex*slot, r.X, r.X+r.W-hw)
+			hx := clampInt(pl.X+c.HoverIndex().Get()*slot, r.X, r.X+r.W-hw)
 			strokeRect(p, hx, pl.Y, hw, baseY-pl.Y+1, theme.OnSurface)
 		}
 	})

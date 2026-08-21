@@ -5,6 +5,7 @@
 package toolkit
 
 import (
+	"github.com/go-widgets/mvvm"
 	"strings"
 
 	"github.com/go-widgets/painter"
@@ -45,8 +46,16 @@ type CommandPalette struct {
 	query     string
 	selected  int
 	scroll    int
-	Visible   bool
+	visible   *mvvm.Observable[bool] // reactive via Visible()
 	OnDismiss func()
+}
+
+// Visible is reactive state as a shared [mvvm.Observable]; edits Set it. Lazily created.
+func (c *CommandPalette) Visible() *mvvm.Observable[bool] {
+	if c.visible == nil {
+		c.visible = mvvm.NewObservable[bool](false)
+	}
+	return c.visible
 }
 
 // Query returns the current search text. Host-driver accessor: pair with
@@ -126,7 +135,7 @@ func NewCommandPalette(cmds []PaletteCommand) *CommandPalette {
 // Open shows the palette, clearing any prior query and selection so it always
 // reopens in a fresh state.
 func (c *CommandPalette) Open() {
-	c.Visible = true
+	c.Visible().Set(true)
 	c.query = ""
 	c.selected = 0
 	c.scroll = 0
@@ -179,7 +188,7 @@ func (c *CommandPalette) scrollSelectedIntoView() {
 // event handlers that dismiss on user intent (Escape / outside-click), mirroring
 // how ContextMenu keeps activation and cancellation on separate paths.
 func (c *CommandPalette) Dismiss() {
-	c.Visible = false
+	c.Visible().Set(false)
 	c.query = ""
 	c.selected = 0
 	c.scroll = 0
@@ -245,7 +254,7 @@ func (c *CommandPalette) panelBounds() Rect {
 // hidden. An empty filtered list still renders the panel with just the query
 // row.
 func (c *CommandPalette) Draw(p painter.Painter, theme *Theme) {
-	if !c.Visible {
+	if !c.Visible().Get() {
 		return
 	}
 	pb := c.panelBounds()
@@ -286,7 +295,7 @@ func (c *CommandPalette) Draw(p painter.Painter, theme *Theme) {
 // the selected command then dismisses, and Escape / outside-click dismisses and
 // fires OnDismiss. Events while hidden are ignored.
 func (c *CommandPalette) OnEvent(ev Event) {
-	if !c.Visible {
+	if !c.Visible().Get() {
 		return
 	}
 	switch ev.Kind {

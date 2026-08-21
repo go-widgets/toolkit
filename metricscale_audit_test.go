@@ -197,7 +197,7 @@ func TestMetricScaleAudit(t *testing.T) {
 		{"CheckButton", 120, 24, func() Widget { c := &CheckButton{}; c.Checked().Set(true); return c }},
 		{"Switch", 60, 24, func() Widget { return NewSwitch(true) }},
 		{"Card", 160, 120, func() Widget { return &Card{} }},
-		{"ProgressBar", 120, 16, func() Widget { return &ProgressBar{Fraction: 0.5} }},
+		{"ProgressBar", 120, 16, func() Widget { p := &ProgressBar{}; p.Fraction().Set(0.5); return p }},
 		{"Chip", 80, 24, func() Widget { return &Chip{} }},
 		{"Kbd", 40, 20, func() Widget { return &Kbd{} }},
 		{"Avatar", 40, 40, func() Widget { return &Avatar{} }},
@@ -287,6 +287,13 @@ func TestMetricScaleAudit(t *testing.T) {
 		{"LineChart", 240, 160, func() Widget { return &LineChart{} }},
 		{"ListBox", 200, 160, func() Widget { return &ListBox{} }},
 		{"MarkdownEditor", 320, 240, func() Widget { return &MarkdownEditor{} }},
+		// RichEditorToolbar is intentionally NOT audited here: unlike the label-less
+		// catalogue widgets, its buttons always carry an iconoir/text glyph, and a
+		// glyph stroke crossing the middle scanline is the arithmetic-rounding
+		// false positive this probe explicitly does not measure (see the header
+		// note on why the catalogue gives widgets no labels). Its chrome — icon-cell
+		// widths, inter-button spacing, group dividers and Measure — is proven to
+		// double under SetMetricScale by TestToolbarMetricScaleDoublesSizes.
 		{"MarkdownView", 320, 240, func() Widget { return &MarkdownView{} }},
 		{"MediaCard", 260, 160, func() Widget { return &MediaCard{} }},
 		{"MenuBar", 320, 28, func() Widget { return &MenuBar{} }},

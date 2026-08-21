@@ -8,7 +8,7 @@ import "testing"
 
 // This file covers the Wave 1 framework enablers: EventMouseMove routing
 // through the containers, the hover-on-move faces the button family / menus /
-// charts now set for themselves, and the shared Base.Disabled state (inert
+// charts now set for themselves, and the shared Base.Disabled().Get() state (inert
 // OnEvent + muted Draw) across the interactive widgets.
 
 // --- EventMouseMove routing through containers ---------------------------
@@ -162,7 +162,7 @@ func TestIconButtonHoverPressAndDisabled(t *testing.T) {
 		t.Fatal("mouseup should release icon button")
 	}
 	// Disabled: click is inert + face is muted.
-	ib.Disabled = true
+	ib.Disabled().Set(true)
 	ib.hovered, ib.pressed = false, false
 	clicked = 0
 	ib.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
@@ -199,7 +199,7 @@ func TestToggleButtonHoverAndDisabled(t *testing.T) {
 		t.Fatalf("toggle click: pressed=%v toggled=%d", tb.Pressed().Get(), toggled)
 	}
 	// Disabled: inert + muted.
-	tb.Disabled = true
+	tb.Disabled().Set(true)
 	tb.Pressed().Set(false)
 	tb.hovered = false
 	toggled = 0
@@ -236,7 +236,7 @@ func TestSplitButtonHoverAndDisabled(t *testing.T) {
 	// Disabled: inert + muted.
 	clicked := 0
 	s.OnClick = func() { clicked++ }
-	s.Disabled = true
+	s.Disabled().Set(true)
 	s.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
 	s.OnEvent(Event{Kind: EventMouseMove, X: 5, Y: 5})
 	if clicked != 0 || s.hovered {
@@ -255,7 +255,7 @@ func TestCycleButtonDisabled(t *testing.T) {
 	th := DefaultLight()
 	c := NewCycleButton("A", "B")
 	c.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
-	c.Disabled = true
+	c.Disabled().Set(true)
 	c.OnEvent(Event{Kind: EventClick})
 	if c.Value() != "A" {
 		t.Fatal("disabled cycle should not advance")
@@ -271,7 +271,7 @@ func TestCheckButtonDisabled(t *testing.T) {
 	th := DefaultLight()
 	c := NewCheckButton("L", false)
 	c.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
-	c.Disabled = true
+	c.Disabled().Set(true)
 	c.OnEvent(Event{Kind: EventClick})
 	if c.Checked().Get() {
 		t.Fatal("disabled checkbox should not toggle")
@@ -292,7 +292,7 @@ func TestRadioButtonDisabled(t *testing.T) {
 	th := DefaultLight()
 	r := NewRadioButton("R")
 	r.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
-	r.Disabled = true
+	r.Disabled().Set(true)
 	r.OnEvent(Event{Kind: EventClick})
 	if r.Checked().Get() {
 		t.Fatal("disabled radio should not toggle")
@@ -309,7 +309,7 @@ func TestSwitchDisabled(t *testing.T) {
 	th := DefaultLight()
 	s := NewSwitch(false)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 40, H: 20})
-	s.Disabled = true
+	s.Disabled().Set(true)
 	s.OnEvent(Event{Kind: EventClick})
 	if s.On().Get() {
 		t.Fatal("disabled switch should not flip")
@@ -325,7 +325,7 @@ func TestScaleDisabled(t *testing.T) {
 	th := DefaultLight()
 	s := NewScale(0, 100, 50)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 20})
-	s.Disabled = true
+	s.Disabled().Set(true)
 	s.OnEvent(Event{Kind: EventClick, X: 90, Y: 10})
 	if s.Value().Get() != 50 {
 		t.Fatalf("disabled scale moved to %v", s.Value().Get())
@@ -338,7 +338,7 @@ func TestScaleDisabled(t *testing.T) {
 	// Vertical disabled path too.
 	sv := NewScale(0, 100, 50)
 	sv.Orientation = Vertical
-	sv.Disabled = true
+	sv.Disabled().Set(true)
 	sv.SetBounds(Rect{X: 0, Y: 0, W: 20, H: 100})
 	sv.Draw(newP(makeSurface(20, 100), 20), th)
 }
@@ -347,7 +347,7 @@ func TestSpinButtonDisabled(t *testing.T) {
 	th := DefaultLight()
 	s := NewSpinButton(0, 10, 5, 1)
 	s.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
-	s.Disabled = true
+	s.Disabled().Set(true)
 	s.OnEvent(Event{Kind: EventClick, X: 55, Y: 5}) // upper button
 	if s.Value().Get() != 5 {
 		t.Fatalf("disabled spin changed to %d", s.Value().Get())
@@ -363,7 +363,7 @@ func TestDropDownDisabled(t *testing.T) {
 	th := DefaultLight()
 	d := NewDropDown([]string{"a", "b"}, 0)
 	d.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 20})
-	d.Disabled = true
+	d.Disabled().Set(true)
 	d.OnEvent(Event{Kind: EventClick})
 	if d.Open().Get() {
 		t.Fatal("disabled dropdown should not open")
@@ -380,7 +380,7 @@ func TestComboBoxDisabled(t *testing.T) {
 	c := NewComboBox([]string{"a", "b"})
 	c.Placeholder = "pick"
 	c.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 24})
-	c.Disabled = true
+	c.Disabled().Set(true)
 	c.OnEvent(Event{Kind: EventChar, Code: "z"})
 	c.OnEvent(Event{Kind: EventClick})
 	if c.Text().Get() != "" || c.Open().Get() {
@@ -447,7 +447,7 @@ func TestContextMenuForwardsMove(t *testing.T) {
 	}
 	// A non-click, non-move event is ignored (not dismissed).
 	cm.OnEvent(Event{Kind: EventKeyDown, Code: "x"})
-	if !cm.Open {
+	if !cm.Open().Get() {
 		t.Fatal("keydown should not dismiss the context menu")
 	}
 	// Closed: a move is a no-op.
@@ -471,11 +471,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	lc := NewLineChart([]float64{1, 4, 2, 5})
 	lc.SetBounds(bounds)
 	lc.OnEvent(inside)
-	if !lc.Hover {
+	if !lc.Hover().Get() {
 		t.Fatal("line move should set Hover")
 	}
 	lc.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5})
-	if lc.Hover {
+	if lc.Hover().Get() {
 		t.Fatal("line move off should clear Hover")
 	}
 	emptyBounded(NewLineChart(nil))
@@ -483,11 +483,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	ac := NewAreaChart([][]float64{{1, 4, 2, 5}})
 	ac.SetBounds(bounds)
 	ac.OnEvent(inside)
-	if !ac.Hover {
+	if !ac.Hover().Get() {
 		t.Fatal("area move should set Hover")
 	}
 	ac.OnEvent(Event{Kind: EventMouseMove, X: 500, Y: 40})
-	if ac.Hover {
+	if ac.Hover().Get() {
 		t.Fatal("area move off should clear Hover")
 	}
 	emptyBounded(NewAreaChart(nil))
@@ -495,11 +495,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	bc := NewBarChart([]float64{4, 7, 2})
 	bc.SetBounds(bounds)
 	bc.OnEvent(inside)
-	if !bc.Hover {
+	if !bc.Hover().Get() {
 		t.Fatal("bar move should set Hover")
 	}
 	bc.OnEvent(Event{Kind: EventMouseMove, X: -1, Y: 40})
-	if bc.Hover {
+	if bc.Hover().Get() {
 		t.Fatal("bar move off should clear Hover")
 	}
 	emptyBounded(NewBarChart(nil))
@@ -522,11 +522,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	px, py := sc.project(sc.Series[0][1], xr, yr)
 	r := sc.Bounds()
 	sc.OnEvent(Event{Kind: EventMouseMove, X: px - r.X, Y: py - r.Y})
-	if !sc.Hover {
+	if !sc.Hover().Get() {
 		t.Fatal("scatter move should set Hover")
 	}
 	sc.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5})
-	if sc.Hover {
+	if sc.Hover().Get() {
 		t.Fatal("scatter move off should clear Hover")
 	}
 	emptyBounded(NewScatterChart(nil))
@@ -534,16 +534,17 @@ func TestChartsHoverOnMove(t *testing.T) {
 	pc := NewPieChart([]float64{3, 5, 2})
 	pc.SetBounds(Rect{X: 10, Y: 10, W: 100, H: 100})
 	pc.OnEvent(Event{Kind: EventMouseMove, X: 52, Y: 30}) // just clockwise of 12 o'clock
-	if !pc.Hover {
+	if !pc.Hover().Get() {
 		t.Fatal("pie move should set Hover")
 	}
 	pc.OnEvent(Event{Kind: EventMouseMove, X: 0, Y: 0}) // corner: inside bounds but outside the disc
-	if pc.Hover {
+	if pc.Hover().Get() {
 		t.Fatal("pie move off the disc should clear Hover")
 	}
-	pc.HoverIndex, pc.Hover = 1, true
+	pc.HoverIndex().Set(1)
+	pc.Hover().Set(true)
 	pc.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5}) // off the widget entirely
-	if pc.Hover {
+	if pc.Hover().Get() {
 		t.Fatal("pie move off the widget should clear Hover")
 	}
 	emptyBounded(NewPieChart(nil))
@@ -551,11 +552,11 @@ func TestChartsHoverOnMove(t *testing.T) {
 	rc := NewRadarChart([]string{"A", "B", "C"}, [][]float64{{8, 6, 7}})
 	rc.SetBounds(bounds)
 	rc.OnEvent(Event{Kind: EventMouseMove, X: 65, Y: 50}) // near centre → axis 0
-	if !rc.Hover {
+	if !rc.Hover().Get() {
 		t.Fatal("radar move should set Hover")
 	}
 	rc.OnEvent(Event{Kind: EventMouseMove, X: -5, Y: -5})
-	if rc.Hover {
+	if rc.Hover().Get() {
 		t.Fatal("radar move off should clear Hover")
 	}
 	emptyBounded(NewRadarChart(nil, nil))
@@ -568,7 +569,7 @@ func TestButtonDisabled(t *testing.T) {
 	fired := 0
 	b := NewButton("X", func() { fired++ })
 	b.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 20})
-	b.Disabled = true
+	b.Disabled().Set(true)
 	b.OnEvent(Event{Kind: EventClick})
 	b.OnEvent(Event{Kind: EventMouseMove, X: 30, Y: 10})
 	if fired != 0 || b.pressed || b.hovered {

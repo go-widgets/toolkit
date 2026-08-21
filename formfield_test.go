@@ -62,8 +62,8 @@ func TestNewFormFieldCarriesLabelAndChild(t *testing.T) {
 	if f.Child != child {
 		t.Fatalf("Child not the one we passed")
 	}
-	if f.Help != "" || f.Error != "" {
-		t.Fatalf("NewFormField left Help/Error non-empty: %q/%q", f.Help, f.Error)
+	if f.Help != "" || f.Error().Get() != "" {
+		t.Fatalf("NewFormField left Help/Error non-empty: %q/%q", f.Help, f.Error().Get())
 	}
 }
 
@@ -193,7 +193,7 @@ func TestFormFieldDrawErrorUsesFixedRedInk(t *testing.T) {
 	theme := DefaultLight()
 	child := &mockFFChild{}
 	f := NewFormField("Name", child)
-	f.Error = "bad"
+	f.Error().Set("bad")
 	f.SetBounds(Rect{X: 4, Y: 6, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	f.Draw(newP(buf, w), theme)
@@ -222,7 +222,7 @@ func TestFormFieldDrawErrorSuppressesHelp(t *testing.T) {
 	child := &mockFFChild{}
 	f := NewFormField("Name", child)
 	f.Help = "hint"
-	f.Error = "bad"
+	f.Error().Set("bad")
 	f.SetBounds(Rect{X: 4, Y: 6, W: 120, H: 60})
 	buf := makeSurface(w, h)
 	f.Draw(newP(buf, w), theme)
@@ -439,12 +439,12 @@ func TestFormFieldValueChildWithValueGetter(t *testing.T) {
 // Validate with empty Rules always succeeds + clears a stale Error.
 func TestFormFieldValidateNoRulesAlwaysValid(t *testing.T) {
 	f := NewFormField("Name", NewEntry(""))
-	f.Error = "stale"
+	f.Error().Set("stale")
 	if ok := f.Validate(); !ok {
 		t.Fatal("Validate() = false, want true (no Rules)")
 	}
-	if f.Error != "" {
-		t.Fatalf("Error = %q, want cleared", f.Error)
+	if f.Error().Get() != "" {
+		t.Fatalf("Error = %q, want cleared", f.Error().Get())
 	}
 }
 
@@ -456,21 +456,21 @@ func TestFormFieldValidateFailureSetsError(t *testing.T) {
 	if ok := f.Validate(); ok {
 		t.Fatal("Validate() = true, want false")
 	}
-	if f.Error != "name is required" {
-		t.Fatalf("Error = %q, want %q", f.Error, "name is required")
+	if f.Error().Get() != "name is required" {
+		t.Fatalf("Error = %q, want %q", f.Error().Get(), "name is required")
 	}
 }
 
 // Validate clears a stale Error + returns true when Rules pass.
 func TestFormFieldValidateSuccessClearsError(t *testing.T) {
 	f := NewFormField("Name", NewEntry("Ada"))
-	f.Error = "stale"
+	f.Error().Set("stale")
 	f.Rules = []Rule{Required("name is required")}
 	if ok := f.Validate(); !ok {
 		t.Fatal("Validate() = false, want true")
 	}
-	if f.Error != "" {
-		t.Fatalf("Error = %q, want cleared", f.Error)
+	if f.Error().Get() != "" {
+		t.Fatalf("Error = %q, want cleared", f.Error().Get())
 	}
 }
 
@@ -483,7 +483,7 @@ func TestFormFieldValidateFirstFailureWins(t *testing.T) {
 		MinLen(5, "too short"),
 	}
 	f.Validate()
-	if f.Error != "required" {
-		t.Fatalf("Error = %q, want %q", f.Error, "required")
+	if f.Error().Get() != "required" {
+		t.Fatalf("Error = %q, want %q", f.Error().Get(), "required")
 	}
 }

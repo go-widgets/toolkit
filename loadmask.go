@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // LoadMaskSpinnerSize is the pixel side of a LoadMask's centred spinner.
 const LoadMaskSpinnerSize = 32
@@ -20,10 +23,6 @@ const LoadMaskSpinnerSize = 32
 // (no goroutine/timer), the same cadence contract as Spinner and ProgressCircle.
 type LoadMask struct {
 	Base
-	// Active gates the whole widget: false draws nothing and is
-	// event-transparent; true dims + shows the spinner/message + swallows
-	// events. The zero value is inactive.
-	Active bool
 	// Message is an optional caption shown under the spinner (e.g. "Loading…").
 	Message string
 	// Scrim is the dimming colour painted over the bounds. The zero value
@@ -31,12 +30,27 @@ type LoadMask struct {
 	// LoadMask dropped in with no configuration reads as a subtle dim.
 	Scrim painter.RGBA
 
+	// active gates the whole widget: false draws nothing and is
+	// event-transparent; true dims + shows the spinner/message + swallows
+	// events. The zero value is inactive.
+	active *mvvm.Observable[bool]
+
 	spinner *Spinner
 }
 
 // NewLoadMask builds an inactive LoadMask with the given message (may be "").
 func NewLoadMask(message string) *LoadMask {
 	return &LoadMask{Message: message, spinner: NewSpinner()}
+}
+
+// Active gates the whole widget as reactive [mvvm.Observable] state: false draws
+// nothing and is event-transparent; true dims + shows the spinner/message +
+// swallows events. Lazily created, defaulting to inactive.
+func (m *LoadMask) Active() *mvvm.Observable[bool] {
+	if m.active == nil {
+		m.active = mvvm.NewObservable(false)
+	}
+	return m.active
 }
 
 // Tick advances the spinner animation by deltaSeconds (a no-op visual while
@@ -47,7 +61,7 @@ func (m *LoadMask) Tick(deltaSeconds float64) { m.spinner.Tick(deltaSeconds) }
 // is Active. Together with Tick this makes LoadMask an [Animator], so a host
 // drives its busy spinner through [TickTree] / [TreeAnimating] with no manual
 // bookkeeping.
-func (m *LoadMask) Animating() bool { return m.Active }
+func (m *LoadMask) Animating() bool { return m.Active().Get() }
 
 // HitTest reports whether the mask should catch a pointer event: only while
 // Active, so an inactive mask is fully transparent to clicks and an active one
@@ -55,13 +69,13 @@ func (m *LoadMask) Animating() bool { return m.Active }
 // Active a covered event routes to the inherited Base.OnEvent no-op, i.e. it is
 // swallowed and never reaches the content underneath.
 func (m *LoadMask) HitTest(px, py int) bool {
-	return m.Active && m.Bounds().Contains(px, py)
+	return m.Active().Get() && m.Bounds().Contains(px, py)
 }
 
 // Draw dims the bounds and paints the spinner + message while Active; inactive
 // or empty-bounds it paints nothing.
 func (m *LoadMask) Draw(p painter.Painter, theme *Theme) {
-	if !m.Active {
+	if !m.Active().Get() {
 		return
 	}
 	r := m.Bounds()

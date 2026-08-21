@@ -11,16 +11,16 @@ import "testing"
 func TestProgressBarSetFractionClamps(t *testing.T) {
 	p := NewProgressBar()
 	p.SetFraction(-0.5)
-	if p.Fraction != 0 {
-		t.Fatalf("negative clamp: got %v", p.Fraction)
+	if p.Fraction().Get() != 0 {
+		t.Fatalf("negative clamp: got %v", p.Fraction().Get())
 	}
 	p.SetFraction(1.7)
-	if p.Fraction != 1 {
-		t.Fatalf("over-1 clamp: got %v", p.Fraction)
+	if p.Fraction().Get() != 1 {
+		t.Fatalf("over-1 clamp: got %v", p.Fraction().Get())
 	}
 	p.SetFraction(0.3)
-	if p.Fraction != 0.3 {
-		t.Fatalf("normal set: got %v", p.Fraction)
+	if p.Fraction().Get() != 0.3 {
+		t.Fatalf("normal set: got %v", p.Fraction().Get())
 	}
 }
 
@@ -46,10 +46,11 @@ func TestProgressBarDrawClampInDraw(t *testing.T) {
 	// SetFraction. Cover both branches.
 	const w, h = 64, 20
 	theme := DefaultLight()
-	p := &ProgressBar{Fraction: -1}
+	p := &ProgressBar{}
+	p.Fraction().Set(-1)
 	p.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 16})
 	p.Draw(newP(makeSurface(w, h), w), theme)
-	p.Fraction = 2
+	p.Fraction().Set(2)
 	p.Draw(newP(makeSurface(w, h), w), theme)
 }
 
@@ -76,7 +77,7 @@ func TestLevelBarDraw(t *testing.T) {
 	const w, h = 64, 12
 	theme := DefaultLight()
 	l := NewLevelBar(5)
-	l.Value = 3
+	l.Value().Set(3)
 	l.SetBounds(Rect{X: 0, Y: 0, W: 60, H: 10})
 	buf := makeSurface(w, h)
 	l.Draw(newP(buf, w), theme)
@@ -95,7 +96,7 @@ func TestLevelBarDrawMaxZeroNoOp(t *testing.T) {
 func TestLevelBarTinyCellWidth(t *testing.T) {
 	// Max=20 cells in a 5-px wide bar -> cellW < 1, clamps to 1.
 	l := NewLevelBar(20)
-	l.Value = 10
+	l.Value().Set(10)
 	l.SetBounds(Rect{X: 0, Y: 0, W: 5, H: 10})
 	l.Draw(newP(makeSurface(64, 12), 64), DefaultLight())
 }
@@ -105,7 +106,7 @@ func TestProgressBarVerticalFillsFromBottom(t *testing.T) {
 	acc := DefaultLight().Accent
 	pb := NewProgressBar()
 	pb.Orientation = Vertical
-	pb.Fraction = 0.5
+	pb.Fraction().Set(0.5)
 	pb.Label = "ignored" // no label drawn in vertical mode
 	pb.SetBounds(Rect{X: 0, Y: 0, W: 12, H: h})
 	surf := makeSurface(w, h)
@@ -124,7 +125,7 @@ func TestLevelBarVerticalFillsFromBottom(t *testing.T) {
 	acc := DefaultLight().Accent
 	l := NewLevelBar(4)
 	l.Orientation = Vertical
-	l.Value = 2 // bottom two cells lit
+	l.Value().Set(2) // bottom two cells lit
 	l.SetBounds(Rect{X: 0, Y: 0, W: 12, H: h})
 	surf := makeSurface(w, h)
 	l.Draw(newP(surf, w), DefaultLight())
@@ -142,7 +143,7 @@ func TestLevelBarVerticalTinyBounds(t *testing.T) {
 	// no draw past bounds).
 	l := NewLevelBar(20)
 	l.Orientation = Vertical
-	l.Value = 20
+	l.Value().Set(20)
 	l.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 5})
 	surf := makeSurface(16, 16)
 	l.Draw(newP(surf, 16), DefaultLight())
@@ -159,7 +160,7 @@ func TestLevelBarStaysWithinBounds(t *testing.T) {
 	// a neighbour. Max=20 at W=5 would stride to x≈39 without the clip.
 	const w, h = 64, 12
 	l := NewLevelBar(20)
-	l.Value = 20
+	l.Value().Set(20)
 	l.SetBounds(Rect{X: 0, Y: 0, W: 5, H: 10})
 	surf := makeSurface(w, h)
 	l.Draw(newP(surf, w), DefaultLight())

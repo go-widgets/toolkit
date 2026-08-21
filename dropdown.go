@@ -103,7 +103,7 @@ func (d *DropDown) Draw(p painter.Painter, theme *Theme) {
 	// A disabled dropdown mutes its face, border, text and chevron; only taken
 	// when Disabled so the enabled draw is byte-identical.
 	face, border, ink := theme.Surface, theme.Border, theme.OnSurface
-	if d.Disabled {
+	if d.Disabled().Get() {
 		face, border, ink = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
@@ -144,7 +144,7 @@ func (d *DropDown) HitRect() Rect { return touchHitRect(d.Bounds()) }
 // the host wires to its popover ListBox's OnActivate. A Disabled dropdown
 // ignores every kind (it cannot be opened).
 func (d *DropDown) OnEvent(ev Event) {
-	if d.Disabled {
+	if d.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

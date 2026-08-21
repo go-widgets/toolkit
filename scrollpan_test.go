@@ -28,23 +28,23 @@ func TestScrollViewContentPan(t *testing.T) {
 	// the view scrolls DOWN — a rising offset.
 	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60})
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 40})
-	if sv.OffsetY != 20 {
-		t.Fatalf("drag up 20: OffsetY=%d, want 20", sv.OffsetY)
+	if sv.OffsetY().Get() != 20 {
+		t.Fatalf("drag up 20: OffsetY=%d, want 20", sv.OffsetY().Get())
 	}
 	// Each sample is relative to the previous one, not to where the press was.
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 25})
-	if sv.OffsetY != 35 {
-		t.Fatalf("drag up 15 more: OffsetY=%d, want 35", sv.OffsetY)
+	if sv.OffsetY().Get() != 35 {
+		t.Fatalf("drag up 15 more: OffsetY=%d, want 35", sv.OffsetY().Get())
 	}
 	// Horizontal drags pan too.
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 10, Y: 25})
-	if sv.OffsetX != 30 {
-		t.Fatalf("drag left 30: OffsetX=%d, want 30", sv.OffsetX)
+	if sv.OffsetX().Get() != 30 {
+		t.Fatalf("drag left 30: OffsetX=%d, want 30", sv.OffsetX().Get())
 	}
 	// Dragging back down returns the view.
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 10, Y: 60})
-	if sv.OffsetY != 0 {
-		t.Fatalf("drag back down: OffsetY=%d, want 0", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("drag back down: OffsetY=%d, want 0", sv.OffsetY().Get())
 	}
 }
 
@@ -54,12 +54,12 @@ func TestScrollViewPanClampsAtTheEnds(t *testing.T) {
 	// A drag far past the end pins to the end rather than running off.
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: -10000})
 	vp := sv.viewport()
-	if want := 400 - vp.H; sv.OffsetY != want {
-		t.Fatalf("drag past the end: OffsetY=%d, want %d", sv.OffsetY, want)
+	if want := 400 - vp.H; sv.OffsetY().Get() != want {
+		t.Fatalf("drag past the end: OffsetY=%d, want %d", sv.OffsetY().Get(), want)
 	}
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 10000})
-	if sv.OffsetY != 0 {
-		t.Fatalf("drag past the start: OffsetY=%d, want 0", sv.OffsetY)
+	if sv.OffsetY().Get() != 0 {
+		t.Fatalf("drag past the start: OffsetY=%d, want 0", sv.OffsetY().Get())
 	}
 }
 
@@ -68,12 +68,12 @@ func TestScrollViewPanEndsOnRelease(t *testing.T) {
 	sv.OnEvent(Event{Kind: EventClick, X: 40, Y: 60})
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 40})
 	sv.OnEvent(Event{Kind: EventMouseUp, X: 40, Y: 40})
-	before := sv.OffsetY
+	before := sv.OffsetY().Get()
 	// A drag with no press behind it is a stray move, not a pan: a pointer
 	// crossing the widget with no button down must not scroll it.
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 5})
-	if sv.OffsetY != before {
-		t.Fatalf("drag after release: OffsetY=%d, want it unchanged at %d", sv.OffsetY, before)
+	if sv.OffsetY().Get() != before {
+		t.Fatalf("drag after release: OffsetY=%d, want it unchanged at %d", sv.OffsetY().Get(), before)
 	}
 }
 
@@ -95,7 +95,7 @@ func TestScrollViewPanIgnoresAPressOnTheScrollbar(t *testing.T) {
 		t.Fatal("a press on the scrollbar should not arm a content pan")
 	}
 	sv.OnEvent(Event{Kind: EventMouseDrag, X: g.cross0 + 1, Y: g.thumbStart + 21})
-	moved := sv.OffsetY
+	moved := sv.OffsetY().Get()
 	if moved == 0 {
 		t.Fatal("dragging the thumb should have scrolled the view")
 	}
@@ -110,8 +110,8 @@ func TestScrollViewPanIgnoresAPressOnTheScrollbar(t *testing.T) {
 	}
 	sv2.sbV = sv.sbV // same grabbed thumb, same grab offset
 	sv2.OnEvent(Event{Kind: EventMouseDrag, X: g.cross0 + 1, Y: g.thumbStart + 21})
-	if sv2.OffsetY != moved {
-		t.Fatalf("thumb drag with a pan armed: OffsetY=%d, want %d -- the pan added to it", sv2.OffsetY, moved)
+	if sv2.OffsetY().Get() != moved {
+		t.Fatalf("thumb drag with a pan armed: OffsetY=%d, want %d -- the pan added to it", sv2.OffsetY().Get(), moved)
 	}
 }
 

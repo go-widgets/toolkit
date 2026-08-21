@@ -62,7 +62,7 @@ func (s *Scrollbar) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
 // the tree — an inactive mask draws nothing and blocks nothing.
 func (m *LoadMask) A11y() A11yInfo {
 	v := ""
-	if m.Active {
+	if m.Active().Get() {
 		v = "busy"
 	}
 	return A11yInfo{Role: RoleStatus, Name: m.Message, Value: v}

@@ -278,7 +278,7 @@ func (s *SourceList) itemRowAt(y int) (slRow, bool) {
 // OnEvent selects on a click, arms/drives a reorder drag on a Reorderable
 // section, and is inert while Disabled.
 func (s *SourceList) OnEvent(ev Event) {
-	if s.Disabled {
+	if s.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {

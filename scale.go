@@ -126,7 +126,7 @@ func (s *Scale) Draw(p painter.Painter, theme *Theme) {
 	// it reads as inert; the enabled draw is byte-identical (branch only taken
 	// when Disabled).
 	trackC, fillC, thumbC, borderC := theme.SurfaceAlt, theme.Accent, theme.Surface, theme.Border
-	if s.Disabled {
+	if s.Disabled().Get() {
 		trackC, fillC, thumbC, borderC = mutedFace(theme), mutedInk(theme), mutedFace(theme), mutedInk(theme)
 	}
 	if s.Orientation == Vertical {
@@ -185,7 +185,7 @@ func (s *Scale) setTo(v float64) { s.SetValue(v) }
 // drag-grab state -- the position->SetValue math handles any coordinate
 // identically, so a drag is just a click that keeps arriving.
 func (s *Scale) OnEvent(ev Event) {
-	if s.Disabled {
+	if s.Disabled().Get() {
 		return
 	}
 	if ev.Kind == EventKeyDown {

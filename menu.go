@@ -394,7 +394,7 @@ func (m *Menu) OnEvent(ev Event) {
 				return
 			}
 		case EventKeyDown:
-			if m.Disabled {
+			if m.Disabled().Get() {
 				return
 			}
 			switch ev.Code {
@@ -424,7 +424,7 @@ func (m *Menu) OnEvent(ev Event) {
 		}
 		return
 	case EventKeyDown:
-		if m.Disabled {
+		if m.Disabled().Get() {
 			return
 		}
 		switch ev.Code {
@@ -733,12 +733,20 @@ type MenuBar struct {
 	Base
 	Names  []string
 	Menus  []*Menu
-	Active int // -1 if none open
+	active *mvvm.Observable[int] // reactive via Active()
 
 	// hoverName tracks the top-level name under the pointer as a 1-based index
 	// (0 = none), set on EventMouseMove. The +1 offset keeps the zero value
 	// (no hover) safe for a literal MenuBar{}, so the resting draw is unchanged.
 	hoverName int
+}
+
+// Active is reactive state as a shared [mvvm.Observable]; edits Set it. Lazily created.
+func (b *MenuBar) Active() *mvvm.Observable[int] {
+	if b.active == nil {
+		b.active = mvvm.NewObservable(-1) // -1 = no menu open, matching NewMenuBar
+	}
+	return b.active
 }
 
 // MenuBarH is the pixel height of the bar strip.
@@ -765,7 +773,7 @@ const MenuBarItemW = 60
 const MenuBarItemPadX = 8
 
 // NewMenuBar builds a MenuBar (Active = -1).
-func NewMenuBar() *MenuBar { return &MenuBar{Active: -1} }
+func NewMenuBar() *MenuBar { m := &MenuBar{}; m.active = mvvm.NewObservable(-1); return m }
 
 // AddMenu appends (name, menu) to the bar.
 func (b *MenuBar) AddMenu(name string, m *Menu) {
@@ -813,7 +821,7 @@ func (b *MenuBar) Draw(p painter.Painter, theme *Theme) {
 		ix := r.X + b.NameOriginX(i)
 		ink := theme.OnSurface
 		switch {
-		case i == b.Active:
+		case i == b.Active().Get():
 			fillRect(p, ix, r.Y, iw, b.barH(), theme.Accent)
 			ink = accentInk(theme)
 		case b.hoverName == i+1:
@@ -874,10 +882,10 @@ func (b *MenuBar) OnEvent(ev Event) {
 		if idx < 0 {
 			return
 		}
-		if b.Active == idx {
-			b.Active = -1
+		if b.Active().Get() == idx {
+			b.Active().Set(-1)
 		} else {
-			b.Active = idx
+			b.Active().Set(idx)
 		}
 	case EventKeyDown:
 		// Mnemonic: "Alt+X" opens the FIRST menu whose Name starts with
@@ -885,30 +893,30 @@ func (b *MenuBar) OnEvent(ev Event) {
 		// is open, ArrowLeft/ArrowRight move Active between top-level menus
 		// (wrapping) and ArrowDown enters the open menu's first item. A
 		// disabled MenuBar ignores keys. Any other Code is ignored.
-		if b.Disabled {
+		if b.Disabled().Get() {
 			return
 		}
 		if ev.Code == "Escape" {
-			b.Active = -1
+			b.Active().Set(-1)
 			return
 		}
 		switch ev.Code {
 		case "ArrowLeft", "ArrowRight":
-			if b.Active < 0 || len(b.Names) == 0 {
+			if b.Active().Get() < 0 || len(b.Names) == 0 {
 				return
 			}
 			dir := 1
 			if ev.Code == "ArrowLeft" {
 				dir = -1
 			}
-			b.Active = (b.Active + dir + len(b.Names)) % len(b.Names)
+			b.Active().Set((b.Active().Get() + dir + len(b.Names)) % len(b.Names))
 			return
 		case "ArrowDown":
 			// Enter the open menu: highlight its first enabled item.
-			if b.Active < 0 || b.Active >= len(b.Menus) {
+			if b.Active().Get() < 0 || b.Active().Get() >= len(b.Menus) {
 				return
 			}
-			if m := b.Menus[b.Active]; m != nil {
+			if m := b.Menus[b.Active().Get()]; m != nil {
 				m.moveHover(1)
 			}
 			return
@@ -930,7 +938,7 @@ func (b *MenuBar) OnEvent(ev Event) {
 				first = first - 'a' + 'A'
 			}
 			if first == want {
-				b.Active = i
+				b.Active().Set(i)
 				return
 			}
 		}
