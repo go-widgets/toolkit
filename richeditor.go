@@ -70,6 +70,11 @@ type RichEditor struct {
 	hbCache   [7]Font
 	hbBase    Font
 
+	// supFace memoises the smaller face a footnote marker is drawn in (a
+	// superscript), rebuilt when the base face changes (supBase tracks it).
+	supBase Font
+	supFace Font
+
 	// lastTheme is the theme most recently drawn with, reused for geometry-only
 	// layout passes (caret pixel, hit-testing) where colours are irrelevant.
 	lastTheme *Theme
@@ -208,6 +213,22 @@ func (e *RichEditor) headingBase(level int) Font {
 	return e.hbCache[level]
 }
 
+// superscriptFont returns (and memoises) the smaller face a footnote reference
+// marker is drawn in — two-thirds of the body face — so the marker reads as a
+// superscript. The cache resets when the body face changes.
+func (e *RichEditor) superscriptFont() Font {
+	base := e.baseFont()
+	if e.supBase != base {
+		e.supBase = base
+		e.supFace = resizeFont(base, 2, 3)
+	}
+	return e.supFace
+}
+
+// footnoteRise is how far a footnote marker is lifted above the baseline, a
+// third of the body height, so the superscript sits high without clipping.
+func (e *RichEditor) footnoteRise() int { return e.baseFont().Height() / 3 }
+
 // fontFor resolves the DRAW face for a style at a heading level: the sized base,
 // emboldened for bold or any heading, and sheared for italic. Layout geometry
 // uses the plain base metrics (bold/italic are faux styles that keep the base
@@ -245,6 +266,12 @@ func (e *RichEditor) cellWidth(sr styledRune, level int) int {
 		return e.baseFont().Measure(sr.payload.(richdoc.Math).TeX)
 	case atomRaw:
 		return e.baseFont().Measure(sr.payload.(richdoc.RawInline).Text)
+	case atomFootnote:
+		return e.superscriptFont().Measure(footnoteMark(sr))
+	case atomXRef:
+		return e.baseFont().Measure(xrefText(sr.payload.(richdoc.CrossRef)))
+	case atomAnchor:
+		return strokeWidth() + scaled(2)
 	}
 	return e.sizedFont(level).Measure(string(sr.r))
 }
@@ -481,8 +508,11 @@ func (e *RichEditor) drawChrome(p painter.Painter, c reChrome, r Rect, scroll in
 	fillRect(p, c.r.X, y, c.r.W, c.r.H, c.c)
 }
 
-// drawRun paints one styled run at screen y, with link underline / strike rules.
+// drawRun paints one styled run at screen y (offset by the run's dy, so a
+// superscript marker rides above the baseline), with link underline / strike
+// rules.
 func (e *RichEditor) drawRun(p painter.Painter, run reRun, y int) {
+	y += run.dy
 	run.font.Draw(p, run.x, y, run.text, run.ink)
 	if !run.underline && !run.strike {
 		return

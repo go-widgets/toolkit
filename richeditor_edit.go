@@ -80,7 +80,15 @@ func (e *RichEditor) insertRuneAt(blocks []richdoc.Block, c DocPos, r rune) ([]r
 	if isCodeBlock(blocks[c.Block]) {
 		cell = styledRune{r: r}
 	} else {
-		cell = styledRune{r: r, style: e.styleAt(rs, c.Off)}
+		// A typed rune inherits its neighbour's enclosing spans — link, anchor and
+		// cross-reference — so typing INSIDE a link / Anchor / CrossRef extends it
+		// rather than splitting it, and takes the caret's (possibly pending) style.
+		nb := neighborCell(rs, c.Off)
+		cell = styledRune{
+			r: r, style: e.styleAt(rs, c.Off),
+			link: nb.link, title: nb.title,
+			anchor: nb.anchor, ref: nb.ref, refActive: nb.refActive,
+		}
 	}
 	rs = insertCell(rs, c.Off, cell)
 	blocks[c.Block] = setBlockContent(blocks[c.Block], rs)
@@ -323,13 +331,20 @@ func (e *RichEditor) styleAtCaret() styleBits {
 // styleOfNeighbor returns the style of the cell left of off (or right of it when
 // off is at the block start), or 0 when the block is empty.
 func styleOfNeighbor(rs []styledRune, off int) styleBits {
+	return neighborCell(rs, off).style
+}
+
+// neighborCell returns the cell left of off (or right of it when off is at the
+// block start), or a zero cell when the block is empty. It is the source of the
+// span context a freshly typed rune inherits (style, link, anchor, ref).
+func neighborCell(rs []styledRune, off int) styledRune {
 	if off > 0 && off-1 < len(rs) {
-		return rs[off-1].style
+		return rs[off-1]
 	}
 	if off >= 0 && off < len(rs) {
-		return rs[off].style
+		return rs[off]
 	}
-	return 0
+	return styledRune{}
 }
 
 // --- block verbs ----------------------------------------------------------
