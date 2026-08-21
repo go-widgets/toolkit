@@ -244,6 +244,56 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// unexported `disabled` behind the Disabled() accessor (so `w.Disabled = x`
 	// fails to compile fleet-wide), leaving Font as the sole set-once config field.
 	"Base": {"Font": true},
+	// Config/display-chrome gate-lock: these Draw-widgets hold NO reactive UI
+	// state — every exported field is set-once content/appearance/layout config
+	// (or a func hook, auto-allowed). Gating them locks out any future imperative
+	// reactive field. Two documented judgement calls: TerminalView's CursorCol/
+	// CursorRow/CursorVisible are the emulator's own write-head over its grid
+	// document (mutated by Write/Put/SetCell — a document model like TextView's
+	// line buffer, not app-bound reactive state); MarkdownEditor's SideBySide/
+	// Preview/Split are host-set view configuration, not a cross-component
+	// Observable. Window's Closable/Resizable/etc. are capability flags, not a
+	// current-state.
+	"ActionRow":        {"Prefix": true, "Subtitle": true, "Suffix": true, "Title": true},
+	"Alert":            {"Kind": true, "Text": true},
+	"ArticleCard":      {"Body": true, "BodyLines": true, "Meta": true, "Title": true},
+	"Avatar":           {"Color": true, "Initials": true},
+	"Backdrop":         {"Bevel": true, "Fill": true, "GradientDir": true, "GradientTo": true, "Grid": true, "Interactive": true, "NoFill": true, "Radius": true, "Step": true, "Stroke": true, "StrokeWidth": true},
+	"Badge":            {"Fill": true, "Ink": true, "Text": true},
+	"ButtonGroup":      {"Buttons": true, "Orientation": true},
+	"Card":             {"Body": true, "Footer": true, "Title": true},
+	"CardMeta":         {"Author": true, "Comments": true, "Score": true, "Time": true},
+	"ChatBubble":       {"Sender": true, "Text": true},
+	"Chip":             {"Closable": true, "Dot": true, "Text": true},
+	"Container":        {"Layout": true},
+	"DatabaseEditor":   {"BarHeight": true, "EditorHeight": true, "ErrorHeight": true, "TreeWidth": true},
+	"Dialog":           {"Buttons": true, "Content": true, "Title": true},
+	"HeaderBar":        {"End": true, "Start": true, "Subtitle": true, "Title": true},
+	"IconButton":       {"Icon": true},
+	"Image":            {"Alt": true, "H": true, "Pixels": true, "Scale": true, "W": true},
+	"IsoIconPalette":   {"DefaultGroupName": true, "Title": true},
+	"Kbd":              {"Keys": true},
+	"HBox":             {"Align": true, "Pack": true, "Spacing": true},
+	"VBox":             {"Align": true, "Pack": true, "Spacing": true},
+	"Grid":             {"ColWidths": true, "RowHeights": true, "Spacing": true},
+	"LinkCard":         {"Domain": true, "Favicon": true, "Meta": true, "Title": true},
+	"MarkdownEditor":   {"Preview": true, "SideBySide": true, "Source": true, "Split": true},
+	"MarkdownView":     {"Source": true},
+	"MediaCard":        {"Meta": true, "Thumbnail": true, "Title": true},
+	"PostCard":         {"MaxTitleLines": true, "Meta": true, "MetaFont": true, "Pill": true, "PillColor": true, "PillFont": true, "PillInk": true, "Subtitle": true, "SubtitleFont": true, "ThumbH": true, "ThumbPlaceholder": true, "ThumbW": true, "Thumbnail": true, "Title": true, "TitleFont": true},
+	"PullToRefresh":    {"Child": true, "Style": true, "Threshold": true},
+	"SegmentedBar":     {"Orientation": true, "Segments": true},
+	"SplitButton":      {"Arrow": true, "Label": true},
+	"Statusbar":        {"SegmentMinW": true, "Segments": true},
+	"StatusIcon":       {"Badge": true, "IH": true, "IW": true, "Icon": true, "Ink": true, "Pixels": true, "Tooltip": true},
+	"StatusArea":       {"Background": true, "Gap": true, "IconSize": true, "Icons": true},
+	"SwipeActions":     {"ActionWidth": true, "Content": true, "DestructiveDen": true, "DestructiveFull": true, "DestructiveNum": true, "Leading": true, "Projection": true, "Trailing": true},
+	"TerminalView":     {"CellH": true, "CellW": true, "Cells": true, "Cols": true, "CursorCol": true, "CursorRow": true, "CursorVisible": true, "DefaultBG": true, "DefaultFG": true, "Rows": true},
+	"Timeline":         {"Events": true, "Horizontal": true},
+	"Toolbar":          {"ButtonH": true, "ButtonW": true, "Items": true, "Orientation": true},
+	"Wallpaper":        {"Bottom": true, "IH": true, "IW": true, "Interactive": true, "Mode": true, "Pixels": true, "Top": true},
+	"Window":           {"Body": true, "Closable": true, "Maximizable": true, "Minimizable": true, "Resizable": true, "Title": true},
+	"WindowDecoration": {"Border": true, "BorderColor": true, "Buttons": true, "Grip": true, "GripColor": true, "Hairline": true, "Shadow": true, "ShowGrip": true, "Title": true, "TitleCenter": true, "TitleColor": true, "TitleInk": true, "Titlebar": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
