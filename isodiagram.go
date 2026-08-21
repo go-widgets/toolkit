@@ -870,14 +870,35 @@ func (d *IsoDiagram) scene(theme *Theme) *iso.Scene {
 // a segment never projects onto the solid's body. Connectors STAY in the scene,
 // so one routed behind a solid is still occluded and one in front still shows.
 //
-// Each segment is stroked exactly as iso.Scene strokes an iso.Line (round cap,
-// width 1, flat composite through the same vector layer), so at rotation 0 an
-// unoccluded grid is pixel-identical to the pre-fix scene grid, and the grid
-// still turns with the view (rotFwd) and rides pan/zoom through d.project.
+// SPRITE nodes need one extra step. A sprite icon adds NO solid to the
+// depth-sorted scene (see addNodeShapes): it is a straight-alpha billboard
+// blitted flat over the rendered scene (drawSprites). Because it contributes no
+// body, nothing composites over the cell it stands on, so the floor-pass grid
+// keeps showing through the sprite's transparent pixels — grid lines run across
+// the icon's own tile. To fix that leak WITHOUT touching the depth sort (so
+// connectors and primitive solids order exactly as before), the four grid
+// sub-segments that bound a sprite node's footprint cell are simply not stroked:
+// the tile the sprite plants on then carries no grid line at all, matching the
+// clean look a solid gives its own cell. This is done in MODEL space — the grid
+// lines and the node footprints are both model-space, and the current view
+// rotation is applied uniformly to both at projection (d.project → rotFwd) — so a
+// skipped cell stays exactly under its sprite in every orientation, no view-space
+// footprint maths required.
+//
+// PRIMITIVE (non-sprite) nodes are left untouched: their opaque solid already
+// occludes the cell, and skipping their edges would erase the outer half of the
+// near-edge grid lines a primitive currently shows, so a primitive-only diagram
+// stays byte-identical to the pre-fix render (spriteFootprints is empty → every
+// line strokes as one full run, exactly as before).
+//
+// Each run is stroked exactly as iso.Scene strokes an iso.Line (round cap,
+// width 1, flat composite through the same vector layer), so an unoccluded grid
+// is pixel-identical to the pre-fix scene grid, and the grid still turns with the
+// view (rotFwd) and rides pan/zoom through d.project.
 func (d *IsoDiagram) drawGrid(img *raster.Image, theme *Theme) {
 	grid := stdColor(theme.Border)
 	rz := &vector.Rasterizer{}
-	seg := func(a, b iso.Vec3) {
+	stroke := func(a, b iso.Vec3) {
 		pa, pb := d.project(a), d.project(b)
 		path := vector.NewPath().MoveTo(pa.X, pa.Y).LineTo(pb.X, pb.Y)
 		cov, ox, oy, w, h, ok := rz.Stroke(path, 1, img.W, img.H)
@@ -886,12 +907,71 @@ func (d *IsoDiagram) drawGrid(img *raster.Image, theme *Theme) {
 		}
 		vector.Composite(img, cov, ox, oy, w, h, vector.SolidPaint{Color: grid})
 	}
+	occ := d.spriteFootprints(theme)
+	// Vertical lines x=i: the unit sub-segment [j, j+1] is the shared edge of cells
+	// (i-1, j) and (i, j); drop it when either is a sprite footprint so no grid line
+	// touches a sprite's tile.
 	for i := 0; i <= d.Cols; i++ {
-		seg(iso.V(float64(i), 0, 0), iso.V(float64(i), float64(d.Rows), 0))
+		gridLineRuns(d.Rows, func(j int) bool {
+			return occ[[2]int{i - 1, j}] || occ[[2]int{i, j}]
+		}, func(lo, hi int) {
+			stroke(iso.V(float64(i), float64(lo), 0), iso.V(float64(i), float64(hi), 0))
+		})
 	}
+	// Horizontal lines y=j: the unit sub-segment [i, i+1] is the shared edge of
+	// cells (i, j-1) and (i, j).
 	for j := 0; j <= d.Rows; j++ {
-		seg(iso.V(0, float64(j), 0), iso.V(float64(d.Cols), float64(j), 0))
+		gridLineRuns(d.Cols, func(i int) bool {
+			return occ[[2]int{i, j - 1}] || occ[[2]int{i, j}]
+		}, func(lo, hi int) {
+			stroke(iso.V(float64(lo), float64(j), 0), iso.V(float64(hi), float64(j), 0))
+		})
 	}
+}
+
+// gridLineRuns walks a grid line's n unit sub-segments (indexed 0..n-1) and calls
+// emit(lo, hi) once per maximal run of consecutive segments that skip reports
+// false for, so each run is stroked as a single polyline. When skip is never true
+// the whole line emits as one run emit(0, n) — identical to stroking it end to
+// end — which is why a diagram with no sprite footprints renders the grid exactly
+// as the pre-fix single-stroke code did. A run is never emitted for a line with
+// no unit segments (n == 0).
+func gridLineRuns(n int, skip func(int) bool, emit func(lo, hi int)) {
+	for lo := 0; lo < n; {
+		if skip(lo) {
+			lo++
+			continue
+		}
+		hi := lo + 1
+		for hi < n && !skip(hi) {
+			hi++
+		}
+		emit(lo, hi)
+		lo = hi
+	}
+}
+
+// spriteFootprints is the set of model grid cells occupied by a node that blits a
+// sprite this frame — an icon node, on a visible layer, whose resolved icon's
+// drawing carries a Sprite (a pure sprite icon or a hybrid that also adds
+// shapes). These are exactly the cells drawGrid must leave gridless, since a
+// billboard sprite adds no solid to occlude the floor grid under it. A
+// primitive-only node (no Sprite) is never included, so the common case yields an
+// empty set and the grid strokes unchanged. Cell membership is evaluated with the
+// same registry, phase and layer-visibility rules as drawSpritesWhere, so the
+// skipped cells match the sprites actually blitted.
+func (d *IsoDiagram) spriteFootprints(theme *Theme) map[[2]int]bool {
+	cells := map[[2]int]bool{}
+	for _, n := range d.doc.Nodes() {
+		if n.Icon == "" || !d.layerVisible(n.Layer) {
+			continue
+		}
+		icon, _ := d.iconRegistry().Resolve(n.Icon)
+		if d.renderIconAtPhase(icon, n.X, n.Y, d.resolveColor(n, theme)).Sprite != nil {
+			cells[[2]int{n.X, n.Y}] = true
+		}
+	}
+	return cells
 }
 
 // addNodeShapes adds a node's depth-sortable solids to sc: the bare shape solid
