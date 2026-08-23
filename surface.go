@@ -54,6 +54,25 @@ type Surface struct {
 	// OnInput receives events with coordinates translated into the buffer's
 	// space. A nil OnInput drops them.
 	OnInput func(Event)
+
+	// Damage, when set, reports which rectangles of the buffer changed since the
+	// frame the host last presented, in the buffer's OWN pixel coordinates (the
+	// space Frame's pixels, Elements and OnInput use). It is what turns a Surface
+	// into a damage-aware root (the host's DamageRenderer capability): a host that
+	// presents incrementally then repaints and blits ONLY those rectangles
+	// instead of the whole buffer. That is the difference between re-presenting a
+	// small animation — a loading spinner, a blinking caret, a progress bar — and
+	// re-blitting the whole window for it, which for a full-window application
+	// buffer is its single biggest per-frame cost.
+	//
+	// The contract is exact: return every rectangle whose pixels differ from the
+	// frame the host last presented, and no others — a change omitted here is a
+	// change the host never shows, because the framebuffer persists between
+	// frames. Return nil (or an empty slice) to mean "assume the whole buffer
+	// changed", which is always safe and is exactly what a Surface that leaves
+	// Damage unset does. An application that cannot cheaply track its own damage
+	// simply leaves this nil and keeps the whole-surface path.
+	Damage func() []Rect
 }
 
 // SurfaceElement is one thing a [Surface] is showing: what it is, what it says,
@@ -85,6 +104,69 @@ func (s *Surface) Draw(p painter.Painter, theme *Theme) {
 		return
 	}
 	blitImage(p, Rect{X: r.X, Y: r.Y, W: w, H: h}, r, pix, w, h)
+}
+
+// RenderDamaged paints this frame into p and returns the rectangles it painted,
+// in SURFACE coordinates, so a damage-aware host presents exactly their union.
+// It is the incremental-present counterpart of [Surface.Draw] and makes Surface
+// satisfy a host's DamageRenderer capability (see [Surface.Damage]).
+//
+// With Damage unset (or reporting no rectangles) it blits the whole buffer and
+// returns its footprint — pixel-identical to Draw followed by a full present.
+// With Damage set it blits ONLY the reported rectangles: each is read from the
+// buffer's coordinates, offset onto the surface, intersected with the drawn
+// buffer footprint, and blitted through the painter's clip so nothing outside it
+// is touched; the surviving rectangles are returned. A reported rectangle that
+// falls wholly off the buffer contributes nothing and is dropped.
+//
+// It shares Draw's guards: a nil Frame, a non-positive bounds, or a buffer too
+// short for w*h*4 paints nothing and reports no damage.
+func (s *Surface) RenderDamaged(p painter.Painter, theme *Theme) []Rect {
+	_ = theme // the application chose every pixel; the theme is not ours to apply
+	r := s.Bounds()
+	if s.Frame == nil || r.W <= 0 || r.H <= 0 {
+		return nil
+	}
+	pix, w, h := s.Frame()
+	if w <= 0 || h <= 0 || len(pix) < w*h*4 {
+		return nil
+	}
+	dst := Rect{X: r.X, Y: r.Y, W: w, H: h}
+	// The buffer's on-surface footprint: where Draw's whole-buffer blit lands,
+	// clipped to the bounds, and the coordinate space the returned damage is in.
+	foot := intersectRect(dst, r)
+	var dmg []Rect
+	if s.Damage != nil {
+		dmg = s.Damage()
+	}
+	if len(dmg) == 0 {
+		blitImage(p, dst, r, pix, w, h)
+		return []Rect{foot}
+	}
+	out := make([]Rect, 0, len(dmg))
+	for _, d := range dmg {
+		// Buffer coordinates -> surface coordinates, then confined to the buffer's
+		// on-surface footprint so a rectangle reaching past the buffer (or past the
+		// widget's bounds) cannot present or paint stale pixels.
+		sc := intersectRect(Rect{X: r.X + d.X, Y: r.Y + d.Y, W: d.W, H: d.H}, foot)
+		if sc.W <= 0 || sc.H <= 0 {
+			continue
+		}
+		blitImage(p, dst, sc, pix, w, h)
+		out = append(out, sc)
+	}
+	return out
+}
+
+// intersectRect returns the overlap of a and b, or a zero-size rectangle when
+// they do not meet.
+func intersectRect(a, b Rect) Rect {
+	x0, y0 := max(a.X, b.X), max(a.Y, b.Y)
+	x1, y1 := min(a.X+a.W, b.X+b.W), min(a.Y+a.H, b.Y+b.H)
+	if x1 <= x0 || y1 <= y0 {
+		return Rect{}
+	}
+	return Rect{X: x0, Y: y0, W: x1 - x0, H: y1 - y0}
 }
 
 // OnEvent hands the event to the application with its coordinates moved into
