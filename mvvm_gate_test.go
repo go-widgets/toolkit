@@ -159,6 +159,11 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// (auto-allowed). Gating them locks out any future imperative state field.
 	"AgendaSidebar": {"Calendars": true, "Title": true},
 	"AppDock":       {"Items": true, "Magnify": true, "MaxScale": true, "Radius": true, "Style": true},
+	// DockPanel holds no reactive state of its own: the launcher bar, the leading
+	// and trailing accessory groups and the context menu are all set-once composed
+	// widgets/config (the menu's open state lives on its own ContextMenu.Open()
+	// Observable). Every exported field below is composition config.
+	"DockPanel":     {"Dock": true, "Leading": true, "Trailing": true, "Menu": true},
 	"Browser":       {"HideScrollbar": true, "Phase": true, "Scale": true, "HideChrome": true},
 	"ColumnBrowser": {"ColumnWidth": true},
 	"IsoDiagram":    {"DefaultShape": true, "Icons": true, "Mode": true, "AnimationPeriod": true, "Cols": true, "Rows": true},
