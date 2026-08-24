@@ -391,10 +391,37 @@ func (d *Diff) A11y() A11yInfo {
 // A11y reports the HeaderBar as a banner named by its title.
 func (h *HeaderBar) A11y() A11yInfo { return A11yInfo{Role: RoleBanner, Name: h.Title} }
 
-// A11y reports the Statusbar as a status region carrying its segments
-// joined into one string.
+// A11y reports the Statusbar as a status region carrying its segments joined
+// into one string: the plain text Segments first, then every interactive
+// Left/Center/Right segment's label (its Text, or its hosted widget's accessible
+// name/value when it has no text). With no interactive segments this is exactly
+// strings.Join(Segments, " | ") — the pre-groups behaviour.
 func (s *Statusbar) A11y() A11yInfo {
-	return A11yInfo{Role: RoleStatus, Value: strings.Join(s.Segments, " | ")}
+	parts := append([]string(nil), s.Segments...)
+	for _, g := range [][]StatusSegment{s.Left, s.Center, s.Right} {
+		for _, seg := range g {
+			parts = append(parts, statusSegLabel(seg))
+		}
+	}
+	return A11yInfo{Role: RoleStatus, Value: strings.Join(parts, " | ")}
+}
+
+// statusSegLabel is the accessible label of one interactive segment: its Text
+// when set, else its hosted widget's accessible Name (or Value when the widget
+// names itself only by value), else the empty string.
+func statusSegLabel(seg StatusSegment) string {
+	if seg.Text != "" {
+		return seg.Text
+	}
+	a, ok := seg.Widget.(Accessible)
+	if !ok {
+		return ""
+	}
+	info := a.A11y()
+	if info.Name != "" {
+		return info.Name
+	}
+	return info.Value
 }
 
 // A11y reports the Dialog as a dialog named by its title. This also covers

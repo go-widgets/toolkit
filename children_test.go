@@ -47,6 +47,7 @@ func TestContainersExposeTheirChildren(t *testing.T) {
 		{"paned", &Paned{First: a, Second: b}, []Widget{a, b}},
 		{"popover", NewPopover(a), []Widget{a}},
 		{"scrollview", NewScrollView(a), []Widget{a}},
+		{"statusbar", &Statusbar{Left: []StatusSegment{{Widget: a}}, Right: []StatusSegment{{Widget: b}}}, []Widget{a, b}},
 		{"window", NewWindow("t", a), []Widget{a}},
 		{"wizard", NewWizard([]WizardStep{{Title: "s", Body: a}}), []Widget{a}},
 	}
@@ -88,6 +89,7 @@ func TestContainersSkipNilChildren(t *testing.T) {
 		{"paned", &Paned{Second: a}},
 		{"popover", NewPopover(nil)},
 		{"scrollview", NewScrollView(nil)},
+		{"statusbar", &Statusbar{Left: []StatusSegment{{Text: "x"}, {Widget: a}}}},
 		{"window", NewWindow("t", nil)},
 		{"wizard", NewWizard([]WizardStep{{Title: "s"}})},
 	}
