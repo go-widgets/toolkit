@@ -47,6 +47,21 @@ func (a *Accordion) Children() []Widget {
 // Children yields the row's leading then trailing widget.
 func (a *ActionRow) Children() []Widget { return nonNil(a.Prefix, a.Suffix) }
 
+// Children yields the settings row's trailing Control (the switch/scale/…),
+// so a generic walk reaches the control the row hosts.
+func (s *SettingRow) Children() []Widget { return nonNil(s.Control) }
+
+// Children yields the group's settings rows in visual (top-to-bottom) order.
+func (g *SettingsGroup) Children() []Widget {
+	out := make([]Widget, 0, len(g.Rows))
+	for _, row := range g.Rows {
+		if row != nil {
+			out = append(out, row)
+		}
+	}
+	return out
+}
+
 // Children yields the five regions in reading order: the edges clockwise from
 // the top, then the centre.
 func (b *Border) Children() []Widget {
