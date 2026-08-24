@@ -32,11 +32,12 @@ import (
 // this gate makes ADDING a new imperative state field to a migrated widget a CI
 // failure. New entries are added here as each widget is migrated in later batches.
 var mvvmMigratedWidgets = map[string]map[string]bool{
-	// AddressBar: Radius + TextPad are device-pixel layout metrics (config); the
-	// icon hooks are funcs and Commit is an *mvvm.Command (both auto-allowed); all
-	// of its reactive state (URL / Editing / Focused / Bookmarked / Copied) is
-	// unexported behind Observable accessors.
-	"AddressBar": {"Radius": true, "TextPad": true},
+	// AddressBar: Radius + TextPad are device-pixel layout metrics and Placeholder
+	// is set-once prompt text (all config); the icon hooks are funcs and Commit is
+	// an *mvvm.Command (both auto-allowed); all of its reactive state (URL /
+	// Editing / Focused / Bookmarked / Copied) is unexported behind Observable
+	// accessors.
+	"AddressBar": {"Radius": true, "TextPad": true, "Placeholder": true},
 	// Max is cell count; FilledColor/EmptyColor are set-once appearance overrides
 	// for the star tones. All reactive state (the score) is on the Value Observable.
 	"Rating": {"Max": true, "FilledColor": true, "EmptyColor": true},

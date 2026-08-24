@@ -26,6 +26,22 @@ func abClick(a *AddressBar, x, y int) {
 	a.OnEvent(Event{Kind: EventClick, X: x, Y: y})
 }
 
+// abCountColor counts pixels in buf exactly equal to want. The test bitmap font
+// paints solid ink pixels (no anti-aliasing), so an exact match locates glyphs
+// drawn in a given ink — used to tell the muted placeholder tone (SurfaceAlt)
+// apart from the value tone (OnSurface).
+func abCountColor(buf []byte, w, h int, want RGBA) int {
+	n := 0
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if abPx(buf, w, x, y) == want {
+				n++
+			}
+		}
+	}
+	return n
+}
+
 func TestAddressBarStateIsObservableOnly(t *testing.T) {
 	a := &AddressBar{Radius: 4, TextPad: 4}
 	a.URL().Set("http://x")
@@ -171,6 +187,103 @@ func TestAddressBarZones(t *testing.T) {
 	}
 	if _, tz, _ := a.zones(Rect{X: 0, Y: 0, W: 10, H: 30}); tz.W != 0 {
 		t.Fatalf("narrow text zone W = %d, want 0", tz.W)
+	}
+}
+
+func TestAddressBarPlaceholder(t *testing.T) {
+	const w, h = 200, 24
+	th := DefaultLight()
+	// SurfaceAlt is the muted placeholder ink; OnSurface is the value/caret ink.
+	// The AddressBar paints SurfaceAlt nowhere else, so its presence == a
+	// placeholder was drawn.
+	muted, solid := th.SurfaceAlt, th.OnSurface
+
+	// Empty value + unfocused + Placeholder set: the prompt paints in the muted
+	// ink, and it is never counted as the value.
+	a := &AddressBar{Radius: 4, TextPad: 4, Placeholder: "search or enter address"}
+	buf := abRender(a, w, h, th)
+	if abCountColor(buf, w, h, muted) == 0 {
+		t.Fatal("empty unfocused field did not paint the placeholder in the muted ink")
+	}
+	if a.Value() != "" || a.A11y().Value != "" {
+		t.Fatalf("placeholder leaked into the value: value=%q a11y=%q", a.Value(), a.A11y().Value)
+	}
+
+	// A real value hides the placeholder: text paints in the solid ink, no muted
+	// glyphs (exercises the value-present branch).
+	a.URL().Set("http://example.com")
+	buf = abRender(a, w, h, th)
+	if abCountColor(buf, w, h, muted) != 0 {
+		t.Fatal("placeholder still painted while a value is present")
+	}
+	if abCountColor(buf, w, h, solid) == 0 {
+		t.Fatal("value did not paint in the solid ink")
+	}
+
+	// Focus (editing) with an empty buffer hides the placeholder too — the field
+	// is being edited, so only the caret shows (exercises the !focused branch).
+	a.URL().Set("")
+	a.Focused().Set(true)
+	a.Editing().Set("")
+	buf = abRender(a, w, h, th)
+	if abCountColor(buf, w, h, muted) != 0 {
+		t.Fatal("placeholder painted while the field was being edited")
+	}
+	if abCountColor(buf, w, h, solid) == 0 {
+		t.Fatal("focused empty field should still paint its caret in the solid ink")
+	}
+
+	// No Placeholder configured: empty unfocused field paints no prompt at all
+	// (exercises the empty-placeholder branch).
+	blank := &AddressBar{Radius: 4, TextPad: 4}
+	if abCountColor(abRender(blank, w, h, th), w, h, muted) != 0 {
+		t.Fatal("a field with no Placeholder should paint no muted prompt")
+	}
+}
+
+func TestAddressBarEscapeCancels(t *testing.T) {
+	committed := ""
+	a := &AddressBar{Radius: 4, TextPad: 4}
+	a.Commit = mvvm.NewCommand(func() { committed = a.Editing().Get() }, nil)
+	a.URL().Set("http://committed")
+
+	// Focus seeds the buffer from URL; the user then edits it.
+	abClick(a, 5, 10)
+	a.OnEvent(Event{Kind: EventChar, Code: "X"})
+	if a.Editing().Get() != "http://committedX" {
+		t.Fatalf("pre-Escape buffer = %q", a.Editing().Get())
+	}
+	a.Copied().Set(true) // Escape also clears any copy highlight.
+	// Escape cancels: the buffer reverts to the committed URL, focus/copy drop,
+	// and Commit does NOT run.
+	a.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
+	if a.Editing().Get() != "http://committed" {
+		t.Fatalf("Escape did not revert the buffer: %q", a.Editing().Get())
+	}
+	if a.Focused().Get() || a.Copied().Get() {
+		t.Fatalf("Escape should defocus and clear copy: focused=%v copied=%v", a.Focused().Get(), a.Copied().Get())
+	}
+	if committed != "" {
+		t.Fatalf("Escape must not commit, but Commit ran with %q", committed)
+	}
+
+	// Escape with no committed value reverts to the empty URL (no-committed-value
+	// branch) and still does not commit.
+	a.URL().Set("")
+	a.Focused().Set(true)
+	a.Editing().Set("typed")
+	a.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
+	if a.Editing().Get() != "" || a.Focused().Get() || committed != "" {
+		t.Fatalf("Escape with empty URL: buffer=%q focused=%v committed=%q", a.Editing().Get(), a.Focused().Get(), committed)
+	}
+
+	// Enter still commits, unchanged by the new Escape path.
+	a.URL().Set("http://committed")
+	abClick(a, 5, 10)
+	a.OnEvent(Event{Kind: EventChar, Code: "!"})
+	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	if committed != "http://committed!" || a.Focused().Get() {
+		t.Fatalf("Enter should still commit: committed=%q focused=%v", committed, a.Focused().Get())
 	}
 }
 
