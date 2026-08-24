@@ -243,6 +243,15 @@ type VirtualList[T any] struct {
 	// before Render. Only consulted when CacheKey is set.
 	CacheBackground toolkit.RGBA
 
+	// OnVisibleRow, when set, is called once per frame for every row currently in
+	// the viewport, with the row's on-screen rect — before that row is painted and
+	// REGARDLESS of the raster cache. It is the seam for per-row work that must
+	// still happen every frame even when the paint is served from a cached tile:
+	// collecting the text runs a selection spans, reporting a row as seen, arming a
+	// lazy load. It must not itself paint (its work is not cached); leave it nil
+	// when unused.
+	OnVisibleRow func(i int, r toolkit.Rect, item T)
+
 	idx        *heightIndex
 	unsub      func()
 	subscribed *mvvm.ObservableList[T]
@@ -439,7 +448,12 @@ func (v *VirtualList[T]) Draw(p painter.Painter, th *toolkit.Theme) {
 	for k := 0; k < count; k++ {
 		i := first + k
 		hgt := v.idx.heightAt(i)
-		v.drawRow(p, th, toolkit.Rect{X: r.X, Y: y, W: r.W, H: hgt}, i, v.Model.At(i))
+		rr := toolkit.Rect{X: r.X, Y: y, W: r.W, H: hgt}
+		item := v.Model.At(i)
+		if v.OnVisibleRow != nil {
+			v.OnVisibleRow(i, rr, item)
+		}
+		v.drawRow(p, th, rr, i, item)
 		y += hgt
 	}
 	v.sweepCache()
