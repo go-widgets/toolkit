@@ -221,9 +221,33 @@ type VirtualList[T any] struct {
 	// content. Reads clamp it to [0, maxOffset]; prefer ScrollTo / ScrollBy.
 	ScrollOffset int
 
+	// CacheKey, when non-nil, turns on per-row RASTER CACHING: each visible row is
+	// rendered once into an offscreen tile keyed by CacheKey(i, item) (plus the
+	// row's pixel size), and later frames BLIT the tile instead of re-running
+	// Render. It is the compositing/layer-cache best practice: an animation
+	// elsewhere on screen no longer re-rasterises a feed of unchanged, expensive
+	// rows (rounded card frames, laid-out text) every frame.
+	//
+	// The key MUST change whenever the row's appearance does — its content and any
+	// state Render paints (selection, read/dimmed veil) — or a stale tile is
+	// shown. Left nil, rows render directly every frame, exactly as before (no
+	// behaviour change for an existing consumer).
+	//
+	// Caching assumes the pixels behind a row are a solid CacheBackground (the
+	// common case for a card feed): the tile is filled with it before Render, so a
+	// row whose content leaves gaps — a card's rounded corners, a translucent veil
+	// — composites over the same colour it would on screen. A non-solid backdrop
+	// is not cacheable this way; leave CacheKey nil.
+	CacheKey func(i int, item T) string
+	// CacheBackground is the solid colour a cached row's tile is filled with
+	// before Render. Only consulted when CacheKey is set.
+	CacheBackground toolkit.RGBA
+
 	idx        *heightIndex
 	unsub      func()
 	subscribed *mvvm.ObservableList[T]
+	rowCache   map[string]cachedRow
+	cacheHit   map[string]bool
 }
 
 var _ toolkit.Widget = (*VirtualList[int])(nil)
@@ -415,9 +439,10 @@ func (v *VirtualList[T]) Draw(p painter.Painter, th *toolkit.Theme) {
 	for k := 0; k < count; k++ {
 		i := first + k
 		hgt := v.idx.heightAt(i)
-		v.Render(p, th, toolkit.Rect{X: r.X, Y: y, W: r.W, H: hgt}, i, v.Model.At(i))
+		v.drawRow(p, th, toolkit.Rect{X: r.X, Y: y, W: r.W, H: hgt}, i, v.Model.At(i))
 		y += hgt
 	}
+	v.sweepCache()
 
 	if overflow && canClip {
 		clr.PopClip()
