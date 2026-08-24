@@ -99,7 +99,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Table":     {"Columns": true, "Rows": true, "MultiSelect": true, "FrozenColumns": true, "EditActivation": true, "GroupBy": true, "Reorderable": true, "SelfSort": true, "ShowSummary": true},
 	"TreeView":  {"Root": true, "RowHeight": true, "MultiSelect": true, "HideRoot": true, "HideScrollbar": true},
 	"TreeTable": {"Columns": true, "Root": true},
-	"ListBox":   {"Items": true, "RowHeight": true, "MultiSelect": true, "Reorderable": true},
+	"ListBox":   {"Items": true, "RowHeight": true, "MultiSelect": true, "Reorderable": true, "Sections": true},
 	"Toast":     {"Text": true, "Kind": true, "ActionLabel": true, "Lines": true, "Actions": true, "Pixels": true, "IW": true, "IH": true, "Icon": true},
 	"Stat":      {"Title": true},
 	"Sparkline": {"Values": true, "Kind": true, "Fill": true, "ShowLast": true},

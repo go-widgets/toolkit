@@ -56,7 +56,17 @@ import (
 type ListBox struct {
 	Base
 	focusState
-	Items     []string
+	Items []string
+
+	// Sections, when non-empty, switches the ListBox into sectioned mode: its
+	// rows render grouped under non-selectable header captions instead of as one
+	// flat run, and the flat Items slice is ignored (see the "Sectioned
+	// navigation lists" section below and [NewSectionedListBox]). Empty (the
+	// default) leaves the widget byte-identical to the flat ListBox above. It is
+	// set-once layout/data config, not reactive state — mutate it and call the
+	// next SetBounds/Draw to re-lay the rows out.
+	Sections []ListSection
+
 	RowHeight int // pixels per row; default 18 via NewListBox
 	// selectedRow is the anchor/cursor row (-1 = no selection). The reactive
 	// selection is MVVM-only: it lives in an unexported Observable exposed via
@@ -190,7 +200,7 @@ const ListRowDragPrefix = "listrow:"
 // recent EventClick (see pressedRow), or "" when Reorderable is false or no
 // row has been pressed yet.
 func (l *ListBox) DragData() string {
-	if !l.Reorderable || l.pressedRow < 0 {
+	if l.sectioned() || !l.Reorderable || l.pressedRow < 0 {
 		return ""
 	}
 	return ListRowDragPrefix + strconv.Itoa(l.pressedRow)
@@ -201,7 +211,7 @@ func (l *ListBox) DragData() string {
 // false for any payload that doesn't carry the scheme (e.g. a different
 // DragSource's payload).
 func (l *ListBox) AcceptsDrop(payload string) bool {
-	if !l.Reorderable {
+	if l.sectioned() || !l.Reorderable {
 		return false
 	}
 	return strings.HasPrefix(payload, ListRowDragPrefix)
@@ -219,6 +229,10 @@ func (l *ListBox) AcceptsDrop(payload string) bool {
 // a partially-visible trailing row never bleeds past Bounds().H, and
 // a thin scrollbar track+thumb is painted on the right edge.
 func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
+	if l.sectioned() {
+		l.drawSectioned(p, theme)
+		return
+	}
 	r := l.Bounds()
 	vr := l.visibleRows()
 	overflow := len(l.Items) > vr
@@ -329,7 +343,7 @@ func (l *ListBox) visibleRows() int {
 // window of content on screen: len(Items) - visibleRows(), floored
 // at 0 so a list that already fits the viewport never scrolls.
 func (l *ListBox) maxScrollRow() int {
-	m := len(l.Items) - l.visibleRows()
+	m := l.rowCount() - l.visibleRows()
 	if m < 0 {
 		return 0
 	}
@@ -376,6 +390,10 @@ func (l *ListBox) ScrollBy(delta int) {
 // selection on screen; it is also exposed for a host that drives Selected
 // externally and wants the list to keep it in view.
 func (l *ListBox) scrollToSelected() {
+	if l.sectioned() {
+		l.scrollToSelectedSectioned()
+		return
+	}
 	sel := l.Selected().Get()
 	if sel < 0 {
 		return
@@ -419,7 +437,7 @@ func (l *ListBox) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 // ScrollView's proportion math but driven by ScrollRow (whole rows).
 func (l *ListBox) scrollbarGeom() (sbGeom, bool) {
 	r := l.Bounds()
-	contentH := len(l.Items) * l.rowHeight()
+	contentH := l.rowCount() * l.rowHeight()
 	if r.H <= 0 || contentH <= r.H {
 		return sbGeom{}, false
 	}
@@ -499,7 +517,7 @@ func (l *ListBox) handleKey(ev Event) {
 		l.activateCursor()
 		return
 	}
-	if idx, ok := rovingIndex(l.Selected().Get(), len(l.Items), l.visibleRows(), ev.Code); ok {
+	if idx, ok := rovingIndex(l.Selected().Get(), l.itemCount(), l.visibleRows(), ev.Code); ok {
 		l.Selected().Set(idx)
 		// A plain move mirrors a plain click: in MultiSelect mode the cursor
 		// row becomes the sole selection (and the anchor).
@@ -516,7 +534,7 @@ func (l *ListBox) handleKey(ev Event) {
 // (nothing selected yet) is a no-op, and a nil OnActivate is safe.
 func (l *ListBox) activateCursor() {
 	sel := l.Selected().Get()
-	if sel < 0 || sel >= len(l.Items) {
+	if sel < 0 || sel >= l.itemCount() {
 		return
 	}
 	if l.MultiSelect {
@@ -558,6 +576,14 @@ func (l *ListBox) IndexAt(x, y int) int {
 	if l.RowHeight <= 0 || y < 0 {
 		return -1
 	}
+	if l.sectioned() {
+		rows := l.sectionRows()
+		v := l.clampedScrollRow() + y/l.rowHeight()
+		if v >= len(rows) || rows[v].header {
+			return -1
+		}
+		return rows[v].item
+	}
 	idx := l.clampedScrollRow() + y/l.rowHeight()
 	if idx < 0 || idx >= len(l.Items) {
 		return -1
@@ -566,6 +592,10 @@ func (l *ListBox) IndexAt(x, y int) int {
 }
 
 func (l *ListBox) onClick(ev Event) {
+	if l.sectioned() {
+		l.onClickSectioned(ev)
+		return
+	}
 	if l.RowHeight <= 0 {
 		return
 	}
@@ -821,4 +851,286 @@ func (l *ListBox) SelectRange(a, b int) {
 		set[i] = true
 	}
 	l.selected = set
+}
+
+// --- Sectioned navigation lists -----------------------------------------
+//
+// A ListBox can group its rows under non-selectable section headers instead of
+// presenting one flat run. This is the sidebar-navigator shape apps otherwise
+// hand-roll (a "Favorites" caption over a run of places, a "Settings" caption
+// over a run of categories): a caption row a screen reader announces as a
+// heading, followed by selectable item rows a pointer or the arrow keys move
+// between, skipping the captions.
+//
+// It is strictly additive. When Sections is empty (the default) the widget is
+// byte-identical to the flat ListBox documented above: the flat Items slice is
+// the model, and none of the code below runs. When Sections is non-empty the
+// widget switches to sectioned mode: the flat Items slice is ignored, the
+// selectable rows are the concatenation of every section's Items, and the
+// Selected Observable, OnActivate, keyboard navigation and the multi-select
+// clamp all address that flat item-index space (headers are never part of it).
+// Sectioned mode is single-selection and, because a caption between two runs has
+// no place in a drag-to-reorder gesture, disables Reorderable (DragData returns
+// "" and AcceptsDrop returns false) — set one or the other, not both.
+
+// ListSection is one labelled group of a sectioned ListBox: a non-selectable
+// Title caption (drawn only when non-empty) followed by its selectable Items.
+// It is the additive alternative to the flat [ListBox.Items] slice — see the
+// Sections field and [NewSectionedListBox].
+type ListSection struct {
+	Title string
+	Items []string
+}
+
+// lbRow is one laid-out VISUAL row of a sectioned ListBox: a non-selectable
+// header (item < 0) carrying a section Title, or a selectable item row carrying
+// its text and its flat selectable-item index.
+type lbRow struct {
+	header bool
+	text   string
+	item   int // flat selectable-item index; -1 for a header
+}
+
+// NewSectionedListBox builds a ListBox in sectioned mode: the given sections
+// render as non-selectable header captions each followed by their selectable
+// item rows. Selection, keyboard navigation and OnActivate address the flat
+// concatenation of every section's items (headers are skipped). It is the
+// section-aware sibling of [NewListBox]; everything else about the widget (the
+// Selected / ScrollRow Observables, virtual scrolling, focus, accessibility) is
+// identical, and passing no sections yields a plain flat ListBox.
+func NewSectionedListBox(sections ...ListSection) *ListBox {
+	lb := NewListBox(nil)
+	lb.Sections = sections
+	return lb
+}
+
+// sectioned reports whether the ListBox is in sectioned mode (at least one
+// [ListSection] configured). In sectioned mode the flat Items slice is ignored;
+// the selectable rows are grouped under non-selectable headers. When false the
+// widget behaves exactly as it did before sections existed.
+func (l *ListBox) sectioned() bool { return len(l.Sections) > 0 }
+
+// itemCount is the number of SELECTABLE items: the flat Items length, or (in
+// sectioned mode) the sum of the sections' item counts. Selection indices,
+// keyboard navigation and the multi-select set all live in this flat item-index
+// space; section headers are NOT part of it.
+func (l *ListBox) itemCount() int {
+	if !l.sectioned() {
+		return len(l.Items)
+	}
+	n := 0
+	for i := range l.Sections {
+		n += len(l.Sections[i].Items)
+	}
+	return n
+}
+
+// rowCount is the number of VISUAL rows: one per Items entry in flat mode, or
+// the items plus their section headers in sectioned mode. The scroll math
+// (maxScrollRow, the scrollbar geometry) windows over visual rows, so a header
+// occupies a row just like an item.
+func (l *ListBox) rowCount() int {
+	if !l.sectioned() {
+		return len(l.Items)
+	}
+	n := 0
+	for i := range l.Sections {
+		if l.Sections[i].Title != "" {
+			n++
+		}
+		n += len(l.Sections[i].Items)
+	}
+	return n
+}
+
+// flatItems is the flat list of selectable item strings: Items in flat mode, or
+// the concatenation of every section's Items in sectioned mode. It is the item
+// index space Selected, keyboard navigation and the multi-select set address;
+// used where the actual string at an arbitrary index is needed (accessibility).
+func (l *ListBox) flatItems() []string {
+	if !l.sectioned() {
+		return l.Items
+	}
+	out := make([]string, 0, l.itemCount())
+	for i := range l.Sections {
+		out = append(out, l.Sections[i].Items...)
+	}
+	return out
+}
+
+// sectionRows lays the visual rows out top to bottom: each section contributes a
+// header row (only when its Title is non-empty) followed by one row per item,
+// with a running flat item index. Only called in sectioned mode.
+func (l *ListBox) sectionRows() []lbRow {
+	rows := make([]lbRow, 0, l.rowCount())
+	idx := 0
+	for s := range l.Sections {
+		sec := &l.Sections[s]
+		if sec.Title != "" {
+			rows = append(rows, lbRow{header: true, text: sec.Title, item: -1})
+		}
+		for _, it := range sec.Items {
+			rows = append(rows, lbRow{text: it, item: idx})
+			idx++
+		}
+	}
+	return rows
+}
+
+// drawSectioned paints the sectioned ListBox: the same windowed, clipped,
+// scrollbar-aware render as the flat Draw, but over the visual rows (headers +
+// items). A header row is drawn as a muted caption on a SurfaceAlt band; an item
+// row is drawn (and selection-highlighted) exactly as in flat mode, including
+// the ItemRenderer content seam.
+func (l *ListBox) drawSectioned(p painter.Painter, theme *Theme) {
+	r := l.Bounds()
+	rows := l.sectionRows()
+	vr := l.visibleRows()
+	overflow := len(rows) > vr
+
+	cr := r // content rect: full bounds, minus the scrollbar gutter if any
+	if overflow {
+		cr.W -= scrollGutter()
+	}
+
+	var clr painter.Clipper
+	canClip := false
+	if overflow {
+		clr, canClip = p.(painter.Clipper)
+		if canClip {
+			clr.PushClip(cr)
+		}
+	}
+
+	start := l.clampedScrollRow()
+	end := start + vr
+	if end > len(rows) {
+		end = len(rows)
+	}
+	rh := l.rowHeight()
+	sel := l.Selected().Get()
+	for i := start; i < end; i++ {
+		row := rows[i]
+		y := r.Y + (i-start)*rh
+		if row.header {
+			l.drawSectionHeader(p, theme, cr, y, rh, row.text)
+			continue
+		}
+		bg := theme.Surface
+		ink := theme.OnSurface
+		hi := row.item == sel
+		if hi {
+			bg = theme.Accent
+			ink = accentInk(theme)
+		}
+		fillRect(p, cr.X, y, cr.W, rh, bg)
+		if l.ItemRenderer != nil {
+			l.ItemRenderer(p, theme, Rect{X: cr.X, Y: y, W: cr.W, H: rh}, row.item, row.text, hi, ink)
+		} else {
+			textY := y + (rh-l.glyphHeight())/2
+			l.drawText(p, cr.X+scaled(4), textY, row.text, ink)
+		}
+	}
+
+	if overflow && canClip {
+		clr.PopClip()
+	}
+	if overflow {
+		l.drawScrollbar(p, theme, r)
+	}
+	l.drawFocusRing(p, theme, r)
+}
+
+// drawSectionHeader paints one non-selectable section caption: a SurfaceAlt band
+// with the title in muted ink, visually distinct from the selectable item rows
+// above and below it.
+func (l *ListBox) drawSectionHeader(p painter.Painter, theme *Theme, cr Rect, y, rh int, title string) {
+	fillRect(p, cr.X, y, cr.W, rh, theme.SurfaceAlt)
+	textY := y + (rh-l.glyphHeight())/2
+	l.drawText(p, cr.X+scaled(4), textY, title, mutedInk(theme))
+}
+
+// onClickSectioned handles a click in sectioned mode: it maps the pointer to a
+// visual row and, when that row is a selectable item (never a header), moves
+// Selected onto its flat item index and fires OnActivate. A click on a header,
+// on empty space past the last row, or with a non-positive RowHeight selects
+// nothing.
+func (l *ListBox) onClickSectioned(ev Event) {
+	if l.RowHeight <= 0 {
+		return
+	}
+	if ev.Y < 0 { // Go truncates toward zero -- guard early.
+		return
+	}
+	v := l.clampedScrollRow() + ev.Y/l.rowHeight()
+	rows := l.sectionRows()
+	if v >= len(rows) {
+		return
+	}
+	row := rows[v]
+	if row.header {
+		return
+	}
+	l.Selected().Set(row.item)
+	if l.OnActivate != nil {
+		l.OnActivate(row.item)
+	}
+}
+
+// scrollToSelectedSectioned keeps the selected item's VISUAL row within the
+// window, mapping the flat selection index through the header rows above it. A
+// selection that is not a currently-listed item (cleared, or out of range)
+// scrolls nothing.
+func (l *ListBox) scrollToSelectedSectioned() {
+	sel := l.Selected().Get()
+	v := -1
+	for i, row := range l.sectionRows() {
+		if !row.header && row.item == sel {
+			v = i
+			break
+		}
+	}
+	if v < 0 {
+		return
+	}
+	if v < l.ScrollRow().Get() {
+		l.ScrollTo(v)
+		return
+	}
+	vr := l.visibleRows()
+	if vr <= 0 {
+		return
+	}
+	if v >= l.ScrollRow().Get()+vr {
+		l.ScrollTo(v - vr + 1)
+	}
+}
+
+// Children exposes a sectioned ListBox's headers and items as synthetic
+// accessibility proxies, in visual order, so [WalkA11y] announces each caption
+// as a heading and each row as a list item (with "selected" on the current one).
+// The proxies are non-visual — they are never laid out or painted, only the
+// accessibility walk reads them. A flat ListBox holds no child widgets, so this
+// returns nil and its accessibility is unchanged.
+func (l *ListBox) Children() []Widget {
+	if !l.sectioned() {
+		return nil
+	}
+	r := l.Bounds()
+	rh := l.rowHeight()
+	start := l.clampedScrollRow()
+	sel := l.Selected().Get()
+	var out []Widget
+	for i, row := range l.sectionRows() {
+		y := r.Y + (i-start)*rh
+		var pr *isoProxy
+		if row.header {
+			pr = &isoProxy{info: A11yInfo{Role: RoleHeading, Name: row.text}}
+		} else {
+			pr = &isoProxy{info: A11yInfo{Role: RoleListItem, Name: row.text, Value: stateValue(row.item == sel, "selected")}}
+		}
+		pr.SetBounds(Rect{X: r.X, Y: y, W: r.W, H: rh})
+		out = append(out, pr)
+	}
+	return out
 }

@@ -38,6 +38,11 @@ const (
 	RoleDocument     Role = "document"
 	RoleToolbar      Role = "toolbar"
 	RolePresentation Role = "presentation"
+	// RoleHeading is a non-selectable group caption; RoleListItem is one
+	// selectable entry of a list. A sectioned ListBox exposes its section
+	// captions as headings and its rows as list items (see ListBox.Children).
+	RoleHeading  Role = "heading"
+	RoleListItem Role = "listitem"
 )
 
 // stateValue returns word when on is true, "" otherwise. It is the shared
@@ -177,8 +182,8 @@ func (l *ListBox) A11y() A11yInfo {
 		if n := len(l.SelectedIndices()); n > 0 {
 			v = strconv.Itoa(n) + " selected"
 		}
-	} else if sel := l.Selected().Get(); sel >= 0 && sel < len(l.Items) {
-		v = l.Items[sel]
+	} else if sel := l.Selected().Get(); sel >= 0 && sel < l.itemCount() {
+		v = l.flatItems()[sel]
 	}
 	return A11yInfo{Role: RoleListbox, Value: v}
 }
