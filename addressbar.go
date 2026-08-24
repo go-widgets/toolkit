@@ -36,8 +36,15 @@ type AddressBar struct {
 
 	// Commit is executed on Enter when the trimmed edit buffer is non-empty; a
 	// host binds it to normalise + navigate to [AddressBar.Editing]. Nil → Enter
-	// just defocuses.
+	// just defocuses. Escape cancels instead: it reverts the edit buffer to URL
+	// and defocuses WITHOUT running Commit.
 	Commit *mvvm.Command
+
+	// Placeholder is prompt text shown in a muted ink when the field is empty and
+	// not being edited (unfocused with no value). It is never part of the value:
+	// [AddressBar.Value] and the a11y report ignore it, and Commit never sees it.
+	// Empty (the default) shows nothing. Appearance config, not reactive state.
+	Placeholder string
 
 	// Radius is the corner radius and TextPad the left/right text inset, both in
 	// device pixels so a HiDPI host scales them. Config, not state.
@@ -167,6 +174,14 @@ func (a *AddressBar) Draw(p painter.Painter, theme *Theme) {
 	if focused {
 		text = a.Editing().Get()
 	}
+	// When the field is empty and not being edited, show the Placeholder in a
+	// muted ink instead. It is a visual prompt only — never the value — so it is
+	// painted here and nowhere else (Value / A11y ignore it).
+	ink := theme.OnSurface
+	if text == "" && !focused && a.Placeholder != "" {
+		text = a.Placeholder
+		ink = theme.SurfaceAlt
+	}
 	innerX := tz.X + a.TextPad
 	avail := tz.W - 2*a.TextPad
 	shown := text
@@ -180,7 +195,7 @@ func (a *AddressBar) Draw(p painter.Painter, theme *Theme) {
 		hl := blendRGBA(theme.Accent, theme.Surface, 0.62)
 		fillRect(p, innerX, ty, a.textWidth(shown), a.glyphHeight(), hl)
 	}
-	a.drawText(p, innerX, ty, shown, theme.OnSurface)
+	a.drawText(p, innerX, ty, shown, ink)
 	if focused {
 		caretW := a.glyphHeight() / 12
 		if caretW < 1 {
@@ -193,7 +208,8 @@ func (a *AddressBar) Draw(p painter.Painter, theme *Theme) {
 // OnEvent routes a click (local coordinates, relative to the field's bounds
 // origin), a typed rune or an edit key. A click on the bookmark slot toggles it;
 // any other click focuses the field and seeds the edit buffer from URL. While
-// focused, a rune appends, Backspace deletes and Enter commits.
+// focused, a rune appends, Backspace deletes, Enter commits and Escape cancels
+// (reverts the edit buffer to URL and defocuses without committing).
 func (a *AddressBar) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
@@ -227,6 +243,8 @@ func (a *AddressBar) OnEvent(ev Event) {
 			a.Editing().Set(string(runes[:len(runes)-1]))
 		case "Enter":
 			a.commit()
+		case "Escape":
+			a.cancel()
 		}
 	}
 }
@@ -240,6 +258,15 @@ func (a *AddressBar) commit() {
 	if raw != "" && a.Commit != nil {
 		a.Commit.Execute()
 	}
+}
+
+// cancel abandons the in-progress edit: it reverts the edit buffer to the last
+// committed URL, then defocuses and clears the copy highlight WITHOUT running
+// Commit. Escape triggers it, so a stray edit never navigates.
+func (a *AddressBar) cancel() {
+	a.Editing().Set(a.URL().Get())
+	a.Focused().Set(false)
+	a.Copied().Set(false)
 }
 
 // CopySelectAll copies the field's value to the toolkit-wide clipboard and flags
