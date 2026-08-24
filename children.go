@@ -90,6 +90,22 @@ func (d *Dock) Children() []Widget {
 	return out
 }
 
+// Children yields the leading accessories, then the launcher bar, then the
+// trailing accessories — the panel's left-to-right reading order — and finally
+// the context menu (an overlay, painted and read last). Nil slots are skipped.
+func (d *DockPanel) Children() []Widget {
+	out := make([]Widget, 0, len(d.Leading)+1+len(d.Trailing)+1)
+	out = append(out, nonNil(d.Leading...)...)
+	if d.Dock != nil {
+		out = append(out, appDockNode{d.Dock})
+	}
+	out = append(out, nonNil(d.Trailing...)...)
+	if d.Menu != nil {
+		out = append(out, d.Menu)
+	}
+	return out
+}
+
 // Children yields the expander's content, whether or not it is expanded — see
 // Carousel for why hidden content still belongs in the structure.
 func (e *Expander) Children() []Widget { return nonNil(e.Content) }
