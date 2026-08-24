@@ -166,6 +166,10 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// Label: the string is unexported behind the Text() Observable; Align/VAlign/
 	// Ellipsis/Ink/FontSize are set-once appearance config.
 	"Label": {"Align": true, "VAlign": true, "Ellipsis": true, "Ink": true, "FontSize": true},
+	// Clock: the displayed instant is unexported behind the Time() Observable; the
+	// internal drawing Label is unexported; Func is a func hook (auto-allowed).
+	// Format and Align are set-once appearance config.
+	"Clock": {"Format": true, "Align": true},
 	// Button: the caption + sticky selection are unexported behind Label()/Selected()
 	// Observables; OnClick/Icon are func hooks; Style/PressFeedback/Flat are config.
 	"Button": {"Style": true, "PressFeedback": true, "Flat": true},
