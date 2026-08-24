@@ -59,9 +59,13 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"CycleButton":  {"Options": true},
 	"Pagination":   {"Total": true},
 	"Steps":        {"Labels": true, "Orientation": true},
-	"Notebook":     {"Tabs": true, "TabSide": true},
-	"DropDown":     {"Options": true, "OpenUp": true},
-	"Accordion":    {"Sections": true, "Multiple": true},
+	// WorkspacePager: the selected workspace index is unexported behind the
+	// Current() Observable accessor; a click / arrow / Home / End Sets it. Count,
+	// Labels, Occupied and Orientation are set-once layout/content config.
+	"WorkspacePager": {"Count": true, "Labels": true, "Occupied": true, "Orientation": true},
+	"Notebook":       {"Tabs": true, "TabSide": true},
+	"DropDown":       {"Options": true, "OpenUp": true},
+	"Accordion":      {"Sections": true, "Multiple": true},
 	// Batch 4 (selection/range widgets): the selected index / low-high / open /
 	// checked state is unexported behind accessors; the slices + flags below are
 	// config (func hooks like OnActivate/OnReorder/OnCardMove/OnTaskChange/OnRefresh
