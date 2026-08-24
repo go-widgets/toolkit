@@ -166,6 +166,21 @@ func (s *ScrollView) ChildOffset() (int, int) {
 	return -(s.OffsetX().Get() + s.overscrollX), -(s.OffsetY().Get() + s.overscrollY)
 }
 
+// Children yields every interactive segment's hosted widget, across the Left,
+// Center then Right groups — the bar's reading order. Text-only segments hold no
+// widget and contribute nothing.
+func (s *Statusbar) Children() []Widget {
+	out := make([]Widget, 0, len(s.Left)+len(s.Center)+len(s.Right))
+	for _, g := range [][]StatusSegment{s.Left, s.Center, s.Right} {
+		for _, seg := range g {
+			if seg.Widget != nil {
+				out = append(out, seg.Widget)
+			}
+		}
+	}
+	return out
+}
+
 // Children yields the window's body.
 func (w *Window) Children() []Widget { return nonNil(w.Body) }
 

@@ -284,7 +284,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"PullToRefresh":    {"Child": true, "Style": true, "Threshold": true},
 	"SegmentedBar":     {"Orientation": true, "Segments": true},
 	"SplitButton":      {"Arrow": true, "Label": true},
-	"Statusbar":        {"SegmentMinW": true, "Segments": true},
+	"Statusbar":        {"SegmentMinW": true, "Segments": true, "Left": true, "Center": true, "Right": true},
 	"StatusIcon":       {"Badge": true, "IH": true, "IW": true, "Icon": true, "Ink": true, "Pixels": true, "Tooltip": true},
 	"StatusArea":       {"Background": true, "Gap": true, "IconSize": true, "Icons": true},
 	"SwipeActions":     {"ActionWidth": true, "Content": true, "DestructiveDen": true, "DestructiveFull": true, "DestructiveNum": true, "Leading": true, "Projection": true, "Trailing": true},
