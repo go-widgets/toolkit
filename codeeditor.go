@@ -63,6 +63,22 @@ type CodeEditor struct {
 	// theme passed to Draw.
 	CurrentLineColor RGBA
 
+	// MatchColor overrides the soft search-match highlight colour (the band
+	// behind every occurrence — see SetMatchHighlights). Its zero value (A == 0)
+	// derives a faint accent wash from the theme passed to Draw.
+	MatchColor RGBA
+
+	// CurrentMatchColor overrides the current-match highlight fill (behind the
+	// range set via SetCurrentMatch, under an accent outline box). Its zero value
+	// (A == 0) derives a stronger accent wash from the theme.
+	CurrentMatchColor RGBA
+
+	// matchRanges are the soft-highlight occurrences and currentMatch the
+	// emphasised one, pushed by a search host (see matchhighlight.go); Draw
+	// resolves them to the TextView's paint-time bands against the live theme.
+	matchRanges  []Selection
+	currentMatch Selection
+
 	// highlight cache: the inputs the last Highlight() ran against and the
 	// per-line spans it produced, so Draw re-lexes only when the buffer,
 	// language, highlighter or theme actually changes — a cursor move
@@ -135,6 +151,7 @@ func NewCodeEditor(initial string) *CodeEditor {
 func (c *CodeEditor) Draw(p painter.Painter, theme *Theme) {
 	c.lastTheme = theme
 	c.refresh(theme)
+	c.buildMatchBands(theme)
 	c.TextView.Draw(p, theme)
 	// The completion popup floats over the editor at the caret; drawn last so
 	// it sits on top of the text it overlays. A no-op while the popup is closed.

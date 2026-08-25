@@ -222,9 +222,16 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// reactive state at all (Border/Material/Overlay/Skeleton). Gating them locks out
 	// any future imperative state field; every exported field below is set-once
 	// composition/appearance/layout config (func hooks auto-allowed).
-	"ActionSheet":   {"Title": true, "Actions": true, "Cancel": true, "Content": true, "PreferredHeight": true, "Detents": true, "Draggable": true, "ShowHandle": true, "DismissFraction": true, "FlingVelocity": true, "SlideDuration": true, "FrameSeconds": true, "ScrimAlpha": true},
-	"Border":        {"North": true, "South": true, "East": true, "West": true, "Center": true, "NorthSize": true, "SouthSize": true, "EastSize": true, "WestSize": true, "NorthSplit": true, "SouthSplit": true, "EastSplit": true, "WestSplit": true},
-	"CodeEditor":    {"Language": true, "Syntax": true, "HighlightCurrentLine": true, "CurrentLineColor": true},
+	"ActionSheet": {"Title": true, "Actions": true, "Cancel": true, "Content": true, "PreferredHeight": true, "Detents": true, "Draggable": true, "ShowHandle": true, "DismissFraction": true, "FlingVelocity": true, "SlideDuration": true, "FrameSeconds": true, "ScrimAlpha": true},
+	"Border":      {"North": true, "South": true, "East": true, "West": true, "Center": true, "NorthSize": true, "SouthSize": true, "EastSize": true, "WestSize": true, "NorthSplit": true, "SouthSplit": true, "EastSplit": true, "WestSplit": true},
+	"CodeEditor":  {"Language": true, "Syntax": true, "HighlightCurrentLine": true, "CurrentLineColor": true, "MatchColor": true, "CurrentMatchColor": true},
+	// FindReplace: the query/replace text, the three search toggles and the
+	// count/index/invalid/visible state all live on unexported Observables behind
+	// accessors (Query/Replace/Regex/CaseSensitive/WholeWord/Total/Current/
+	// Invalid/Visible); the composed children are unexported. Its only exported
+	// fields are the OnX func hooks (auto-allowed), so the empty config set
+	// enforces that no imperative state field is ever added.
+	"FindReplace":   {},
 	"Fab":           {"Icon": true, "Label": true, "Corner": true, "Margin": true, "Diameter": true, "Actions": true},
 	"Material":      {"Kind": true, "Blend": true, "Source": true, "SW": true, "SH": true, "Sigma": true, "Tint": true, "Child": true},
 	"Overlay":       {"Content": true, "Layers": true, "Modal": true},

@@ -114,6 +114,14 @@ type TextView struct {
 	// caret. Kept private -- callers drive programmatic selection through
 	// SetSelection/SelectAll instead.
 	selAnchorLine, selAnchorCol int
+
+	// matchBands are search-match highlight ranges pushed by a host through the
+	// CodeEditor match-highlight API (SetMatchHighlights / SetCurrentMatch): a
+	// soft fill behind every match plus a stronger outline box for the current
+	// one. Painted under the text like a selection band, on top of RowBackground
+	// and the local/remote selections so a match on the caret line still reads.
+	// Empty (nil) for an editor with no active search. See matchhighlight.go.
+	matchBands []matchBand
 }
 
 // Text is the committed contents as a shared [mvvm.Observable]: a host binds it
@@ -361,6 +369,9 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 			for _, d := range t.Decorations {
 				t.paintSelectionBand(p, i, textX, y, lineH, r, d.Selection, tintBand(d.Color))
 			}
+			// Search-match bands sit on top of the selection so a highlighted
+			// match on a selected / caret line is still visible.
+			t.paintMatchBands(p, i, textX, y, lineH, r)
 			if t.ShowLineNumbers {
 				num := strconv.Itoa(i + 1)
 				// Right-justify within the numbers column: every number's right
@@ -422,19 +433,29 @@ func (t *TextView) paintSelectionBand(p painter.Painter, i, textX, y, lineH int,
 	if sel.IsEmpty() || i < sel.StartLine || i > sel.EndLine {
 		return
 	}
+	x0, x1 := t.bandXRange(i, textX, r, sel)
+	fillRect(p, x0, y-2, x1-x0, lineH, c)
+}
+
+// bandXRange is the horizontal extent of the band for range sel on buffer line
+// i, in absolute pixels: it starts at sel.StartCol on the start line (else at
+// the text origin) and ends at sel.EndCol on the end line (else at the widget's
+// right edge, so a range spanning through the line reads as covering its
+// newline). Shared by paintSelectionBand and paintMatchBands so the selection
+// highlight and the search-match highlight place their bands identically.
+func (t *TextView) bandXRange(i, textX int, r Rect, sel Selection) (x0, x1 int) {
 	adv := t.glyphAdvance()
 	sc := 0
 	if i == sel.StartLine {
 		sc = sel.StartCol
 	}
-	x0 := textX + sc*adv
-	var x1 int
+	x0 = textX + sc*adv
 	if i < sel.EndLine {
-		x1 = r.X + r.W - 1 // selection continues onto the next line
+		x1 = r.X + r.W - 1 // range continues onto the next line
 	} else {
 		x1 = textX + sel.EndCol*adv
 	}
-	fillRect(p, x0, y-2, x1-x0, lineH, c)
+	return x0, x1
 }
 
 // tintBand returns c at the selection-band alpha, so the highlight tints the
