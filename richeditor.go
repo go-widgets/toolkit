@@ -78,6 +78,24 @@ type RichEditor struct {
 	// lastTheme is the theme most recently drawn with, reused for geometry-only
 	// layout passes (caret pixel, hit-testing) where colours are irrelevant.
 	lastTheme *Theme
+
+	// MatchColor overrides the soft search-match highlight colour (the band behind
+	// every occurrence — see SetMatchHighlights). Its zero value (A == 0) derives a
+	// faint accent wash from the theme passed to Draw.
+	MatchColor RGBA
+
+	// CurrentMatchColor overrides the current-match highlight fill (behind the
+	// range set via SetCurrentMatch, under an accent outline box). Its zero value
+	// (A == 0) derives a stronger accent wash from the theme.
+	CurrentMatchColor RGBA
+
+	// matchRanges are the soft-highlight occurrences and currentMatch the
+	// emphasised one, pushed by a search host (see richeditor_match.go); Draw
+	// resolves them to bands against the live theme. They are overlay UI state,
+	// not document state, so they stay off the MVVM layer exactly as the caret
+	// selection band's inputs would.
+	matchRanges  []DocSelection
+	currentMatch DocSelection
 }
 
 // NewRichEditor builds an editor over doc (a nil doc starts an empty document).
@@ -467,6 +485,11 @@ func (e *RichEditor) Draw(p painter.Painter, theme *Theme) {
 				e.drawSelectionBand(p, theme, ln, sel, r, scroll)
 			}
 		}
+		if e.hasMatchHighlights() {
+			for _, ln := range lay.lines {
+				e.drawMatchBands(p, theme, ln, r, scroll)
+			}
+		}
 		for _, ln := range lay.lines {
 			y := ln.textY - scroll
 			if y+ln.h < r.Y || y > r.Y+r.H {
@@ -527,37 +550,15 @@ func (e *RichEditor) drawRun(p painter.Painter, run reRun, y int) {
 	}
 }
 
-// drawSelectionBand paints the highlight for a single line under the text.
+// drawSelectionBand paints the active-selection highlight for a single line
+// under the text, using the shared band geometry (bandXRange) so it aligns with
+// the search-match bands drawn the same way.
 func (e *RichEditor) drawSelectionBand(p painter.Painter, theme *Theme, ln reLine, sel DocSelection, r Rect, scroll int) {
-	if !ln.hasStops || ln.blockIdx < sel.Start.Block || ln.blockIdx > sel.End.Block {
+	x0, x1, ok := e.bandXRange(ln, sel, r)
+	if !ok {
 		return
 	}
-	n := ln.nCells()
-	lo := 0
-	if ln.blockIdx == sel.Start.Block {
-		lo = sel.Start.Off - ln.startOff
-	} else {
-		lo = -(1 << 30)
-	}
-	hiAbs := 1 << 30
-	if ln.blockIdx == sel.End.Block {
-		hiAbs = sel.End.Off - ln.startOff
-	}
-	c0 := reClamp(lo, 0, n)
-	c1 := reClamp(hiAbs, 0, n)
-	continues := hiAbs > n
-	if c1 <= c0 && !continues {
-		return
-	}
-	x0 := ln.cellX[c0]
-	x1 := ln.cellX[c1]
-	if continues {
-		x1 = r.X + r.W - rePadX() - e.scrollbarReserve()
-	}
-	y := ln.y - scroll
-	if x1 > x0 {
-		fillRect(p, x0, y, x1-x0, ln.h, tintBand(theme.Accent))
-	}
+	fillRect(p, x0, ln.y-scroll, x1-x0, ln.h, tintBand(theme.Accent))
 }
 
 // drawScrollbar paints a track + proportional thumb on the right when the content
