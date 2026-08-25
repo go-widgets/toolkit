@@ -292,8 +292,10 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"DatabaseEditor": {"BarHeight": true, "EditorHeight": true, "ErrorHeight": true, "TreeWidth": true},
 	// Closable is a set-once capability flag (like Window.Closable); Input is the
 	// composed top input-bar sub-widget (its reactive text lives on Input.Text());
-	// both are config, not reactive state.
-	"Dialog": {"Buttons": true, "Content": true, "Title": true, "Closable": true, "Input": true},
+	// DragBounds is set-once layout config (the area a title-bar drag is clamped
+	// within, set by the container); all are config, not reactive state — the
+	// live drag offset lives in unexported fields, mutated only through OnEvent.
+	"Dialog": {"Buttons": true, "Content": true, "Title": true, "Closable": true, "Input": true, "DragBounds": true},
 	// ModalWindow holds no reactive state of its own: Scrim + Panel are composed
 	// sub-widgets, CloseOnScrim is a capability flag and PanelW/PanelH are layout
 	// metrics (all config); OnClose is a func hook (auto-allowed). Any reactive

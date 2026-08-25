@@ -136,6 +136,141 @@ func TestDialogInputAcceptsEntry(t *testing.T) {
 	}
 }
 
+// --- Dialog: title-bar drag ---------------------------------------------
+
+// A press on the title bar arms a drag; an EventMouseDrag moves the panel by
+// the pointer delta, and the moved origin survives an EventMouseUp release.
+func TestDialogTitleBarDragMovesPanel(t *testing.T) {
+	d := NewDialog("Move me", NewLabel("body"))
+	d.SetBounds(Rect{X: 100, Y: 100, W: 300, H: 200})
+
+	// Grab the title bar (well left of any trailing control), then drag +40,+30.
+	d.OnEvent(Event{Kind: EventClick, X: 20, Y: 8})
+	if !d.dragging {
+		t.Fatal("a press on the title bar did not arm a drag")
+	}
+	d.OnEvent(Event{Kind: EventMouseDrag, X: 60, Y: 38})
+	if b := d.Bounds(); b.X != 140 || b.Y != 130 {
+		t.Fatalf("after drag, origin = (%d,%d), want (140,130)", b.X, b.Y)
+	}
+	d.OnEvent(Event{Kind: EventMouseUp, X: 60, Y: 38})
+	if d.dragging {
+		t.Fatal("EventMouseUp did not release the drag")
+	}
+	// A relayout to the ORIGINAL requested origin keeps the dragged position: the
+	// offset is re-applied over the base, so the panel does not snap back.
+	d.SetBounds(Rect{X: 100, Y: 100, W: 300, H: 200})
+	if b := d.Bounds(); b.X != 140 || b.Y != 130 {
+		t.Fatalf("after relayout, origin = (%d,%d), want the dragged (140,130)", b.X, b.Y)
+	}
+}
+
+// A press on the title bar of a Closable dialog that lands on the × zone does
+// NOT arm a drag (the close button owns that press); a press on the input strip
+// does not arm a drag either (the field owns it).
+func TestDialogTitleBarDragExcludesCloseAndInput(t *testing.T) {
+	d := NewDialog("T", NewLabel("body"))
+	d.Closable = true
+	d.Input = NewSearchEntry("")
+	d.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 220})
+
+	// The × button: its press closes and never arms a drag.
+	cb := d.closeButton().Bounds()
+	d.OnEvent(Event{Kind: EventClick, X: cb.X + cb.W/2, Y: cb.Y + cb.H/2})
+	if d.dragging {
+		t.Fatal("a press on the × armed a drag")
+	}
+	// The input strip (below the title bar): focuses the field, arms no drag.
+	ib := d.Input.Bounds()
+	d.OnEvent(Event{Kind: EventClick, X: ib.X + ib.W/2, Y: ib.Y + ib.H/2})
+	if d.dragging {
+		t.Fatal("a press on the input strip armed a drag")
+	}
+	// A press on the title strip proper (left of the ×, above the input) arms it.
+	d.OnEvent(Event{Kind: EventClick, X: 10, Y: 4})
+	if !d.dragging {
+		t.Fatal("a press on the title strip did not arm a drag")
+	}
+}
+
+// Without a drag armed, EventMouseDrag / EventMouseUp forward to the content
+// unchanged, and neither moves the panel.
+func TestDialogUnarmedDragForwardsToContent(t *testing.T) {
+	body := &recordingWidget{}
+	d := NewDialog("T", body)
+	d.SetBounds(Rect{X: 50, Y: 50, W: 300, H: 200})
+	d.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 120})
+	d.OnEvent(Event{Kind: EventMouseUp, X: 40, Y: 120})
+	if b := d.Bounds(); b.X != 50 || b.Y != 50 {
+		t.Fatalf("unarmed drag moved the panel to (%d,%d)", b.X, b.Y)
+	}
+	if len(body.events) != 2 {
+		t.Fatalf("content received %d events, want 2 (drag + up forwarded)", len(body.events))
+	}
+}
+
+// A press-release on the title bar with no intervening move does not reposition
+// the panel — a plain click never moves it.
+func TestDialogTitleClickWithoutMoveKeepsPosition(t *testing.T) {
+	d := NewDialog("T", nil)
+	d.SetBounds(Rect{X: 10, Y: 20, W: 300, H: 200})
+	d.OnEvent(Event{Kind: EventClick, X: 15, Y: 6})
+	d.OnEvent(Event{Kind: EventMouseUp, X: 15, Y: 6})
+	if b := d.Bounds(); b.X != 10 || b.Y != 20 {
+		t.Fatalf("a no-move title click repositioned the panel to (%d,%d)", b.X, b.Y)
+	}
+}
+
+// DragBounds clamps the panel so it cannot be dragged off any edge: dragging far
+// past each corner pins the whole card (and thus the title bar) inside.
+func TestDialogDragClampsWithinBounds(t *testing.T) {
+	d := NewDialog("T", nil)
+	d.DragBounds = Rect{X: 0, Y: 0, W: 400, H: 300}
+	d.SetBounds(Rect{X: 100, Y: 100, W: 200, H: 150}) // fits: (100,100)..(300,250)
+
+	// Drag hard toward the bottom-right; origin pins at the far corner.
+	d.OnEvent(Event{Kind: EventClick, X: 10, Y: 5})
+	d.OnEvent(Event{Kind: EventMouseDrag, X: 10010, Y: 10005})
+	if b := d.Bounds(); b.X != 200 || b.Y != 150 {
+		t.Fatalf("bottom-right drag origin = (%d,%d), want the clamped (200,150)", b.X, b.Y)
+	}
+	// Drag hard toward the top-left; origin pins at (0,0).
+	d.OnEvent(Event{Kind: EventMouseDrag, X: -10000, Y: -10000})
+	if b := d.Bounds(); b.X != 0 || b.Y != 0 {
+		t.Fatalf("top-left drag origin = (%d,%d), want the clamped (0,0)", b.X, b.Y)
+	}
+	d.OnEvent(Event{Kind: EventMouseUp, X: -10000, Y: -10000})
+}
+
+// A ModalWindow's panel is draggable and clamped to the modal's bounds, and the
+// dragged position survives the modal re-centring on the next relayout.
+func TestModalWindowPanelDragSurvivesRecentre(t *testing.T) {
+	m := NewModalWindow("Find", NewLabel("body"))
+	m.PanelW, m.PanelH = 200, 150
+	m.SetBounds(Rect{X: 0, Y: 0, W: 800, H: 600})
+	start := m.Panel.Bounds()
+
+	// Grab the panel title bar (modal at origin, so panel-local == modal-local
+	// offset by the panel origin) and drag it +50,+40.
+	m.OnEvent(Event{Kind: EventClick, X: start.X + 10, Y: start.Y + 5})
+	m.OnEvent(Event{Kind: EventMouseDrag, X: start.X + 60, Y: start.Y + 45})
+	moved := m.Panel.Bounds()
+	if moved.X != start.X+50 || moved.Y != start.Y+40 {
+		t.Fatalf("panel origin after drag = (%d,%d), want (%d,%d)",
+			moved.X, moved.Y, start.X+50, start.Y+40)
+	}
+	m.OnEvent(Event{Kind: EventMouseUp, X: start.X + 60, Y: start.Y + 45})
+
+	// Re-lay the modal out (host relayout re-centres + re-anchors the panel): the
+	// dragged offset is preserved on top of the fresh centre.
+	m.SetBounds(Rect{X: 0, Y: 0, W: 800, H: 600})
+	if b := m.Panel.Bounds(); b.X != start.X+50 || b.Y != start.Y+40 {
+		t.Fatalf("panel origin after re-centre = (%d,%d), want the dragged (%d,%d)",
+			b.X, b.Y, start.X+50, start.Y+40)
+	}
+	// The dragging on the title bar never dismissed the modal via the scrim.
+}
+
 // --- ModalWindow --------------------------------------------------------
 
 func TestNewModalWindowShape(t *testing.T) {
