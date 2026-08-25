@@ -275,20 +275,28 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// Preview/Split are host-set view configuration, not a cross-component
 	// Observable. Window's Closable/Resizable/etc. are capability flags, not a
 	// current-state.
-	"ActionRow":        {"Prefix": true, "Subtitle": true, "Suffix": true, "Title": true},
-	"Alert":            {"Kind": true, "Text": true},
-	"ArticleCard":      {"Body": true, "BodyLines": true, "Meta": true, "Title": true},
-	"Avatar":           {"Color": true, "Initials": true},
-	"Backdrop":         {"Bevel": true, "Fill": true, "GradientDir": true, "GradientTo": true, "Grid": true, "Interactive": true, "NoFill": true, "Radius": true, "Step": true, "Stroke": true, "StrokeWidth": true},
-	"Badge":            {"Fill": true, "Ink": true, "Text": true},
-	"ButtonGroup":      {"Buttons": true, "Orientation": true},
-	"Card":             {"Body": true, "Footer": true, "Title": true},
-	"CardMeta":         {"Author": true, "Comments": true, "Score": true, "Time": true},
-	"ChatBubble":       {"Sender": true, "Text": true},
-	"Chip":             {"Closable": true, "Dot": true, "Text": true},
-	"Container":        {"Layout": true},
-	"DatabaseEditor":   {"BarHeight": true, "EditorHeight": true, "ErrorHeight": true, "TreeWidth": true},
-	"Dialog":           {"Buttons": true, "Content": true, "Title": true},
+	"ActionRow":      {"Prefix": true, "Subtitle": true, "Suffix": true, "Title": true},
+	"Alert":          {"Kind": true, "Text": true},
+	"ArticleCard":    {"Body": true, "BodyLines": true, "Meta": true, "Title": true},
+	"Avatar":         {"Color": true, "Initials": true},
+	"Backdrop":       {"Bevel": true, "Fill": true, "GradientDir": true, "GradientTo": true, "Grid": true, "Interactive": true, "NoFill": true, "Radius": true, "Step": true, "Stroke": true, "StrokeWidth": true},
+	"Badge":          {"Fill": true, "Ink": true, "Text": true},
+	"ButtonGroup":    {"Buttons": true, "Orientation": true},
+	"Card":           {"Body": true, "Footer": true, "Title": true},
+	"CardMeta":       {"Author": true, "Comments": true, "Score": true, "Time": true},
+	"ChatBubble":     {"Sender": true, "Text": true},
+	"Chip":           {"Closable": true, "Dot": true, "Text": true},
+	"Container":      {"Layout": true},
+	"DatabaseEditor": {"BarHeight": true, "EditorHeight": true, "ErrorHeight": true, "TreeWidth": true},
+	// Closable is a set-once capability flag (like Window.Closable); Input is the
+	// composed top input-bar sub-widget (its reactive text lives on Input.Text());
+	// both are config, not reactive state.
+	"Dialog": {"Buttons": true, "Content": true, "Title": true, "Closable": true, "Input": true},
+	// ModalWindow holds no reactive state of its own: Scrim + Panel are composed
+	// sub-widgets, CloseOnScrim is a capability flag and PanelW/PanelH are layout
+	// metrics (all config); OnClose is a func hook (auto-allowed). Any reactive
+	// state (the search text) lives on Panel.Input's own Text() observable.
+	"ModalWindow":      {"Scrim": true, "Panel": true, "CloseOnScrim": true, "PanelW": true, "PanelH": true},
 	"HeaderBar":        {"End": true, "Start": true, "Subtitle": true, "Title": true},
 	"IconButton":       {"Icon": true},
 	"Image":            {"Alt": true, "H": true, "Pixels": true, "Scale": true, "W": true},
