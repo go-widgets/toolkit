@@ -50,8 +50,36 @@ type Dialog struct {
 	// read/bind it via Input.Text().
 	Input DialogInput
 
+	// DragBounds, when its W and H are both positive, is the area the panel is
+	// kept inside while the user drags it by the title bar: the panel origin is
+	// clamped so the whole card (and thus the title bar) stays reachable within
+	// it. The zero value (an empty rect) leaves a title-bar drag unclamped — the
+	// host is then responsible for any bounds. [ModalWindow] sets this to its own
+	// bounds (the whole surface) so a modal's panel cannot be dragged off-screen.
+	DragBounds Rect
+
 	// closeBtn is the lazily-built close (×) control; see closeButton.
 	closeBtn *IconButton
+
+	// Title-bar drag state, following the toolkit's grab-on-EventClick /
+	// track-on-EventMouseDrag / release-on-EventMouseUp convention (as Paned's
+	// handle and Kanban's cards do). dragging is true between a press on the
+	// title bar and the release; dragLastX/Y is the last pointer position in
+	// absolute (surface) coordinates, so the per-tick delta is immune to the
+	// panel itself moving under the pointer mid-drag.
+	dragging             bool
+	dragLastX, dragLastY int
+
+	// baseRect is the layout-requested rect from the most recent SetBounds,
+	// before the drag offset is applied. dragOffX/Y is the accumulated title-bar
+	// drag displacement, re-applied over baseRect on every layout. Keeping the
+	// requested origin and the user displacement apart is what makes a drag
+	// authoritative: a container that re-centres or a host that re-anchors the
+	// panel each frame (calling SetBounds with the same origin) sets baseRect,
+	// and the offset is laid back over it, so the panel holds where it was
+	// dragged instead of snapping back.
+	baseRect           Rect
+	dragOffX, dragOffY int
 }
 
 // DialogInput is the contract a Dialog's optional top input bar satisfies: a
@@ -106,9 +134,32 @@ func NewDialog(title string, content Widget, buttons ...*Button) *Dialog {
 	return &Dialog{Title: title, Content: content, Buttons: buttons}
 }
 
-// SetBounds also lays out the input bar, close button, content + button
-// positions.
+// SetBounds records the layout-requested rect, then lays the panel and its
+// children out at that rect with any accumulated title-bar drag offset applied
+// on top (see applyBounds). Storing the requested origin apart from the drawn
+// origin is what lets a drag survive a re-centring / re-anchoring relayout: a
+// container or host that re-calls SetBounds with the same origin every frame
+// only sets the base, and the persistent offset is re-applied over it.
 func (d *Dialog) SetBounds(r Rect) {
+	d.baseRect = r
+	d.applyBounds()
+}
+
+// applyBounds lays the panel out at baseRect shifted by the drag offset and
+// clamped within DragBounds, then positions the input bar, close button,
+// content and action buttons relative to that final rect. With a zero drag
+// offset — and a DragBounds the panel already fits inside, which [ModalWindow]
+// guarantees by clamping the panel size to its bounds — the final rect equals
+// the requested rect, so an undragged Dialog lays out byte-identically to
+// before this method existed.
+func (d *Dialog) applyBounds() {
+	r := d.baseRect
+	r.X += d.dragOffX
+	r.Y += d.dragOffY
+	if d.DragBounds.W > 0 && d.DragBounds.H > 0 {
+		r.X = clampInt(r.X, d.DragBounds.X, maxInt(d.DragBounds.X, d.DragBounds.X+d.DragBounds.W-r.W))
+		r.Y = clampInt(r.Y, d.DragBounds.Y, maxInt(d.DragBounds.Y, d.DragBounds.Y+d.DragBounds.H-r.H))
+	}
 	d.Base.SetBounds(r)
 	// The body starts below the title bar, and below the input strip when one is
 	// present. With no input bar `top` is r.Y+titleH, so the content rect below is
@@ -211,6 +262,32 @@ func (d *Dialog) OnEvent(ev Event) {
 			return
 		}
 	}
+	// Title-bar drag: a press on the title strip (never the × or the input bar,
+	// both handled above) arms a drag; each following EventMouseDrag moves the
+	// panel by the pointer delta, and EventMouseUp releases. None of this fires
+	// unless a drag was armed on the title bar, so every other press-drag-release
+	// — on content, buttons or the input bar — still forwards exactly as before.
+	switch ev.Kind {
+	case EventClick:
+		if d.onTitleBar(ev) {
+			d.dragging = true
+			d.dragLastX = ev.X + d.Bounds().X
+			d.dragLastY = ev.Y + d.Bounds().Y
+			return
+		}
+	case EventMouseDrag:
+		if d.dragging {
+			ax, ay := ev.X+d.Bounds().X, ev.Y+d.Bounds().Y
+			d.moveBy(ax-d.dragLastX, ay-d.dragLastY)
+			d.dragLastX, d.dragLastY = ax, ay
+			return
+		}
+	case EventMouseUp:
+		if d.dragging {
+			d.dragging = false
+			return
+		}
+	}
 	if d.Content != nil {
 		// Content occupies the body between the title bar and the button strip
 		// (bounded in SetBounds). Translate the event into its local frame — the
@@ -219,6 +296,30 @@ func (d *Dialog) OnEvent(ev Event) {
 		// too low (plus the Dialog's own origin).
 		d.Content.OnEvent(translateEvent(ev, d.Bounds(), d.Content.Bounds()))
 	}
+}
+
+// onTitleBar reports whether a widget-local event point falls on the draggable
+// part of the title bar: the title strip, minus the trailing close (×) button
+// when Closable. The optional input bar sits in its own strip below the title
+// bar, so it is never in this zone.
+func (d *Dialog) onTitleBar(ev Event) bool {
+	if ev.Y < 0 || ev.Y >= scaled(DialogTitleH) {
+		return false
+	}
+	rightLimit := d.Bounds().W
+	if d.Closable {
+		rightLimit -= scaled(DialogTitleH) // the square × button at the trailing edge
+	}
+	return ev.X >= 0 && ev.X < rightLimit
+}
+
+// moveBy accumulates a title-bar drag displacement into the persistent offset
+// and re-lays the panel out, so the move is clamped within DragBounds and the
+// new position survives the next relayout.
+func (d *Dialog) moveBy(dx, dy int) {
+	d.dragOffX += dx
+	d.dragOffY += dy
+	d.applyBounds()
 }
 
 // NewMessageDialog is a convenience constructor for the most common

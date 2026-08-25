@@ -108,6 +108,11 @@ func (m *ModalWindow) SetBounds(r Rect) {
 		h = r.H
 	}
 	if m.Panel != nil {
+		// Constrain a title-bar drag to the modal's own bounds so the panel — and
+		// thus its title bar — can never be dragged off-screen. Set before laying
+		// the panel out so the drag offset (if the user has already moved it) is
+		// clamped against the current surface on this relayout too.
+		m.Panel.DragBounds = r
 		m.Panel.SetBounds(Rect{X: r.X + (r.W-w)/2, Y: r.Y + (r.H-h)/2, W: w, H: h})
 	}
 }
