@@ -724,3 +724,49 @@ type pagedContent struct {
 func (c *pagedContent) Draw(p painter.Painter, theme *Theme) {
 	c.pv.drawPages(p, theme, c.Bounds())
 }
+
+// PageRect reports where a 1-based page is currently DRAWN and how much of it
+// the pane still shows, both in SURFACE coordinates — the forward mapping
+// [PagedView.PageAt] inverts.
+//
+// ⚠ The coordinate spaces differ on purpose. PageAt consumes a WIDGET-LOCAL
+// point because that is what [PagedView.OnEvent] delivers. PageRect produces
+// SURFACE coordinates because its caller is placing something over the pane —
+// a [Foreign] region's host object, a magnifier, an annotation — and every
+// other placement seam in this toolkit ([WalkA11y], [WalkForeign]) is
+// surface-absolute. Adding the widget's origin twice is the mistake this note
+// exists to prevent.
+//
+// rect is the whole card at the current zoom and scroll, so it can start above
+// or left of the pane, or extend past it. clip is the part the pane actually
+// shows: rect intersected with the ScrollView's viewport, which excludes the
+// toolbar strip and the scrollbar gutters. clip is empty when the page is
+// scrolled out of view or the mode shows a different page — ok stays true,
+// because the page exists and simply is not on screen, which a host answers by
+// hiding its object rather than destroying it.
+//
+// ok is false only when there is no such page: page outside [1, PageCount], or
+// a page the current layout does not place (paginated mode shows one).
+//
+// The zoom the card is drawn at is rect.W / the page bitmap's natural width, or
+// equivalently [PagedView.Zoom] as a percentage — a host scaling its own
+// content to match the blit reads it from either.
+func (pv *PagedView) PageRect(page int) (rect, clip Rect, ok bool) {
+	pv.relayout()
+	if page < 1 || page > pv.PageCount() {
+		return Rect{}, Rect{}, false
+	}
+	for k, card := range pv.lay.cards {
+		if pv.lay.indices[k] != page-1 {
+			continue
+		}
+		// The content widget holds the card origin unscrolled; the ScrollView
+		// reports how far it PAINTS that content from there. Reading both is what
+		// keeps this in step with drawPages, which is handed the same base.
+		base := pv.content.Bounds()
+		dx, dy := pv.scroll.ChildOffset()
+		rect = Rect{X: base.X + card.X + dx, Y: base.Y + card.Y + dy, W: card.W, H: card.H}
+		return rect, intersectRect(rect, pv.scroll.ChildClip()), true
+	}
+	return Rect{}, Rect{}, false
+}
