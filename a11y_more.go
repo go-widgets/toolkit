@@ -43,6 +43,8 @@ const (
 	// captions as headings and its rows as list items (see ListBox.Children).
 	RoleHeading  Role = "heading"
 	RoleListItem Role = "listitem"
+	// RoleLink is a hyperlink — text that navigates when activated (see Link).
+	RoleLink Role = "link"
 )
 
 // stateValue returns word when on is true, "" otherwise. It is the shared
