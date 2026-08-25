@@ -148,10 +148,12 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"GalleryView": {"Items": true, "Empty": true},
 	// RichEditor: the edited document lives on the Doc() Observable, and the
 	// caret / selection / focus / scroll offset are each their own Observable
-	// accessor; the pending-style, selection anchor, font caches and last theme
-	// are unexported internal state. It exposes no imperative state field, so the
-	// empty config set enforces that none is ever added.
-	"RichEditor": {},
+	// accessor; the pending-style, selection anchor, font caches, last theme and
+	// the search-match overlay ranges are unexported internal state. Its only
+	// exported fields are MatchColor / CurrentMatchColor — set-once appearance
+	// overrides for the search-match bands (the CodeEditor convention), not
+	// reactive state — so any other new state field still fails the gate.
+	"RichEditor": {"MatchColor": true, "CurrentMatchColor": true},
 	// RichEditorToolbar: the bound editor, button strip, child buttons + their
 	// predicates and the subscription handles are all unexported; each button's
 	// lit state lives on its own Selected() Observable. IconSize and Spacing are
