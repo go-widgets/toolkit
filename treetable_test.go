@@ -590,6 +590,55 @@ func TestTreeTableNoScrollbarWhenTreeFits(t *testing.T) {
 	}
 }
 
+// --- per-cell ink (CellInk) ---------------------------------------------
+
+// cellInkTint is a colour distinct from every DefaultLight theme ink, so a scan
+// that finds it proves the CellInk override (not the row's default ink) painted.
+var cellInkTint = RGBA{R: 0x12, G: 0x99, B: 0x77, A: 0xFF}
+
+// TestTreeTableCellInkTintsColumn proves an opaque CellInk entry tints that
+// column's text, while a zero-value entry in the same slice inherits the row ink
+// (column 0 here carries a zero entry, so it is NOT the source of the tint).
+func TestTreeTableCellInkTintsColumn(t *testing.T) {
+	root := []*TreeTableNode{{Cells: []string{"main.tex", "M"}, CellInk: []RGBA{{}, cellInkTint}}}
+	tt := NewTreeTable([]TreeTableColumn{{Title: "File"}, {Title: "S", Width: 40}}, root)
+	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 60})
+	buf := makeSurface(200, 60)
+	tt.Draw(newP(buf, 200), DefaultLight())
+	if !hasColor(buf, 200, cellInkTint) {
+		t.Fatal("opaque CellInk override colour was not painted")
+	}
+}
+
+// TestTreeTableCellInkAbsentWhenUnset is the control: with no CellInk slice
+// (j >= len(CellInk) for every column) the tint never appears — the row falls
+// back to the theme ink entirely.
+func TestTreeTableCellInkAbsentWhenUnset(t *testing.T) {
+	root := []*TreeTableNode{{Cells: []string{"main.tex", "M"}}}
+	tt := NewTreeTable([]TreeTableColumn{{Title: "File"}, {Title: "S", Width: 40}}, root)
+	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 60})
+	buf := makeSurface(200, 60)
+	tt.Draw(newP(buf, 200), DefaultLight())
+	if hasColor(buf, 200, cellInkTint) {
+		t.Fatal("no CellInk was set, yet the tint colour appeared")
+	}
+}
+
+// TestTreeTableCellInkIgnoredWhenRowSelected proves a selected row paints every
+// cell in the selection ink, ignoring CellInk, so the accent highlight stays
+// legible.
+func TestTreeTableCellInkIgnoredWhenRowSelected(t *testing.T) {
+	node := &TreeTableNode{Cells: []string{"main.tex", "M"}, CellInk: []RGBA{{}, cellInkTint}}
+	tt := NewTreeTable([]TreeTableColumn{{Title: "File"}, {Title: "S", Width: 40}}, []*TreeTableNode{node})
+	tt.Selected().Set(node)
+	tt.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 60})
+	buf := makeSurface(200, 60)
+	tt.Draw(newP(buf, 200), DefaultLight())
+	if hasColor(buf, 200, cellInkTint) {
+		t.Fatal("selected row should ignore CellInk, but the tint colour appeared")
+	}
+}
+
 // --- columnWidths -------------------------------------------------------
 
 func TestTreeTableColumnWidthsNoColumns(t *testing.T) {
