@@ -29,6 +29,17 @@ type TreeTableNode struct {
 	Cells    []string
 	Children []*TreeTableNode
 	Expanded bool
+
+	// CellInk is an optional per-column text-ink override, parallel to Cells:
+	// column j is painted with CellInk[j] when that index is present and opaque
+	// (A != 0), and inherits the row's default ink otherwise (a shorter slice, a
+	// zero-value entry). It lets a host tint individual cells without a custom
+	// row renderer — a git-status badge column (green "clean", amber "modified",
+	// red "deleted"), a severity column in a log grid, a diff +/- column. The
+	// disclosure chevron always keeps the row ink; only the cell TEXT is tinted.
+	// A selected row ignores CellInk and paints every cell in the selection ink,
+	// so the accent-background highlight stays legible.
+	CellInk []RGBA
 }
 
 // TreeTable renders a Table-shaped grid whose body rows form a TREE: a
@@ -375,6 +386,20 @@ func cellText(row *TreeTableNode, j int) string {
 	return ""
 }
 
+// cellInkFor returns the text ink for column j of node: the node's per-column
+// CellInk override when that index is present and opaque, else rowInk. A
+// selected row always uses rowInk (the selection ink) so its accent-background
+// highlight stays legible regardless of any per-cell tint.
+func cellInkFor(node *TreeTableNode, j int, rowInk RGBA, selected bool) RGBA {
+	if selected {
+		return rowInk
+	}
+	if j < len(node.CellInk) && node.CellInk[j].A != 0 {
+		return node.CellInk[j]
+	}
+	return rowInk
+}
+
 // Draw paints the header, then the rows in the current scroll window:
 // flattened nodes [ScrollRow, ScrollRow+bodyVisibleRows()). The first
 // column is indented by depth + prefixed with a ▸/▾ disclosure glyph when
@@ -437,8 +462,10 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, r.X, y, bodyW, t.rowH(), bg)
 		cx := r.X
 		cty := y + (t.rowH()-t.glyphHeight())/2
+		selectedRow := row.node == sel
 		for j, col := range t.Columns {
 			cellW := widths[j]
+			cellInk := cellInkFor(row.node, j, ink, selectedRow)
 			if j == 0 {
 				indent := r.X + row.depth*scaled(TreeIndentW)
 				if len(row.node.Children) > 0 {
@@ -458,10 +485,10 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 						}
 					}
 				}
-				t.drawText(p, indent+scaled(TreeChevronW), cty, cellText(row.node, 0), ink)
+				t.drawText(p, indent+scaled(TreeChevronW), cty, cellText(row.node, 0), cellInk)
 			} else {
 				text := cellText(row.node, j)
-				t.drawText(p, cellTextX(&t.Base, cx, cellW, text, col.Align), cty, text, ink)
+				t.drawText(p, cellTextX(&t.Base, cx, cellW, text, col.Align), cty, text, cellInk)
 			}
 			cx += cellW
 		}
