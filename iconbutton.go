@@ -28,9 +28,34 @@ type IconButton struct {
 	Icon    string
 	OnClick func()
 
+	// Glyph draws the button's mark instead of rendering Icon as text. It is the
+	// same seam [Button.Icon] uses, so a real icon — go-iconoir, an SVG mask,
+	// anything that can paint into a rect — replaces the letter that used to
+	// stand in for one. Nil keeps the text path, so every existing caller draws
+	// byte-identically.
+	Glyph func(p painter.Painter, r Rect, ink RGBA)
+
+	// Flat drops the resting face and border: the button is invisible until the
+	// pointer is over it, and hover and press paint a ROUNDED background instead
+	// of a square one. That is what a close affordance in a title bar wants — a
+	// boxed square in the corner of a panel reads as a control that belongs to
+	// the content, not to the window. False keeps the framed look every other
+	// caller has.
+	Flat bool
+
 	hovered bool
 	pressed bool
 }
+
+// IconButtonFlatRadius is the corner radius of a Flat button's hover and press
+// background, in pixels before scaling. IconButtonFlatHoverAlpha and
+// IconButtonFlatPressAlpha are how opaque that background is — a veil, not a
+// face, so it reads on any ground the host paints behind it.
+const (
+	IconButtonFlatRadius     = 6
+	IconButtonFlatHoverAlpha = 0x22
+	IconButtonFlatPressAlpha = 0x44
+)
 
 // IconButtonSize is the default square dimension in pixels when
 // Bounds() is zero-sized. Matches the 28-px toolbar icon buttons
@@ -75,9 +100,30 @@ func (i *IconButton) Draw(p painter.Painter, theme *Theme) {
 	if i.Disabled().Get() {
 		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
-	fillRect(p, r.X, r.Y, r.W, r.H, face)
-	strokeRect(p, r.X, r.Y, r.W, r.H, border)
-	if i.Icon != "" {
+	if i.Flat {
+		// Nothing at rest; a rounded wash under the pointer.
+		//
+		// The wash is a translucent veil of the INK, not one of the theme's
+		// faces: a flat button sits on whatever its host paints — a title bar in
+		// SurfaceAlt, a toolbar in Surface — and a face-coloured hover is
+		// invisible on the half of them that share its colour. A veil of the ink
+		// darkens a light ground and lightens a dark one, so it shows on both.
+		switch {
+		case i.pressed:
+			fillRoundRect(p, r.X, r.Y, r.W, r.H, scaled(IconButtonFlatRadius),
+				withAlpha(ink, IconButtonFlatPressAlpha))
+		case i.hovered:
+			fillRoundRect(p, r.X, r.Y, r.W, r.H, scaled(IconButtonFlatRadius),
+				withAlpha(ink, IconButtonFlatHoverAlpha))
+		}
+	} else {
+		fillRect(p, r.X, r.Y, r.W, r.H, face)
+		strokeRect(p, r.X, r.Y, r.W, r.H, border)
+	}
+	switch {
+	case i.Glyph != nil:
+		i.Glyph(p, iconButtonGlyphRect(r), ink)
+	case i.Icon != "":
 		tw := i.textWidth(i.Icon)
 		tx := r.X + (r.W-tw)/2
 		ty := r.Y + (r.H-i.glyphHeight())/2
@@ -129,3 +175,20 @@ func (i *IconButton) HitRect() Rect { return touchHitRect(i.Bounds()) }
 // (touch-clamped) hit rect — the default Bounds().Contains at compact, the
 // finger-sized area at touch.
 func (i *IconButton) HitTest(px, py int) bool { return i.HitRect().Contains(px, py) }
+
+// iconButtonGlyphRect is the centred square a Glyph is drawn into, inset so the
+// mark does not touch the button's edge (or the wash under it).
+func iconButtonGlyphRect(r Rect) Rect {
+	in := scaled(IconButtonGlyphInset)
+	s := r.W - 2*in
+	if r.H-2*in < s {
+		s = r.H - 2*in
+	}
+	if s < 1 {
+		s = 1
+	}
+	return Rect{X: r.X + (r.W-s)/2, Y: r.Y + (r.H-s)/2, W: s, H: s}
+}
+
+// IconButtonGlyphInset is the inset from each edge to the glyph square.
+const IconButtonGlyphInset = 7

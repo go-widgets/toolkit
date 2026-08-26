@@ -302,7 +302,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// state (the search text) lives on Panel.Input's own Text() observable.
 	"ModalWindow":      {"Scrim": true, "Panel": true, "CloseOnScrim": true, "PanelW": true, "PanelH": true},
 	"HeaderBar":        {"End": true, "Start": true, "Subtitle": true, "Title": true},
-	"IconButton":       {"Icon": true},
+	"IconButton":       {"Flat": true, "Glyph": true, "Icon": true},
 	"Image":            {"Alt": true, "H": true, "Pixels": true, "Scale": true, "W": true},
 	"IsoIconPalette":   {"DefaultGroupName": true, "Title": true},
 	"Kbd":              {"Keys": true},

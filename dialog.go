@@ -5,6 +5,7 @@
 package toolkit
 
 import (
+	"github.com/go-iconoir/iconoir"
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
@@ -110,20 +111,28 @@ const DialogInputH = 32
 // and the input field drawn inside it.
 const dialogInputPad = 4
 
-// dialogCloseGlyph is the glyph rendered on the close button. The toolkit's 5x7
-// bitmap font carries no "×", so "x" stands in — the same close/reset affordance
-// SearchEntry already uses for its clear slot.
-const dialogCloseGlyph = "x"
+// DialogRadius is the panel's corner radius in pixels before scaling. A dialog
+// is a sheet floating over the application, and a square-cornered sheet reads as
+// a region of it; the rest of the toolkit already rounds its floating surfaces.
+const DialogRadius = 8
 
 // closeButton lazily builds (and caches) the title-bar close control, wired to
 // fire OnClose live at click time (nil-safe). Only ever consulted when Closable.
 func (d *Dialog) closeButton() *IconButton {
 	if d.closeBtn == nil {
-		d.closeBtn = NewIconButton(dialogCloseGlyph, func() {
+		d.closeBtn = NewIconButton("", func() {
 			if d.OnClose != nil {
 				d.OnClose()
 			}
 		})
+		// A real ✕ from the icon set the org already owns, not the letter "x"
+		// that stood in for one because the old 5x7 bitmap font had no glyph for
+		// it. And flat: a framed square in the corner of a title bar reads as a
+		// control belonging to the content rather than to the window.
+		d.closeBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) {
+			iconoir.Draw(p, r, "xmark", ink)
+		}
+		d.closeBtn.Flat = true
 	}
 	return d.closeBtn
 }
@@ -197,11 +206,20 @@ func (d *Dialog) applyBounds() {
 // Draw paints card + title + content + buttons.
 func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 	r := d.Bounds()
-	fillRect(p, r.X, r.Y, r.W, r.H, theme.Background)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
-	// Title bar.
-	fillRect(p, r.X, r.Y, r.W, scaled(DialogTitleH), theme.SurfaceAlt)
-	titleY := r.Y + (scaled(DialogTitleH)-d.glyphHeight())/2
+	rad := scaled(DialogRadius)
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, rad, theme.Background)
+	// Title bar. It is filled as a round rect so it follows the panel's top
+	// corners, then squared off along its lower half — filling it as a plain
+	// rect would poke out past the rounding at both top corners.
+	th := scaled(DialogTitleH)
+	fillRoundRect(p, r.X, r.Y, r.W, th, rad, theme.SurfaceAlt)
+	if th > rad {
+		fillRect(p, r.X, r.Y+rad, r.W, th-rad, theme.SurfaceAlt)
+	}
+	// A hairline between the title bar and what is under it, so the two read as
+	// separate bands rather than one field of colour.
+	fillRect(p, r.X, r.Y+th-strokeWidth(), r.W, strokeWidth(), theme.Border)
+	titleY := r.Y + (th-d.glyphHeight())/2
 	d.drawText(p, r.X+8, titleY, d.Title, theme.OnSurface)
 	// Close (×) button.
 	if d.Closable {
@@ -216,12 +234,20 @@ func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 	if d.Content != nil {
 		d.Content.Draw(p, theme)
 	}
-	// Action strip.
-	stripY := r.Y + r.H - scaled(DialogButtonStripH)
-	fillRect(p, r.X, stripY, r.W, scaled(DialogButtonStripH), theme.SurfaceAlt)
+	// Action strip, rounded along the panel's BOTTOM corners the same way the
+	// title bar is rounded along the top.
+	sh := scaled(DialogButtonStripH)
+	stripY := r.Y + r.H - sh
+	fillRoundRect(p, r.X, stripY, r.W, sh, rad, theme.SurfaceAlt)
+	if sh > rad {
+		fillRect(p, r.X, stripY, r.W, sh-rad, theme.SurfaceAlt)
+	}
+	fillRect(p, r.X, stripY, r.W, strokeWidth(), theme.Border)
 	for _, b := range d.Buttons {
 		b.Draw(p, theme)
 	}
+	// The panel outline last, so neither band paints over it.
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, rad, theme.Border)
 }
 
 // OnEvent forwards to the close button, action buttons, optional input bar and
