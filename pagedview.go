@@ -43,7 +43,15 @@ type PagedView struct {
 
 	// pages is the set of page bitmaps (config-ish content set via SetPages, not
 	// reactive Observable state); it is unexported so the MVVM gate stays green.
+	// A nil entry is a page the view lays out but does not blit.
 	pages []*image.RGBA
+
+	// sizes is each page's NATURAL size, in the bitmap's own pixels. SetPages
+	// derives it from the bitmaps; SetPageSizes declares it for pages that have
+	// no bitmap at all, because a host renders them itself. It is what every
+	// layout decision reads, so a hosted page pages, zooms, scrolls and reports
+	// its rectangle exactly like a blitted one.
+	sizes []image.Point
 
 	// Reactive state, MVVM-only behind accessors.
 	mode    *mvvm.Observable[PagedMode]
@@ -155,7 +163,7 @@ func (pv *PagedView) Zoom() *mvvm.Observable[int] {
 }
 
 // PageCount is the number of pages currently set.
-func (pv *PagedView) PageCount() int { return len(pv.pages) }
+func (pv *PagedView) PageCount() int { return len(pv.sizes) }
 
 // SetPages replaces the page bitmaps (each a natural-size RGBA the caller
 // rasterised; nil entries are skipped when drawn). CurrentPage is clamped back
@@ -163,14 +171,45 @@ func (pv *PagedView) PageCount() int { return len(pv.pages) }
 // is empty or the page was below 1.
 func (pv *PagedView) SetPages(pages []*image.RGBA) {
 	pv.pages = pages
+	pv.sizes = make([]image.Point, len(pages))
+	for i, img := range pages {
+		if img != nil {
+			pv.sizes[i] = image.Point{X: img.Rect.Dx(), Y: img.Rect.Dy()}
+		}
+	}
+	pv.clampCurrent(len(pages))
+}
+
+// SetPageSizes declares pages the view LAYS OUT but does not draw the content
+// of: it paints each one's paper, shadow and border, and a host puts the real
+// thing on top — an <svg> in the DOM, a video, a native subview — reading where
+// from [PagedView.PageRect].
+//
+// This is the same widget doing the same paging, zoom, scrolling and page
+// reporting; only the blit is missing, because for some content the host draws
+// it better than a pixel buffer can. Rasterising a typeset page into a bitmap
+// costs 2,6x to 5,6x what handing the same SVG to a browser costs, measured in
+// wasm against the browser it runs in — and the bitmap is fixed at one
+// resolution while the host's own rendering is not.
+//
+// sizes are natural (un-zoomed) page sizes, in the same pixels a bitmap would
+// have used, so a hosted set and a blitted set lay out identically.
+func (pv *PagedView) SetPageSizes(sizes []image.Point) {
+	pv.pages = nil
+	pv.sizes = sizes
+	pv.clampCurrent(len(sizes))
+}
+
+// clampCurrent brings CurrentPage back into range after the page set changed:
+// to the last page if it now points past the end, to 1 if the set is empty or
+// the page was below 1.
+func (pv *PagedView) clampCurrent(n int) {
 	c := pv.CurrentPage().Get()
 	switch {
-	case len(pages) == 0:
+	case n == 0, c < 1:
 		pv.CurrentPage().Set(1)
-	case c < 1:
-		pv.CurrentPage().Set(1)
-	case c > len(pages):
-		pv.CurrentPage().Set(len(pages))
+	case c > n:
+		pv.CurrentPage().Set(n)
 	}
 }
 
@@ -247,12 +286,12 @@ func (pv *PagedView) relayout() {
 // scaledSize is page i's blit size at the current zoom, in device pixels. A nil
 // page (or one scaled away to nothing) reports zero and is skipped when drawn.
 func (pv *PagedView) scaledSize(i int) (w, h int) {
-	img := pv.pages[i]
-	if img == nil {
+	sz := pv.sizes[i]
+	if sz.X <= 0 || sz.Y <= 0 {
 		return 0, 0
 	}
 	z := pv.Zoom().Get()
-	return img.Rect.Dx() * z / 100, img.Rect.Dy() * z / 100
+	return sz.X * z / 100, sz.Y * z / 100
 }
 
 // computeLayout resolves the card rects + content size for the current mode. The
@@ -270,7 +309,7 @@ func (pv *PagedView) computeLayout(usableW, usableH int) pagedLayout {
 	var lay pagedLayout
 	if pv.Mode().Get() == PagedPaginated {
 		idx := pv.cur() - 1
-		if idx < 0 || idx >= len(pv.pages) {
+		if idx < 0 || idx >= len(pv.sizes) {
 			lay.contentW, lay.contentH = usableW, usableH
 			return lay
 		}
@@ -289,12 +328,12 @@ func (pv *PagedView) computeLayout(usableW, usableH int) pagedLayout {
 		return lay
 	}
 	// Continuous: a centred vertical stack of every page.
-	if len(pv.pages) == 0 {
+	if len(pv.sizes) == 0 {
 		lay.contentW, lay.contentH = usableW, usableH
 		return lay
 	}
 	maxW := 0
-	for i := range pv.pages {
+	for i := range pv.sizes {
 		if pw, _ := pv.scaledSize(i); pw > maxW {
 			maxW = pw
 		}
@@ -304,7 +343,7 @@ func (pv *PagedView) computeLayout(usableW, usableH int) pagedLayout {
 		cw = usableW
 	}
 	y := margin
-	for i := range pv.pages {
+	for i := range pv.sizes {
 		pw, ph := pv.scaledSize(i)
 		lay.cards = append(lay.cards, Rect{X: (cw - pw) / 2, Y: y, W: pw, H: ph})
 		lay.indices = append(lay.indices, i)
@@ -417,17 +456,28 @@ func (pv *PagedView) drawCenteredText(p painter.Painter, theme *Theme, slot Rect
 // shadow, a surface matte, the page blit, and a 1px border.
 func (pv *PagedView) drawPages(p painter.Painter, theme *Theme, base Rect) {
 	for k, card := range pv.lay.cards {
-		img := pv.pages[pv.lay.indices[k]]
 		dst := Rect{X: base.X + card.X, Y: base.Y + card.Y, W: card.W, H: card.H}
-		if img == nil || dst.W <= 0 || dst.H <= 0 {
+		if dst.W <= 0 || dst.H <= 0 {
 			continue
 		}
 		sh := scaled(pagedShadow)
 		fillRect(p, dst.X+sh, dst.Y+sh, dst.W, dst.H, pagedShadowColor)
 		fillRect(p, dst.X, dst.Y, dst.W, dst.H, theme.Surface)
-		blitImage(p, dst, dst, img.Pix, img.Rect.Dx(), img.Rect.Dy())
+		// A hosted page has no bitmap: its paper, shadow and border are painted
+		// here and the host draws the content over them (see SetPageSizes).
+		if img := pv.pageImage(pv.lay.indices[k]); img != nil {
+			blitImage(p, dst, dst, img.Pix, img.Rect.Dx(), img.Rect.Dy())
+		}
 		strokeRect(p, dst.X, dst.Y, dst.W, dst.H, theme.Border)
 	}
+}
+
+// pageImage is page i's bitmap, or nil when the host renders that page.
+func (pv *PagedView) pageImage(i int) *image.RGBA {
+	if i < 0 || i >= len(pv.pages) {
+		return nil
+	}
+	return pv.pages[i]
 }
 
 // HitTest covers the full bounds (the toolbar + pane are both interactive).
@@ -697,10 +747,10 @@ func (pv *PagedView) setZoom(z int) {
 // non-positive.
 func (pv *PagedView) fitWidth() {
 	idx := pv.cur() - 1
-	if idx < 0 || idx >= len(pv.pages) || pv.pages[idx] == nil {
+	if idx < 0 || idx >= len(pv.sizes) {
 		return
 	}
-	w := pv.pages[idx].Rect.Dx()
+	w := pv.sizes[idx].X
 	if w <= 0 {
 		return
 	}
