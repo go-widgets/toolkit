@@ -111,10 +111,23 @@ const DialogInputH = 32
 // and the input field drawn inside it.
 const dialogInputPad = 4
 
-// DialogRadius is the panel's corner radius in pixels before scaling. A dialog
-// is a sheet floating over the application, and a square-cornered sheet reads as
-// a region of it; the rest of the toolkit already rounds its floating surfaces.
-const DialogRadius = 8
+// DialogRadius is the panel's corner radius in pixels before scaling, and
+// DialogShadow the offset of its drop shadow.
+//
+// A dialog is a sheet floating over the application, and a square-cornered sheet
+// reads as a region of it. But rounding ALONE is not enough to say so: measured
+// on the live playground, an 8px radius against a dark scrim showed the scrim
+// through the corner at [16,18,21] where the edge read [58,62,70] — present, and
+// invisible. A sheet reads as floating when it is rounded AND it casts a shadow,
+// which is what the page cards in PagedView already do.
+const (
+	DialogRadius = 12
+	DialogShadow = 4
+)
+
+// dialogShadowColor is the translucent black a panel casts onto what is under
+// it — the same value a page card uses.
+var dialogShadowColor = RGBA{R: 0, G: 0, B: 0, A: 0x30}
 
 // closeButton lazily builds (and caches) the title-bar close control, wired to
 // fire OnClose live at click time (nil-safe). Only ever consulted when Closable.
@@ -207,6 +220,10 @@ func (d *Dialog) applyBounds() {
 func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 	r := d.Bounds()
 	rad := scaled(DialogRadius)
+	// The shadow first, offset down and right, so the sheet reads as lifted off
+	// what is behind it.
+	drop := scaled(DialogShadow)
+	fillRoundRect(p, r.X+drop, r.Y+drop, r.W, r.H, rad, dialogShadowColor)
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, rad, theme.Background)
 	// Title bar. It is filled as a round rect so it follows the panel's top
 	// corners, then squared off along its lower half — filling it as a plain
