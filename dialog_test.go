@@ -19,17 +19,57 @@ func TestDialogPanelIsRounded(t *testing.T) {
 	buf := make([]byte, 4*200*140)
 	d.Draw(painter.NewPixelPainter(buf, 200, 140), DefaultLight())
 
-	at := func(x, y int) byte { return buf[(y*200+x)*4+3] }
-	for _, c := range [][2]int{{0, 0}, {199, 0}, {0, 139}, {199, 139}} {
-		if at(c[0], c[1]) != 0 {
-			t.Errorf("corner %v is painted; the panel must be rounded", c)
-		}
+	// A rounded corner does not carry the panel's own paint. Asserting merely
+	// "unpainted" was too coarse: the drop shadow, offset down and right, lands
+	// on the corners it falls past, and that is the shadow doing its job.
+	at := func(x, y int) RGBA {
+		i := (y*200 + x) * 4
+		return RGBA{R: buf[i], G: buf[i+1], B: buf[i+2], A: buf[i+3]}
 	}
-	if at(100, 0) == 0 {
+	topEdge, bottomEdge := at(100, 0), at(100, 139)
+	if topEdge.A == 0 {
 		t.Error("the middle of the top edge must be painted")
 	}
-	if at(100, 139) == 0 {
+	if bottomEdge.A == 0 {
 		t.Error("the middle of the bottom edge must be painted")
+	}
+	for _, c := range [][2]int{{0, 0}, {199, 0}, {0, 139}, {199, 139}} {
+		if got := at(c[0], c[1]); got == topEdge || got == bottomEdge {
+			t.Errorf("corner %v carries the panel's own paint %v; it must be rounded away", c, got)
+		}
+	}
+}
+
+// The panel casts a shadow down and to the right, which is what makes a rounded
+// sheet read as floating rather than merely as a rounded region. Rounding alone
+// was measured on the live playground and was invisible: the corner showed the
+// dark scrim through it at [16,18,21] where the edge read [58,62,70].
+func TestDialogCastsAShadow(t *testing.T) {
+	const W, H = 260, 200
+	buf := make([]byte, 4*W*H)
+	p := painter.NewPixelPainter(buf, W, H)
+	d := NewDialog("Title", nil)
+	d.SetBounds(Rect{X: 20, Y: 20, W: 200, H: 140})
+	d.Draw(p, DefaultLight())
+
+	at := func(x, y int) RGBA {
+		i := (y*W + x) * 4
+		return RGBA{R: buf[i], G: buf[i+1], B: buf[i+2], A: buf[i+3]}
+	}
+	drop := scaled(DialogShadow)
+	// Below the middle of the bottom edge, inside the shadow's offset. The
+	// CORNERS are the wrong place to probe: the shadow is rounded too, so it has
+	// already curved away there.
+	if got := at(20+100, 20+140+drop/2); got.A == 0 {
+		t.Errorf("no shadow below the panel: %v", got)
+	}
+	// And nothing further out than the shadow reaches.
+	if got := at(20+100, 20+140+drop+2); got.A != 0 {
+		t.Errorf("the shadow must not extend past its offset: %v", got)
+	}
+	// Same to the right.
+	if got := at(20+200+drop/2, 20+70); got.A == 0 {
+		t.Errorf("no shadow to the right of the panel: %v", got)
 	}
 }
 
