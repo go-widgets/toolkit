@@ -130,6 +130,20 @@ func (s *SettingRow) Measure(width int) int {
 	return h + 2*scaled(SettingRowPadY)
 }
 
+// SetBounds positions the row and seats its Control in the trailing slot.
+//
+// Draw does this too, and did it alone until now, so before the first frame the
+// Control had no bounds: a click routed into a drop-down or a scale hit a
+// zero-size rectangle, and every walk that asks a widget where it is was told
+// the origin. Positioning is layout. Draw keeps its call, which re-seats a
+// Control attached since the last layout.
+func (s *SettingRow) SetBounds(r Rect) {
+	s.Base.SetBounds(r)
+	if s.Control != nil {
+		s.Control.SetBounds(s.controlRect())
+	}
+}
+
 // Draw paints the row body, positions + draws the trailing Control (when
 // non-nil), paints the Title (and Subtitle, when non-empty) vertically
 // centred at the leading edge, and finally the bottom Divider (when set).

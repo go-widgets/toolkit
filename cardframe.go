@@ -45,6 +45,17 @@ const (
 func cardFrame(p painter.Painter, theme *Theme, r Rect) Rect {
 	fillRoundRect(p, r.X, r.Y, r.W, r.H, scaled(CardCornerRadius), theme.Surface)
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, scaled(CardCornerRadius), theme.Border)
+	return cardContent(r)
+}
+
+// cardContent is the inner content rectangle of a card frame at r: r inset by
+// CardPadX horizontally and CardPadY vertically on every side.
+//
+// It is separate from cardFrame because a card must be able to LAY OUT without
+// painting -- SetBounds has no painter -- and the two answers have to be the
+// same rectangle by construction rather than by two copies of the arithmetic
+// agreeing.
+func cardContent(r Rect) Rect {
 	return Rect{
 		X: r.X + scaled(CardPadX),
 		Y: r.Y + scaled(CardPadY),

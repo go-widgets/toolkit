@@ -191,3 +191,59 @@ func TestSettingsGroupWalkA11y(t *testing.T) {
 		t.Fatalf("switch nodes = %d, want 3", switches)
 	}
 }
+
+// TestASettingsGroupLaysOutBeforeItIsPainted.
+//
+// A group positioned its rows, and each row its control, only inside Draw. So a
+// settings card that had never been painted reported every row and every control
+// at the origin with no size: a click routed into a drop-down hit a zero-size
+// rectangle, and a host sizing a window from the tree measured nothing.
+//
+// The negative control is the arrangement itself: the rows must come out where
+// Draw would have put them, at their own measured heights, in order, inside the
+// card inset.
+func TestASettingsGroupLaysOutBeforeItIsPainted(t *testing.T) {
+	dd := NewDropDown([]string{"3", "6", "9"}, 0)
+	dd.SetBounds(Rect{W: 80, H: 24}) // the caller sizes a control; the row places it
+	sw := NewSwitch(true)
+	rows := []*SettingRow{
+		&SettingRow{Title: "Glasses",
+			Subtitle: "which headset when several are attached", Control: dd},
+		NewSettingRow("Cover the menu bar", sw),
+	}
+	g := NewSettingsGroup("xrdesk", rows...)
+
+	outer := Rect{X: 10, Y: 20, W: 400, H: g.Measure(400)}
+	g.SetBounds(outer)
+
+	inner := cardContent(outer)
+	y := inner.Y + g.headerH()
+	for i, row := range rows {
+		want := Rect{X: inner.X, Y: y, W: inner.W, H: row.Measure(inner.W)}
+		if got := row.Bounds(); got != want {
+			t.Errorf("row %d is at %+v, want %+v", i, got, want)
+		}
+		if row.Control.Bounds() == (Rect{}) {
+			t.Errorf("row %d has a control with no bounds", i)
+		}
+		if cr := row.Control.Bounds(); !want.Contains(cr.X, cr.Y) {
+			t.Errorf("row %d put its control at %+v, outside the row %+v", i, cr, want)
+		}
+		y += want.H
+	}
+	// Every row but the last carries the divider, which is the group's to set.
+	if !rows[0].Divider || rows[len(rows)-1].Divider {
+		t.Error("the dividers were not set by the layout")
+	}
+
+	// A click on the drop-down reaches it with nothing painted yet.
+	cr := dd.Bounds()
+	g.OnEvent(Event{
+		Kind: EventClick,
+		X:    cr.X + cr.W/2 - outer.X,
+		Y:    cr.Y + cr.H/2 - outer.Y,
+	})
+	if !dd.Open().Get() {
+		t.Error("a click on the control did not reach it before the first paint")
+	}
+}
