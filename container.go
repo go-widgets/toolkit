@@ -35,6 +35,13 @@ type Item struct {
 	Flex   int
 	Size   int
 	Region Region
+	// Natural asks a box layout to size this item on the MAIN axis to what the
+	// widget MEASURES, re-measured on every layout. It is what a run of cards or
+	// settings rows wants: a fixed Size is right at one window size and wrong at
+	// every other, and a fixed run that no longer fits is drawn over whatever is
+	// pinned below it. Ignored when Flex or Size is set, since those are explicit
+	// answers to the same question.
+	Natural bool
 }
 
 // boxSpec resolves an Item's flex weight and fixed size for a box layout: a
@@ -102,12 +109,16 @@ func (l *BoxLayout) Arrange(r Rect, items []Item) {
 	for i, it := range items {
 		flex, size := it.boxSpec()
 		children[i] = boxChild{w: it.Widget, flex: flex, size: size}
+		if it.Natural && it.Flex <= 0 && it.Size <= 0 {
+			children[i] = boxChild{w: it.Widget, natural: true}
+		}
 	}
-	total := r.W
+	total, cross := r.W, r.H
 	if l.Vertical {
-		total = r.H
+		total, cross = r.H, r.W
 	}
 	sp := clampSpacing(l.Spacing)
+	children = boxResolveNatural(children, cross, l.Vertical)
 	sizes := boxCells(total, sp, children)
 	pos := r.X
 	if l.Vertical {

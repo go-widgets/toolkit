@@ -48,6 +48,9 @@ type boxChild struct {
 	w    Widget
 	flex int // >0 => proportional; 0 => fixed
 	size int // used when flex == 0
+	// natural asks the box to fill size in from what the child MEASURES, at
+	// layout time, when the box knows its cross extent. See boxNatural.
+	natural bool
 }
 
 // clampSpacing takes a box's Spacing literally, clamping only negative values to
@@ -249,6 +252,15 @@ func (h *HBox) AddFixed(w Widget, size int) {
 	h.add(w, 0, size)
 }
 
+// AddNatural appends w sized to what it MEASURES on the main axis -- its width
+// here -- re-measured on every layout, so a resize redistributes rather than
+// leaving a fixed cell that no longer fits. A widget that measures nothing falls
+// back to its own Bounds width.
+func (h *HBox) AddNatural(w Widget) {
+	h.children = append(h.children, boxChild{w: w, natural: true})
+	h.SetBounds(h.Bounds())
+}
+
 func (h *HBox) add(w Widget, flex, size int) {
 	h.children = append(h.children, boxChild{w: w, flex: flex, size: size})
 	h.SetBounds(h.Bounds())
@@ -269,9 +281,10 @@ func (h *HBox) SetBounds(r Rect) {
 		return
 	}
 	sp := clampSpacing(h.Spacing)
-	sizes := boxCells(r.W, sp, h.children)
+	kids := boxResolveNatural(h.children, r.H, false)
+	sizes := boxCells(r.W, sp, kids)
 	x := r.X + boxLead(h.Pack, boxSlack(r.W, sp, sizes))
-	for i, c := range h.children {
+	for i, c := range kids {
 		y, ch := boxCross(c.w, h.Align, r.Y, r.H, sizes[i], true)
 		c.w.SetBounds(Rect{X: x, Y: y, W: sizes[i], H: ch})
 		x += sizes[i] + sp
@@ -368,6 +381,15 @@ func (v *VBox) AddFixed(w Widget, size int) {
 	v.add(w, 0, size)
 }
 
+// AddNatural appends w sized to what it MEASURES on the main axis -- its height
+// here, at the column's width -- re-measured on every layout. It is what a
+// column of cards wants: shrink the window and the run re-flows instead of
+// overflowing whatever is pinned below it.
+func (v *VBox) AddNatural(w Widget) {
+	v.children = append(v.children, boxChild{w: w, natural: true})
+	v.SetBounds(v.Bounds())
+}
+
 func (v *VBox) add(w Widget, flex, size int) {
 	v.children = append(v.children, boxChild{w: w, flex: flex, size: size})
 	v.SetBounds(v.Bounds())
@@ -387,9 +409,10 @@ func (v *VBox) SetBounds(r Rect) {
 		return
 	}
 	sp := clampSpacing(v.Spacing)
-	sizes := boxCells(r.H, sp, v.children)
+	kids := boxResolveNatural(v.children, r.W, true)
+	sizes := boxCells(r.H, sp, kids)
 	y := r.Y + boxLead(v.Pack, boxSlack(r.H, sp, sizes))
-	for i, c := range v.children {
+	for i, c := range kids {
 		x, cw := boxCross(c.w, v.Align, r.X, r.W, sizes[i], false)
 		c.w.SetBounds(Rect{X: x, Y: y, W: cw, H: sizes[i]})
 		y += sizes[i] + sp
@@ -801,4 +824,85 @@ func (f *Frame) OnEvent(ev Event) {
 	if f.child.HitTest(sx, sy) {
 		f.child.OnEvent(translateEvent(ev, pr, f.child.Bounds()))
 	}
+}
+
+// WidthMeasurer is the card family's measure shape: a widget that reports the
+// height it needs at a given width. SettingsGroup, SettingRow, PostCard,
+// ArticleCard, LinkCard, MediaCard and GroupCard all implement it.
+//
+// It is a second shape rather than a replacement for [Measurer] because the
+// question is different: a card's height genuinely depends on its width (text
+// wraps), while [Measurer] answers both axes from both. A box on its main axis
+// wants the first when it is vertical, and the second otherwise.
+type WidthMeasurer interface {
+	Measure(width int) int
+}
+
+// boxNatural reports a child's natural MAIN-axis extent, or 0 when nothing can
+// say: the counterpart of [naturalCross] for the axis the box flows along.
+//
+// A vertical box prefers [WidthMeasurer] -- the card family's "how tall are you
+// at this width" -- because that is exactly the question a column asks. Failing
+// that it takes [Measurer]'s height. A horizontal box can only use [Measurer],
+// since a height at a width says nothing about a width. Either way the child's
+// own Bounds extent is the last resort, which is what a widget that has been
+// sized by its owner already carries.
+func boxNatural(w Widget, cross int, vertical bool) int {
+	if vertical {
+		if m, ok := w.(WidthMeasurer); ok {
+			if h := m.Measure(cross); h > 0 {
+				return h
+			}
+		}
+		if m, ok := w.(Measurer); ok {
+			if _, h := m.Measure(cross, 0); h > 0 {
+				return h
+			}
+		}
+		return w.Bounds().H
+	}
+	if m, ok := w.(Measurer); ok {
+		if width, _ := m.Measure(0, cross); width > 0 {
+			return width
+		}
+	}
+	return w.Bounds().W
+}
+
+// boxResolveNatural fills in the main-axis size of every child that asked to be
+// sized to what it measures, now that the box knows its cross extent.
+//
+// This is where a box stops being a table of pixel constants. A column of cards
+// laid out with fixed sizes is right at one window size and wrong at every
+// other: shrink the window and the fixed rows keep their height, so the run
+// overflows and whatever is pinned below it -- a button bar -- is drawn over. A
+// child sized to what it measures re-measures on every layout, so a resize
+// redistributes instead of overlapping.
+//
+// A child that measures nothing keeps whatever the caller asked for, so an
+// unmeasurable widget is no worse off than before.
+func boxResolveNatural(children []boxChild, cross int, vertical bool) []boxChild {
+	var out []boxChild
+	for i, c := range children {
+		if !c.natural || c.flex > 0 {
+			continue
+		}
+		if out == nil {
+			out = make([]boxChild, len(children))
+			copy(out, children)
+		}
+		if n := boxNatural(c.w, cross, vertical); n > 0 {
+			out[i].flex, out[i].size = 0, n
+			continue
+		}
+		// Nothing to measure and no bounds either -- a widget added before it
+		// was given a size. An equal flex share is what such a child would have
+		// had without asking for anything, and it is a great deal better than a
+		// cell of zero pixels, which is what a fixed size of nought would be.
+		out[i].flex, out[i].size = 1, 0
+	}
+	if out == nil {
+		return children
+	}
+	return out
 }
