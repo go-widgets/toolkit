@@ -60,13 +60,31 @@ type IconGrid struct {
 // paints a light chip behind it; leave it false for a flat vector/symbol icon
 // that needs no backing. Key is an opaque caller identity carried by DragData.
 type IconCell struct {
-	Image  *Image
+	Image *Image
+	// Icon is a VECTOR icon drawn into the cell's icon square, for a cell whose
+	// picture is a shape rather than a photograph: one of the stock DrawIcon***
+	// functions, or the caller's own.
+	//
+	// It exists because a cell used to accept an Image and nothing else, so an
+	// application whose grid holds device classes -- pairs of glasses, printers,
+	// drives -- had to rasterise artwork to put anything in one, or hand-draw
+	// beside the widget. The toolkit already had [IconFunc] and a stock icon
+	// family; the grid simply could not take one.
+	//
+	// Image wins when both are set, since a caller who supplied pixels meant
+	// them.
+	Icon   IconFunc
 	Label  string
 	Key    string
 	Raster bool
 }
 
-// IconGrid cell metrics (pixels).
+// IconGrid cell metrics, in LOGICAL pixels: each one is routed through [scaled]
+// at use, so a cell grows with HiDPI and touch density like every other box
+// metric in the toolkit. They were raw device pixels, which left a magnified
+// interface with cells whose padding, label band and selection field had stayed
+// the size they were at 1x -- a large icon in a small cell with its label
+// crushed against it.
 const (
 	igPadX      = 14 // horizontal padding either side of the icon
 	igPadTop    = 16 // padding above the icon
@@ -133,8 +151,10 @@ func (v *IconGrid) SetSelected(index int) {
 	v.Selected().Set(-1)
 }
 
-func (v *IconGrid) cellW() int { return v.IconSize + 2*igPadX }
-func (v *IconGrid) cellH() int { return igPadTop + v.IconSize + igIconLabel + igLabelH }
+func (v *IconGrid) cellW() int { return v.IconSize + 2*scaled(igPadX) }
+func (v *IconGrid) cellH() int {
+	return scaled(igPadTop) + v.IconSize + scaled(igIconLabel) + scaled(igLabelH)
+}
 
 // cols is the number of columns that fit in the current width (at least one).
 func (v *IconGrid) cols() int {
@@ -194,36 +214,43 @@ func (v *IconGrid) drawEmpty(p painter.Painter, theme *Theme) {
 func (v *IconGrid) drawCell(p painter.Painter, theme *Theme, r Rect, i int) {
 	cell := v.Cells[i]
 	selected := i == v.Selected().Get()
-	iconBox := Rect{X: r.X + igPadX, Y: r.Y + igPadTop, W: v.IconSize, H: v.IconSize}
+	iconBox := Rect{X: r.X + scaled(igPadX), Y: r.Y + scaled(igPadTop), W: v.IconSize, H: v.IconSize}
 
 	if selected {
 		field := Rect{
-			X: iconBox.X - igSelField, Y: iconBox.Y - igSelField,
-			W: iconBox.W + 2*igSelField, H: iconBox.H + 2*igSelField,
+			X: iconBox.X - scaled(igSelField), Y: iconBox.Y - scaled(igSelField),
+			W: iconBox.W + 2*scaled(igSelField), H: iconBox.H + 2*scaled(igSelField),
 		}
 		p.FillRoundRect(field, 10, withAlpha(theme.Accent, 0x33))
 	}
 
 	if cell.Raster {
 		chip := Rect{
-			X: iconBox.X - igChip, Y: iconBox.Y - igChip,
-			W: iconBox.W + 2*igChip, H: iconBox.H + 2*igChip,
+			X: iconBox.X - scaled(igChip), Y: iconBox.Y - scaled(igChip),
+			W: iconBox.W + 2*scaled(igChip), H: iconBox.H + 2*scaled(igChip),
 		}
 		p.FillRoundRect(chip, 8, chipColor(theme))
 		p.StrokeRoundRect(chip, 8, theme.Border, 1)
 	}
-	if cell.Image != nil {
+	switch {
+	case cell.Image != nil:
 		cell.Image.SetBounds(iconBox)
 		cell.Image.Draw(p, theme)
+	case cell.Icon != nil:
+		ink := theme.OnSurface
+		if selected {
+			ink = theme.Accent
+		}
+		cell.Icon(p, iconBox, ink)
 	}
 
 	label := cell.Label
-	if v.textWidth(label) > r.W-igLabelPad {
-		label = ellipsize(v.EffectiveFont(), label, r.W-igLabelPad)
+	if v.textWidth(label) > r.W-scaled(igLabelPad) {
+		label = ellipsize(v.EffectiveFont(), label, r.W-scaled(igLabelPad))
 	}
 	tw := v.textWidth(label)
 	lx := r.X + (r.W-tw)/2
-	ly := r.Y + igPadTop + v.IconSize + igIconLabel
+	ly := r.Y + scaled(igPadTop) + v.IconSize + scaled(igIconLabel)
 	ink := theme.OnSurface
 	if selected {
 		hl := Rect{X: lx - 6, Y: ly - 2, W: tw + 12, H: v.glyphHeight() + 4}
@@ -331,4 +358,31 @@ func chipColor(theme *Theme) RGBA {
 		return RGB(0xEC, 0xEE, 0xF2)
 	}
 	return RGB(0xFF, 0xFF, 0xFF)
+}
+
+// Measure reports the height the grid needs at this width: as many rows as its
+// cells make at that width, each a cell tall.
+//
+// It makes an IconGrid usable as content -- an item in a column, or the child of
+// a ScrollView -- instead of something a caller has to give a height to. A grid
+// given a height that is not a whole number of rows shows a half row and scrolls
+// for no reason, and a caller computing that height by hand is computing
+// cellH() * ceil(n/cols) with the toolkit's own constants, which is exactly the
+// arithmetic a widget should be asked for rather than reproduced.
+//
+// Width, not the current bounds, because the column count follows the width and
+// a parent asks before it has committed to one.
+func (v *IconGrid) Measure(width int) int {
+	if len(v.Cells) == 0 {
+		// The empty-state message, which is one line centred in whatever it is
+		// given: a row's worth is enough for it and leaves the grid the same
+		// height whether or not it has anything in it yet.
+		return v.cellH()
+	}
+	cols := width / v.cellW()
+	if cols < 1 {
+		cols = 1
+	}
+	rows := (len(v.Cells) + cols - 1) / cols
+	return rows * v.cellH()
 }
