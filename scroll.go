@@ -160,10 +160,62 @@ func NewScrollView(child Widget) *ScrollView {
 	return &ScrollView{Child: child}
 }
 
+// SetBounds positions the view and, when the child can say how big it wants to
+// be, sizes the child and declares the content extent from that.
+//
+// This is the other half of a scroll view, and it was the caller's until now:
+// nothing here gave the child any bounds, and Draw kept only the width and
+// height the child already carried. So a scroll view around a freshly built
+// column showed nothing at all -- the child had no size -- and one whose content
+// changed kept scrolling over the extent it was told about the last time
+// somebody remembered to call SetContentSize.
+//
+// Only a MEASURABLE child is sized here. A child that cannot answer is left
+// exactly as it was, so a caller who lays out and declares the extent by hand
+// keeps doing so, and one who calls SetContentSize after SetBounds still wins:
+// their call is simply later.
+//
+// The content is never shorter than the viewport, so a short child fills the
+// view instead of leaving a strip of bare surface under it.
+func (s *ScrollView) SetBounds(r Rect) {
+	s.Base.SetBounds(r)
+	if s.Child == nil {
+		return
+	}
+	h, ok := scrollNatural(s.Child, s.viewport().W)
+	if !ok {
+		return
+	}
+	vp := s.viewport()
+	if h < vp.H {
+		h = vp.H
+	}
+	s.Child.SetBounds(Rect{X: vp.X, Y: vp.Y, W: vp.W, H: h})
+	s.SetContentSize(vp.W, h)
+}
+
+// scrollNatural is the height a child asks for at width w, and whether it could
+// say. It is the same question a column asks of a card -- see WidthMeasurer --
+// and deliberately does NOT fall back to the child's own bounds: a child that
+// cannot measure must be left alone, not re-declared at whatever size it happens
+// to be carrying.
+func scrollNatural(child Widget, w int) (int, bool) {
+	if m, ok := child.(WidthMeasurer); ok {
+		if h := m.Measure(w); h > 0 {
+			return h, true
+		}
+	}
+	if m, ok := child.(Measurer); ok {
+		if _, h := m.Measure(w, 0); h > 0 {
+			return h, true
+		}
+	}
+	return 0, false
+}
+
 // SetContentSize tells the ScrollView how big the child's logical
 // drawing area is. Used by Scroll() to clamp + by Draw() to size
-// the thumb. Caller is responsible for invoking this when the child
-// grows / shrinks.
+// the thumb. A measurable child has this done for it by SetBounds.
 func (s *ScrollView) SetContentSize(w, h int) {
 	s.contentW = w
 	s.contentH = h
