@@ -81,6 +81,20 @@ type Dialog struct {
 	// dragged instead of snapping back.
 	baseRect           Rect
 	dragOffX, dragOffY int
+
+	// Minimisable and Maximisable add the two title-bar controls beside the
+	// close one. Both default false: a Dialog is a sheet, and a sheet has one
+	// thing to do with it — dismiss it. An application that wants a window says
+	// so.
+	Minimisable bool
+	Maximisable bool
+
+	// minimised / maximised are the two states, reactive via the accessors.
+	// restore is the rect a maximised panel returns to.
+	minimised, maximised *mvvm.Observable[bool]
+	restoreOffX          int
+	restoreOffY          int
+	minBtn, maxBtn       *IconButton
 }
 
 // DialogInput is the contract a Dialog's optional top input bar satisfies: a
@@ -133,7 +147,7 @@ var dialogShadowColor = RGBA{R: 0, G: 0, B: 0, A: 0x30}
 // fire OnClose live at click time (nil-safe). Only ever consulted when Closable.
 func (d *Dialog) closeButton() *IconButton {
 	if d.closeBtn == nil {
-		d.closeBtn = NewIconButton("", func() {
+		d.closeBtn = d.titleControl(func() {
 			if d.OnClose != nil {
 				d.OnClose()
 			}
@@ -145,9 +159,79 @@ func (d *Dialog) closeButton() *IconButton {
 		d.closeBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) {
 			iconoir.Draw(p, r, "xmark", ink)
 		}
-		d.closeBtn.Flat = true
 	}
 	return d.closeBtn
+}
+
+// Minimised is the rolled-up state as a shared [mvvm.Observable]: a minimised
+// panel shows its title bar and nothing else, so the window is out of the way
+// without being dismissed. Lazily created.
+func (d *Dialog) Minimised() *mvvm.Observable[bool] {
+	if d.minimised == nil {
+		d.minimised = mvvm.NewObservable(false)
+	}
+	return d.minimised
+}
+
+// Maximised is the filled state as a shared [mvvm.Observable]: a maximised panel
+// takes its whole DragBounds and returns to where it was when un-maximised.
+// Lazily created.
+func (d *Dialog) Maximised() *mvvm.Observable[bool] {
+	if d.maximised == nil {
+		d.maximised = mvvm.NewObservable(false)
+	}
+	return d.maximised
+}
+
+// titleButtons are the title-bar controls in TRAILING-EDGE order — the one
+// nearest the corner first — so layout and hit-testing walk the same list and
+// cannot disagree about which square belongs to which control.
+func (d *Dialog) titleButtons() []*IconButton {
+	var out []*IconButton
+	if d.Closable {
+		out = append(out, d.closeButton())
+	}
+	if d.Maximisable {
+		out = append(out, d.maxButton())
+	}
+	if d.Minimisable {
+		out = append(out, d.minButton())
+	}
+	return out
+}
+
+// maxButton toggles Maximised. The glyph follows the state: a panel that fills
+// its bounds offers to shrink back.
+func (d *Dialog) maxButton() *IconButton {
+	if d.maxBtn == nil {
+		d.maxBtn = d.titleControl(func() { d.Maximised().Set(!d.Maximised().Get()); d.applyBounds() })
+	}
+	name := "expand"
+	if d.Maximised().Get() {
+		name = "collapse"
+	}
+	d.maxBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { iconoir.Draw(p, r, name, ink) }
+	return d.maxBtn
+}
+
+// minButton toggles Minimised.
+func (d *Dialog) minButton() *IconButton {
+	if d.minBtn == nil {
+		d.minBtn = d.titleControl(func() { d.Minimised().Set(!d.Minimised().Get()); d.applyBounds() })
+	}
+	name := "minus"
+	if d.Minimised().Get() {
+		name = "plus"
+	}
+	d.minBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { iconoir.Draw(p, r, name, ink) }
+	return d.minBtn
+}
+
+// titleControl builds one flat icon button for the title bar.
+func (d *Dialog) titleControl(onClick func()) *IconButton {
+	b := NewIconButton("", onClick)
+	b.Flat = true
+	return b
 }
 
 // NewDialog builds a Dialog with the given title, content + action
@@ -179,10 +263,25 @@ func (d *Dialog) applyBounds() {
 	r.X += d.dragOffX
 	r.Y += d.dragOffY
 	if d.DragBounds.W > 0 && d.DragBounds.H > 0 {
-		r.X = clampInt(r.X, d.DragBounds.X, maxInt(d.DragBounds.X, d.DragBounds.X+d.DragBounds.W-r.W))
-		r.Y = clampInt(r.Y, d.DragBounds.Y, maxInt(d.DragBounds.Y, d.DragBounds.Y+d.DragBounds.H-r.H))
+		if d.Maximised().Get() {
+			// Filled: the whole area the panel is allowed to occupy. Without
+			// DragBounds there is nothing to fill, so maximising does nothing
+			// rather than guessing at a size.
+			r = d.DragBounds
+		} else {
+			r.X = clampInt(r.X, d.DragBounds.X, maxInt(d.DragBounds.X, d.DragBounds.X+d.DragBounds.W-r.W))
+			r.Y = clampInt(r.Y, d.DragBounds.Y, maxInt(d.DragBounds.Y, d.DragBounds.Y+d.DragBounds.H-r.H))
+		}
+	}
+	if d.Minimised().Get() {
+		// Rolled up to its title bar: out of the way without being dismissed.
+		r.H = scaled(DialogTitleH)
 	}
 	d.Base.SetBounds(r)
+	d.layoutTitleButtons(r)
+	if d.Minimised().Get() {
+		return // nothing below the title bar to place
+	}
 	// The body starts below the title bar, and below the input strip when one is
 	// present. With no input bar `top` is r.Y+titleH, so the content rect below is
 	// byte-identical to before this field existed.
@@ -201,11 +300,6 @@ func (d *Dialog) applyBounds() {
 		}
 		d.Content.SetBounds(body)
 	}
-	// Close (×) button: a square filling the title bar's trailing edge.
-	if d.Closable {
-		s := scaled(DialogTitleH)
-		d.closeButton().SetBounds(Rect{X: r.X + r.W - s, Y: r.Y, W: s, H: s})
-	}
 	// Right-align the action buttons in the bottom strip.
 	stripY := r.Y + r.H - scaled(DialogButtonStripH)
 	bx := r.X + r.W - 8
@@ -215,6 +309,22 @@ func (d *Dialog) applyBounds() {
 		bx -= 8 // gap
 	}
 }
+
+// layoutTitleButtons places the title-bar controls as squares along the trailing
+// edge, the closest to the corner first.
+func (d *Dialog) layoutTitleButtons(r Rect) {
+	sq := scaled(DialogTitleH)
+	x := r.X + r.W
+	for _, b := range d.titleButtons() {
+		x -= sq
+		b.SetBounds(Rect{X: x, Y: r.Y, W: sq, H: sq})
+	}
+}
+
+// titleBarInk is what a title bar's text and controls are drawn in. The bar is
+// filled with the theme's accent, so the ink is the colour the toolkit already
+// uses ON the accent — the face a pressed button shows its glyph against.
+func titleBarInk(theme *Theme) RGBA { return theme.Background }
 
 // Draw paints card + title + content + buttons.
 func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
@@ -229,18 +339,28 @@ func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 	// corners, then squared off along its lower half — filling it as a plain
 	// rect would poke out past the rounding at both top corners.
 	th := scaled(DialogTitleH)
-	fillRoundRect(p, r.X, r.Y, r.W, th, rad, theme.SurfaceAlt)
-	if th > rad {
-		fillRect(p, r.X, r.Y+rad, r.W, th-rad, theme.SurfaceAlt)
+	// The bar carries the theme's ACCENT: it is what tells a window from the
+	// content under it at a glance, and it is the surface a drag starts on, so
+	// it should look like a thing to grab.
+	fillRoundRect(p, r.X, r.Y, r.W, th, rad, theme.Accent)
+	if th > rad && !d.Minimised().Get() {
+		fillRect(p, r.X, r.Y+rad, r.W, th-rad, theme.Accent)
 	}
-	// A hairline between the title bar and what is under it, so the two read as
-	// separate bands rather than one field of colour.
-	fillRect(p, r.X, r.Y+th-strokeWidth(), r.W, strokeWidth(), theme.Border)
+	// The accent already separates the bar from the body, so the hairline that
+	// used to do that job is gone with it.
 	titleY := r.Y + (th-d.glyphHeight())/2
-	d.drawText(p, r.X+8, titleY, d.Title, theme.OnSurface)
-	// Close (×) button.
-	if d.Closable {
-		d.closeButton().Draw(p, theme)
+	d.drawText(p, r.X+8, titleY, d.Title, titleBarInk(theme))
+	// The title-bar controls, drawn against the accent.
+	accented := *theme
+	accented.OnSurface = titleBarInk(theme)
+	for _, b := range d.titleButtons() {
+		b.Draw(p, &accented)
+	}
+	if d.Minimised().Get() {
+		// Rolled up: the bar, its controls, and its outline. Nothing else exists
+		// to draw, and drawing the strip would paint below the panel.
+		strokeRoundRect(p, r.X, r.Y, r.W, r.H, rad, theme.Border)
+		return
 	}
 	// Optional input-bar strip below the title bar.
 	if d.Input != nil {
@@ -274,13 +394,17 @@ func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 // typed into). A click that doesn't land on any of them falls through silently
 // (the app keeps the dialog open).
 func (d *Dialog) OnEvent(ev Event) {
-	// Close (×) button.
-	if d.Closable && ev.Kind == EventClick {
-		cb := d.closeButton()
-		if cb.Bounds().Contains(ev.X+d.Bounds().X, ev.Y+d.Bounds().Y) {
-			cb.OnEvent(Event{Kind: EventClick})
-			return
+	// The title-bar controls.
+	if ev.Kind == EventClick {
+		for _, b := range d.titleButtons() {
+			if b.Bounds().Contains(ev.X+d.Bounds().X, ev.Y+d.Bounds().Y) {
+				b.OnEvent(Event{Kind: EventClick})
+				return
+			}
 		}
+	}
+	if d.Minimised().Get() {
+		return // rolled up: only the bar exists, and it was handled above
 	}
 	for _, b := range d.Buttons {
 		if b.Bounds().Contains(ev.X+d.Bounds().X, ev.Y+d.Bounds().Y) && ev.Kind == EventClick {
@@ -349,10 +473,10 @@ func (d *Dialog) onTitleBar(ev Event) bool {
 	if ev.Y < 0 || ev.Y >= scaled(DialogTitleH) {
 		return false
 	}
-	rightLimit := d.Bounds().W
-	if d.Closable {
-		rightLimit -= scaled(DialogTitleH) // the square × button at the trailing edge
-	}
+	// Every control on the bar is a square at the trailing edge, and none of them
+	// starts a drag. Counting only the close one — which is what this did before
+	// the other two existed — would arm a drag on top of them.
+	rightLimit := d.Bounds().W - len(d.titleButtons())*scaled(DialogTitleH)
 	return ev.X >= 0 && ev.X < rightLimit
 }
 
