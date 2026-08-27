@@ -110,6 +110,13 @@ func TestTheChevronGrowsWithTheInterface(t *testing.T) {
 		return n
 	}
 
+	// A host may scale BELOW one -- SetMetricScale takes any positive value --
+	// and a chevron rounded to nothing would leave the control with no mark at
+	// all. The unit is floored at one pixel.
+	if small := ink(0.4); small == 0 {
+		t.Error("at a sub-unit scale the chevron disappeared entirely")
+	}
+
 	one, three := ink(1), ink(3)
 	if one == 0 {
 		t.Fatal("no chevron was painted at all at 1x")
