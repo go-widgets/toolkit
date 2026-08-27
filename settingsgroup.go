@@ -62,6 +62,23 @@ func (g *SettingsGroup) Measure(width int) int {
 	return h
 }
 
+// SetBounds positions the group and lays out its rows, each at its own measured
+// height inside the card inset -- the same arrangement Draw makes, made before
+// the first frame rather than during it, so a row and its Control have bounds as
+// soon as the group does.
+func (g *SettingsGroup) SetBounds(r Rect) {
+	g.Base.SetBounds(r)
+	inner := cardContent(r)
+	y := inner.Y + g.headerH()
+	last := len(g.Rows) - 1
+	for i, row := range g.Rows {
+		row.Divider = i < last
+		rh := row.Measure(inner.W)
+		row.SetBounds(Rect{X: inner.X, Y: y, W: inner.W, H: rh})
+		y += rh
+	}
+}
+
 // Draw paints the card frame + optional caption, then lays each row full
 // inner width and draws it, setting Divider on every row but the last.
 // Row positioning is a side effect (SetBounds), so a later OnEvent can
