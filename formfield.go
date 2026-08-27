@@ -112,6 +112,24 @@ func (f *FormField) childRect() Rect {
 	}
 }
 
+// SetBounds positions the field and seats its Child in the strip between the
+// label row and the caption row.
+//
+// Draw does this too, and did it alone until now, which meant a Child had NO
+// bounds until the first frame was painted. Everything that asks a widget where
+// it is before then got Rect{}: a click routed to a list inside a form field
+// picked its row from a zero-height rectangle, an accessibility walk reported
+// every control at the origin, and a layout assertion measured a tree that
+// looked empty. Positioning is layout, so it belongs here; Draw keeps its own
+// call, which costs nothing and re-seats the child if Help or Error changed the
+// strip since.
+func (f *FormField) SetBounds(r Rect) {
+	f.Base.SetBounds(r)
+	if f.Child != nil {
+		f.Child.SetBounds(f.childRect())
+	}
+}
+
 // Draw paints the label row, positions + draws the Child (when non-
 // nil), and paints the caption row (Error > Help > nothing).
 func (f *FormField) Draw(p painter.Painter, theme *Theme) {

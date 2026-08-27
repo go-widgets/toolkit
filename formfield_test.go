@@ -487,3 +487,51 @@ func TestFormFieldValidateFirstFailureWins(t *testing.T) {
 		t.Fatalf("Error = %q, want %q", f.Error().Get(), "required")
 	}
 }
+
+// TestFormFieldSeatsItsChildBeforeTheFirstFrame.
+//
+// A form field positioned its child inside Draw and nowhere else, so until the
+// first frame was painted the child's Bounds were Rect{}: a click routed into a
+// list picked its row out of a zero-height rectangle, and every walk that asks
+// a widget where it is was told the origin. The negative control is the same
+// assertion on a field whose Child is set AFTER SetBounds, where Draw is still
+// what seats it.
+func TestFormFieldSeatsItsChildBeforeTheFirstFrame(t *testing.T) {
+	child := NewListBox([]string{"one", "two", "three"})
+	f := NewFormField("Rows", child)
+	r := Rect{X: 30, Y: 40, W: 200, H: 120}
+	f.SetBounds(r)
+
+	got := child.Bounds()
+	if got == (Rect{}) {
+		t.Fatal("the child has no bounds until something paints it")
+	}
+	want := f.childRect()
+	if got != want {
+		t.Errorf("the child is at %+v, the field's child strip is %+v", got, want)
+	}
+	if got.Y <= r.Y {
+		t.Errorf("the child at %+v is not below the label row", got)
+	}
+
+	// A click lands on the row under the pointer, with nothing painted yet.
+	row := child.RowHeight
+	f.OnEvent(Event{Kind: EventClick, X: got.X - r.X + 4, Y: got.Y - r.Y + row + row/2})
+	if sel := child.Selected().Get(); sel != 1 {
+		t.Errorf("a click on the second row selected %d before any paint", sel)
+	}
+
+	// A child attached after the fact is still seated by the next paint, which
+	// is what Draw's own call is for.
+	late := NewListBox([]string{"a", "b"})
+	f2 := NewFormField("Late", nil)
+	f2.SetBounds(r)
+	f2.Child = late
+	if late.Bounds() != (Rect{}) {
+		t.Error("a child attached after SetBounds should not have bounds yet")
+	}
+	f2.Draw(newP(makeSurface(260, 200), 260), DefaultDark())
+	if late.Bounds() == (Rect{}) {
+		t.Error("Draw did not seat a child attached after SetBounds")
+	}
+}
