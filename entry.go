@@ -46,6 +46,13 @@ type Entry struct {
 	// EventCompositionEnd. The preview is NOT part of the text until the host
 	// commits it via EventChar, so the text always reflects only committed input.
 	composition string
+	// scrollX is the horizontal scroll offset in device pixels: how far the text
+	// is shifted left under the field so a caret past the right edge stays in view.
+	// Recomputed each Draw to follow the caret and clamped so the text never
+	// scrolls past either end; an unfocused field resets to 0 (reads from the
+	// start). Text is clipped to the field, so a value wider than the field no
+	// longer spills past its border.
+	scrollX int
 }
 
 // entryPadX is the left inset in LOGICAL pixels between the field border and the
@@ -113,7 +120,9 @@ func (e *Entry) display() string {
 }
 
 // Draw paints the border, fill, text + (when Focused) a 1-px cursor
-// stroke at the cursor's pixel position.
+// stroke at the cursor's pixel position. The text is horizontally scrolled to
+// keep the caret in view and clipped to the field, so a value wider than the
+// field scrolls under it instead of spilling past the border.
 func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	r := e.Bounds()
 	border := theme.Border
@@ -125,19 +134,44 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	textY := r.Y + (r.H-e.glyphHeight())/2
 	shown := e.display()
 	pad := scaled(entryPadX)
+
+	// Fit the caret in the inner (padded) width, scrolling the text left when it
+	// runs past the right edge. The composition preview sits at the caret, so it
+	// counts toward the caret's effective x for the fit.
+	runes := []rune(shown)
+	if e.cursor > len(runes) {
+		e.cursor = len(runes)
+	}
+	innerW := r.W - 2*pad
+	caretW := e.textWidth(string(runes[:e.cursor]))
+	compW := 0
+	if e.composition != "" {
+		compW = e.textWidth(e.composition)
+	}
+	totalW := e.textWidth(shown)
+	if caretW+compW > totalW {
+		totalW = caretW + compW
+	}
+	e.scrollX = clampEntryScroll(e.scrollX, caretW+compW, totalW, innerW, e.focused)
+
+	// Clip the text to the inner content rect so the overflow scrolls under the
+	// border rather than over it. Backends that cannot clip (a cell grid never
+	// needs to here) degrade to the old unclipped draw, as List/Carousel do.
+	tx := r.X + pad - e.scrollX
+	clr, canClip := p.(painter.Clipper)
+	if canClip {
+		clr.PushClip(Rect{X: r.X + pad, Y: r.Y, W: innerW, H: r.H})
+	}
 	if shown == "" && e.composition == "" && e.Placeholder != "" {
 		e.drawText(p, r.X+pad, textY, e.Placeholder, theme.SurfaceAlt)
 	} else {
-		e.drawText(p, r.X+pad, textY, shown, theme.OnSurface)
+		e.drawText(p, tx, textY, shown, theme.OnSurface)
 	}
 	if e.focused {
 		// Caret x measured from the shown text up to the cursor, so it lands
-		// correctly under a proportional / CJK font (not a fixed advance).
-		runes := []rune(shown)
-		if e.cursor > len(runes) {
-			e.cursor = len(runes)
-		}
-		cx := r.X + pad + e.textWidth(string(runes[:e.cursor]))
+		// correctly under a proportional / CJK font (not a fixed advance),
+		// then shifted by the same scroll offset as the text.
+		cx := tx + caretW
 		if e.composition != "" {
 			// IME composition preview: render the pending string in
 			// the muted SurfaceAlt tone right at the cursor, ghosted +
@@ -147,14 +181,62 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 			// CursorCol), Entry pushes its single caret past the
 			// preview's pixel width so it visually tracks where the
 			// next committed rune will land.
-			cw := e.textWidth(e.composition)
 			e.drawText(p, cx, textY, e.composition, theme.SurfaceAlt)
-			fillRect(p, cx, textY+e.glyphHeight(), cw, 1, theme.SurfaceAlt)
-			cx += cw
+			fillRect(p, cx, textY+e.glyphHeight(), compW, 1, theme.SurfaceAlt)
+			cx += compW
 		}
 		fillRect(p, cx, textY-1, 1, e.glyphHeight()+2, theme.OnSurface)
 	}
+	if canClip {
+		clr.PopClip()
+	}
 	e.drawFocusRing(p, theme, r)
+}
+
+// clampEntryScroll returns a horizontal scroll offset (device pixels, ≥0) that
+// keeps the caret at caretW visible inside an innerW-wide viewport over text
+// totalW wide, never scrolling past either end. A field that is not focused, or
+// whose text fits, reads from the start (offset 0); a focused field follows the
+// caret, revealing the tail when it runs off the right and the head when it comes
+// back to the left.
+func clampEntryScroll(cur, caretW, totalW, innerW int, focused bool) int {
+	if innerW <= 0 || totalW <= innerW || !focused {
+		return 0
+	}
+	s := cur
+	if caretW-s < 0 { // caret fell off the left: pin it to the left edge
+		s = caretW
+	}
+	if caretW-s > innerW { // caret ran off the right: pin it to the right edge
+		s = caretW - innerW
+	}
+	if m := totalW - innerW; s > m { // never scroll past the text's end
+		s = m
+	}
+	if s < 0 {
+		s = 0
+	}
+	return s
+}
+
+// caretIndexAt returns the rune index in shown nearest the pixel position localX
+// (measured from the text's own left, i.e. after the pad and scroll offset are
+// removed). A click left of the first glyph parks at 0; one past the last glyph
+// parks at the end; in between it snaps to whichever rune boundary the click is
+// closer to, so a click lands where the eye expects.
+func (e *Entry) caretIndexAt(shown string, localX int) int {
+	runes := []rune(shown)
+	if localX <= 0 {
+		return 0
+	}
+	for i := 0; i < len(runes); i++ {
+		left := e.textWidth(string(runes[:i]))
+		right := e.textWidth(string(runes[:i+1]))
+		if localX < (left+right)/2 {
+			return i
+		}
+	}
+	return len(runes)
 }
 
 // OnEvent handles focus, keyboard navigation, character insertion +
@@ -164,6 +246,10 @@ func (e *Entry) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
 		e.focused = true
+		// Place the caret under the click, mapping the click x back through the
+		// left pad and the current scroll offset into the text's own pixel space.
+		pad := scaled(entryPadX)
+		e.cursor = e.caretIndexAt(e.display(), ev.X-(e.Bounds().X+pad)+e.scrollX)
 	case EventKeyDown:
 		switch ev.Code {
 		case "Backspace":
