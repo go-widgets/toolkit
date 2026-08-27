@@ -77,3 +77,54 @@ func TestDropDownBareAccessors(t *testing.T) {
 		t.Fatal("host did not observe Open().Set(true)")
 	}
 }
+
+// TestTheChevronGrowsWithTheInterface.
+//
+// The mark that says "this control opens" was drawn in RAW pixels: seven by
+// four, whatever the interface was scaled to. On a 2160-row panel at 3x it is a
+// speck beside type nine times its area. Counting the ink it paints is the only
+// way to see it -- a bounds test cannot, because the chevron is inside the
+// control's rectangle either way.
+func TestTheChevronGrowsWithTheInterface(t *testing.T) {
+	ink := func(scale float64) int {
+		was := MetricScale()
+		defer SetMetricScale(was)
+		SetMetricScale(scale)
+
+		d := NewDropDown([]string{"a", "b"}, 0)
+		w, h := Scaled(200), Scaled(30)
+		d.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+		buf := makeSurface(w, h)
+		theme := DefaultDark()
+		d.Draw(newP(buf, w), theme)
+
+		// Only the right-hand quarter, so the option text is not counted.
+		n := 0
+		for y := range h {
+			for x := w * 3 / 4; x < w; x++ {
+				if pixelAt(buf, w, x, y) == theme.OnSurface {
+					n++
+				}
+			}
+		}
+		return n
+	}
+
+	// A host may scale BELOW one -- SetMetricScale takes any positive value --
+	// and a chevron rounded to nothing would leave the control with no mark at
+	// all. The unit is floored at one pixel.
+	if small := ink(0.4); small == 0 {
+		t.Error("at a sub-unit scale the chevron disappeared entirely")
+	}
+
+	one, three := ink(1), ink(3)
+	if one == 0 {
+		t.Fatal("no chevron was painted at all at 1x")
+	}
+	// Area grows with the square of the scale: 3x is nine times the ink, give or
+	// take the odd row lost to integer rounding.
+	if three < 8*one {
+		t.Errorf("the chevron paints %d pixels at 1x and %d at 3x; it did not grow "+
+			"with the interface", one, three)
+	}
+}

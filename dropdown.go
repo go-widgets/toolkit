@@ -116,14 +116,24 @@ func (d *DropDown) Draw(p painter.Painter, theme *Theme) {
 	strokeRect(p, r.X, r.Y, r.W, r.H, border)
 	textY := r.Y + (r.H-d.glyphHeight())/2
 	d.drawText(p, r.X+scaled(dropdownPadX), textY, d.Current(), ink)
-	// ▼ chevron on the right edge to signal a drop-down. The wide base
-	// sits on the top row and rows narrow moving down to the point,
-	// so at t=0 the 1-pixel-wide tip lands at cy+2 and at t=3 the 7-
-	// pixel-wide base lands at cy-1.
+	// The chevron on the right edge, signalling a drop-down. The wide base sits
+	// on the top row and the rows narrow moving down to the point, so at t=0 the
+	// one-unit tip lands at cy+2u and at t=3 the seven-unit base lands at cy-u.
+	//
+	// The unit is a SCALED pixel, not a raw one. Drawn in raw pixels the mark
+	// stayed seven by four device pixels whatever the interface was scaled to:
+	// on a 2160-row panel at 3x that is a speck beside type nine times its area,
+	// so the one thing saying "this control opens" vanishes exactly where a
+	// person is most likely to need telling. At 1x the unit is 1 and this is
+	// byte-identical to what it replaces.
+	u := scaled(1)
+	if u < 1 {
+		u = 1
+	}
 	cx := r.X + r.W - scaled(dropdownChevronInset)
 	cy := r.Y + r.H/2
 	for t := 0; t < 4; t++ {
-		fillRect(p, cx-t, cy+2-t, 1+2*t, 1, ink)
+		fillRect(p, cx-t*u, cy+(2-t)*u, (1+2*t)*u, u, ink)
 	}
 	d.drawFocusRing(p, theme, r)
 }
