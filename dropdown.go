@@ -14,6 +14,12 @@ import (
 // Options just below the widget; selecting one closes the popover and
 // Sets the Selected Observable.
 //
+// The popover is drawn and clicked through by the host, because a widget draws
+// inside its own bounds and in tree order and the option list is outside both.
+// [PopoverHost] is that host: wrap the root in one and this control works. An
+// application that composes its own surface can instead use [PopoverOwners] and
+// call DrawPopover / PopoverClick itself, but it does not have to.
+//
 // Like Dialog, the popover's rendering surface is owned by the host
 // app; the toolkit exposes Open + Selected — both MVVM-only, as shared
 // [mvvm.Observable] handles behind accessors — so the host knows what to
@@ -321,3 +327,9 @@ func (d *DropDown) PopoverClick(x, y int) bool {
 	}
 	return true
 }
+
+// PopoverOpen reports whether the option list is showing. It is [DropDown]'s
+// half of the [PopoverOwner] capability, alongside PopoverBounds, DrawPopover and
+// PopoverClick, so a [PopoverHost] can find an open list without knowing what
+// kind of widget it belongs to.
+func (d *DropDown) PopoverOpen() bool { return d.Open().Get() }
