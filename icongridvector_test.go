@@ -166,3 +166,45 @@ func TestDrawIconGlassesPaintsSomething(t *testing.T) {
 	tiny := makeSurface(4, 4)
 	DrawIconGlasses(newP(tiny, 4), Rect{X: 0, Y: 0, W: 4, H: 4}, ink)
 }
+
+// TestIconGridMinCellWidth: a grid whose label identifies the cell can widen it,
+// so the name is not elided away.
+//
+// A cell is otherwise as wide as its icon plus padding, which is right for a
+// grid of files and wrong for a grid of devices: "VITURE Luma Ultra" under a
+// 40-pixel icon came out as "VITURE ...", which is the one thing the tile exists
+// to say.
+func TestIconGridMinCellWidth(t *testing.T) {
+	g := NewIconGrid(IconCell{Icon: DrawIconGlasses, Label: "VITURE Luma Ultra"})
+	narrow := g.cellW()
+
+	g.MinCellW = narrow * 2
+	if wide := g.cellW(); wide != narrow*2 {
+		t.Errorf("the floor gave %d, want %d", wide, narrow*2)
+	}
+	// A floor under the icon-derived width changes nothing: it is a floor.
+	g.MinCellW = 1
+	if got := g.cellW(); got != narrow {
+		t.Errorf("a floor of 1 changed the width to %d, want %d", got, narrow)
+	}
+
+	// The label survives at the wider cell. Measured by what the grid would
+	// elide it to, which is the thing that was going wrong.
+	g.MinCellW = 0
+	g.SetBounds(Rect{X: 0, Y: 0, W: 4 * narrow, H: 200})
+	short := ellipsize(g.EffectiveFont(), "VITURE Luma Ultra", g.cellW()-scaled(igLabelPad))
+	g.MinCellW = 220
+	full := ellipsize(g.EffectiveFont(), "VITURE Luma Ultra", g.cellW()-scaled(igLabelPad))
+	if len(full) <= len(short) {
+		t.Errorf("a wider cell shows %q, no more of the name than the narrow "+
+			"cell's %q", full, short)
+	}
+
+	// And the floor scales, like every other metric.
+	was := MetricScale()
+	defer SetMetricScale(was)
+	SetMetricScale(2)
+	if got, want := g.cellW(), scaled(220); got != want {
+		t.Errorf("at 2x the floor gave %d, want %d", got, want)
+	}
+}

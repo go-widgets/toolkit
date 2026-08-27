@@ -144,7 +144,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// IconGrid / GalleryView: the selected index (-1 = none) is unexported behind
 	// the Selected() Observable; SetSelected clamps+scrolls onto it and OnActivate
 	// is a func hook. Cells/Items + IconSize/Empty are set-once config.
-	"IconGrid":    {"Cells": true, "IconSize": true, "Empty": true},
+	"IconGrid":    {"Cells": true, "IconSize": true, "Empty": true, "MinCellW": true},
 	"GalleryView": {"Items": true, "Empty": true},
 	// RichEditor: the edited document lives on the Doc() Observable, and the
 	// caret / selection / focus / scroll offset are each their own Observable
