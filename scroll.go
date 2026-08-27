@@ -206,7 +206,7 @@ func scrollNatural(child Widget, w int) (int, bool) {
 		}
 	}
 	if m, ok := child.(Measurer); ok {
-		if _, h := m.Measure(w, 0); h > 0 {
+		if _, h := m.Measure(w, measureUnbounded); h > 0 {
 			return h, true
 		}
 	}
