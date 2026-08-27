@@ -716,6 +716,48 @@ func (f *Frame) headerH() int {
 	return 0
 }
 
+// inset is the border-plus-padding a frame keeps on each side, and the whole of
+// what its child loses. Kept in one place so SetBounds and Measure cannot
+// disagree about how big a child's box is.
+func (f *Frame) inset() int {
+	pad := f.Padding
+	if pad == 0 {
+		pad = defaultPadding
+	}
+	if pad < 0 {
+		pad = 0
+	}
+	return 1 + pad
+}
+
+// Measure reports the height the frame needs at this width: its child's, plus
+// the border, the padding and the title bar. A collapsed frame is the title bar
+// and the border, and nothing else.
+//
+// Without it a frame could not be an item in a column or the child of a scroll
+// view without a caller working the number out -- border plus pad plus title bar
+// plus whatever the child says -- which is four of the toolkit's own constants
+// reproduced outside it. A child that cannot measure contributes the height it
+// is carrying, and one that carries none leaves the frame its chrome.
+func (f *Frame) Measure(width int) int {
+	chrome := 2*f.inset() + f.headerH()
+	if f.child == nil {
+		return chrome
+	}
+	if f.Collapsed().Get() && f.headerH() > 0 {
+		return 2 + f.headerH()
+	}
+	inner := width - 2*f.inset()
+	switch m := f.child.(type) {
+	case WidthMeasurer:
+		return chrome + m.Measure(inner)
+	case Measurer:
+		_, h := m.Measure(inner, measureUnbounded)
+		return chrome + h
+	}
+	return chrome + f.child.Bounds().H
+}
+
 // SetBounds positions the Frame + resizes its child to fit inside the
 // border, title bar (if any) + padding. A collapsed frame hides the child.
 func (f *Frame) SetBounds(r Rect) {
@@ -728,17 +770,10 @@ func (f *Frame) SetBounds(r Rect) {
 		f.child.SetBounds(Rect{}) // hidden while collapsed
 		return
 	}
-	pad := f.Padding
-	if pad == 0 {
-		pad = defaultPadding
-	}
-	if pad < 0 {
-		pad = 0
-	}
 	// 1px border on each side plus pad on each side; the title bar (hh)
 	// eats into the top only. With hh == 0 this is the original inset box.
-	inset := 1 + pad
-	top := r.Y + 1 + hh + pad
+	inset := f.inset()
+	top := r.Y + inset + hh
 	f.child.SetBounds(Rect{
 		X: r.X + inset,
 		Y: top,
@@ -855,7 +890,7 @@ func boxNatural(w Widget, cross int, vertical bool) int {
 			}
 		}
 		if m, ok := w.(Measurer); ok {
-			if _, h := m.Measure(cross, 0); h > 0 {
+			if _, h := m.Measure(cross, measureUnbounded); h > 0 {
 				return h
 			}
 		}
@@ -906,3 +941,15 @@ func boxResolveNatural(children []boxChild, cross int, vertical bool) []boxChild
 	}
 	return out
 }
+
+// measureUnbounded is what to offer a [Measurer] on the axis a caller is not
+// constraining: "as much as you like".
+//
+// Zero was the obvious value and it is the wrong one. A Measurer takes what is
+// AVAILABLE on each axis, so a widget asked for its height in nought pixels of
+// height can only answer nought -- which is what an AlignBox and a Padding did,
+// making a frame that consulted one measure to nothing at all. A large number
+// says "unconstrained" to a widget that clamps to what it is offered and changes
+// nothing for the ones (the whole card family) that report their own size
+// regardless.
+const measureUnbounded = 1 << 20

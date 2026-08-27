@@ -652,3 +652,69 @@ func TestBoxAddClampsAndOverflow(t *testing.T) {
 		t.Fatalf("hbox fixed clamp width = %d, want 0", fx.Bounds().W)
 	}
 }
+
+// TestFrameMeasure: the child's height plus the border, the padding and the
+// title bar.
+//
+// Without it a frame could not be an item in a column or the child of a scroll
+// view without a caller working the number out -- four of the toolkit's own
+// constants reproduced outside it.
+func TestFrameMeasure(t *testing.T) {
+	grid := NewIconGrid(IconCell{Label: "one"}, IconCell{Label: "two"})
+	f := NewFrame(grid)
+	f.Title = "Glasses"
+
+	const width = 400
+	inner := width - 2*f.inset()
+	want := 2*f.inset() + f.headerH() + grid.Measure(inner)
+	if got := f.Measure(width); got != want {
+		t.Errorf("the frame measures %d, want %d", got, want)
+	}
+
+	// And the measurement matches what SetBounds then does, which is the whole
+	// point: a column that sizes a frame from Measure and a frame that lays its
+	// child out have to agree.
+	f.SetBounds(Rect{X: 0, Y: 0, W: width, H: want})
+	b := grid.Bounds()
+	if b.H != grid.Measure(inner) {
+		t.Errorf("laid out, the child is %d tall; it measured %d", b.H, grid.Measure(inner))
+	}
+	if b.Y+b.H > want {
+		t.Errorf("the child %+v reaches past the frame's %d", b, want)
+	}
+
+	// No title bar: the chrome is just border and padding.
+	plain := NewFrame(grid)
+	if got, want := plain.Measure(width), 2*plain.inset()+grid.Measure(inner); got != want {
+		t.Errorf("an untitled frame measures %d, want %d", got, want)
+	}
+
+	// Collapsed: the title bar and the border, and nothing else.
+	f.Collapsible = true
+	f.Collapsed().Set(true)
+	if got, want := f.Measure(width), 2+f.headerH(); got != want {
+		t.Errorf("a collapsed frame measures %d, want %d", got, want)
+	}
+
+	// An empty frame is its chrome.
+	empty := NewFrame(nil)
+	empty.Title = "nothing"
+	if got, want := empty.Measure(width), 2*empty.inset()+empty.headerH(); got != want {
+		t.Errorf("an empty frame measures %d, want %d", got, want)
+	}
+
+	// A child that answers on both axes, and one that answers on neither: the
+	// second contributes the height it is carrying rather than nothing.
+	innerLabel := NewLabel("x")
+	innerLabel.SetBounds(Rect{W: 20, H: 14}) // an AlignBox reports its child's size
+	both := NewFrame(NewAlignBox(innerLabel))
+	if got, want := both.Measure(width), 2*both.inset()+14; got != want {
+		t.Errorf("a two-axis child gave %d, want %d", got, want)
+	}
+	plainKid := NewLabel("plain")
+	plainKid.SetBounds(Rect{W: 10, H: 33})
+	carried := NewFrame(plainKid)
+	if got, want := carried.Measure(width), 2*carried.inset()+33; got != want {
+		t.Errorf("an unmeasurable child gave %d, want %d", got, want)
+	}
+}
