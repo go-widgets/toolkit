@@ -106,3 +106,82 @@ func TestAScrollViewTakesTheTwoAxisMeasurerToo(t *testing.T) {
 		t.Errorf("a child measuring nothing was re-laid-out to %+v", got)
 	}
 }
+
+// TestAClickReachesTheContentOfAScrollView.
+//
+// The content was PASSIVE for clicks: a press that neither scrollbar wanted
+// began a pan and nothing was forwarded, so every control inside a scroll view
+// was dead to the mouse. A long form is exactly what a scroll view is for, and
+// none of its drop-downs, switches or buttons could be operated -- which is how
+// a settings window came to have a control nobody could use.
+func TestAClickReachesTheContentOfAScrollView(t *testing.T) {
+	first, second := 0, 0
+	top := NewButton("Save", func() { first++ })
+	lower := NewButton("Close", func() { second++ })
+	page := NewVBox()
+	page.Spacing = 0
+	page.AddFixed(top, 30)            // content y 0..30
+	page.AddFixed(NewLabel("."), 100) // 30..130
+	page.AddFixed(lower, 30)          // 130..160
+	page.AddFixed(NewLabel("."), 400)
+
+	sv := NewScrollView(page)
+	sv.SetBounds(Rect{X: 10, Y: 20, W: 300, H: 100})
+	// A box is not measurable, so the caller sizes the content, as before.
+	page.SetBounds(Rect{X: 10, Y: 20, W: 284, H: 560})
+	sv.SetContentSize(284, 560)
+
+	// View-local y=15 is content y=15, which is the first button.
+	sv.OnEvent(Event{Kind: EventClick, X: 4, Y: 15})
+	if first != 1 {
+		t.Fatalf("the first button was pressed %d times; the click never reached "+
+			"the content at all", first)
+	}
+
+	// Scrolled down by 100, the same point is content y=115 -- the filler.
+	sv.Scroll(0, 100)
+	sv.OnEvent(Event{Kind: EventClick, X: 4, Y: 15})
+	if first != 1 {
+		t.Errorf("after scrolling, the same point still pressed the first button "+
+			"(%d times): the offset is not applied", first)
+	}
+
+	// And view-local y=35 is now content y=135, which is the second button.
+	sv.OnEvent(Event{Kind: EventClick, X: 4, Y: 35})
+	if second != 1 {
+		t.Errorf("the second button was pressed %d times; a click after scrolling "+
+			"does not land where the offset says", second)
+	}
+}
+
+// TestAClickOnTheScrollbarDoesNotReachTheContent: the thumb owns its own press,
+// as it did before.
+func TestAClickOnTheScrollbarDoesNotReachTheContent(t *testing.T) {
+	hit := 0
+	button := NewButton("wide", func() { hit++ })
+	page := NewVBox()
+	page.Spacing = 0
+	page.AddFixed(button, 600)
+
+	sv := NewScrollView(page)
+	sv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 100})
+	page.SetBounds(Rect{X: 0, Y: 0, W: 284, H: 600})
+	sv.SetContentSize(284, 600)
+
+	// The vertical scrollbar's own geometry, so the press is on the track and
+	// not a guess at where it is.
+	g, ok := sv.vscrollGeom()
+	if !ok {
+		t.Fatal("a content taller than the view has no vertical scrollbar")
+	}
+	// A press near the start of the track, on the track column: paging the view
+	// toward the click is the scrollbar's own behaviour.
+	sv.OnEvent(Event{Kind: EventClick,
+		X: g.cross0 + 1, Y: g.trackStart + g.trackLen - 2})
+	if hit != 0 {
+		t.Errorf("a press on the scrollbar reached the content %d times", hit)
+	}
+	if sv.OffsetY().Get() == 0 {
+		t.Error("a press on the scrollbar track did not move the view")
+	}
+}

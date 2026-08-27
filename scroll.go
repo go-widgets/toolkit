@@ -333,9 +333,28 @@ func (s *ScrollView) OnEvent(ev Event) {
 		if g, ok := s.hscrollGeom(); s.sbH.press(g, ok, ev, s.viewport().W, func(d int) { s.Scroll(d, 0) }) {
 			return
 		}
-		// Neither scrollbar wanted the press, so it landed on the content:
-		// begin a pan. The content area is otherwise passive for clicks, so
-		// this takes nothing away from anything else.
+		// Neither scrollbar wanted the press, so it landed on the content --
+		// which means it was meant for whatever is drawn there.
+		//
+		// The content used to be PASSIVE for clicks: the press began a pan and
+		// nothing was forwarded, so every control inside a scroll view was dead
+		// to the mouse. A long form is exactly what a scroll view is for, and
+		// none of its drop-downs, switches or buttons could be operated.
+		//
+		// Translated by the scroll offset, because that is how the content is
+		// PAINTED: the child sits at the viewport origin and Draw shifts the
+		// paint by the offset, so the thing under the pointer is the content
+		// point offset further in. Without this, clicking a control after
+		// scrolling hits whatever was in its place before.
+		if s.Child != nil && s.localViewport().Contains(ev.X, ev.Y) {
+			inner := translateEvent(ev, s.Bounds(), s.Child.Bounds())
+			inner.X += s.OffsetX().Get()
+			inner.Y += s.OffsetY().Get()
+			s.Child.OnEvent(inner)
+		}
+		// And a pan as well, on the same press: a click acts on what it hits,
+		// and a DRAG that follows scrolls the view. Both are true of every
+		// scroll view a person has used.
 		if !s.ScrollDriven() && s.localViewport().Contains(ev.X, ev.Y) {
 			// Catching a coasting view stops it dead, the way putting a
 			// finger on a spinning record does.
