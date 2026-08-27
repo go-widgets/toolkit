@@ -6,16 +6,30 @@ package toolkit
 
 import "testing"
 
-// TestItemBoxSpec covers the three Flex/Size resolutions.
+// TestItemBoxSpec covers the three Flex/Size/natural resolutions.
+//
+// The third one changed: an item with no configuration used to mean an equal
+// flex share and now means the widget's natural size. That default matters more
+// than it looks -- it is what the tempting way to add a widget does, and while
+// it was "share the space equally" a caller who wanted a sensible column had to
+// compute one in pixels.
 func TestItemBoxSpec(t *testing.T) {
-	if f, s := (Item{Flex: 3}).boxSpec(); f != 3 || s != 0 {
-		t.Fatalf("flex item: %d,%d", f, s)
+	if f, s, n := (Item{Flex: 3}).boxSpec(); f != 3 || s != 0 || n {
+		t.Fatalf("flex item: %d,%d,%v", f, s, n)
 	}
-	if f, s := (Item{Size: 40}).boxSpec(); f != 0 || s != 40 {
-		t.Fatalf("size item: %d,%d", f, s)
+	if f, s, n := (Item{Size: 40}).boxSpec(); f != 0 || s != 40 || n {
+		t.Fatalf("size item: %d,%d,%v", f, s, n)
 	}
-	if f, s := (Item{}).boxSpec(); f != 1 || s != 0 {
-		t.Fatalf("default item: %d,%d", f, s)
+	if f, s, n := (Item{}).boxSpec(); f != 0 || s != 0 || !n {
+		t.Fatalf("default item: %d,%d,%v", f, s, n)
+	}
+	// Natural spelled out is the same thing, and an explicit Size or Flex still
+	// wins over it: they are answers to the same question.
+	if f, s, n := (Item{Natural: true}).boxSpec(); f != 0 || s != 0 || !n {
+		t.Fatalf("natural item: %d,%d,%v", f, s, n)
+	}
+	if f, s, n := (Item{Natural: true, Size: 12}).boxSpec(); f != 0 || s != 12 || n {
+		t.Fatalf("natural with a size: %d,%d,%v", f, s, n)
 	}
 }
 

@@ -36,24 +36,38 @@ type Item struct {
 	Size   int
 	Region Region
 	// Natural asks a box layout to size this item on the MAIN axis to what the
-	// widget MEASURES, re-measured on every layout. It is what a run of cards or
-	// settings rows wants: a fixed Size is right at one window size and wrong at
-	// every other, and a fixed run that no longer fits is drawn over whatever is
-	// pinned below it. Ignored when Flex or Size is set, since those are explicit
+	// widget MEASURES, re-measured on every layout.
+	//
+	// It is now the DEFAULT -- an item with neither Flex nor Size gets it -- so
+	// this field says out loud what the zero value already does. It is kept
+	// because a layout is read as often as it is written, and "Natural: true" in
+	// a call is worth more to the next reader than an absence they have to know
+	// the rule about. Ignored when Flex or Size is set, since those are explicit
 	// answers to the same question.
 	Natural bool
 }
 
-// boxSpec resolves an Item's flex weight and fixed size for a box layout: a
-// positive Flex wins, else a positive Size is fixed, else an equal flex share.
-func (it Item) boxSpec() (flex, size int) {
+// boxSpec resolves an Item's main-axis sizing for a box layout: a positive Flex
+// wins, else a positive Size is fixed, else the widget's NATURAL size.
+//
+// Natural last, rather than an equal flex share, because that is what an item
+// with no configuration means: put this here at the size it needs. An equal
+// share was the historical answer and it is the wrong default -- it makes the
+// tempting way to add a widget the one that ignores everything the widget knows
+// about its own size, so a caller who wants a sensible column has to compute one
+// in pixels. Which is exactly what happened: a settings window laid out as a
+// table of hand-computed heights, right at one window size and wrong at every
+// other. A widget that cannot measure itself still falls back to the equal
+// share, so nothing that could not have answered is affected (see
+// boxResolveNatural).
+func (it Item) boxSpec() (flex, size int, natural bool) {
 	if it.Flex > 0 {
-		return it.Flex, 0
+		return it.Flex, 0, false
 	}
 	if it.Size > 0 {
-		return 0, it.Size
+		return 0, it.Size, false
 	}
-	return 1, 0
+	return 0, 0, true
 }
 
 // Layout positions a container's items within its content rectangle. Swapping the
@@ -107,11 +121,8 @@ func (l *BoxLayout) Arrange(r Rect, items []Item) {
 	}
 	children := make([]boxChild, len(items))
 	for i, it := range items {
-		flex, size := it.boxSpec()
-		children[i] = boxChild{w: it.Widget, flex: flex, size: size}
-		if it.Natural && it.Flex <= 0 && it.Size <= 0 {
-			children[i] = boxChild{w: it.Widget, natural: true}
-		}
+		flex, size, natural := it.boxSpec()
+		children[i] = boxChild{w: it.Widget, flex: flex, size: size, natural: natural}
 	}
 	total, cross := r.W, r.H
 	if l.Vertical {
