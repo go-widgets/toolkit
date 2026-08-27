@@ -194,3 +194,43 @@ func iconInset(r Rect) int {
 	}
 	return inset
 }
+
+// DrawIconGlasses paints XR glasses seen from the front: two lens rectangles
+// joined by a bridge, with a temple angling back from each outer edge.
+//
+// It is in the stock set because a headset is a DEVICE CLASS, like a printer or
+// a camera, and an application that lets a person choose between two pairs of
+// glasses should not have to ship artwork to do it. Drawn rather than
+// photographed for the same reason every icon here is: a photograph of somebody
+// else's product is their picture, and an offline application has nowhere to
+// fetch one from anyway.
+func DrawIconGlasses(p painter.Painter, r Rect, ink RGBA) {
+	inset := iconInset(r)
+	x, y := r.X+inset, r.Y+inset
+	w, h := r.W-2*inset, r.H-2*inset
+
+	// Two lenses either side of a bridge a sixth of the width, centred
+	// vertically on the upper half where a pair of glasses actually sits.
+	bridge := w / 6
+	if bridge < 1 {
+		bridge = 1
+	}
+	lensW := (w - bridge) / 2
+	lensH := h / 2
+	if lensH < 1 {
+		lensH = 1
+	}
+	top := y + (h-lensH)/2
+	strokeRect(p, x, top, lensW, lensH, ink)
+	strokeRect(p, x+lensW+bridge, top, lensW, lensH, ink)
+	// The bridge itself, along the lenses' top edge.
+	fillRect(p, x+lensW, top, bridge, 1, ink)
+
+	// A temple from each outer edge, angling back and down: two pixels out for
+	// every one down, which reads as a hinge at this size.
+	arm := h / 3
+	for t := 0; t < arm; t++ {
+		putPixel(p, x-t/2, top+t, ink)
+		putPixel(p, x+w+t/2, top+t, ink)
+	}
+}
