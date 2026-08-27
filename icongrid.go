@@ -45,6 +45,16 @@ type IconGrid struct {
 	// a generic default.
 	Empty string
 
+	// MinCellW is a floor on the cell width, in LOGICAL pixels, for a grid whose
+	// LABEL is the identifying thing rather than the icon.
+	//
+	// A cell is otherwise as wide as its icon plus padding, which is right for a
+	// grid of files -- the icon says what it is and the name is a caption. It is
+	// wrong for a grid of devices: "VITURE Luma Ultra" under a 40-pixel icon is
+	// elided to "VITURE ...", which is the one thing the tile exists to say.
+	// Zero keeps the icon-derived width.
+	MinCellW int
+
 	// OnActivate fires when the already-selected cell is clicked again, with its
 	// index. Nil-guarded.
 	OnActivate func(index int)
@@ -151,7 +161,13 @@ func (v *IconGrid) SetSelected(index int) {
 	v.Selected().Set(-1)
 }
 
-func (v *IconGrid) cellW() int { return v.IconSize + 2*scaled(igPadX) }
+func (v *IconGrid) cellW() int {
+	w := v.IconSize + 2*scaled(igPadX)
+	if min := scaled(v.MinCellW); min > w {
+		return min
+	}
+	return w
+}
 func (v *IconGrid) cellH() int {
 	return scaled(igPadTop) + v.IconSize + scaled(igIconLabel) + scaled(igLabelH)
 }
