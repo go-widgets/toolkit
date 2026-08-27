@@ -336,3 +336,86 @@ func (c *Container) OnEvent(ev Event) {
 		}
 	}
 }
+
+// LayoutMeasurer is an optional [Layout] capability: how much room the items
+// need, given what is available. A [Container] whose layout implements it can
+// answer [Measurer] for itself, which is what lets a container be the child of a
+// [ScrollView] or an Item marked Natural.
+//
+// It is separate from Arrange because measuring must not move anything: a parent
+// asks several candidate sizes before it commits to one.
+type LayoutMeasurer interface {
+	Measure(availW, availH int, items []Item) (w, h int)
+}
+
+// Measure reports the size this container's items need, by asking its layout.
+//
+// A container that cannot ask -- a layout with no Measure -- reports its current
+// bounds, which is the same answer every other unmeasurable widget gives and
+// leaves a caller no worse off than before.
+func (c *Container) Measure(availW, availH int) (int, int) {
+	if m, ok := c.Layout.(LayoutMeasurer); ok {
+		return m.Measure(availW, availH, c.items)
+	}
+	return c.Bounds().W, c.Bounds().H
+}
+
+// Measure reports the room the items need along the box axis: every item's own
+// main-axis extent plus the gaps between them, and the widest cross extent.
+//
+// An item's main extent is its explicit Size, or -- for one marked Natural --
+// what the widget MEASURES at the cross extent it would get. A FLEX item
+// contributes only what it measures, if anything: flex means "take what is left
+// over", and in a measurement there is nothing left over to take. So a column of
+// cards with a flex spacer at the end measures exactly the cards, which is what
+// makes it usable as scrollable content.
+func (l *BoxLayout) Measure(availW, availH int, items []Item) (int, int) {
+	if len(items) == 0 {
+		return 0, 0
+	}
+	cross := availH
+	if l.Vertical {
+		cross = availW
+	}
+	main, widest := 0, 0
+	for _, it := range items {
+		size := it.Size
+		if size <= 0 {
+			size = boxNatural(it.Widget, cross, l.Vertical)
+		}
+		if size > 0 {
+			main += size
+		}
+		if n := naturalCross(it.Widget, size, cross, !l.Vertical); n > widest {
+			widest = n
+		}
+	}
+	main += clampSpacing(l.Spacing) * (len(items) - 1)
+	if widest <= 0 {
+		widest = cross
+	}
+	if l.Vertical {
+		return widest, main
+	}
+	return main, widest
+}
+
+// Measure reports what the one item needs, since a fit layout gives it the whole
+// container: the fit of a fit layout is the child.
+func (FitLayout) Measure(availW, availH int, items []Item) (int, int) {
+	w, h := 0, 0
+	for _, it := range items {
+		if m, ok := it.Widget.(Measurer); ok {
+			iw, ih := m.Measure(availW, availH)
+			w, h = max(w, iw), max(h, ih)
+			continue
+		}
+		if m, ok := it.Widget.(WidthMeasurer); ok {
+			w, h = max(w, availW), max(h, m.Measure(availW))
+			continue
+		}
+		b := it.Widget.Bounds()
+		w, h = max(w, b.W), max(h, b.H)
+	}
+	return w, h
+}
