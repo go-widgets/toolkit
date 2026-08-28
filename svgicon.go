@@ -6,11 +6,21 @@ package toolkit
 
 import (
 	"image/color"
+	"strconv"
+	"strings"
 	"sync"
 
 	"github.com/go-gfx/gfx/svg"
 	"github.com/go-widgets/painter"
 )
+
+// iconRasterPx is the pixel size an icon SVG is rasterised to before the painter
+// scales it into the (usually smaller) target box. It bounds the work and memory
+// regardless of the SVG's own viewBox — an icon authored on a 960-unit grid and
+// one on a 24-unit grid both rasterise to roughly this many pixels, not 960×2 vs
+// 24×2. Chosen a touch above a comfortable HiDPI row height, so the downscale to
+// a ~14–28 px tree row stays crisp.
+const iconRasterPx = 64.0
 
 // SVGIcon returns an icon drawer that renders the SVG document doc into the box
 // it is handed — for a [TreeTableNode.Icon], or anywhere a
@@ -66,10 +76,58 @@ func rasterizeIcon(doc string, ink RGBA) iconRaster {
 		return v.(iconRaster)
 	}
 	var ras iconRaster
-	res, err := svg.Rasterize(doc, svg.Options{Ink: color.RGBA{R: ink.R, G: ink.G, B: ink.B, A: ink.A}})
+	res, err := svg.Rasterize(doc, svg.Options{
+		Scale: iconScale(doc),
+		Ink:   color.RGBA{R: ink.R, G: ink.G, B: ink.B, A: ink.A},
+	})
 	if err == nil && res != nil && res.Image != nil && res.Image.W > 0 && res.Image.H > 0 {
 		ras = iconRaster{pix: res.Image.Pix, w: res.Image.W, h: res.Image.H}
 	}
 	iconCache.Store(key, ras)
 	return ras
+}
+
+// iconScale returns the svg.Rasterize scale that renders doc's viewBox to about
+// iconRasterPx on its larger side, so the raster size is bounded no matter what
+// coordinate grid the icon was authored on. A doc with no readable viewBox falls
+// back to the rasteriser's own default (a small icon rendered at 1:1-ish).
+func iconScale(doc string) float64 {
+	if longest := svgViewBoxLongestSide(doc); longest > 0 {
+		return iconRasterPx / longest
+	}
+	return 0 // svg.Rasterize treats <=0 as its default scale
+}
+
+// svgViewBoxLongestSide reads the width/height of the first viewBox attribute in
+// doc and returns the larger, or 0 when there is no readable "viewBox=\"minX minY
+// w h\"". It is a light string scan, not an XML parse — enough to size the raster.
+func svgViewBoxLongestSide(doc string) float64 {
+	i := strings.Index(doc, "viewBox")
+	if i < 0 {
+		return 0
+	}
+	rest := doc[i+len("viewBox"):]
+	q := strings.IndexAny(rest, `"'`)
+	if q < 0 {
+		return 0
+	}
+	quote := rest[q]
+	rest = rest[q+1:]
+	closeAt := strings.IndexByte(rest, quote)
+	if closeAt < 0 {
+		return 0
+	}
+	fields := strings.Fields(strings.ReplaceAll(rest[:closeAt], ",", " "))
+	if len(fields) != 4 {
+		return 0
+	}
+	w, err1 := strconv.ParseFloat(fields[2], 64)
+	h, err2 := strconv.ParseFloat(fields[3], 64)
+	if err1 != nil || err2 != nil || w <= 0 || h <= 0 {
+		return 0
+	}
+	if w > h {
+		return w
+	}
+	return h
 }
