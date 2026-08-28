@@ -72,6 +72,11 @@ type FormField struct {
 	Rules []Rule                   // optional validation rules run by Validate
 }
 
+// focusableChildren yields the input this field labels, so the focus walker can
+// reach it. Without this a FormField is a wall: the walk cannot see the control
+// inside, so Tab skips every labelled input in a form.
+func (f *FormField) focusableChildren() []Widget { return nonNil(f.Child) }
+
 // Error is reactive state as a shared [mvvm.Observable]; edits Set it. Lazily created.
 func (f *FormField) Error() *mvvm.Observable[string] {
 	if f.error == nil {
