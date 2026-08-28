@@ -126,10 +126,10 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// appearance config, so they are the only allowlisted fields.
 	"Entry": {"Placeholder": true, "Mask": true},
 	// FolderTabs: the active-tab index is unexported behind the Selected
-	// Observable accessor; OnSelect is a func hook (auto-allowed). Labels is the
-	// set-once tab captions (layout config, not reactive state), so it is the
-	// sole allowlisted field.
-	"FolderTabs": {"Labels": true},
+	// Observable accessor; OnSelect / OnClose are func hooks (auto-allowed). Labels
+	// (tab captions) and Closable (whether tabs show a × close affordance) are
+	// set-once appearance/layout config, not reactive state, so both are allowlisted.
+	"FolderTabs": {"Labels": true, "Closable": true},
 	// TabBar: the highlighted item index is unexported behind the Selected()
 	// Observable accessor; a tap/swipe/arrow-key Sets it and subscribers replace
 	// the old OnSelect callback. Items (destinations), SwipeNavigation and the
