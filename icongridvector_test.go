@@ -208,3 +208,50 @@ func TestIconGridMinCellWidth(t *testing.T) {
 		t.Errorf("at 2x the floor gave %d, want %d", got, want)
 	}
 }
+
+// TestDrawIconAppStaysInsideItsBox and paints a window rather than a blank
+// frame: the bar is what makes it read as an application at 40 pixels.
+func TestDrawIconAppStaysInsideItsBox(t *testing.T) {
+	const w, h = 48, 48
+	buf := makeSurface(w, h)
+	box := Rect{X: 8, Y: 8, W: 32, H: 32}
+	ink := RGB(0xFF, 0x00, 0x00)
+	DrawIconApp(newP(buf, w), box, ink)
+
+	painted, inBar := 0, 0
+	bar := box.H/8 + (box.H-2*(box.H/8))/5 // inset + a fifth of the content
+	for y := range h {
+		for x := range w {
+			if pixelAt(buf, w, x, y) != ink {
+				continue
+			}
+			painted++
+			if x < box.X || x > box.X+box.W || y < box.Y || y > box.Y+box.H {
+				t.Errorf("ink at %d,%d, outside the box %+v", x, y, box)
+			}
+			if y <= box.Y+bar {
+				inBar++
+			}
+		}
+	}
+	if painted < 40 {
+		t.Errorf("the icon painted %d pixels; it is meant to be a frame, a title "+
+			"bar and a button", painted)
+	}
+	// The frame alone would put almost nothing in the top fifth beyond its own
+	// edge; the bar and the dot are what this counts.
+	if inBar < box.W {
+		t.Errorf("only %d pixels in the title bar band; it is a blank frame, not "+
+			"a window", inBar)
+	}
+
+	// Too small to divide: it must draw nothing rather than dividing by zero.
+	tiny := makeSurface(4, 4)
+	DrawIconApp(newP(tiny, 4), Rect{X: 0, Y: 0, W: 4, H: 4}, ink)
+	// And a rect with no room at all.
+	DrawIconApp(newP(tiny, 4), Rect{X: 0, Y: 0, W: 1, H: 1}, ink)
+	// Wide and SHORT: there is room for a frame and none for a button under the
+	// bar, which must leave the button out rather than draw it over the frame.
+	flat := makeSurface(24, 8)
+	DrawIconApp(newP(flat, 24), Rect{X: 0, Y: 0, W: 20, H: 5}, ink)
+}
