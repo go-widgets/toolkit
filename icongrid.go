@@ -258,7 +258,15 @@ func (v *IconGrid) drawEmpty(p painter.Painter, theme *Theme) {
 func (v *IconGrid) drawCell(p painter.Painter, theme *Theme, r Rect, i int) {
 	cell := v.Cells[i]
 	selected := i == v.Selected().Get()
-	iconBox := Rect{X: r.X + scaled(igPadX), Y: r.Y + scaled(igPadTop), W: v.IconSize, H: v.IconSize}
+	// CENTRED in the cell, like the label under it. A cell is normally exactly
+	// an icon plus its padding either side, where centring and padding are the
+	// same position -- so this changes nothing for a grid of files. It changes
+	// everything for a grid with MinCellW, which is the whole point of that
+	// field: the cell is then far wider than the icon, and an icon left against
+	// the padding with its name centred under the cell is a picture and a
+	// caption that do not belong to each other. Seen in a full-view gallery of
+	// running applications at 640 pixels a cell.
+	iconBox := Rect{X: r.X + (r.W-v.IconSize)/2, Y: r.Y + scaled(igPadTop), W: v.IconSize, H: v.IconSize}
 
 	if selected {
 		field := Rect{
