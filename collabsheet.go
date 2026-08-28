@@ -107,7 +107,11 @@ func (c *CollabSheet) Version() crdt.CompositeVersion { return c.sheet.Version()
 
 // OpsSince returns the operations this replica holds that v does not, ready to
 // send to the peer that produced v. Pass a nil version for everything.
-func (c *CollabSheet) OpsSince(v crdt.CompositeVersion) []crdt.PartOps {
+//
+// It refuses with [crdt.ErrCollected] below what this replica has collected:
+// what collection gave back is not in a difference any more, so a peer that far
+// behind has to be sent a snapshot instead.
+func (c *CollabSheet) OpsSince(v crdt.CompositeVersion) ([]crdt.PartOps, error) {
 	return c.sheet.OpsSince(v)
 }
 

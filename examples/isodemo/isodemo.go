@@ -248,8 +248,20 @@ func ConvergedReplicas() (a, b *toolkit.IsoCRDTDocument) {
 	b.PutZone(toolkit.IsoZone{ID: CollabAddedZone, X: 6, Y: 5, W: 3, H: 3, Color: ColZoneEdge, Label: "Edge", Layer: LayerInfra})
 
 	// Exchange the operations each side is missing, both directions.
-	apply(b, a.OpsSince(baseB))
-	apply(a, b.OpsSince(baseA))
+	//
+	// OpsSince refuses below what a replica has collected — a peer that far
+	// behind has to be sent a snapshot rather than a difference. Nothing in
+	// this demo collects, so neither call can refuse here.
+	fromA, err := a.OpsSince(baseB)
+	if err != nil {
+		panic(err)
+	}
+	fromB, err := b.OpsSince(baseA)
+	if err != nil {
+		panic(err)
+	}
+	apply(b, fromA)
+	apply(a, fromB)
 	return a, b
 }
 

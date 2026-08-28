@@ -249,7 +249,7 @@ func flatten(batches []crdt.PartOps) []crdt.PartOps {
 // the verdict — so a green law below is evidence, not an accident.
 func TestCollabSheetHarnessDetectsDivergence(t *testing.T) {
 	source := runSheetSession(t, 17, 2)
-	ops := flatten(source[0].OpsSince(nil))
+	ops := flatten(must(source[0].OpsSince(nil)))
 	if len(ops) < 4 {
 		t.Fatalf("fixture too small: %d ops", len(ops))
 	}
@@ -289,7 +289,7 @@ func TestCollabSheetConvergence(t *testing.T) {
 // pending buffer, not the batch, doing the reordering.
 func TestCollabSheetCommutativity(t *testing.T) {
 	source := runSheetSession(t, 42, 3)
-	ops := flatten(source[0].OpsSince(nil))
+	ops := flatten(must(source[0].OpsSince(nil)))
 	if len(ops) < 20 {
 		t.Fatalf("only %d operations to permute; fixture too small", len(ops))
 	}
@@ -322,7 +322,7 @@ func TestCollabSheetCommutativity(t *testing.T) {
 func TestCollabSheetIdempotence(t *testing.T) {
 	docs := runSheetSession(t, 5, 3)
 	assertConverged(t, 5, docs)
-	ops := flatten(docs[0].OpsSince(nil))
+	ops := flatten(must(docs[0].OpsSince(nil)))
 	before := docs[0].Snapshot()
 	for _, b := range ops {
 		if err := docs[0].Apply(b); err != nil {
@@ -343,7 +343,7 @@ func TestCollabSheetIdempotence(t *testing.T) {
 // grouped two different ways; the grouping cannot matter.
 func TestCollabSheetAssociativity(t *testing.T) {
 	source := runSheetSession(t, 99, 3)
-	ops := flatten(source[0].OpsSince(nil))
+	ops := flatten(must(source[0].OpsSince(nil)))
 	rng := rand.New(rand.NewPCG(3, 4))
 	rng.Shuffle(len(ops), func(a, b int) { ops[a], ops[b] = ops[b], ops[a] })
 
@@ -614,7 +614,7 @@ func TestSyncSpreadsheet(t *testing.T) {
 		t.Fatalf("model cell after widget edit = %q, want typed", got)
 	}
 	// The peer sees it after a sync.
-	if err := m2.Apply(m1.OpsSince(m2.Version())...); err != nil {
+	if err := m2.Apply(must(m1.OpsSince(m2.Version()))...); err != nil {
 		t.Fatal(err)
 	}
 	if got := m2.CellText(0, 0); got != "typed" {

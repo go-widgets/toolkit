@@ -197,7 +197,7 @@ func isoRunSession(t *testing.T, seed uint64, replicas int) []*IsoCRDTDocument {
 			for range 1 + rng.IntN(3) {
 				isoGenEdit(rng)(docs[i])
 			}
-			delta := docs[i].OpsSince(sent[i])
+			delta := must(docs[i].OpsSince(sent[i]))
 			sent[i] = docs[i].Version()
 			nw.broadcast(i, delta)
 			if rng.IntN(2) == 0 {
@@ -270,7 +270,7 @@ func isoAssertConverged(t *testing.T, seed uint64, docs []*IsoCRDTDocument) {
 // verdict, so a green law below is evidence rather than an accident.
 func TestIsoCRDTHarnessDetectsDivergence(t *testing.T) {
 	source := isoRunSession(t, 17, 2)
-	ops := flatten(source[0].OpsSince(nil))
+	ops := flatten(must(source[0].OpsSince(nil)))
 	if len(ops) < 4 {
 		t.Fatalf("fixture too small: %d ops", len(ops))
 	}
@@ -310,7 +310,7 @@ func TestIsoCRDTConvergence(t *testing.T) {
 // batch, doing the reordering.
 func TestIsoCRDTCommutativity(t *testing.T) {
 	source := isoRunSession(t, 42, 3)
-	ops := flatten(source[0].OpsSince(nil))
+	ops := flatten(must(source[0].OpsSince(nil)))
 	if len(ops) < 20 {
 		t.Fatalf("only %d operations to permute; fixture too small", len(ops))
 	}
@@ -342,7 +342,7 @@ func TestIsoCRDTCommutativity(t *testing.T) {
 func TestIsoCRDTIdempotence(t *testing.T) {
 	docs := isoRunSession(t, 5, 3)
 	isoAssertConverged(t, 5, docs)
-	ops := flatten(docs[0].OpsSince(nil))
+	ops := flatten(must(docs[0].OpsSince(nil)))
 	before := docs[0].Snapshot()
 	for _, b := range ops {
 		if err := docs[0].Apply(b); err != nil {
@@ -363,7 +363,7 @@ func TestIsoCRDTIdempotence(t *testing.T) {
 // the grouping cannot matter.
 func TestIsoCRDTAssociativity(t *testing.T) {
 	source := isoRunSession(t, 99, 3)
-	ops := flatten(source[0].OpsSince(nil))
+	ops := flatten(must(source[0].OpsSince(nil)))
 	rng := rand.New(rand.NewPCG(3, 4))
 	rng.Shuffle(len(ops), func(a, b int) { ops[a], ops[b] = ops[b], ops[a] })
 
@@ -420,7 +420,7 @@ func TestIsoCRDTFieldWiseMerge(t *testing.T) {
 	b := NewIsoCRDTDocument(2)
 	// Both start from the same node.
 	a.PutNode(IsoNode{ID: "srv", X: 1, Y: 1, Label: "Server"})
-	if err := b.Apply(a.OpsSince(nil)...); err != nil {
+	if err := b.Apply(must(a.OpsSince(nil))...); err != nil {
 		t.Fatal(err)
 	}
 	base := a.Version()
@@ -434,10 +434,10 @@ func TestIsoCRDTFieldWiseMerge(t *testing.T) {
 	b.PutNode(bn)
 
 	// Exchange only the new operations, each way.
-	if err := b.Apply(a.OpsSince(base)...); err != nil {
+	if err := b.Apply(must(a.OpsSince(base))...); err != nil {
 		t.Fatal(err)
 	}
-	if err := a.Apply(b.OpsSince(base)...); err != nil {
+	if err := a.Apply(must(b.OpsSince(base))...); err != nil {
 		t.Fatal(err)
 	}
 
@@ -491,7 +491,7 @@ func TestIsoCRDTFanOut(t *testing.T) {
 	b := NewIsoCRDTDocument(2)
 	remote := 0
 	b.Subscribe(func() { remote++ })
-	if err := b.Apply(a.OpsSince(nil)...); err != nil {
+	if err := b.Apply(must(a.OpsSince(nil))...); err != nil {
 		t.Fatal(err)
 	}
 	if remote != 1 {

@@ -4,12 +4,10 @@ github.com/cespare/xxhash/v2 v2.3.0 h1:UL815xU9SqsFlibzuggzjXhog7bL6oX9BbNZnL2UF
 github.com/cespare/xxhash/v2 v2.3.0/go.mod h1:VGX0DQ3Q6kWi7AoAeZDth3/j3BFtOZR5XLFGgcrjCOs=
 github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
-github.com/go-crdt/collab v0.25.0 h1:xO/cZq41GvsCyPOw+sdldCu2r3lDbMK1N0GgN6D9+Ss=
-github.com/go-crdt/collab v0.25.0/go.mod h1:eYhMwHjmRyN5zMk/IBwBsTe3ZxqHuSCvNx3TdVTpYHg=
-github.com/go-crdt/crdt v0.31.0 h1:CTi+lo0bjsJv3F09CR/AdILQtWEWmzbDQ+S/6HNBOMU=
-github.com/go-crdt/crdt v0.31.0/go.mod h1:vbfvns9B9FUaMi2sPKzMYttKmbxfgO7EK3Yu82SrlYw=
-github.com/go-gfx/gfx v0.7.0 h1:C/32WYqip5DWNA1s8e8h0yhL0oHad4V3do4C9IjoFcI=
-github.com/go-gfx/gfx v0.7.0/go.mod h1:bFt/MWyYWRU3Ic9IaB8XOC9KLMMHRRmahMk4FaIGK7g=
+github.com/go-crdt/collab v0.32.0 h1:a1ozzOIl+Zw6mvkKxWN4ADPw0IW3hFPbgWpaQSkv5jA=
+github.com/go-crdt/collab v0.32.0/go.mod h1:O9L0KGhtdNFBHmYEb+Zx+wW4T59TtFjDJWvtnnT85Qg=
+github.com/go-crdt/crdt v0.34.0 h1:KxE89Hew0nQDg99S3wCbxV5xs4UN6s/t/VbESYCv/s4=
+github.com/go-crdt/crdt v0.34.0/go.mod h1:vbfvns9B9FUaMi2sPKzMYttKmbxfgO7EK3Yu82SrlYw=
 github.com/go-gfx/gfx v0.11.0 h1:IwdTO1i7veITSvEFBSjYAqiwzNm7CryDlkQgTt/NsKI=
 github.com/go-gfx/gfx v0.11.0/go.mod h1:bFt/MWyYWRU3Ic9IaB8XOC9KLMMHRRmahMk4FaIGK7g=
 github.com/go-iconoir/iconoir v0.2.0 h1:2ANqG6gkvHMoCtpNgNhSeOsuGMnlWQ+Sl43EndujIC0=
