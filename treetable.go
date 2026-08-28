@@ -40,6 +40,15 @@ type TreeTableNode struct {
 	// A selected row ignores CellInk and paints every cell in the selection ink,
 	// so the accent-background highlight stays legible.
 	CellInk []RGBA
+
+	// Icon, when set, paints a small glyph in the first (tree) column just before
+	// Cells[0]'s text — a file-type or folder icon in a file tree. It is called
+	// with a square box sized to the row's glyph height and the cell's resolved
+	// ink; a drawer that bakes in its own colour (e.g. a DrawIcon* func closed
+	// over a fixed ink) may ignore the ink it is passed. The text shifts right by
+	// the icon's width, so a row with an icon and one without keep the same
+	// chevron and indent. nil draws nothing and leaves the text where it was.
+	Icon func(p painter.Painter, r Rect, ink RGBA)
 }
 
 // TreeTable renders a Table-shaped grid whose body rows form a TREE: a
@@ -485,7 +494,14 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 						}
 					}
 				}
-				t.drawText(p, indent+scaled(TreeChevronW), cty, cellText(row.node, 0), cellInk)
+				tx := indent + scaled(TreeChevronW)
+				if row.node.Icon != nil {
+					iw := t.glyphHeight()
+					iy := y + (t.rowH()-iw)/2
+					row.node.Icon(p, Rect{X: tx, Y: iy, W: iw, H: iw}, cellInk)
+					tx += iw + scaled(TreeIconGap)
+				}
+				t.drawText(p, tx, cty, cellText(row.node, 0), cellInk)
 			} else {
 				text := cellText(row.node, j)
 				t.drawText(p, cellTextX(&t.Base, cx, cellW, text, col.Align), cty, text, cellInk)
