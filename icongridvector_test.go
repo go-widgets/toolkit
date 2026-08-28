@@ -329,3 +329,45 @@ func TestSetSelectedScrollsTheCellIntoView(t *testing.T) {
 		t.Errorf("scroll = %d before the grid has bounds, want 0", fresh.scroll)
 	}
 }
+
+// TestTheIconIsCentredOverItsLabel, in a cell made wide by MinCellW.
+//
+// A cell is normally an icon plus its padding, where centred and left-padded are
+// the same place — so this is invisible in a grid of files and glaring in a grid
+// whose LABEL identifies the cell: the icon sat against the left padding with
+// its name centred under a cell four times as wide.
+func TestTheIconIsCentredOverItsLabel(t *testing.T) {
+	const w, h = 600, 200
+	buf := makeSurface(w, h)
+	g := NewIconGrid(IconCell{Icon: DrawIconApp, Label: "Code (15 windows) on screen 1"})
+	g.SetIconSize(40)
+	g.MinCellW = 600 // one very wide cell
+	g.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	g.Draw(newP(buf, w), DefaultDark())
+
+	// Where is the ink? The icon is the only thing in the top band.
+	minX, maxX := w, -1
+	for y := 0; y < 60; y++ {
+		for x := 0; x < w; x++ {
+			if pixelAt(buf, w, x, y) == DefaultDark().Surface {
+				continue
+			}
+			if x < minX {
+				minX = x
+			}
+			if x > maxX {
+				maxX = x
+			}
+		}
+	}
+	if maxX < 0 {
+		t.Fatal("nothing was drawn in the icon band")
+	}
+	mid := (minX + maxX) / 2
+	// Within a few pixels of the middle of the cell, rather than against the
+	// left padding at around 14.
+	if got, want := mid, w/2; got < want-8 || got > want+8 {
+		t.Errorf("the icon's middle is at %d, want about %d (the cell's); minX=%d maxX=%d",
+			got, want, minX, maxX)
+	}
+}
