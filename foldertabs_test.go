@@ -93,6 +93,74 @@ func TestFolderTabsTabRectLayout(t *testing.T) {
 	}
 }
 
+// TestFolderTabsClosableWidth: a Closable strip reserves the × box on the right,
+// so each tab is FolderTabsCloseW wider than the same tab on a plain strip.
+func TestFolderTabsClosableWidth(t *testing.T) {
+	plain := NewFolderTabs([]string{"AAAA", "BB"}, 0)
+	plain.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 30})
+	clos := NewFolderTabs([]string{"AAAA", "BB"}, 0)
+	clos.Closable = true
+	clos.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 30})
+	for i := 0; i < 2; i++ {
+		if want := plain.TabRect(i).W + scaled(FolderTabsCloseW); clos.TabRect(i).W != want {
+			t.Fatalf("closable tab %d W = %d, want %d", i, clos.TabRect(i).W, want)
+		}
+	}
+	// A non-Closable strip has an empty close box, so its Contains is always false.
+	if plain.closeRect(0) != (Rect{}) {
+		t.Fatalf("non-closable closeRect = %+v, want zero", plain.closeRect(0))
+	}
+	// The close box sits inside the tab, tucked against its right edge.
+	tr, cr := clos.TabRect(0), clos.closeRect(0)
+	if cr.X < tr.X || cr.X+cr.W != tr.X+tr.W {
+		t.Fatalf("close box %+v not flush with tab right edge %+v", cr, tr)
+	}
+}
+
+// TestFolderTabsCloseVsSelect: on a Closable strip a click on the × fires OnClose
+// (not select); a click on the label body still selects.
+func TestFolderTabsCloseVsSelect(t *testing.T) {
+	ft := NewFolderTabs([]string{"one", "two", "three"}, 0)
+	ft.Closable = true
+	ft.SetBounds(Rect{X: 10, Y: 5, W: 400, H: 30})
+	var closed []int
+	ft.OnClose = func(i int) { closed = append(closed, i) }
+
+	// Click the × of tab 1: closes it, does not select it.
+	cr := ft.closeRect(1)
+	ft.OnEvent(Event{Kind: EventClick, X: cr.X + cr.W/2 - ft.Bounds().X, Y: cr.Y + cr.H/2 - ft.Bounds().Y})
+	if ft.Selected().Get() != 0 {
+		t.Fatalf("clicking × changed the selection to %d, want 0", ft.Selected().Get())
+	}
+	if len(closed) != 1 || closed[0] != 1 {
+		t.Fatalf("OnClose fired %v, want [1]", closed)
+	}
+
+	// Click the label body of tab 2 (left of its × box): selects it, no close.
+	tr := ft.TabRect(2)
+	lx := tr.X + scaled(FolderTabsPadX) - ft.Bounds().X // in the label area, left of ×
+	ft.OnEvent(Event{Kind: EventClick, X: lx, Y: tr.Y + tr.H/2 - ft.Bounds().Y})
+	if ft.Selected().Get() != 2 {
+		t.Fatalf("clicking tab2 body selected %d, want 2", ft.Selected().Get())
+	}
+	if len(closed) != 1 {
+		t.Fatalf("body click also closed: %v", closed)
+	}
+}
+
+// TestFolderTabsCloseNilCallback: a × click with no OnClose set is a safe no-op
+// (and still does not select).
+func TestFolderTabsCloseNilCallback(t *testing.T) {
+	ft := NewFolderTabs([]string{"a", "b"}, 1)
+	ft.Closable = true // no OnClose
+	ft.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 30})
+	cr := ft.closeRect(0)
+	ft.OnEvent(Event{Kind: EventClick, X: cr.X + cr.W/2, Y: cr.Y + cr.H/2})
+	if ft.Selected().Get() != 1 {
+		t.Fatalf("× click with nil OnClose changed selection to %d, want 1", ft.Selected().Get())
+	}
+}
+
 // TestFolderTabsTabRectClampsTinyHeight covers the h<1 floor: a strip shorter
 // than the top inset must still yield a 1px-high tab, never a negative one.
 func TestFolderTabsTabRectClampsTinyHeight(t *testing.T) {
@@ -139,6 +207,34 @@ func TestFolderTabsDrawEmpty(t *testing.T) {
 // paints a Surface body under a rounded top with an Accent bar along its top
 // edge, while an INACTIVE tab paints a dimmer face and its top corner is cut
 // away (rounded) to the strip colour.
+// TestFolderTabsClosableDraw exercises the Closable draw path: a × is painted in
+// each tab's close box (the box shows ink over the tab face), covering drawTab's
+// closable branch.
+func TestFolderTabsClosableDraw(t *testing.T) {
+	const w, h = 300, 30
+	theme := DefaultLight()
+	buf := makeSurface(w, h)
+	ft := NewFolderTabs([]string{"main.tex", "notes.md"}, 0)
+	ft.Closable = true
+	ft.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	ft.Draw(newP(buf, w), theme)
+
+	// The × box of tab 0 must carry ink that differs from the plain tab face
+	// (the glyph painted over the active Surface fill).
+	cr := ft.closeRect(0)
+	var inked bool
+	for y := cr.Y; y < cr.Y+cr.H; y++ {
+		for x := cr.X; x < cr.X+cr.W; x++ {
+			if pixelAt(buf, w, x, y) != theme.Surface {
+				inked = true
+			}
+		}
+	}
+	if !inked {
+		t.Fatal("closable tab drew no × glyph in its close box")
+	}
+}
+
 func TestFolderTabsDrawPixels(t *testing.T) {
 	const w, h = 300, 30
 	theme := DefaultLight()
