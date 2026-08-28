@@ -29,7 +29,7 @@ type IconButton struct {
 	OnClick func()
 
 	// Glyph draws the button's mark instead of rendering Icon as text. It is the
-	// same seam [Button.Icon] uses, so a real icon — go-iconoir, an SVG mask,
+	// same seam [Button.Icon] uses, so a real icon — go-icons/iconoir, an SVG mask,
 	// anything that can paint into a rect — replaces the letter that used to
 	// stand in for one. Nil keeps the text path, so every existing caller draws
 	// byte-identically.

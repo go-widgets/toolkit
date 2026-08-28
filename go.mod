@@ -21,14 +21,13 @@ require (
 	github.com/go-crdt/collab v0.25.0
 	github.com/go-crdt/crdt v0.31.0
 	github.com/go-gfx/gfx v0.11.0
-	github.com/go-iconoir/iconoir v0.2.0
+	github.com/go-icons/iconoir v0.2.0
 	github.com/go-richdoc/richdoc v0.2.0
 )
 
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
-	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
