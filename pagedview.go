@@ -8,7 +8,6 @@ import (
 	"image"
 	"strconv"
 
-	"github.com/go-iconoir/iconoir"
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
@@ -247,7 +246,7 @@ func (pv *PagedView) iconButton(name string, onClick func()) *Button {
 	b := NewButton("", onClick)
 	b.PressFeedback = false
 	b.Icon = func(p painter.Painter, r Rect, ink RGBA) {
-		iconoir.Draw(p, iconGlyphRect(r), name, ink)
+		drawIconoir(p, iconGlyphRect(r), name, ink)
 	}
 	return b
 }

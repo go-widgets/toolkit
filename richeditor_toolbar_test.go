@@ -7,7 +7,7 @@ package toolkit
 import (
 	"testing"
 
-	"github.com/go-iconoir/iconoir"
+	"github.com/go-icons/iconoir"
 	"github.com/go-richdoc/richdoc"
 	"github.com/go-widgets/painter"
 )
@@ -125,7 +125,7 @@ func TestEveryDeclaredIconExists(t *testing.T) {
 			if spec.icon == "" {
 				continue // heading buttons intentionally use a text glyph
 			}
-			if _, ok := iconoir.Get(spec.icon); !ok {
+			if !iconoir.Has(spec.icon) {
 				t.Errorf("declared iconoir icon %q does not exist", spec.icon)
 			}
 		}
@@ -273,8 +273,9 @@ func TestToolbarPendingInlineStyleLights(t *testing.T) {
 // --- painting -------------------------------------------------------------
 
 func TestIconoirDrawPaintsInk(t *testing.T) {
-	// Control-style: iconoir.Draw reports the name exists AND paints a non-empty
-	// inked region for every real icon the toolbar declares.
+	// Every icon the toolbar declares resolves in the pack AND paints a non-empty
+	// inked region when drawn (data from go-icons/iconoir, rendered by drawIconoir
+	// over go-gfx).
 	const sz = 24
 	ink := RGBA{R: 0x10, G: 0x20, B: 0x30, A: 0xFF}
 	for _, group := range reToolbarGroups {
@@ -282,12 +283,13 @@ func TestIconoirDrawPaintsInk(t *testing.T) {
 			if spec.icon == "" {
 				continue
 			}
-			buf := make([]byte, 4*sz*sz)
-			p := painter.NewPixelPainter(buf, sz, sz)
-			if !iconoir.Draw(p, Rect{X: 0, Y: 0, W: sz, H: sz}, spec.icon, ink) {
-				t.Errorf("iconoir.Draw(%q) returned false", spec.icon)
+			if !iconoir.Has(spec.icon) {
+				t.Errorf("iconoir.Has(%q) = false", spec.icon)
 				continue
 			}
+			buf := make([]byte, 4*sz*sz)
+			p := painter.NewPixelPainter(buf, sz, sz)
+			drawIconoir(p, Rect{X: 0, Y: 0, W: sz, H: sz}, spec.icon, ink)
 			painted := 0
 			for i := 3; i < len(buf); i += 4 {
 				if buf[i] != 0 {
@@ -295,7 +297,7 @@ func TestIconoirDrawPaintsInk(t *testing.T) {
 				}
 			}
 			if painted == 0 {
-				t.Errorf("iconoir.Draw(%q) painted no ink", spec.icon)
+				t.Errorf("drawIconoir(%q) painted no ink", spec.icon)
 			}
 		}
 	}

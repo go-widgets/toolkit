@@ -8,7 +8,7 @@ import (
 	"image"
 	"testing"
 
-	"github.com/go-iconoir/iconoir"
+	"github.com/go-icons/iconoir"
 	"github.com/go-widgets/painter"
 )
 
@@ -609,7 +609,7 @@ func TestPagedViewIconsExist(t *testing.T) {
 		"nav-arrow-left", "nav-arrow-right",
 		"multiple-pages", "page",
 	} {
-		if _, ok := iconoir.Get(name); !ok {
+		if !iconoir.Has(name) {
 			t.Fatalf("iconoir has no icon %q", name)
 		}
 	}

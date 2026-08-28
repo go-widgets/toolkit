@@ -5,7 +5,6 @@
 package toolkit
 
 import (
-	"github.com/go-iconoir/iconoir"
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
@@ -157,7 +156,7 @@ func (d *Dialog) closeButton() *IconButton {
 		// it. And flat: a framed square in the corner of a title bar reads as a
 		// control belonging to the content rather than to the window.
 		d.closeBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) {
-			iconoir.Draw(p, r, "xmark", ink)
+			drawIconoir(p, r, "xmark", ink)
 		}
 	}
 	return d.closeBtn
@@ -210,7 +209,7 @@ func (d *Dialog) maxButton() *IconButton {
 	if d.Maximised().Get() {
 		name = "collapse"
 	}
-	d.maxBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { iconoir.Draw(p, r, name, ink) }
+	d.maxBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { drawIconoir(p, r, name, ink) }
 	return d.maxBtn
 }
 
@@ -223,7 +222,7 @@ func (d *Dialog) minButton() *IconButton {
 	if d.Minimised().Get() {
 		name = "plus"
 	}
-	d.minBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { iconoir.Draw(p, r, name, ink) }
+	d.minBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { drawIconoir(p, r, name, ink) }
 	return d.minBtn
 }
 
