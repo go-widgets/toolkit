@@ -69,3 +69,43 @@ func TestSVGIconGuards(t *testing.T) {
 		}
 	}
 }
+
+// TestSVGViewBoxLongestSide covers the viewBox scan: a valid box returns its
+// larger side; the many malformed/absent forms return 0.
+func TestSVGViewBoxLongestSide(t *testing.T) {
+	for _, tc := range []struct {
+		doc  string
+		want float64
+	}{
+		{`<svg viewBox="0 0 24 32">`, 32},
+		{`<svg viewBox='0 -960 960 940'>`, 960},
+		{`<svg viewBox="0,0,10,50">`, 50}, // comma-separated
+		{`<svg width="10">`, 0},           // no viewBox
+		{`<svg viewBox=`, 0},              // no quote
+		{`<svg viewBox="0 0 24 32`, 0},    // unclosed quote
+		{`<svg viewBox="0 0 24">`, 0},     // wrong field count
+		{`<svg viewBox="0 0 x 32">`, 0},   // non-numeric
+		{`<svg viewBox="0 0 0 32">`, 0},   // non-positive width
+	} {
+		if got := svgViewBoxLongestSide(tc.doc); got != tc.want {
+			t.Errorf("svgViewBoxLongestSide(%q) = %g, want %g", tc.doc, got, tc.want)
+		}
+	}
+}
+
+// TestIconScaleBoundsLargeViewBox: an icon on a large grid rasterises to about
+// iconRasterPx, not viewBox-sized — iconScale shrinks it, and a small grid falls
+// back to the rasteriser default.
+func TestIconScaleBoundsLargeViewBox(t *testing.T) {
+	if s := iconScale(`<svg viewBox="0 0 960 960"><rect/></svg>`); s <= 0 || s > 0.1 {
+		t.Errorf("large viewBox scale = %g, want a small positive (~%g/960)", s, iconRasterPx)
+	}
+	if s := iconScale(`<svg><rect/></svg>`); s != 0 {
+		t.Errorf("no-viewBox scale = %g, want 0 (rasteriser default)", s)
+	}
+	// End to end: a 960-grid SVG rasterises to a bounded ~iconRasterPx square.
+	res := rasterizeIcon(`<svg viewBox="0 0 960 960"><rect width="960" height="960" fill="#000"/></svg>`, RGBA{A: 255})
+	if res.w <= 0 || res.w > int(iconRasterPx)+2 {
+		t.Errorf("rastered width = %d, want ~%g (bounded)", res.w, iconRasterPx)
+	}
+}
