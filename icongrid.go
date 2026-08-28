@@ -152,13 +152,41 @@ func (v *IconGrid) Selected() *mvvm.Observable[int] {
 	return v.sel
 }
 
-// SetSelected selects cell index; an out-of-range index clears the selection.
+// SetSelected selects cell index and SCROLLS IT INTO VIEW; an out-of-range index
+// clears the selection.
+//
+// The scroll is not a flourish. This widget invites a host to drive the
+// selection programmatically, and a keyboard host does exactly that: down means
+// the cell a row further on. Without the scroll, a selection walks off the
+// bottom of the visible rows and the person is moving a highlight they cannot
+// see — measured in a full-view gallery of running applications, where three
+// rows fit and the fourth did not.
+//
+// A click needs no scroll (you clicked what you could see), and this does
+// nothing when the cell is already visible, so the mouse path is unchanged.
 func (v *IconGrid) SetSelected(index int) {
 	if index >= 0 && index < len(v.Cells) {
 		v.Selected().Set(index)
+		v.reveal(index)
 		return
 	}
 	v.Selected().Set(-1)
+}
+
+// reveal scrolls the least it can to put cell index's row inside the bounds.
+func (v *IconGrid) reveal(index int) {
+	h := v.Bounds().H
+	if h <= 0 {
+		return // no bounds yet: the first Draw will clamp the scroll anyway
+	}
+	ch := v.cellH()
+	top := (index / v.cols()) * ch
+	switch {
+	case top < v.scroll:
+		v.scroll = v.clampScroll(top)
+	case top+ch > v.scroll+h:
+		v.scroll = v.clampScroll(top + ch - h)
+	}
 }
 
 func (v *IconGrid) cellW() int {

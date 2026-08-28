@@ -283,3 +283,49 @@ func TestIconGridColumnsIsWhatTheArrowsNeed(t *testing.T) {
 			"must mean more rows", tall, short, few, many)
 	}
 }
+
+// TestSetSelectedScrollsTheCellIntoView is what a KEYBOARD host needs: down
+// means the cell a row further on, and a selection that walks off the bottom is
+// a highlight the person cannot see.
+func TestSetSelectedScrollsTheCellIntoView(t *testing.T) {
+	var cells []IconCell
+	for i := range 40 {
+		cells = append(cells, IconCell{Label: string(rune('a' + i%26))})
+	}
+	g := NewIconGrid(cells...)
+	g.SetIconSize(40)
+	// Two columns and room for about two rows, so most of it is out of view.
+	g.MinCellW = 100
+	g.SetBounds(Rect{X: 0, Y: 0, W: 2 * 100, H: 200})
+
+	// The last cell cannot be visible at scroll zero.
+	g.SetSelected(len(cells) - 1)
+	if g.scroll == 0 {
+		t.Fatal("selecting the last cell left the grid scrolled to the top")
+	}
+	// It is now inside the view, not past the end.
+	rows := (len(cells) + g.Columns() - 1) / g.Columns()
+	if max := rows*g.cellH() - 200; g.scroll > max {
+		t.Errorf("scroll = %d, past the end at %d", g.scroll, max)
+	}
+
+	// Back to the first: scrolled all the way up again.
+	g.SetSelected(0)
+	if g.scroll != 0 {
+		t.Errorf("scroll = %d after selecting the first cell, want 0", g.scroll)
+	}
+
+	// A cell already in view moves nothing — the mouse path is unchanged.
+	g.SetSelected(1)
+	if g.scroll != 0 {
+		t.Errorf("scroll = %d after selecting a visible cell, want it left alone", g.scroll)
+	}
+
+	// With no bounds yet there is nothing to reveal into, and it must not divide
+	// by a height of nothing.
+	fresh := NewIconGrid(cells...)
+	fresh.SetSelected(30)
+	if fresh.scroll != 0 {
+		t.Errorf("scroll = %d before the grid has bounds, want 0", fresh.scroll)
+	}
+}
