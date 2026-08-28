@@ -234,3 +234,41 @@ func DrawIconGlasses(p painter.Painter, r Rect, ink RGBA) {
 		putPixel(p, x+w+t/2, top+t, ink)
 	}
 }
+
+// DrawIconApp paints an application window: a frame with a title bar across its
+// top and a dot in it where a close button sits.
+//
+// It is in the stock set for the same reason as [DrawIconGlasses]: a running
+// APPLICATION is a thing an interface has to offer a person a picture of — a
+// gallery of what is open, a picker for which window goes where — and no
+// application should have to hand-draw beside the widget to say "this is a
+// program". What it deliberately is not is any particular program's icon: those
+// belong to whoever wrote them, and a system that has one will hand it over as
+// an [Image], which a cell prefers when both are set.
+func DrawIconApp(p painter.Painter, r Rect, ink RGBA) {
+	inset := iconInset(r)
+	x, y := r.X+inset, r.Y+inset
+	w, h := r.W-2*inset, r.H-2*inset
+	if w < 1 || h < 1 {
+		return
+	}
+	strokeRect(p, x, y, w, h, ink)
+
+	// The title bar: a fifth of the height, at least one pixel, closed off by a
+	// line so the frame reads as a window rather than as an empty box.
+	bar := h / 5
+	if bar < 1 {
+		bar = 1
+	}
+	fillRect(p, x, y+bar, w, 1, ink)
+
+	// One dot in the bar, a bar-height in from the left, which is where every
+	// window on every system this runs on keeps its buttons.
+	dot := bar - 1
+	if dot < 1 {
+		dot = 1
+	}
+	if bar+dot < h {
+		fillRect(p, x+dot, y+(bar-dot)/2, dot, dot, ink)
+	}
+}
