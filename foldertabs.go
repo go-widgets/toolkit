@@ -54,6 +54,17 @@ type FolderTabs struct {
 	// either or both.
 	OnSelect func(index int)
 
+	// Closable, when true, draws a small × affordance on the right of each tab and
+	// makes a click on it fire OnClose(i) instead of selecting the tab — the editor
+	// idiom of closeable document tabs. Off by default, so the Rendered│Log style
+	// strips stay uncloseable.
+	Closable bool
+	// OnClose fires with a tab's index when its × is clicked (Closable only). The
+	// host owns the tab list, so it decides what removing tab i means (drop the
+	// label, pick a neighbour to select); FolderTabs itself does not mutate Labels.
+	// nil-safe.
+	OnClose func(index int)
+
 	// selected is the reactive active-tab index. It is MVVM-only: the value lives
 	// in an unexported Observable exposed via [FolderTabs.Selected], so there is
 	// no settable Selected field to drift out of the reactive layer.
@@ -77,6 +88,9 @@ const (
 	FolderTabsInset = 3
 	// FolderTabsAccentH is the thickness of the active tab's top accent bar.
 	FolderTabsAccentH = 2
+	// FolderTabsCloseW is the width reserved on the right of a tab for its ×
+	// close affordance when [FolderTabs.Closable] is set (label + gap + glyph box).
+	FolderTabsCloseW = 16
 )
 
 // FolderTabsHeight is the recommended strip height in device pixels at the
@@ -135,19 +149,39 @@ func (t *FolderTabs) TabRect(i int) Rect {
 		return Rect{}
 	}
 	r := t.Bounds()
-	padX := scaled(FolderTabsPadX)
 	gap := scaled(FolderTabsGap)
 	x := r.X + scaled(FolderTabsInset)
 	for k := 0; k < i; k++ {
-		x += t.textWidth(t.Labels[k]) + 2*padX + gap
+		x += t.tabWidth(t.Labels[k]) + gap
 	}
-	w := t.textWidth(t.Labels[i]) + 2*padX
 	top := t.tabTop()
 	h := r.Y + r.H - top
 	if h < 1 {
 		h = 1
 	}
-	return Rect{X: x, Y: top, W: w, H: h}
+	return Rect{X: x, Y: top, W: t.tabWidth(t.Labels[i]), H: h}
+}
+
+// tabWidth is a tab's device width: its label plus horizontal padding, and — when
+// [FolderTabs.Closable] — the reserved close-affordance width on the right.
+func (t *FolderTabs) tabWidth(label string) int {
+	w := t.textWidth(label) + 2*scaled(FolderTabsPadX)
+	if t.Closable {
+		w += scaled(FolderTabsCloseW)
+	}
+	return w
+}
+
+// closeRect is the square hit box of tab i's × affordance, tucked against the
+// tab's right edge and vertically centred. The zero Rect when the strip is not
+// Closable or i is out of range, so a caller can test Contains unconditionally.
+func (t *FolderTabs) closeRect(i int) Rect {
+	if !t.Closable || i < 0 || i >= len(t.Labels) {
+		return Rect{}
+	}
+	tr := t.TabRect(i)
+	cw := scaled(FolderTabsCloseW)
+	return Rect{X: tr.X + tr.W - cw, Y: tr.Y + (t.height()-cw)/2, W: cw, H: cw}
 }
 
 // tabAt returns the tab index under a SURFACE point, or -1 when none.
@@ -211,9 +245,20 @@ func (t *FolderTabs) drawTab(p painter.Painter, theme *Theme, i int, face, ink R
 	}
 	label := t.Labels[i]
 	tw := t.textWidth(label)
-	tx := tr.X + (tr.W-tw)/2
+	// Centre the label in the tab, over the LABEL area (the reserved × box, when
+	// Closable, is excluded so the caption stays centred in the room it actually has).
+	labelW := tr.W
+	if t.Closable {
+		labelW -= scaled(FolderTabsCloseW)
+	}
+	tx := tr.X + (labelW-tw)/2
 	ty := tr.Y + (t.height()-t.glyphHeight())/2
 	t.drawText(p, tx, ty, label, ink)
+	if t.Closable {
+		cr := t.closeRect(i)
+		xw := t.textWidth("×")
+		t.drawText(p, cr.X+(cr.W-xw)/2, cr.Y+(cr.H-t.glyphHeight())/2, "×", ink)
+	}
 }
 
 // OnEvent selects a tab on a click and steps the selection on an arrow key. The
@@ -227,7 +272,15 @@ func (t *FolderTabs) OnEvent(ev Event) {
 	}
 	switch ev.Kind {
 	case EventClick:
-		if i := t.tabAt(t.Bounds().X+ev.X, t.Bounds().Y+ev.Y); i >= 0 {
+		sx, sy := t.Bounds().X+ev.X, t.Bounds().Y+ev.Y
+		if i := t.tabAt(sx, sy); i >= 0 {
+			// A click on the × closes the tab (Closable) rather than selecting it.
+			if t.Closable && t.closeRect(i).Contains(sx, sy) {
+				if t.OnClose != nil {
+					t.OnClose(i)
+				}
+				return
+			}
 			t.setActive(i)
 		}
 	case EventKeyDown:
