@@ -117,6 +117,10 @@ const TreeChevronW = 14
 // TreeIndentW is the per-depth pixel indent.
 const TreeIndentW = 16
 
+// TreeIconGap is the pixel gap between a row's optional [TreeTableNode.Icon] and
+// its first-column text.
+const TreeIconGap = 4
+
 // NewTreeView builds a TreeView rooted at root (which may be nil for
 // an empty initial view).
 func NewTreeView(root *TreeNode) *TreeView {
