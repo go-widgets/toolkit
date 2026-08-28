@@ -153,6 +153,49 @@ func (s *ScrollView) viewport() Rect {
 	return Rect{X: r.X, Y: r.Y, W: vw, H: vh}
 }
 
+// focusableChildren yields the scrolled content, so the focus walker can reach
+// the controls inside it. Without this a ScrollView is a wall: a panel of ten
+// inputs in a scrolling column had none of them reachable by Tab.
+func (s *ScrollView) focusableChildren() []Widget { return nonNil(s.Child) }
+
+// revealFocused scrolls so that the focused descendant, if there is one, is
+// inside the viewport. Reaching a control by Tab and leaving it out of sight
+// would trade one defect for a worse one — a cursor blinking where nobody can
+// see it — and a scrolling panel is exactly where that happens: ten controls in
+// a column three deep leaves eight of them below the fold.
+//
+// A child's Bounds do not move when the view scrolls; SetBounds anchors the
+// child at the viewport's origin with the whole content's height, and the
+// offset is applied when it is drawn. So a child's position within the content
+// is its Bounds minus that origin, and what has to change is the offset.
+func (s *ScrollView) revealFocused() {
+	w := focusedInList(focusListOf(s))
+	if w == nil {
+		return
+	}
+	vp, b := s.viewport(), w.Bounds()
+	s.Scroll(revealDelta(b.X-vp.X, b.W, s.OffsetX().Get(), vp.W),
+		revealDelta(b.Y-vp.Y, b.H, s.OffsetY().Get(), vp.H))
+}
+
+// revealDelta is how far to scroll along one axis so that the span [at, at+size)
+// of the content lies inside the window [offset, offset+extent). It brings the
+// near edge in when the span is before the window and the far edge in when it is
+// after, and asks for nothing when the span is already inside or is larger than
+// the window can hold — in which case the near edge is the one worth showing.
+func revealDelta(at, size, offset, extent int) int {
+	if at < offset {
+		return at - offset
+	}
+	if at+size > offset+extent && size <= extent {
+		return at + size - offset - extent
+	}
+	if at >= offset+extent {
+		return at - offset
+	}
+	return 0
+}
+
 // NewScrollView builds a ScrollView around child. Call SetContentSize
 // after construction to declare the child's logical extent so the
 // thumb is sized correctly + scrolling is clamped.

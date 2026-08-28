@@ -189,8 +189,10 @@ func routeFocusKey(ce focusEnumerator, ev Event) bool {
 		switch {
 		case ev.Code == "Tab":
 			moveFocus(list, !ev.Shift)
+			revealFocused(ce)
 		case ev.Code == "Shift+Tab":
 			moveFocus(list, false)
+			revealFocused(ce)
 		default:
 			if w := focusedInList(list); w != nil {
 				w.OnEvent(ev)
@@ -204,6 +206,20 @@ func routeFocusKey(ce focusEnumerator, ev Event) bool {
 		return true
 	}
 	return false
+}
+
+// revealFocused asks every ScrollView under ce to scroll its focused descendant
+// into sight. Focus is a flat list and knows nothing of ancestors, so this is
+// the walk that puts the two back together after Tab has moved.
+func revealFocused(ce focusEnumerator) {
+	for _, child := range ce.focusableChildren() {
+		if sv, ok := child.(*ScrollView); ok {
+			sv.revealFocused()
+		}
+		if sub, ok := child.(focusEnumerator); ok {
+			revealFocused(sub)
+		}
+	}
 }
 
 // focusClick moves focus to the focusable descendant containing surface point
