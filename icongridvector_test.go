@@ -255,3 +255,31 @@ func TestDrawIconAppStaysInsideItsBox(t *testing.T) {
 	flat := makeSurface(24, 8)
 	DrawIconApp(newP(flat, 24), Rect{X: 0, Y: 0, W: 20, H: 5}, ink)
 }
+
+// TestIconGridColumnsIsWhatTheArrowsNeed: the count a host adds or subtracts to
+// move a selection down or up, and it must follow the width.
+func TestIconGridColumnsIsWhatTheArrowsNeed(t *testing.T) {
+	g := NewIconGrid(IconCell{Label: "a"}, IconCell{Label: "b"}, IconCell{Label: "c"})
+	g.SetIconSize(40)
+
+	// One cell's width, so one column, whatever the label wants.
+	g.SetBounds(Rect{X: 0, Y: 0, W: 1, H: 200})
+	if got := g.Columns(); got != 1 {
+		t.Errorf("Columns() = %d in a one-pixel width, want 1", got)
+	}
+
+	narrow := Rect{X: 0, Y: 0, W: 200, H: 200}
+	g.SetBounds(narrow)
+	few := g.Columns()
+	g.SetBounds(Rect{X: 0, Y: 0, W: 800, H: 200})
+	many := g.Columns()
+	if !(many > few) {
+		t.Errorf("Columns() = %d at 800 wide and %d at 200; it must follow the width", many, few)
+	}
+	// And it agrees with the layout the widget itself uses: fewer columns is
+	// more rows, so the height it asks for must grow.
+	if tall, short := g.Measure(200), g.Measure(800); !(tall > short) {
+		t.Errorf("Measure = %d at 200 wide and %d at 800; %d columns against %d "+
+			"must mean more rows", tall, short, few, many)
+	}
+}

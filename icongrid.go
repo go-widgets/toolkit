@@ -402,3 +402,13 @@ func (v *IconGrid) Measure(width int) int {
 	rows := (len(v.Cells) + cols - 1) / cols
 	return rows * v.cellH()
 }
+
+// Columns is how many cells fit across the grid at its current width, at least
+// one.
+//
+// It is exported for a host that drives the selection from the KEYBOARD, which
+// this widget's own docs invite: moving up or down means adding or subtracting a
+// row, and a row is this number. Without it a host has to guess the column count
+// from the cell metrics — which are deliberately not exported, being scaled — and
+// its arrows then disagree with the picture whenever the density changes.
+func (v *IconGrid) Columns() int { return v.cols() }
