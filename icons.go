@@ -272,3 +272,47 @@ func DrawIconApp(p painter.Painter, r Rect, ink RGBA) {
 		fillRect(p, x+dot, y+(bar-dot)/2, dot, dot, ink)
 	}
 }
+
+// DrawIconPlus paints a plus: two bars of equal thickness crossing at the
+// centre, symmetric about both axes at every size.
+//
+// It is in the stock set because "add one more" is drawn everywhere and because
+// the obvious alternative is not symmetric. A "+" TYPESET from a font is a
+// glyph with side bearings and a baseline: it sits left of centre in its own
+// box, its arms are unequal, and at the size a headset needs — a plus the width
+// of a hand at arm's length — that is plainly visible. It was reported from a
+// pair of glasses as "not properly symmetric", which it was not.
+//
+// The bar thickness is a fifth of the box, rounded to an ODD number of pixels
+// whenever the box is odd and an even one when it is even, so the two arms
+// either side of centre are the same length. That is the whole of why this is
+// not three lines.
+func DrawIconPlus(p painter.Painter, r Rect, ink RGBA) {
+	inset := iconInset(r)
+	x, y := r.X+inset, r.Y+inset
+	w, h := r.W-2*inset, r.H-2*inset
+	if w < 1 || h < 1 {
+		return
+	}
+	// A square, centred: a plus in a rectangle is a cross, and nobody means a
+	// cross.
+	side := w
+	if h < side {
+		side = h
+	}
+	x += (w - side) / 2
+	y += (h - side) / 2
+
+	thick := side / 5
+	if thick < 1 {
+		thick = 1
+	}
+	// Same parity as the side, so (side-thick) is even and the two arms are
+	// equal to the pixel.
+	if (side-thick)%2 != 0 {
+		thick++
+	}
+	off := (side - thick) / 2
+	fillRect(p, x+off, y, thick, side, ink)
+	fillRect(p, x, y+off, side, thick, ink)
+}
