@@ -15,12 +15,21 @@ import (
 	"github.com/go-widgets/painter"
 )
 
-// drawIconoir paints the named Iconoir glyph into r, recoloured to ink: the SVG
-// comes from go-icons/iconoir (data) and SVGIcon renders it over go-gfx (code) —
+// DrawIconoir paints the named Iconoir glyph into r, recoloured to ink: the SVG
+// comes from go-icons/iconoir (data) and [SVGIcon] renders it over go-gfx (code) —
 // icons in one place, rasterising in another. An unknown name draws nothing.
-func drawIconoir(p painter.Painter, r Rect, name string, ink RGBA) {
+//
+// It is the toolkit's single seam for an Iconoir glyph, exported so a consumer
+// draws one THROUGH the toolkit (its own controls do the same) rather than
+// depending on an icon-pack renderer directly. Pair it with [IconoirNames] to
+// enumerate the available stems.
+func DrawIconoir(p painter.Painter, r Rect, name string, ink RGBA) {
 	SVGIcon(iconoir.Icon(name))(p, r, ink)
 }
+
+// IconoirNames is the sorted list of available Iconoir glyph stems (the names
+// [DrawIconoir] accepts), from go-icons/iconoir.
+func IconoirNames() []string { return iconoir.Names() }
 
 // iconRasterPx is the pixel size an icon SVG is rasterised to before the painter
 // scales it into the (usually smaller) target box. It bounds the work and memory

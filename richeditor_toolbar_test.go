@@ -274,7 +274,7 @@ func TestToolbarPendingInlineStyleLights(t *testing.T) {
 
 func TestIconoirDrawPaintsInk(t *testing.T) {
 	// Every icon the toolbar declares resolves in the pack AND paints a non-empty
-	// inked region when drawn (data from go-icons/iconoir, rendered by drawIconoir
+	// inked region when drawn (data from go-icons/iconoir, rendered by DrawIconoir
 	// over go-gfx).
 	const sz = 24
 	ink := RGBA{R: 0x10, G: 0x20, B: 0x30, A: 0xFF}
@@ -289,7 +289,7 @@ func TestIconoirDrawPaintsInk(t *testing.T) {
 			}
 			buf := make([]byte, 4*sz*sz)
 			p := painter.NewPixelPainter(buf, sz, sz)
-			drawIconoir(p, Rect{X: 0, Y: 0, W: sz, H: sz}, spec.icon, ink)
+			DrawIconoir(p, Rect{X: 0, Y: 0, W: sz, H: sz}, spec.icon, ink)
 			painted := 0
 			for i := 3; i < len(buf); i += 4 {
 				if buf[i] != 0 {
@@ -297,7 +297,7 @@ func TestIconoirDrawPaintsInk(t *testing.T) {
 				}
 			}
 			if painted == 0 {
-				t.Errorf("drawIconoir(%q) painted no ink", spec.icon)
+				t.Errorf("DrawIconoir(%q) painted no ink", spec.icon)
 			}
 		}
 	}
