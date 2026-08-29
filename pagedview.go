@@ -246,7 +246,7 @@ func (pv *PagedView) iconButton(name string, onClick func()) *Button {
 	b := NewButton("", onClick)
 	b.PressFeedback = false
 	b.Icon = func(p painter.Painter, r Rect, ink RGBA) {
-		drawIconoir(p, iconGlyphRect(r), name, ink)
+		DrawIconoir(p, iconGlyphRect(r), name, ink)
 	}
 	return b
 }

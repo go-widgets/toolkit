@@ -219,7 +219,7 @@ func reToolbarIcon(name string, inset int) func(p painter.Painter, r Rect, ink R
 	}
 	return func(p painter.Painter, r Rect, ink RGBA) {
 		ir := Rect{X: r.X + inset, Y: r.Y + inset, W: r.W - 2*inset, H: r.H - 2*inset}
-		drawIconoir(p, ir, name, ink)
+		DrawIconoir(p, ir, name, ink)
 	}
 }
 

@@ -12,6 +12,40 @@ import (
 
 const redSquareSVG = `<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" fill="#ff0000"/></svg>`
 
+// TestDrawIconoir: the exported Iconoir seam paints a known glyph (ink appears in
+// the box) and draws nothing for an unknown stem, and IconoirNames lists stems
+// DrawIconoir accepts.
+func TestDrawIconoir(t *testing.T) {
+	const sz = 24
+	names := IconoirNames()
+	if len(names) == 0 {
+		t.Fatal("IconoirNames() is empty")
+	}
+
+	// A known stem paints ink.
+	buf := make([]byte, sz*sz*4)
+	DrawIconoir(painter.NewPixelPainter(buf, sz, sz), Rect{X: 0, Y: 0, W: sz, H: sz}, names[0], RGB(0x20, 0x20, 0x20))
+	inked := false
+	for _, b := range buf {
+		if b != 0 {
+			inked = true
+			break
+		}
+	}
+	if !inked {
+		t.Fatalf("DrawIconoir(%q) painted no ink", names[0])
+	}
+
+	// An unknown stem draws nothing (transparent), not a panic.
+	blank := make([]byte, sz*sz*4)
+	DrawIconoir(painter.NewPixelPainter(blank, sz, sz), Rect{X: 0, Y: 0, W: sz, H: sz}, "not-a-real-iconoir-stem", RGB(0x20, 0x20, 0x20))
+	for _, b := range blank {
+		if b != 0 {
+			t.Fatal("DrawIconoir of an unknown stem painted something")
+		}
+	}
+}
+
 // TestSVGIconRenders rasterises a solid-red SVG and blits it into a box; the box
 // must carry red. A second draw exercises the cache path.
 func TestSVGIconRenders(t *testing.T) {
