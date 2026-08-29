@@ -420,7 +420,13 @@ func TestThePlusIsSymmetric(t *testing.T) {
 	tiny := makeSurface(4, 4)
 	DrawIconPlus(newP(tiny, 4), Rect{X: 0, Y: 0, W: 1, H: 1}, RGB(0xFF, 0, 0))
 	DrawIconPlus(newP(tiny, 4), Rect{X: 0, Y: 0, W: 4, H: 4}, RGB(0xFF, 0, 0))
-	// A rectangle gives a plus, not a cross: the square is centred in it.
+	// A rectangle gives a plus, not a cross: the square is centred in it, either
+	// way round.
 	wide := makeSurface(60, 20)
 	DrawIconPlus(newP(wide, 60), Rect{X: 0, Y: 0, W: 60, H: 20}, RGB(0xFF, 0, 0))
+	tall := makeSurface(20, 60)
+	DrawIconPlus(newP(tall, 20), Rect{X: 0, Y: 0, W: 20, H: 60}, RGB(0xFF, 0, 0))
+	// And a box small enough that a fifth of it is nothing.
+	small := makeSurface(12, 12)
+	DrawIconPlus(newP(small, 12), Rect{X: 0, Y: 0, W: 8, H: 8}, RGB(0xFF, 0, 0))
 }
