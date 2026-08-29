@@ -15,7 +15,7 @@ require github.com/go-opentype/fonts v0.6.0
 
 require github.com/go-widgets/mvvm v0.5.0
 
-require github.com/go-images/images v0.0.0-20260811115337-bc5d586f8e38
+require github.com/go-images/images v0.0.0-20260815210351-4a50ef5ab734
 
 require (
 	github.com/go-crdt/collab v0.25.0
@@ -28,6 +28,9 @@ require (
 require (
 	github.com/andybalholm/brotli v1.2.2 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
+	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
+	github.com/sergeymakinen/go-ico v1.0.0 // indirect
+	golang.org/x/image v0.45.0 // indirect
 	golang.org/x/net v0.49.0 // indirect
 	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/text v0.41.0 // indirect
