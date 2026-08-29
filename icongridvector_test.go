@@ -371,3 +371,56 @@ func TestTheIconIsCentredOverItsLabel(t *testing.T) {
 			got, want, minX, maxX)
 	}
 }
+
+// TestThePlusIsSymmetric, which is the whole reason it exists rather than a
+// typeset "+".
+//
+// Measured the way a person sees it: the ink's own bounding box, mirrored both
+// ways. A glyph from a font fails this — it sits left of centre in its box and
+// its arms are unequal, which at a hand's width on a headset is plain.
+func TestThePlusIsSymmetric(t *testing.T) {
+	for _, side := range []int{16, 17, 24, 31, 32, 48, 100} {
+		w, h := side+8, side+8
+		buf := makeSurface(w, h)
+		box := Rect{X: 4, Y: 4, W: side, H: side}
+		ink := RGB(0xFF, 0x00, 0x00)
+		DrawIconPlus(newP(buf, w), box, ink)
+
+		minX, minY, maxX, maxY := w, h, -1, -1
+		painted := 0
+		for y := range h {
+			for x := range w {
+				if pixelAt(buf, w, x, y) != ink {
+					continue
+				}
+				painted++
+				minX, minY = min(minX, x), min(minY, y)
+				maxX, maxY = max(maxX, x), max(maxY, y)
+			}
+		}
+		if painted == 0 {
+			t.Errorf("side %d: nothing was drawn", side)
+			continue
+		}
+		// Mirror the ink about the middle of its own bounding box, both ways.
+		for y := minY; y <= maxY; y++ {
+			for x := minX; x <= maxX; x++ {
+				on := pixelAt(buf, w, x, y) == ink
+				if got := pixelAt(buf, w, minX+maxX-x, y) == ink; got != on {
+					t.Fatalf("side %d: not symmetric left-to-right at %d,%d", side, x, y)
+				}
+				if got := pixelAt(buf, w, x, minY+maxY-y) == ink; got != on {
+					t.Fatalf("side %d: not symmetric top-to-bottom at %d,%d", side, x, y)
+				}
+			}
+		}
+	}
+
+	// Degenerate boxes draw nothing rather than dividing by one.
+	tiny := makeSurface(4, 4)
+	DrawIconPlus(newP(tiny, 4), Rect{X: 0, Y: 0, W: 1, H: 1}, RGB(0xFF, 0, 0))
+	DrawIconPlus(newP(tiny, 4), Rect{X: 0, Y: 0, W: 4, H: 4}, RGB(0xFF, 0, 0))
+	// A rectangle gives a plus, not a cross: the square is centred in it.
+	wide := makeSurface(60, 20)
+	DrawIconPlus(newP(wide, 60), Rect{X: 0, Y: 0, W: 60, H: 20}, RGB(0xFF, 0, 0))
+}
