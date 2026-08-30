@@ -179,10 +179,10 @@ func (s *ScrollView) Children() []Widget { return nonNil(s.Child) }
 // bridges read this between frames, and the whole reason this method exists is
 // that they must not be lied to about where a control is.
 // ChildClip is the rectangle this viewport actually shows its child in: the
-// bounds minus the scrollbar gutters. A host placing its own object over a
-// [Foreign] region needs it — clipping to Bounds instead puts the object under
-// the scrollbar, which is exactly where an overlay stops looking like part of
-// the tree.
+// bounds minus the scrollbar gutters. Anything placed OVER the view — a host's
+// own object in a browser, a magnifier, an annotation — must clip to this and
+// not to Bounds: clipping to Bounds puts the object under the scrollbar, which
+// is exactly where an overlay stops looking like part of the tree.
 func (s *ScrollView) ChildClip() Rect { return s.viewport() }
 
 func (s *ScrollView) ChildOffset() (int, int) {

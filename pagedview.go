@@ -823,10 +823,9 @@ func (c *pagedContent) Draw(p painter.Painter, theme *Theme) {
 // ⚠ The coordinate spaces differ on purpose. PageAt consumes a WIDGET-LOCAL
 // point because that is what [PagedView.OnEvent] delivers. PageRect produces
 // SURFACE coordinates because its caller is placing something over the pane —
-// a [Foreign] region's host object, a magnifier, an annotation — and every
-// other placement seam in this toolkit ([WalkA11y], [WalkForeign]) is
-// surface-absolute. Adding the widget's origin twice is the mistake this note
-// exists to prevent.
+// a host's own object in a browser, a magnifier, an annotation — and the other
+// placement seam in this toolkit ([WalkA11y]) is surface-absolute too. Adding
+// the widget's origin twice is the mistake this note exists to prevent.
 //
 // rect is the whole card at the current zoom and scroll, so it can start above
 // or left of the pane, or extend past it. clip is the part the pane actually
