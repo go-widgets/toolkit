@@ -101,6 +101,12 @@ type TextView struct {
 	// Text() sees only committed input.
 	composition string
 
+	// caretHidden suppresses the insertion caret while it is true, even when the
+	// view is focused — the seam a host uses to blink the caret (it toggles this on
+	// a timer). Zero value false keeps the caret visible, so nothing changes for a
+	// host that never touches it. The IME composition preview is unaffected.
+	caretHidden bool
+
 	// undo/redo hold point-in-time snapshots taken before each
 	// mutating edit (see pushUndo). Ports the go-widgets/tui
 	// TextEditor's undo model: one snapshot per mutation (no
@@ -190,6 +196,16 @@ func (t *TextView) Focused() *mvvm.Observable[bool] {
 	}
 	return t.focus
 }
+
+// CaretVisible reports whether the insertion caret is currently drawn (when the
+// view is focused). It is true by default.
+func (t *TextView) CaretVisible() bool { return !t.caretHidden }
+
+// SetCaretVisible shows or hides the insertion caret without disturbing focus,
+// selection or the IME preview. A host blinks the caret by toggling this on a
+// timer; setting it back to true (e.g. on a keystroke) makes the caret solid
+// again so it never blinks off mid-typing.
+func (t *TextView) SetCaretVisible(v bool) { t.caretHidden = !v }
 
 // sync publishes the line buffer onto the Text() Observable, firing its
 // subscribers. Called at the end of every mutating edit — the OnChange
@@ -390,7 +406,9 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	if t.Focused().Get() {
 		cx := textX + t.CursorCol().Get()*t.glyphAdvance()
 		cy := r.Y + 4 + (t.CursorLine().Get()-start)*lineH
-		fillRect(p, cx, cy-1, 1, t.glyphHeight()+2, theme.OnSurface)
+		if !t.caretHidden {
+			fillRect(p, cx, cy-1, 1, t.glyphHeight()+2, theme.OnSurface)
+		}
 		// IME composition preview: render the pending string in the
 		// muted SurfaceAlt tone starting at the cursor, so the user
 		// sees dead-key / CJK candidates without them entering the
