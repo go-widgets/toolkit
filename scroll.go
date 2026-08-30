@@ -103,10 +103,13 @@ func (p *contentPan) delta(ev Event) (dx, dy int) {
 // release ends the pan.
 func (p *contentPan) release() { p.active = false }
 
-// scrollbarWidth is the LOGICAL pixel thickness of a scrollbar track — wide
-// enough that the thumb is comfortably grabbable with the mouse. Routed through
-// [scrollbarTrack] so a HiDPI host gets a track scaled to its device pixels.
-const scrollbarWidth = 12
+// scrollbarWidth is the LOGICAL pixel thickness of a scrollbar track — the ONE
+// canonical width every scrollbar in the toolkit uses: slim and modern while
+// still grabbable. Routed through [scrollbarTrack] so a HiDPI host gets a track
+// scaled to its device pixels. A host that hides a widget's own bar and paints
+// its own (the HideScrollbar pattern) reads it through [ScrollbarWidth] so its
+// bar aligns with every embedded one by construction, not by picking a number.
+const scrollbarWidth = 6
 
 // scrollbarGap is the LOGICAL pixel gap the scrolled content is inset by ON TOP
 // of the scrollbar track, so the content never sits flush against the thumb.
@@ -124,6 +127,17 @@ func scrollbarTrack() int { return scaled(scrollbarWidth) }
 // Because ScrollView, ListBox and TreeView all inset by this one value, content
 // never touches the thumb and the gap is the same everywhere.
 func scrollGutter() int { return scaled(scrollbarWidth) + scaled(scrollbarGap) }
+
+// ScrollbarWidth is the device-pixel thickness of the toolkit's scrollbar track
+// — the single source of truth. A host that hides a widget's own bar and paints
+// its own (see the HideScrollbar pattern) sizes it through this, so every bar in
+// the app matches the embedded ones without hardcoding a width of its own.
+func ScrollbarWidth() int { return scrollbarTrack() }
+
+// ScrollGutter is the device-pixel width scrolled content is inset by to clear
+// the scrollbar (track plus gap) — the same reservation every scrollable widget
+// makes, exported so a host overlaying its own bar reserves the identical gutter.
+func ScrollGutter() int { return scrollGutter() }
 
 // localViewport is [ScrollView.viewport] in WIDGET-LOCAL coordinates, the space
 // an event arrives in.

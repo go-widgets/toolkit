@@ -240,7 +240,14 @@ func TestMetricScaleAudit(t *testing.T) {
 		{"ProgressCircle", 80, 80, func() Widget { return &ProgressCircle{} }},
 		{"RadioButton", 120, 24, func() Widget { return &RadioButton{} }},
 		{"Rating", 120, 24, func() Widget { return &Rating{} }},
-		{"Scrollbar", 16, 160, func() Widget { return &Scrollbar{} }},
+		// Scrollbar is deliberately absent, like the five rounded widgets in
+		// roundedscale_test.go: its capsule caps make painted runs not double
+		// cleanly once the track is a visibly distinct colour — the discrete cap
+		// apex is a partial pixel at 1x but full at 2x, so a run reads a couple of
+		// pixels short at 1x and the doubled expectation undershoots the clean 2x
+		// run. Widening the tolerance to absorb that would hide the class this
+		// audit catches, so its honouring of SetMetricScale is asserted from
+		// geometry instead — see TestScrollbarMinThumbHonoursMetricScale.
 		{"SearchEntry", 200, 30, func() Widget { return &SearchEntry{} }},
 		{"SegmentedBar", 200, 30, func() Widget { return &SegmentedBar{} }},
 		{"Spinner", 40, 40, func() Widget { return &Spinner{} }},

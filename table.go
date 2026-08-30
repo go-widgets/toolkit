@@ -1767,11 +1767,15 @@ func (t *Table) maxScrollX() int {
 
 // clampScrollX returns ScrollX collapsed into [0, maxScrollX()], read-only
 // (like clampScrollRow). Zero whenever horizontal scrolling is inactive.
-func (t *Table) clampScrollX() int {
+func (t *Table) clampScrollX() int { return t.clampScrollXVal(t.ScrollX().Get()) }
+
+// clampScrollXVal collapses an arbitrary target into [0, maxScrollX()] without
+// reading the observable, so ScrollXTo can clamp BEFORE its single Set. Zero
+// whenever horizontal scrolling is inactive.
+func (t *Table) clampScrollXVal(s int) int {
 	if !t.hScrollable() {
 		return 0
 	}
-	s := t.ScrollX().Get()
 	if s < 0 {
 		s = 0
 	}
@@ -1784,8 +1788,9 @@ func (t *Table) clampScrollX() int {
 // ScrollXTo sets ScrollX to px, clamped into [0, maxScrollX()] -- the direct
 // entry point a horizontal scrollbar drag or a wheel handler drives.
 func (t *Table) ScrollXTo(px int) {
-	t.ScrollX().Set(px)
-	t.ScrollX().Set(t.clampScrollX())
+	// One Set of the already-clamped target: an overshooting scroll must not
+	// publish an out-of-range value nor notify ScrollX twice on the way down.
+	t.ScrollX().Set(t.clampScrollXVal(px))
 }
 
 // ScrollXBy adjusts ScrollX by delta pixels (positive scrolls right), clamped

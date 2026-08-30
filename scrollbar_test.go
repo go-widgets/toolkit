@@ -40,6 +40,32 @@ func TestScrollbarThumbGeometry(t *testing.T) {
 	}
 }
 
+// TestScrollbarMinThumbHonoursMetricScale asserts the standalone Scrollbar
+// honours SetMetricScale from geometry rather than pixels. The metric-scale
+// audit (metricscale_audit_test.go) excludes it: its rounded capsule caps make
+// painted runs not double cleanly once the track is a visibly distinct colour,
+// the same reason the rounded widgets in roundedscale_test.go are excluded.
+// The grabbable minimum thumb routes through scaled(), so it must grow with the
+// metric — a bar whose proportional thumb sits well below the floor at both
+// scales isolates that floor.
+func TestScrollbarMinThumbHonoursMetricScale(t *testing.T) {
+	defer SetMetricScale(1)
+	sb := NewScrollbar()
+	sb.Total, sb.Viewport = 100000, 100 // proportional thumb << floor at any scale
+	sb.SetBounds(Rect{X: 0, Y: 0, W: 16, H: 4000})
+
+	SetMetricScale(1)
+	h1 := sb.ThumbRect().H
+	if h1 != scrollbarMinThumb {
+		t.Fatalf("thumb at 1x = %d, want floor %d", h1, scrollbarMinThumb)
+	}
+	SetMetricScale(2)
+	h2 := sb.ThumbRect().H
+	if h2 != 2*scrollbarMinThumb {
+		t.Fatalf("thumb at 2x = %d, want %d (the floor doubled with the metric)", h2, 2*scrollbarMinThumb)
+	}
+}
+
 func TestScrollbarEverythingFitsAndMinThumb(t *testing.T) {
 	// Everything visible → thumb fills the track.
 	sb := NewScrollbar()

@@ -292,12 +292,13 @@ func TestSpreadsheetPublicEditCommands(t *testing.T) {
 func TestSpreadsheetCellAtGutter(t *testing.T) {
 	s := NewSpreadsheet(20, 30) // overflows -> a scrollbar gutter exists
 	s.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
-	// gridRect is {36,20,252,168}; a point in the right gutter (gx >= g.W).
-	if _, ok := s.cellAt(290, 50); ok {
+	// gridRect is {36,20,258,174} with the slim 6px track; a point in the right
+	// gutter (gx >= g.W, i.e. x >= 294).
+	if _, ok := s.cellAt(296, 50); ok {
 		t.Error("point in the vertical scrollbar gutter must not resolve to a cell")
 	}
-	// A point in the bottom gutter (gy >= g.H).
-	if _, ok := s.cellAt(50, 190); ok {
+	// A point in the bottom gutter (gy >= g.H, i.e. y >= 194).
+	if _, ok := s.cellAt(50, 196); ok {
 		t.Error("point in the horizontal scrollbar gutter must not resolve to a cell")
 	}
 }

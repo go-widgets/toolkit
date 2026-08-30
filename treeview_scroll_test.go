@@ -335,7 +335,7 @@ func TestTreeViewScrollbarPaintedOnOverflow(t *testing.T) {
 		for y := 0; y < 90; y++ {
 			for x := trackX; x < 200; x++ {
 				switch pixelAt(buf, 200, x, y) {
-				case theme.SurfaceAlt:
+				case scrollbarTrackColor(theme):
 					foundAlt = true
 				case scrollbarThumbColor(theme):
 					foundAccent = true
@@ -370,21 +370,16 @@ func TestTreeViewScrollbarThumbMinimumSize(t *testing.T) {
 	tv := NewTreeView(root)
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 90})
 
-	theme := DefaultLight()
-	buf := makeSurface(200, 90)
-	tv.Draw(newP(buf, 200), theme)
-
-	trackX := 200 - scrollbarWidth
-	thumbRows := 0
-	for y := 0; y < 90; y++ {
-		// Centre column: the rounded thumb is full-length there, so the count
-		// reflects the true (floor-clamped) thumb height.
-		if pixelAt(buf, 200, trackX+scrollbarWidth/2, y) == scrollbarThumbColor(theme) {
-			thumbRows++
-		}
+	// With 501 rows against a 5-row window the proportional thumb is a sliver;
+	// the floor clamps it to a grabbable minimum. Assert the clamped length from
+	// geometry — a slim track's rounded caps taper the exact-colour centre column,
+	// so counting pixels there under-reports a thumb that is in fact at the floor.
+	g, ok := tv.scrollbarGeom()
+	if !ok {
+		t.Fatal("expected an overflow scrollbar")
 	}
-	if thumbRows < 8 {
-		t.Fatalf("thumb height = %d px, want >= 8 (clamped minimum)", thumbRows)
+	if g.thumbLen < scaled(8) {
+		t.Fatalf("thumb length = %d px, want >= %d (clamped minimum)", g.thumbLen, scaled(8))
 	}
 }
 

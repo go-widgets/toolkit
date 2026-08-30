@@ -131,8 +131,8 @@ func (s *Scrollbar) ThumbRect() Rect {
 	return Rect{X: r.X, Y: r.Y + g.thumbStart, W: r.W, H: g.thumbLen}
 }
 
-// Draw paints the track and the thumb. The thumb is drawn in Theme.Border so it
-// reads against the SurfaceAlt track in both light and dark themes.
+// Draw paints the track and the thumb through the shared house style, so a
+// standalone Scrollbar is identical to every widget's embedded one.
 func (s *Scrollbar) Draw(p painter.Painter, theme *Theme) {
 	r := s.Bounds()
 	if r.W <= 0 || r.H <= 0 {
@@ -205,6 +205,21 @@ func scrollbarThumbColor(theme *Theme) RGBA {
 	return blendRGBA(theme.OnSurface, theme.SurfaceAlt, scrollbarThumbMix)
 }
 
+// scrollbarTrackMix is how far the track colour sits from SurfaceAlt toward the
+// foreground: a faint tint so the gutter is a visible channel on ANY ground. A
+// bare SurfaceAlt track vanishes on a SurfaceAlt panel (a sidebar), which left
+// the accordion's gutter invisible; this small blend keeps the track one clear
+// shade off its own surface, well below the thumb's 0.45 so the thumb still
+// reads against it.
+const scrollbarTrackMix = 0.14
+
+// scrollbarTrackColor is the faint grey channel every scrollbar track uses:
+// SurfaceAlt nudged toward OnSurface so the gutter is visible on both a Surface
+// panel (the feed) and a SurfaceAlt panel (the sidebar), the same everywhere.
+func scrollbarTrackColor(theme *Theme) RGBA {
+	return blendRGBA(theme.OnSurface, theme.SurfaceAlt, scrollbarTrackMix)
+}
+
 // scrollbarRadius rounds a scrollbar track/thumb by half its short side, so its
 // ends are fully rounded like a capsule regardless of orientation.
 func scrollbarRadius(w, h int) int {
@@ -215,13 +230,13 @@ func scrollbarRadius(w, h int) int {
 }
 
 // paintScrollTrack and paintScrollThumb are the ONE house style for a scrollbar:
-// a rounded SurfaceAlt track under a rounded muted-grey thumb. Every embedded
+// a rounded faint-grey track under a rounded muted-grey thumb. Every embedded
 // scrollbar — ScrollView, List, TreeView, Table, Browser — and the standalone
 // Scrollbar draw through these, so a scrollbar looks identical wherever it
 // appears. Each caller keeps its own geometry (track thickness, position, the
 // viewport/content proportion that sizes the thumb); only the fill is shared.
 func paintScrollTrack(p painter.Painter, theme *Theme, x, y, w, h int) {
-	fillRoundRect(p, x, y, w, h, scrollbarRadius(w, h), theme.SurfaceAlt)
+	fillRoundRect(p, x, y, w, h, scrollbarRadius(w, h), scrollbarTrackColor(theme))
 }
 
 func paintScrollThumb(p painter.Painter, theme *Theme, x, y, w, h int) {

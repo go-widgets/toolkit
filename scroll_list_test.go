@@ -165,8 +165,8 @@ func TestScrollViewDrawPaintsScrollbarTrack(t *testing.T) {
 	// Track pixel at right edge of bounds, below the thumb. With
 	// contentH=200 + viewH=40 + OffsetY=0, thumbH=8 covering [0,8);
 	// any row past 10 lands on bare track.
-	if pixelAt(buf, w, 35, 20) != theme.SurfaceAlt {
-		t.Fatalf("scrollbar track not painted; got %+v want SurfaceAlt", pixelAt(buf, w, 35, 20))
+	if pixelAt(buf, w, 35, 20) != scrollbarTrackColor(theme) {
+		t.Fatalf("scrollbar track not painted; got %+v want track grey", pixelAt(buf, w, 35, 20))
 	}
 }
 
@@ -641,7 +641,7 @@ func TestListBoxScrollbarThumbRendersOnOverflow(t *testing.T) {
 	trackX := 50 - scrollbarWidth // 38
 	foundTrack := false
 	for y := 90; y < 100; y++ {
-		if pixelAt(buf, w, trackX+3, y) == theme.SurfaceAlt {
+		if pixelAt(buf, w, trackX+3, y) == scrollbarTrackColor(theme) {
 			foundTrack = true
 		}
 	}
