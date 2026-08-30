@@ -119,6 +119,16 @@ const DialogTitleH = 28
 // DialogButtonStripH is the pixel height of the bottom action strip.
 const DialogButtonStripH = 32
 
+// stripH is the height reserved for (and drawn as) the bottom action strip: zero
+// when the dialog has no action Buttons, so a modal that keeps its controls inside
+// Content is a clean card with no empty strip; otherwise DialogButtonStripH.
+func (d *Dialog) stripH() int {
+	if len(d.Buttons) == 0 {
+		return 0
+	}
+	return scaled(DialogButtonStripH)
+}
+
 // DialogButtonW is the width allocated per action button.
 const DialogButtonW = 90
 
@@ -296,17 +306,19 @@ func (d *Dialog) applyBounds() {
 		d.Input.SetBounds(Rect{X: r.X + pad, Y: top + pad, W: r.W - 2*pad, H: scaled(DialogInputH) - 2*pad})
 		top += scaled(DialogInputH)
 	}
+	sh := d.stripH()
 	if d.Content != nil {
 		body := Rect{
 			X: r.X,
 			Y: top,
 			W: r.W,
-			H: r.Y + r.H - scaled(DialogButtonStripH) - top,
+			H: r.Y + r.H - sh - top,
 		}
 		d.Content.SetBounds(body)
 	}
-	// Right-align the action buttons in the bottom strip.
-	stripY := r.Y + r.H - scaled(DialogButtonStripH)
+	// Right-align the action buttons in the bottom strip (none when Buttons is
+	// empty — the modal then holds its own controls inside Content).
+	stripY := r.Y + r.H - sh
 	bx := r.X + r.W - 8
 	for i := len(d.Buttons) - 1; i >= 0; i-- {
 		bx -= scaled(DialogButtonW)
@@ -386,16 +398,19 @@ func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 		d.Content.Draw(p, theme)
 	}
 	// Action strip, rounded along the panel's BOTTOM corners the same way the
-	// title bar is rounded along the top.
-	sh := scaled(DialogButtonStripH)
-	stripY := r.Y + r.H - sh
-	fillRoundRect(p, r.X, stripY, r.W, sh, rad, theme.SurfaceAlt)
-	if sh > rad {
-		fillRect(p, r.X, stripY, r.W, sh-rad, theme.SurfaceAlt)
-	}
-	fillRect(p, r.X, stripY, r.W, strokeWidth(), theme.Border)
-	for _, b := range d.Buttons {
-		b.Draw(p, theme)
+	// title bar is rounded along the top. Absent when there are no action buttons —
+	// a modal that carries its controls inside Content gets a clean card with no
+	// empty strip.
+	if sh := d.stripH(); sh > 0 {
+		stripY := r.Y + r.H - sh
+		fillRoundRect(p, r.X, stripY, r.W, sh, rad, theme.SurfaceAlt)
+		if sh > rad {
+			fillRect(p, r.X, stripY, r.W, sh-rad, theme.SurfaceAlt)
+		}
+		fillRect(p, r.X, stripY, r.W, strokeWidth(), theme.Border)
+		for _, b := range d.Buttons {
+			b.Draw(p, theme)
+		}
 	}
 	// The panel outline last, so neither band paints over it.
 	strokeRoundRect(p, r.X, r.Y, r.W, r.H, rad, theme.Border)

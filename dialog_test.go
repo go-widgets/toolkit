@@ -77,7 +77,7 @@ func TestDialogCastsAShadow(t *testing.T) {
 // hairline, so neither reads as one field of colour with what it sits against.
 func TestDialogBandsAreSeparated(t *testing.T) {
 	th := DefaultLight()
-	d := NewDialog("Title", nil)
+	d := NewDialog("Title", nil, NewButton("OK", nil)) // a button so the action strip is present
 	d.SetBounds(Rect{W: 200, H: 140})
 	buf := make([]byte, 4*200*140)
 	d.Draw(painter.NewPixelPainter(buf, 200, 140), th)
