@@ -42,6 +42,14 @@ type Button struct {
 	// the button never flips it itself.
 	selected *mvvm.Observable[bool]
 
+	// leadingIcon and shortcut are OPTIONAL, reactive adornments drawn ALONGSIDE the
+	// caption (unlike the Icon field above, which replaces it): a small vector glyph
+	// before the label, and a right-aligned keyboard-shortcut hint (e.g. "⌘F") in a
+	// muted tone. Both are lazily-created Observables via LeadingIcon()/Shortcut();
+	// a button that never sets them draws exactly as before.
+	leadingIcon *mvvm.Observable[IconFunc]
+	shortcut    *mvvm.Observable[string]
+
 	// PressFeedback shows the pressed face on EventClick (until EventMouseUp).
 	// NewButton enables it; set it false to opt a button out (e.g. one whose
 	// action already navigates away so the flash would just flicker).
@@ -122,6 +130,43 @@ func (b *Button) Selected() *mvvm.Observable[bool] {
 	return b.selected
 }
 
+// LeadingIcon is an OPTIONAL vector glyph drawn just before the caption, as a
+// shared [mvvm.Observable]: set a non-nil IconFunc to show it, nil to hide it.
+// Lazily created; a button that never sets it draws exactly as before.
+func (b *Button) LeadingIcon() *mvvm.Observable[IconFunc] {
+	if b.leadingIcon == nil {
+		// IconFunc is not comparable, so an equality function is required; funcs
+		// cannot be compared beyond nil, so every Set is treated as a change.
+		b.leadingIcon = mvvm.NewObservableEq[IconFunc](nil, func(a, b IconFunc) bool { return false })
+	}
+	return b.leadingIcon
+}
+
+// Shortcut is an OPTIONAL keyboard-shortcut hint (e.g. "⌘F") drawn right-aligned
+// in a muted tone, as a shared [mvvm.Observable]. Empty hides it. Lazily created.
+func (b *Button) Shortcut() *mvvm.Observable[string] {
+	if b.shortcut == nil {
+		b.shortcut = mvvm.NewObservable("")
+	}
+	return b.shortcut
+}
+
+// leadingIconFn / shortcutText read the optional adornments without forcing the
+// Observable to exist (an unset button keeps the byte-identical legacy draw).
+func (b *Button) leadingIconFn() IconFunc {
+	if b.leadingIcon == nil {
+		return nil
+	}
+	return b.leadingIcon.Get()
+}
+
+func (b *Button) shortcutText() string {
+	if b.shortcut == nil {
+		return ""
+	}
+	return b.shortcut.Get()
+}
+
 // SetHovered/SetPressed are wired by the parent container's mouse
 // dispatcher so the button can render its hover/press visual states.
 // Direct setters (vs deducing from OnEvent kinds) keep the parent
@@ -181,17 +226,48 @@ func (b *Button) Draw(p painter.Painter, theme *Theme) {
 	}
 	// A host-supplied Icon replaces the text Label (like SearchEntry.Icon): it is
 	// handed the full button rect and the current ink so the glyph tracks the
-	// button's pressed / disabled tint. The Label is the nil-Icon fallback.
-	switch {
-	case b.Icon != nil:
+	// button's pressed / disabled tint. Otherwise the caption is drawn, with its
+	// optional leading icon and trailing shortcut.
+	if b.Icon != nil {
 		b.Icon(p, r, ink)
-	case b.Label().Get() != "":
-		tw := b.textWidth(b.Label().Get())
-		tx := r.X + (r.W-tw)/2
-		ty := r.Y + (r.H-b.glyphHeight())/2
-		b.drawText(p, tx, ty, b.Label().Get(), ink)
+	} else {
+		b.drawContent(p, theme, r, ink)
 	}
 	b.drawFocusRing(p, theme, r)
+}
+
+// drawContent paints the caption plus its optional leading icon and trailing
+// shortcut hint. With neither adornment set the caption is centred exactly as
+// before (byte-identical); with either set the row is laid out left-to-right —
+// [icon] label … [shortcut] — inside the button's padding.
+func (b *Button) drawContent(p painter.Painter, theme *Theme, r Rect, ink RGBA) {
+	label := b.Label().Get()
+	icon := b.leadingIconFn()
+	sc := b.shortcutText()
+	gh := b.glyphHeight()
+	ty := r.Y + (r.H-gh)/2
+
+	if icon == nil && sc == "" {
+		if label != "" {
+			tw := b.textWidth(label)
+			b.drawText(p, r.X+(r.W-tw)/2, ty, label, ink)
+		}
+		return
+	}
+
+	pad := scaled(8)
+	x := r.X + pad
+	if icon != nil {
+		icon(p, Rect{X: x, Y: r.Y + (r.H-gh)/2, W: gh, H: gh}, ink)
+		x += gh + scaled(6)
+	}
+	if label != "" {
+		b.drawText(p, x, ty, label, ink)
+	}
+	if sc != "" {
+		sw := b.textWidth(sc)
+		b.drawText(p, r.X+r.W-pad-sw, ty, sc, mutedInk(theme))
+	}
 }
 
 // OnEvent drives the button from pointer events: EventClick presses it (shows
