@@ -11,7 +11,7 @@ require (
 	github.com/go-typeset/bidi v0.3.0
 )
 
-require github.com/go-opentype/fonts v0.6.0
+require github.com/go-opentype/fonts v0.9.0
 
 require github.com/go-widgets/mvvm v0.5.0
 
