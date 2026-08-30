@@ -19,6 +19,26 @@ func TestScaledExported(t *testing.T) {
 	}
 }
 
+// TestScrollbarMetricsExported checks the [ScrollbarWidth] and [ScrollGutter]
+// seams a host routes its own bar through are the SAME single source of truth
+// the embedded widgets use — identical to the internal track/gutter at 1x, and
+// scaled with the metric at 2x — so a host that paints its own bar aligns with
+// every embedded one instead of hardcoding a width.
+func TestScrollbarMetricsExported(t *testing.T) {
+	defer SetMetricScale(1)
+	if ScrollbarWidth() != scrollbarTrack() || ScrollGutter() != scrollGutter() {
+		t.Fatalf("exported metrics %d/%d must equal internal %d/%d at 1x",
+			ScrollbarWidth(), ScrollGutter(), scrollbarTrack(), scrollGutter())
+	}
+	if ScrollbarWidth() != scrollbarWidth {
+		t.Fatalf("ScrollbarWidth() at 1x = %d, want %d", ScrollbarWidth(), scrollbarWidth)
+	}
+	SetMetricScale(2)
+	if ScrollbarWidth() != 2*scrollbarWidth || ScrollGutter() != scrollGutter() {
+		t.Fatalf("exported metrics must scale with the metric: width %d gutter %d", ScrollbarWidth(), ScrollGutter())
+	}
+}
+
 // TestScrollGutterNormalized proves the one normalized scrollbar gutter — a
 // scaled track PLUS a scaled gap — is applied identically by ScrollView, ListBox
 // and TreeView, so scrolled content never sits flush against the thumb and the
@@ -65,8 +85,8 @@ func TestScrollGutterNormalized(t *testing.T) {
 		t.Fatal("ListBox content must not extend into the scrollbar gutter gap")
 	}
 	// Probe the bare track well below the thumb (which sits at the top at ScrollRow 0).
-	if got := pixelAt(buf, 128, 100-scrollbarTrack()+1, 90); got != theme.SurfaceAlt {
-		t.Fatalf("ListBox track column should be SurfaceAlt; got %+v", got)
+	if got := pixelAt(buf, 128, 100-scrollbarTrack()+1, 90); got != scrollbarTrackColor(theme) {
+		t.Fatalf("ListBox track column should be the track grey; got %+v", got)
 	}
 
 	// TreeView uses the same track position and gutter, so its scrollbar lines up

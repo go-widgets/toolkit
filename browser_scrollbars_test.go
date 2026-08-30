@@ -60,16 +60,17 @@ func TestBrowserVerticalScrollbarDrawTracksScroll(t *testing.T) {
 		return buf
 	}
 
-	// scroll=0: thumb hugs the track top; the track's far end is bare SurfaceAlt.
+	// scroll=0: thumb hugs the track top; the track's far end is bare track grey.
 	// The thumb is the shared muted grey; sample interior points (the rounded caps
 	// taper at the very ends).
 	muted := scrollbarThumbColor(theme)
+	track := scrollbarTrackColor(theme)
 	buf := draw()
 	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g.thumbStart+2); got != muted {
 		t.Errorf("scroll=0: thumb-top pixel = %+v, want muted thumb %+v", got, muted)
 	}
-	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g.trackLen-scrollbarWidth); got != theme.SurfaceAlt {
-		t.Errorf("scroll=0: track-bottom pixel = %+v, want SurfaceAlt %+v", got, theme.SurfaceAlt)
+	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g.trackLen-scrollbarWidth); got != track {
+		t.Errorf("scroll=0: track-bottom pixel = %+v, want track %+v", got, track)
 	}
 
 	// scroll=max: thumb hugs the track bottom; the track top is now bare.
@@ -79,8 +80,8 @@ func TestBrowserVerticalScrollbarDrawTracksScroll(t *testing.T) {
 		t.Errorf("scroll=max: thumb end %d != trackLen %d (thumb not pinned to bottom)", g2.thumbStart+g2.thumbLen, g2.trackLen)
 	}
 	buf = draw()
-	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g2.trackStart+2); got != theme.SurfaceAlt {
-		t.Errorf("scroll=max: track-top pixel = %+v, want SurfaceAlt %+v", got, theme.SurfaceAlt)
+	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g2.trackStart+2); got != track {
+		t.Errorf("scroll=max: track-top pixel = %+v, want track %+v", got, track)
 	}
 	if got := pixelAt(buf, browserBounds.W, colX, cr.Y+g2.thumbStart+2); got != muted {
 		t.Errorf("scroll=max: thumb-bottom pixel = %+v, want muted thumb %+v", got, muted)

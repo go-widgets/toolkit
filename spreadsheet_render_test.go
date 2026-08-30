@@ -180,15 +180,18 @@ func TestSpreadsheetScrollGeometry(t *testing.T) {
 	if !ok {
 		t.Fatal("vscrollGeom must be live")
 	}
-	if gv.cross0 != 288 || gv.trackStart != 20 || gv.trackLen != 168 || gv.maxScroll != 22 || gv.thumbLen != 47 || gv.thumbStart != 20 {
-		t.Errorf("vscrollGeom = %+v, want cross0=288 trackStart=20 trackLen=168 maxScroll=22 thumbLen=47 thumbStart=20", gv)
+	// The slim 6px track leaves a 10px gutter (was 16): the cross axis starts 6px
+	// later, the track runs 6px longer, and the wider viewport fits one more
+	// column so the horizontal maxScroll drops by one.
+	if gv.cross0 != 294 || gv.trackStart != 20 || gv.trackLen != 174 || gv.maxScroll != 22 || gv.thumbLen != 50 || gv.thumbStart != 20 {
+		t.Errorf("vscrollGeom = %+v, want cross0=294 trackStart=20 trackLen=174 maxScroll=22 thumbLen=50 thumbStart=20", gv)
 	}
 	gh, ok := s.hscrollGeom()
 	if !ok {
 		t.Fatal("hscrollGeom must be live")
 	}
-	if gh.cross0 != 188 || gh.trackStart != 36 || gh.trackLen != 252 || gh.maxScroll != 17 || gh.thumbLen != 49 || gh.thumbStart != 36 {
-		t.Errorf("hscrollGeom = %+v, want cross0=188 trackStart=36 trackLen=252 maxScroll=17 thumbLen=49 thumbStart=36", gh)
+	if gh.cross0 != 194 || gh.trackStart != 36 || gh.trackLen != 258 || gh.maxScroll != 16 || gh.thumbLen != 52 || gh.thumbStart != 36 {
+		t.Errorf("hscrollGeom = %+v, want cross0=194 trackStart=36 trackLen=258 maxScroll=16 thumbLen=52 thumbStart=36", gh)
 	}
 }
 
@@ -242,8 +245,8 @@ func TestSpreadsheetScrollByClamps(t *testing.T) {
 		t.Errorf("scrollRow = %d, want 0", row)
 	}
 	s.ScrollBy(100, 0) // past right
-	if col, _ := s.ScrollOffset(); col != 17 {
-		t.Errorf("scrollCol = %d, want 17 (max)", col)
+	if col, _ := s.ScrollOffset(); col != 16 {
+		t.Errorf("scrollCol = %d, want 16 (max)", col)
 	}
 	s.ScrollBy(-100, 0) // past left
 	if col, _ := s.ScrollOffset(); col != 0 {
@@ -300,16 +303,16 @@ func TestSpreadsheetHScrollbarDragAndPage(t *testing.T) {
 	// Horizontal thumb: track y[188,200), thumb x[36,85). Press then drag right.
 	s.OnEvent(Event{Kind: EventClick, X: 50, Y: 194})
 	s.OnEvent(Event{Kind: EventMouseDrag, X: 1000, Y: 194})
-	if col, _ := s.ScrollOffset(); col != 17 {
-		t.Errorf("scrollCol after drag right = %d, want 17", col)
+	if col, _ := s.ScrollOffset(); col != 16 {
+		t.Errorf("scrollCol after drag right = %d, want 16", col)
 	}
 	s.OnEvent(Event{Kind: EventMouseUp})
 	// Fresh sheet: press the h-track right of the thumb -> pages right by fullCols.
 	s2 := NewSpreadsheet(20, 30)
 	s2.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
 	s2.OnEvent(Event{Kind: EventClick, X: 200, Y: 194})
-	if col, _ := s2.ScrollOffset(); col != 3 {
-		t.Errorf("scrollCol after page-right = %d, want 3 (fullCols)", col)
+	if col, _ := s2.ScrollOffset(); col != 4 {
+		t.Errorf("scrollCol after page-right = %d, want 4 (fullCols)", col)
 	}
 }
 
@@ -327,12 +330,12 @@ func TestSpreadsheetDragWithoutGrabIsInert(t *testing.T) {
 // arrow navigation that pushes the active cell past each viewport edge.
 func TestSpreadsheetEnsureVisibleScrolls(t *testing.T) {
 	s := NewSpreadsheet(20, 30)
-	s.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200}) // fullCols=3, fullRows=8
+	s.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200}) // fullCols=4, fullRows=8
 	for i := 0; i < 5; i++ {
 		s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
 	}
-	if col, _ := s.ScrollOffset(); col != 3 {
-		t.Fatalf("scrollCol after 5x right = %d, want 3", col)
+	if col, _ := s.ScrollOffset(); col != 2 {
+		t.Fatalf("scrollCol after 5x right = %d, want 2", col)
 	}
 	for i := 0; i < 5; i++ {
 		s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
