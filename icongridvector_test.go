@@ -386,11 +386,17 @@ func TestThePlusIsSymmetric(t *testing.T) {
 		ink := RGB(0xFF, 0x00, 0x00)
 		DrawIconPlus(newP(buf, w), box, ink)
 
+		// Anything that is not the surface as it was: a disc's rim is
+		// anti-aliased, so counting only the pixels that came out exactly
+		// the colour measures the square inscribed in it -- which is how the
+		// first version of this test called a disc a square -- and counting
+		// "any green" counts a background that is not black.
+		bg := pixelAt(buf, w, 0, 0)
 		minX, minY, maxX, maxY := w, h, -1, -1
 		painted := 0
 		for y := range h {
 			for x := range w {
-				if pixelAt(buf, w, x, y) != ink {
+				if pixelAt(buf, w, x, y) == bg {
 					continue
 				}
 				painted++
@@ -429,4 +435,107 @@ func TestThePlusIsSymmetric(t *testing.T) {
 	// And a box small enough that a fifth of it is nothing.
 	small := makeSurface(12, 12)
 	DrawIconPlus(newP(small, 12), Rect{X: 0, Y: 0, W: 8, H: 8}, RGB(0xFF, 0, 0))
+}
+
+// TestTheDotIsRoundAndCentred.
+//
+// A status light is read at a glance and often out of the corner of an eye, so
+// what matters is that it is a disc where it was asked for and not a square,
+// and that it stays inside its box: a dot drawn over another icon that leaked
+// a pixel would smear the glyph under it.
+func TestTheDotIsRoundAndCentred(t *testing.T) {
+	for _, side := range []int{8, 11, 16, 24, 40} {
+		w, h := side+8, side+8
+		buf := makeSurface(w, h)
+		box := Rect{X: 4, Y: 4, W: side, H: side}
+		DrawIconDot(newP(buf, w), box, RGB(0x00, 0xFF, 0x00))
+
+		// Everything the dot TOUCHED, not only what came out exactly the
+		// colour: the rim of a disc is anti-aliased, and the fully covered
+		// pixels are a smaller disc drawn on a coarser grid -- 88% of its own
+		// box at 16 pixels, which barely tells a disc from a square. What the
+		// ink reached does: it is the disc itself.
+		bg := pixelAt(buf, w, 0, 0)
+		minX, minY, maxX, maxY := w, h, -1, -1
+		painted := 0
+		for y := range h {
+			for x := range w {
+				if pixelAt(buf, w, x, y) == bg {
+					continue
+				}
+				painted++
+				minX, minY = min(minX, x), min(minY, y)
+				maxX, maxY = max(maxX, x), max(maxY, y)
+			}
+		}
+		if painted == 0 {
+			t.Errorf("side %d: nothing was drawn", side)
+			continue
+		}
+		// Inside its box, always: the inset every icon here leaves is the
+		// margin, and a dot that overflowed would smear whatever it sits on.
+		if minX < box.X || minY < box.Y || maxX >= box.X+box.W || maxY >= box.Y+box.H {
+			t.Errorf("side %d: ink spans %d..%d,%d..%d, outside the box at %d,%d %dx%d",
+				side, minX, maxX, minY, maxY, box.X, box.Y, box.W, box.H)
+		}
+		// Square in a square box, to the pixel.
+		if (maxX - minX) != (maxY - minY) {
+			t.Errorf("side %d: the ink is %dx%d; a dot in a square box is square",
+				side, maxX-minX+1, maxY-minY+1)
+		}
+		// And ROUND, not the square it would be without a radius. The corners
+		// are the test: a square inks all four of them, a disc none. Area does
+		// not say it as plainly -- an anti-aliased disc TOUCHES about 85% of
+		// its box, where the disc itself is pi/4 of it, about 79%.
+		//
+		// Only where there is room to tell. A disc four pixels across touches
+		// all sixteen of them, corners included, so nothing separates it from a
+		// square there, and asserting otherwise would assert something untrue
+		// of a dot at a real size.
+		if maxX-minX+1 < 10 {
+			continue
+		}
+		for _, c := range [][2]int{{minX, minY}, {maxX, minY}, {minX, maxY}, {maxX, maxY}} {
+			if pixelAt(buf, w, c[0], c[1]) != bg {
+				t.Errorf("side %d: the corner at %d,%d is inked; a disc leaves its box's corners alone",
+					side, c[0], c[1])
+			}
+		}
+	}
+	// The corner check discriminates: a plain rectangle of the same size inks
+	// the very corners the dot leaves alone. Without this, a DrawIconDot that
+	// quietly lost its radius would pass everything above.
+	sq := makeSurface(48, 48)
+	bg := pixelAt(sq, 48, 0, 0)
+	newP(sq, 48).FillRect(Rect{X: 4, Y: 4, W: 40, H: 40}, RGB(0x00, 0xFF, 0x00))
+	if pixelAt(sq, 48, 4, 4) == bg {
+		t.Error("a filled rectangle left its corner blank; the corner check above proves nothing")
+	}
+
+	// A box that is not square gives a dot that is not round: a caller asking
+	// for a wide box means a wide dot, and the radius follows the SHORTER side
+	// so the ends stay half-circles instead of overshooting into the long one.
+	for _, box := range []Rect{{X: 4, Y: 4, W: 40, H: 16}, {X: 4, Y: 4, W: 16, H: 40}} {
+		buf := makeSurface(48, 48)
+		bg := pixelAt(buf, 48, 0, 0)
+		DrawIconDot(newP(buf, 48), box, RGB(0x00, 0xFF, 0x00))
+		minX, minY, maxX, maxY := 48, 48, -1, -1
+		for y := range 48 {
+			for x := range 48 {
+				if pixelAt(buf, 48, x, y) != bg {
+					minX, minY = min(minX, x), min(minY, y)
+					maxX, maxY = max(maxX, x), max(maxY, y)
+				}
+			}
+		}
+		gotW, gotH := maxX-minX+1, maxY-minY+1
+		if wantWide := box.W > box.H; wantWide != (gotW > gotH) {
+			t.Errorf("a %dx%d box gave a %dx%d dot", box.W, box.H, gotW, gotH)
+		}
+	}
+
+	// A box with no room draws nothing rather than a stray pixel.
+	tiny := makeSurface(4, 4)
+	DrawIconDot(newP(tiny, 4), Rect{X: 0, Y: 0, W: 1, H: 1}, RGB(0xFF, 0, 0))
+	DrawIconDot(newP(tiny, 4), Rect{X: 0, Y: 0, W: 4, H: 4}, RGB(0xFF, 0, 0))
 }

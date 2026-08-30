@@ -316,3 +316,31 @@ func DrawIconPlus(p painter.Painter, r Rect, ink RGBA) {
 	fillRect(p, x+off, y, thick, side, ink)
 	fillRect(p, x, y+off, side, thick, ink)
 }
+
+// DrawIconDot paints a filled disc: the smallest thing a picture can say.
+//
+// It is what a status LIGHT is — "this is live", "this is recording", "this is
+// connected" — put on top of another icon or beside a row of them. A dot rather
+// than a shape change, because a colour is read at a glance where a different
+// outline has to be looked at twice, and because the one place these appear
+// most is a menu bar somebody is not looking at yet.
+//
+// It fills the rectangle it is given, less the inset every icon here leaves, so
+// a caller sizes it by sizing the rectangle. Round in a square box and an
+// ellipse in any other: a caller asking for a wide box means a wide dot.
+func DrawIconDot(p painter.Painter, r Rect, ink RGBA) {
+	inset := iconInset(r)
+	x, y := r.X+inset, r.Y+inset
+	w, h := r.W-2*inset, r.H-2*inset
+	if w < 1 || h < 1 {
+		return
+	}
+	// A round rectangle whose radius is half its shorter side IS a disc, and
+	// the painter already draws those with the antialiasing the rest of this
+	// package gets. Nothing here rasterises a circle by hand.
+	radius := w
+	if h < radius {
+		radius = h
+	}
+	p.FillRoundRect(Rect{X: x, Y: y, W: w, H: h}, radius/2, ink)
+}
