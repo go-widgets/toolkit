@@ -43,6 +43,12 @@ type SearchEntry struct {
 	// current text on every event and Draw, so an external Text().Set stays safe.
 	cursor  int
 	scrollX int
+	// editing is true only while OnEvent applies the widget's own edit, so the Text
+	// subscription (see watchText) can tell a host / two-way-binding Set apart from
+	// the widget's own and leave the caret the widget just placed alone. watched
+	// guards the one-time subscription.
+	editing bool
+	watched bool
 }
 
 // Text is the current field value as a shared [mvvm.Observable]: a host binds
@@ -53,7 +59,24 @@ func (s *SearchEntry) Text() *mvvm.Observable[string] {
 	if s.text == nil {
 		s.text = mvvm.NewObservable("")
 	}
+	s.watchText()
 	return s.text
+}
+
+// watchText subscribes (once) to the value so a Set from OUTSIDE the widget — a
+// host or a two-way binding — parks the caret at the end, letting the next
+// keystroke append rather than insert at a stale index. The widget's own edits
+// set s.editing, which suppresses the reset so a mid-text insert keeps its caret.
+func (s *SearchEntry) watchText() {
+	if s.watched || s.text == nil {
+		return
+	}
+	s.watched = true
+	s.text.Subscribe(func(v string) {
+		if !s.editing {
+			s.cursor = len([]rune(v))
+		}
+	})
 }
 
 // SearchEntryPadX is the horizontal padding between the widget's outer
@@ -85,6 +108,7 @@ func NewSearchEntry(text string) *SearchEntry {
 	s := &SearchEntry{}
 	s.text = mvvm.NewObservable(text)
 	s.cursor = len([]rune(text)) // caret parks at the end, like Entry
+	s.watchText()
 	return s
 }
 
@@ -178,6 +202,8 @@ func (s *SearchEntry) ClearHitRect() Rect { return touchHitRect(s.clearSlot()) }
 // subscribers. Event X is field-local (0 at the widget's left edge), matching the
 // clear-slot hit test.
 func (s *SearchEntry) OnEvent(ev Event) {
+	s.editing = true // suppress the caret-parking subscription for our own edits
+	defer func() { s.editing = false }()
 	runes := []rune(s.Text().Get())
 	if s.cursor > len(runes) {
 		s.cursor = len(runes)

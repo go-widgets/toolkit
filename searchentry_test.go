@@ -401,8 +401,8 @@ func TestSearchEntryClickPlacesCaret(t *testing.T) {
 }
 
 func TestSearchEntryCursorClamps(t *testing.T) {
-	s := NewSearchEntry("hello") // cursor = 5
-	s.Text().Set("hi")           // external shrink leaves cursor stale at 5
+	s := NewSearchEntry("hi")
+	s.cursor = 5 // force a stale over-length cursor that Draw must clamp
 	s.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
 	s.SetFocused(true)
 	buf := makeSurface(80, 24)
@@ -420,5 +420,24 @@ func TestSearchEntryCursorClamps(t *testing.T) {
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"}) // clamps -3→0 then 0→1
 	if s.cursor != 1 {
 		t.Fatalf("negative cursor not clamped before move: %d", s.cursor)
+	}
+}
+
+// TestSearchEntryExternalSetParksCaret: a Set from OUTSIDE the widget (a host /
+// two-way binding) parks the caret at the end, so the next typed rune appends
+// rather than inserting at a stale index — while the widget's own mid-text edits
+// keep their caret.
+func TestSearchEntryExternalSetParksCaret(t *testing.T) {
+	s := NewSearchEntry("")
+	s.Text().Set("golang") // external set; caret must move to the end
+	s.OnEvent(Event{Kind: EventChar, Code: "!"})
+	if got := s.Text().Get(); got != "golang!" {
+		t.Fatalf("external Set then type = %q, want golang! (caret must park at end)", got)
+	}
+	// The widget's own mid-text edit is NOT clobbered by the subscription.
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
+	s.OnEvent(Event{Kind: EventChar, Code: "z"}) // insert at start
+	if got := s.Text().Get(); got != "zgolang!" {
+		t.Fatalf("mid-text insert = %q, want zgolang!", got)
 	}
 }
