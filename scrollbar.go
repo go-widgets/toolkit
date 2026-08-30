@@ -220,6 +220,17 @@ func scrollbarTrackColor(theme *Theme) RGBA {
 	return blendRGBA(theme.OnSurface, theme.SurfaceAlt, scrollbarTrackMix)
 }
 
+// ScrollbarTrackColor is the faint grey a scrollbar track is painted in the
+// given theme — the shared colour a host that paints or verifies the bar itself
+// (the HideScrollbar pattern) references, so its bar matches every embedded one
+// instead of reconstructing the blend.
+func ScrollbarTrackColor(theme *Theme) RGBA { return scrollbarTrackColor(theme) }
+
+// ScrollbarThumbColor is the muted grey a scrollbar thumb is painted in the
+// given theme — the shared colour, exported for the same reason as
+// [ScrollbarTrackColor].
+func ScrollbarThumbColor(theme *Theme) RGBA { return scrollbarThumbColor(theme) }
+
 // scrollbarRadius rounds a scrollbar track/thumb by half its short side, so its
 // ends are fully rounded like a capsule regardless of orientation.
 func scrollbarRadius(w, h int) int {

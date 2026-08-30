@@ -66,6 +66,24 @@ func TestScrollbarMinThumbHonoursMetricScale(t *testing.T) {
 	}
 }
 
+// TestScrollbarColorsExported checks the exported track/thumb colours a host
+// paints or verifies the shared bar with are the SAME colours the embedded
+// widgets draw through, so a host-painted bar matches every embedded one.
+func TestScrollbarColorsExported(t *testing.T) {
+	for _, theme := range []*Theme{DefaultLight(), DefaultDark()} {
+		if ScrollbarTrackColor(theme) != scrollbarTrackColor(theme) {
+			t.Errorf("ScrollbarTrackColor %+v != internal %+v", ScrollbarTrackColor(theme), scrollbarTrackColor(theme))
+		}
+		if ScrollbarThumbColor(theme) != scrollbarThumbColor(theme) {
+			t.Errorf("ScrollbarThumbColor %+v != internal %+v", ScrollbarThumbColor(theme), scrollbarThumbColor(theme))
+		}
+		// The track is a visible channel: distinct from its own SurfaceAlt ground.
+		if ScrollbarTrackColor(theme) == theme.SurfaceAlt {
+			t.Error("track colour must differ from SurfaceAlt so the gutter is visible")
+		}
+	}
+}
+
 func TestScrollbarEverythingFitsAndMinThumb(t *testing.T) {
 	// Everything visible → thumb fills the track.
 	sb := NewScrollbar()
