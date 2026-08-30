@@ -48,6 +48,11 @@ type FolderTabs struct {
 	// layout config (the reactive part is the selected index, on the Observable),
 	// so it stays a plain field under the MVVM gate.
 	Labels []string
+	// Icons are OPTIONAL per-tab leading glyphs, parallel to Labels: a non-nil
+	// IconFunc at index i draws a glyph before that tab's caption (and widens the
+	// tab to fit it). A short or nil slice simply leaves those tabs icon-less, so
+	// a FolderTabs that never sets Icons draws exactly as before. Set-once config.
+	Icons []IconFunc
 	// OnSelect fires with the newly-selected index whenever the selection changes
 	// via a click or an arrow key — nil-safe, and fired only on an actual change.
 	// It is a convenience seam beside the Selected Observable; a host may use
@@ -152,24 +157,38 @@ func (t *FolderTabs) TabRect(i int) Rect {
 	gap := scaled(FolderTabsGap)
 	x := r.X + scaled(FolderTabsInset)
 	for k := 0; k < i; k++ {
-		x += t.tabWidth(t.Labels[k]) + gap
+		x += t.tabWidth(k) + gap
 	}
 	top := t.tabTop()
 	h := r.Y + r.H - top
 	if h < 1 {
 		h = 1
 	}
-	return Rect{X: x, Y: top, W: t.tabWidth(t.Labels[i]), H: h}
+	return Rect{X: x, Y: top, W: t.tabWidth(i), H: h}
 }
 
-// tabWidth is a tab's device width: its label plus horizontal padding, and — when
-// [FolderTabs.Closable] — the reserved close-affordance width on the right.
-func (t *FolderTabs) tabWidth(label string) int {
-	w := t.textWidth(label) + 2*scaled(FolderTabsPadX)
+// tabWidth is tab i's device width: its label plus horizontal padding, an optional
+// leading icon, and — when [FolderTabs.Closable] — the reserved close-affordance.
+func (t *FolderTabs) tabWidth(i int) int {
+	w := t.textWidth(t.Labels[i]) + 2*scaled(FolderTabsPadX)
+	if t.tabIcon(i) != nil {
+		w += t.glyphHeight() + scaled(FolderTabsIconGap)
+	}
 	if t.Closable {
 		w += scaled(FolderTabsCloseW)
 	}
 	return w
+}
+
+// FolderTabsIconGap is the gap between a tab's leading icon and its caption.
+const FolderTabsIconGap = 4
+
+// tabIcon is tab i's optional leading glyph, or nil when it has none.
+func (t *FolderTabs) tabIcon(i int) IconFunc {
+	if i >= 0 && i < len(t.Icons) {
+		return t.Icons[i]
+	}
+	return nil
 }
 
 // closeRect is the square hit box of tab i's × affordance, tucked against the
@@ -245,15 +264,26 @@ func (t *FolderTabs) drawTab(p painter.Painter, theme *Theme, i int, face, ink R
 	}
 	label := t.Labels[i]
 	tw := t.textWidth(label)
-	// Centre the label in the tab, over the LABEL area (the reserved × box, when
-	// Closable, is excluded so the caption stays centred in the room it actually has).
+	gh := t.glyphHeight()
+	// Centre the caption (with its optional leading icon) in the tab, over the LABEL
+	// area (the reserved × box, when Closable, is excluded so the group stays centred
+	// in the room it actually has).
 	labelW := tr.W
 	if t.Closable {
 		labelW -= scaled(FolderTabsCloseW)
 	}
-	tx := tr.X + (labelW-tw)/2
-	ty := tr.Y + (t.height()-t.glyphHeight())/2
-	t.drawText(p, tx, ty, label, ink)
+	ty := tr.Y + (t.height()-gh)/2
+	icon := t.tabIcon(i)
+	groupW := tw
+	if icon != nil {
+		groupW += gh + scaled(FolderTabsIconGap)
+	}
+	gx := tr.X + (labelW-groupW)/2
+	if icon != nil {
+		icon(p, Rect{X: gx, Y: ty, W: gh, H: gh}, ink)
+		gx += gh + scaled(FolderTabsIconGap)
+	}
+	t.drawText(p, gx, ty, label, ink)
 	if t.Closable {
 		cr := t.closeRect(i)
 		xw := t.textWidth("×")
