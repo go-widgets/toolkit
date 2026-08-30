@@ -13,11 +13,13 @@ import (
 // search-prefix glyph and, when the text is non-empty, a trailing "clear"
 // affordance on the right. Think GTK's SearchEntry: an Entry whose
 // visual chrome hints at its role and offers a one-click reset. The
-// widget appends printable characters, deletes on Backspace, and clears
-// on a click in the right-side X slot. It draws a simple end-of-text
-// caret when Focused (set by the host), measured with its own font so it
-// always aligns; it has no cursor navigation or IME — callers needing
-// those should reach for Entry / TextView instead.
+// widget inserts printable characters at the caret, deletes before it on
+// Backspace, and clears on a click in the right-side X slot. Like Entry it has a
+// movable caret: ArrowLeft/Right and Home/End move it, a click in the text places
+// it, and edits happen at the caret — so a value can be corrected mid-text, not
+// only at the end. The text scrolls horizontally to keep the caret in view. The
+// caret renders only when Focused (set by the host). It has no IME — callers
+// needing composed input should reach for Entry / TextView instead.
 //
 // The reactive text is MVVM-only: the current value lives in an unexported
 // Observable exposed via [SearchEntry.Text]. A host binds it (Set / Subscribe
@@ -31,10 +33,16 @@ import (
 // existing callers are unaffected. This mirrors Banner.Icon.
 type SearchEntry struct {
 	Base
-	focusState // when focused, a text caret is drawn at the end of the text
+	focusState // when focused, a text caret is drawn at the cursor
 	Icon       func(p painter.Painter, r Rect, ink RGBA)
 
 	text *mvvm.Observable[string]
+	// cursor is the caret rune index in [0, len(runes)]; edits and the drawn caret
+	// track it. scrollX is the horizontal scroll offset (device px) that keeps the
+	// caret in view when the text is wider than the field. Both are clamped to the
+	// current text on every event and Draw, so an external Text().Set stays safe.
+	cursor  int
+	scrollX int
 }
 
 // Text is the current field value as a shared [mvvm.Observable]: a host binds
@@ -76,6 +84,7 @@ const searchEntryClear = "x"
 func NewSearchEntry(text string) *SearchEntry {
 	s := &SearchEntry{}
 	s.text = mvvm.NewObservable(text)
+	s.cursor = len([]rune(text)) // caret parks at the end, like Entry
 	return s
 }
 
@@ -100,18 +109,37 @@ func (s *SearchEntry) Draw(p painter.Painter, theme *Theme) {
 		prefixX := r.X + padX + (iconW-s.glyphAdvance())/2
 		s.drawText(p, prefixX, textY, searchEntryPrefix, theme.OnSurface)
 	}
-	// Middle text.
+	// Middle text region, between the prefix slot and the (always-reserved) clear
+	// slot. The text scrolls horizontally and clips to this region so the caret
+	// stays in view on a value wider than the field.
 	textX := r.X + padX + iconW
-	s.drawText(p, textX, textY, text, theme.OnSurface)
-	// Caret at the end of the text when focused. Measured with the widget's own
-	// font so it always aligns with the text the widget just drew — a host must not
-	// overlay its own caret with a different font engine.
+	innerW := r.W - 2*padX - 2*iconW
+	if innerW < 0 {
+		innerW = 0
+	}
+	runes := []rune(text)
+	if s.cursor > len(runes) {
+		s.cursor = len(runes)
+	}
+	caretW := s.textWidth(string(runes[:s.cursor]))
+	s.scrollX = clampEntryScroll(s.scrollX, caretW, s.textWidth(text), innerW, s.focused)
+	tx := textX - s.scrollX
+	clr, canClip := p.(painter.Clipper)
+	if canClip {
+		clr.PushClip(Rect{X: textX, Y: r.Y, W: innerW, H: r.H})
+	}
+	s.drawText(p, tx, textY, text, theme.OnSurface)
+	// Caret at the cursor when focused, measured with the widget's own font so it
+	// aligns with the text the widget just drew and tracks the same scroll offset.
 	if s.focused {
-		caretW := s.glyphHeight() / 12
-		if caretW < 1 {
-			caretW = 1
+		cw := s.glyphHeight() / 12
+		if cw < 1 {
+			cw = 1
 		}
-		fillRect(p, textX+s.textWidth(text), textY, caretW, s.glyphHeight(), theme.OnSurface)
+		fillRect(p, tx+caretW, textY, cw, s.glyphHeight(), theme.OnSurface)
+	}
+	if canClip {
+		clr.PopClip()
 	}
 	// Right clear slot only when there is text to clear.
 	if text != "" {
@@ -142,37 +170,61 @@ func (s *SearchEntry) HitRect() Rect { return touchHitRect(s.Bounds()) }
 // [DensityTouch]. At [DensityCompact] it equals the drawn slot byte-for-byte.
 func (s *SearchEntry) ClearHitRect() Rect { return touchHitRect(s.clearSlot()) }
 
-// OnEvent handles character insertion (EventChar), Backspace deletion
-// (EventKeyDown / "Backspace"), and click-to-clear in the right icon
-// slot (EventClick, when the text is non-empty). Other events are ignored.
-// Every mutation routes through the Text Observable's Set, notifying
-// subscribers.
+// OnEvent handles character insertion at the caret (EventChar), Backspace
+// deletion before the caret and caret movement (EventKeyDown: Backspace,
+// ArrowLeft/Right, Home, End), and clicks (EventClick): a click in the right icon
+// slot clears the text, one in the text region places the caret. Other events are
+// ignored. Every text mutation routes through the Text Observable's Set, notifying
+// subscribers. Event X is field-local (0 at the widget's left edge), matching the
+// clear-slot hit test.
 func (s *SearchEntry) OnEvent(ev Event) {
+	runes := []rune(s.Text().Get())
+	if s.cursor > len(runes) {
+		s.cursor = len(runes)
+	}
+	if s.cursor < 0 {
+		s.cursor = 0
+	}
 	switch ev.Kind {
 	case EventChar:
 		if ev.Code == "" {
 			return
 		}
-		s.Text().Set(s.Text().Get() + ev.Code)
+		ch := []rune(ev.Code)
+		runes = append(runes[:s.cursor], append(ch, runes[s.cursor:]...)...)
+		s.cursor += len(ch)
+		s.Text().Set(string(runes))
 	case EventKeyDown:
-		if ev.Code != "Backspace" {
-			return
+		switch ev.Code {
+		case "Backspace":
+			if s.cursor > 0 {
+				runes = append(runes[:s.cursor-1], runes[s.cursor:]...)
+				s.cursor--
+				s.Text().Set(string(runes))
+			}
+		case "ArrowLeft":
+			if s.cursor > 0 {
+				s.cursor--
+			}
+		case "ArrowRight":
+			if s.cursor < len(runes) {
+				s.cursor++
+			}
+		case "Home":
+			s.cursor = 0
+		case "End":
+			s.cursor = len(runes)
 		}
-		runes := []rune(s.Text().Get())
-		if len(runes) == 0 {
-			return
-		}
-		s.Text().Set(string(runes[:len(runes)-1]))
 	case EventClick:
-		if s.Text().Get() == "" {
-			return
-		}
 		r := s.Bounds()
 		padX, iconW := scaled(SearchEntryPadX), scaled(SearchEntryIconW)
-		clearLeft := r.W - padX - iconW
-		clearRight := r.W - padX
-		if ev.X >= clearLeft && ev.X < clearRight {
+		if len(runes) > 0 && ev.X >= r.W-padX-iconW && ev.X < r.W-padX {
+			s.cursor = 0
 			s.Text().Set("")
+			return
 		}
+		// A click in the text region places the caret; map the field-local x back
+		// through the prefix slot and the current scroll into the text's own space.
+		s.cursor = s.caretIndexAt(string(runes), ev.X-(padX+iconW)+s.scrollX)
 	}
 }

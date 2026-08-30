@@ -223,15 +223,17 @@ func clampEntryScroll(cur, caretW, totalW, innerW int, focused bool) int {
 // (measured from the text's own left, i.e. after the pad and scroll offset are
 // removed). A click left of the first glyph parks at 0; one past the last glyph
 // parks at the end; in between it snaps to whichever rune boundary the click is
-// closer to, so a click lands where the eye expects.
-func (e *Entry) caretIndexAt(shown string, localX int) int {
+// closer to, so a click lands where the eye expects. It lives on Base so every
+// single-line text widget (Entry, SearchEntry) maps a click to a caret the same
+// way, measured with that widget's own font.
+func (b *Base) caretIndexAt(shown string, localX int) int {
 	runes := []rune(shown)
 	if localX <= 0 {
 		return 0
 	}
 	for i := 0; i < len(runes); i++ {
-		left := e.textWidth(string(runes[:i]))
-		right := e.textWidth(string(runes[:i+1]))
+		left := b.textWidth(string(runes[:i]))
+		right := b.textWidth(string(runes[:i+1]))
 		if localX < (left+right)/2 {
 			return i
 		}
