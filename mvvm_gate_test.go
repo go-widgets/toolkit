@@ -295,7 +295,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// DragBounds is set-once layout config (the area a title-bar drag is clamped
 	// within, set by the container); all are config, not reactive state — the
 	// live drag offset lives in unexported fields, mutated only through OnEvent.
-	"Dialog": {"Maximisable": true, "Minimisable": true, "Buttons": true, "Content": true, "Title": true, "Closable": true, "Input": true, "DragBounds": true},
+	"Dialog": {"Maximisable": true, "Minimisable": true, "Buttons": true, "Content": true, "Title": true, "Closable": true, "PlainTitle": true, "Input": true, "DragBounds": true},
 	// ModalWindow holds no reactive state of its own: Scrim + Panel are composed
 	// sub-widgets, CloseOnScrim is a capability flag and PanelW/PanelH are layout
 	// metrics (all config); OnClose is a func hook (auto-allowed). Any reactive
