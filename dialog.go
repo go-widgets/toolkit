@@ -42,6 +42,12 @@ type Dialog struct {
 	// exactly as before — no close control.
 	Closable bool
 
+	// PlainTitle draws the title bar in the panel's Surface (with an OnSurface
+	// title and a bottom hairline) instead of the accent fill, for a calmer
+	// card-style modal that matches a hand-built Surface panel. The zero value
+	// (false) keeps the accent bar, so existing dialogs are unchanged.
+	PlainTitle bool
+
 	// Input, when non-nil, is a single-line input bar drawn in a strip directly
 	// below the title bar; the Content body starts below it, and keyboard input
 	// plus a click on the strip route to the field. Nil (the default) draws no
@@ -340,20 +346,29 @@ func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 	th := scaled(DialogTitleH)
 	// The bar carries the theme's ACCENT: it is what tells a window from the
 	// content under it at a glance, and it is the surface a drag starts on, so
-	// it should look like a thing to grab.
-	fillRoundRect(p, r.X, r.Y, r.W, th, rad, theme.Accent)
-	if th > rad && !d.Minimised().Get() {
-		fillRect(p, r.X, r.Y+rad, r.W, th-rad, theme.Accent)
+	// it should look like a thing to grab. PlainTitle instead keeps the bar in the
+	// panel's Surface with a bottom hairline — a calmer card look.
+	barFill, titleInk := theme.Accent, titleBarInk(theme)
+	if d.PlainTitle {
+		barFill, titleInk = theme.Surface, theme.OnSurface
 	}
-	// The accent already separates the bar from the body, so the hairline that
-	// used to do that job is gone with it.
+	fillRoundRect(p, r.X, r.Y, r.W, th, rad, barFill)
+	if th > rad && !d.Minimised().Get() {
+		fillRect(p, r.X, r.Y+rad, r.W, th-rad, barFill)
+	}
+	if d.PlainTitle && !d.Minimised().Get() {
+		// The Surface bar does not separate itself from the body, so restore the
+		// hairline the accent used to stand in for.
+		fillRect(p, r.X, r.Y+th-scaled(1), r.W, scaled(1), theme.Border)
+	}
 	titleY := r.Y + (th-d.glyphHeight())/2
-	d.drawText(p, r.X+8, titleY, d.Title, titleBarInk(theme))
-	// The title-bar controls, drawn against the accent.
-	accented := *theme
-	accented.OnSurface = titleBarInk(theme)
+	d.drawText(p, r.X+8, titleY, d.Title, titleInk)
+	// The title-bar controls take the same ink as the title text, so they read on
+	// either the accent bar (Background) or the PlainTitle Surface bar (OnSurface).
+	barTheme := *theme
+	barTheme.OnSurface = titleInk
 	for _, b := range d.titleButtons() {
-		b.Draw(p, &accented)
+		b.Draw(p, &barTheme)
 	}
 	if d.Minimised().Get() {
 		// Rolled up: the bar, its controls, and its outline. Nothing else exists

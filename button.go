@@ -270,6 +270,30 @@ func (b *Button) drawContent(p painter.Painter, theme *Theme, r Rect, ink RGBA) 
 	}
 }
 
+// PreferredWidth is the intrinsic width the button needs to show its CURRENT
+// content without clipping — the caption plus its optional leading icon and
+// trailing shortcut, measured with the same paddings Draw uses. A host that sizes
+// its buttons to this (instead of a hard-coded width) never clips a longer label,
+// a wider toggled caption, an icon or a shortcut. Re-measure after a label change.
+func (b *Button) PreferredWidth() int {
+	pad := scaled(8)
+	// An Icon that REPLACES the caption is square (a glyph in the button's height).
+	if b.Icon != nil {
+		return b.glyphHeight() + 2*pad
+	}
+	w := 2 * pad
+	if b.leadingIconFn() != nil {
+		w += b.glyphHeight() + scaled(6)
+	}
+	if label := b.Label().Get(); label != "" {
+		w += b.textWidth(label)
+	}
+	if sc := b.shortcutText(); sc != "" {
+		w += scaled(12) + b.textWidth(sc) // the gap before the right-aligned hint
+	}
+	return w
+}
+
 // OnEvent drives the button from pointer events: EventClick presses it (shows
 // the pressed face + fires OnClick) and EventMouseUp releases it. Self-managing
 // the pressed state means any host that routes the press/release pair gets the
