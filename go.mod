@@ -20,7 +20,7 @@ require github.com/go-images/images v0.0.0-20260815210351-4a50ef5ab734
 require (
 	github.com/go-crdt/collab v0.33.0
 	github.com/go-crdt/crdt v0.35.0
-	github.com/go-gfx/gfx v0.18.0
+	github.com/go-gfx/gfx v0.19.0
 	github.com/go-icons/iconoir v0.2.0
 	github.com/go-richdoc/richdoc v0.2.0
 )
