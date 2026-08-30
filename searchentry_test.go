@@ -330,3 +330,95 @@ func TestSearchEntryNoSubscriberNoPanic(t *testing.T) {
 	s.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
 	s.OnEvent(Event{Kind: EventClick, X: 65, Y: 12})
 }
+
+// --- caret navigation (SearchEntry gained Entry-style cursor movement) ---
+
+func TestSearchEntryInsertsAtCaret(t *testing.T) {
+	s := NewSearchEntry("ac")
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"}) // caret between a and c
+	if s.cursor != 1 {
+		t.Fatalf("ArrowLeft cursor = %d, want 1", s.cursor)
+	}
+	s.OnEvent(Event{Kind: EventChar, Code: "b"})
+	if got := s.Text().Get(); got != "abc" {
+		t.Fatalf("insert at caret = %q, want abc", got)
+	}
+	if s.cursor != 2 {
+		t.Fatalf("cursor after insert = %d, want 2", s.cursor)
+	}
+}
+
+func TestSearchEntryArrowAndHomeEndBounds(t *testing.T) {
+	s := NewSearchEntry("ab")                                // cursor parks at end (2)
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"}) // at end → no-op
+	if s.cursor != 2 {
+		t.Fatalf("ArrowRight past end → %d", s.cursor)
+	}
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
+	if s.cursor != 0 {
+		t.Fatalf("Home → %d, want 0", s.cursor)
+	}
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"}) // at start → no-op
+	if s.cursor != 0 {
+		t.Fatalf("ArrowLeft before start → %d", s.cursor)
+	}
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"})
+	if s.cursor != 1 {
+		t.Fatalf("ArrowRight → %d, want 1", s.cursor)
+	}
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
+	if s.cursor != 2 {
+		t.Fatalf("End → %d, want 2", s.cursor)
+	}
+}
+
+func TestSearchEntryBackspaceAtCaret(t *testing.T) {
+	s := NewSearchEntry("abc")
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Home"})
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"}) // caret=1, between a and b
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})  // deletes the 'a' before it
+	if got := s.Text().Get(); got != "bc" {
+		t.Fatalf("backspace at caret = %q, want bc", got)
+	}
+	if s.cursor != 0 {
+		t.Fatalf("cursor after backspace = %d, want 0", s.cursor)
+	}
+}
+
+func TestSearchEntryClickPlacesCaret(t *testing.T) {
+	s := NewSearchEntry("hello")
+	s.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 24})
+	// A click at the text region's left edge parks the caret at the start.
+	s.OnEvent(Event{Kind: EventClick, X: scaled(SearchEntryPadX) + scaled(SearchEntryIconW), Y: 12})
+	if s.cursor != 0 {
+		t.Fatalf("click at text start → cursor %d, want 0", s.cursor)
+	}
+	// A click far to the right (past the text) parks it at the end.
+	s.OnEvent(Event{Kind: EventClick, X: 150, Y: 12})
+	if s.cursor != len([]rune("hello")) {
+		t.Fatalf("click past text → cursor %d, want end", s.cursor)
+	}
+}
+
+func TestSearchEntryCursorClamps(t *testing.T) {
+	s := NewSearchEntry("hello") // cursor = 5
+	s.Text().Set("hi")           // external shrink leaves cursor stale at 5
+	s.SetBounds(Rect{X: 0, Y: 0, W: 80, H: 24})
+	s.SetFocused(true)
+	buf := makeSurface(80, 24)
+	s.Draw(newP(buf, 80), DefaultLight())
+	if s.cursor != 2 {
+		t.Fatalf("Draw did not clamp a stale cursor: %d, want 2", s.cursor)
+	}
+	// An event clamps too — including a negative index up to 0, then a move.
+	s.cursor = 99
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"}) // clamps 99→2 then 2→1
+	if s.cursor != 1 {
+		t.Fatalf("over-length cursor not clamped before move: %d", s.cursor)
+	}
+	s.cursor = -3
+	s.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowRight"}) // clamps -3→0 then 0→1
+	if s.cursor != 1 {
+		t.Fatalf("negative cursor not clamped before move: %d", s.cursor)
+	}
+}
