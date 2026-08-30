@@ -512,6 +512,28 @@ func TestTheDotIsRoundAndCentred(t *testing.T) {
 		t.Error("a filled rectangle left its corner blank; the corner check above proves nothing")
 	}
 
+	// A box that is not square gives a dot that is not round: a caller asking
+	// for a wide box means a wide dot, and the radius follows the SHORTER side
+	// so the ends stay half-circles instead of overshooting into the long one.
+	for _, box := range []Rect{{X: 4, Y: 4, W: 40, H: 16}, {X: 4, Y: 4, W: 16, H: 40}} {
+		buf := makeSurface(48, 48)
+		bg := pixelAt(buf, 48, 0, 0)
+		DrawIconDot(newP(buf, 48), box, RGB(0x00, 0xFF, 0x00))
+		minX, minY, maxX, maxY := 48, 48, -1, -1
+		for y := range 48 {
+			for x := range 48 {
+				if pixelAt(buf, 48, x, y) != bg {
+					minX, minY = min(minX, x), min(minY, y)
+					maxX, maxY = max(maxX, x), max(maxY, y)
+				}
+			}
+		}
+		gotW, gotH := maxX-minX+1, maxY-minY+1
+		if wantWide := box.W > box.H; wantWide != (gotW > gotH) {
+			t.Errorf("a %dx%d box gave a %dx%d dot", box.W, box.H, gotW, gotH)
+		}
+	}
+
 	// A box with no room draws nothing rather than a stray pixel.
 	tiny := makeSurface(4, 4)
 	DrawIconDot(newP(tiny, 4), Rect{X: 0, Y: 0, W: 1, H: 1}, RGB(0xFF, 0, 0))
