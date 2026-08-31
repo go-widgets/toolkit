@@ -187,32 +187,132 @@ func TestWalkNativeNil(t *testing.T) {
 
 func TestWalkNativeUnclipped(t *testing.T) {
 	n := NewNativeButton("b", nil)
+	n.Key = "btn"
 	n.SetBounds(Rect{X: 5, Y: 6, W: 20, H: 10})
 	root := &fakeContainer{kids: []Widget{nil, n}} // nil child exercises the nil guard
 	got := WalkNative(root)
 	if len(got) != 1 {
-		t.Fatalf("got %d placements, want 1", len(got))
+		t.Fatalf("got %d descriptors, want 1", len(got))
 	}
 	pl := got[0]
-	if pl.Control != n {
-		t.Errorf("placement control mismatch")
+	if pl.Key != "btn" || pl.Kind != NativeButton {
+		t.Errorf("descriptor identity: key=%q kind=%v", pl.Key, pl.Kind)
 	}
 	if pl.Rect != (Rect{X: 5, Y: 6, W: 20, H: 10}) {
 		t.Errorf("unclipped Rect = %+v, want the bounds", pl.Rect)
 	}
 	if pl.Clip != pl.Rect || !pl.Visible {
-		t.Errorf("unclipped placement should be fully visible: clip=%+v visible=%v", pl.Clip, pl.Visible)
+		t.Errorf("unclipped descriptor should be fully visible: clip=%+v visible=%v", pl.Clip, pl.Visible)
+	}
+}
+
+func TestWalkNativeAdaptsValueAndCallbacks(t *testing.T) {
+	activated := 0
+	claimed := false
+	n := NewNativeEntry("hello")
+	n.Key = "e"
+	n.SetOnActivate(func() { activated++ })
+	n.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
+	n.Claimed().Subscribe(func(b bool) { claimed = b })
+
+	got := WalkNative(&fakeContainer{kids: []Widget{n}})
+	if len(got) != 1 {
+		t.Fatalf("got %d, want 1", len(got))
+	}
+	c := got[0]
+	if c.Text != "hello" {
+		t.Errorf("descriptor Text = %q, want hello (read from the observable)", c.Text)
+	}
+	// The change callback writes back through the widget's observable.
+	c.OnText("world")
+	if n.Text().Get() != "world" {
+		t.Errorf("OnText did not write back: observable = %q", n.Text().Get())
+	}
+	// Bool/Number callbacks are wired even for an entry (harmless lazy-create).
+	c.OnBool(true)
+	if !n.On().Get() {
+		t.Error("OnBool did not write back")
+	}
+	c.OnNumber(3)
+	if n.Number().Get() != 3 {
+		t.Error("OnNumber did not write back")
+	}
+	c.OnActivate()
+	if activated != 1 {
+		t.Errorf("OnActivate ran %d times, want 1", activated)
+	}
+	c.OnClaim(true)
+	if !claimed || !n.Claimed().Get() {
+		t.Error("OnClaim did not set the widget claimed")
+	}
+}
+
+func TestWalkNativeAdaptsBoolAndNumberValues(t *testing.T) {
+	cb := NewNativeCheckbox("c", true)
+	cb.Key = "c"
+	cb.SetBounds(Rect{W: 10, H: 10})
+	sl := NewNativeSlider(0, 10, 4)
+	sl.Key = "s"
+	sl.SetBounds(Rect{W: 10, H: 10})
+
+	got := WalkNative(&fakeContainer{kids: []Widget{cb, sl}})
+	byKey := map[string]NativeControl{}
+	for _, pl := range got {
+		byKey[pl.Key] = pl
+	}
+	if !byKey["c"].On {
+		t.Error("checkbox descriptor On = false, want true (read from the observable)")
+	}
+	if byKey["s"].Number != 4 || byKey["s"].Min != 0 || byKey["s"].Max != 10 {
+		t.Errorf("slider descriptor = %+v, want Number 4, Min 0, Max 10", byKey["s"])
+	}
+}
+
+func TestWalkNativeSynthesisesKeyWhenUnset(t *testing.T) {
+	// A widget-tree app need not name its controls: WalkNative gives an unkeyed
+	// Native a stable per-widget identity.
+	n := NewNativeButton("go", nil) // no Key
+	n.SetBounds(Rect{W: 10, H: 10})
+	got := WalkNative(&fakeContainer{kids: []Widget{n}})
+	if len(got) != 1 {
+		t.Fatalf("got %d, want 1", len(got))
+	}
+	if got[0].Key == "" {
+		t.Error("unkeyed Native produced an empty descriptor Key; want a synthesised one")
+	}
+	// Stable across walks for the same widget.
+	if again := WalkNative(&fakeContainer{kids: []Widget{n}}); again[0].Key != got[0].Key {
+		t.Errorf("synthesised Key not stable: %q vs %q", again[0].Key, got[0].Key)
+	}
+}
+
+func TestSurfaceNativeControls(t *testing.T) {
+	// Nil source → nil, no panic.
+	var s Surface
+	if got := s.NativeControls(); got != nil {
+		t.Errorf("nil-source NativeControls = %v, want nil", got)
+	}
+	// A set source is called through.
+	s.Controls = func() []NativeControl {
+		return []NativeControl{{Kind: NativeButton, Key: "ok"}}
+	}
+	got := s.NativeControls()
+	if len(got) != 1 || got[0].Key != "ok" {
+		t.Errorf("NativeControls = %+v, want one control keyed ok", got)
 	}
 }
 
 func TestWalkNativeClipped(t *testing.T) {
 	inside := NewNativeEntry("in")
+	inside.Key = "in"
 	inside.SetBounds(Rect{X: 20, Y: 20, W: 30, H: 15})
 
 	outside := NewNativeEntry("out")
+	outside.Key = "out"
 	outside.SetBounds(Rect{X: 90, Y: 20, W: 30, H: 15}) // past the clip's right edge
 
 	nested := NewNativeEntry("nested")
+	nested.Key = "nested"
 	nested.SetBounds(Rect{X: 5, Y: 5, W: 10, H: 10})
 	inner := &fakeViewport{clip: Rect{X: 0, Y: 0, W: 40, H: 50}, kids: []Widget{nested}}
 	inner.SetBounds(Rect{X: 0, Y: 0, W: 50, H: 50})
@@ -226,15 +326,15 @@ func TestWalkNativeClipped(t *testing.T) {
 
 	got := WalkNative(outer)
 	if len(got) != 3 {
-		t.Fatalf("got %d placements, want 3", len(got))
+		t.Fatalf("got %d descriptors, want 3", len(got))
 	}
-	byControl := map[*Native]NativePlacement{}
+	byKey := map[string]NativeControl{}
 	for _, pl := range got {
-		byControl[pl.Control] = pl
+		byKey[pl.Key] = pl
 	}
 
 	// inside: offset by (-10,-5), fully within the clip → visible.
-	in := byControl[inside]
+	in := byKey["in"]
 	if in.Rect != (Rect{X: 10, Y: 15, W: 30, H: 15}) {
 		t.Errorf("inside Rect = %+v, want {10,15,30,15}", in.Rect)
 	}
@@ -243,13 +343,13 @@ func TestWalkNativeClipped(t *testing.T) {
 	}
 
 	// outside: begins at the clip's right edge → clipped to nothing.
-	out := byControl[outside]
+	out := byKey["out"]
 	if out.Visible || out.Clip.W != 0 {
 		t.Errorf("outside should be clipped away: clip=%+v visible=%v", out.Clip, out.Visible)
 	}
 
 	// nested: reached through two viewports (the inner intersects the outer clip).
-	if _, ok := byControl[nested]; !ok {
+	if _, ok := byKey["nested"]; !ok {
 		t.Errorf("nested control was not walked through the inner viewport")
 	}
 }
