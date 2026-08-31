@@ -73,6 +73,29 @@ type Surface struct {
 	// Damage unset does. An application that cannot cheaply track its own damage
 	// simply leaves this nil and keeps the whole-surface path.
 	Damage func() []Rect
+
+	// Controls, when set, reports the native platform controls the surface wants
+	// embedded this frame — a real secure field, button or slider the host backs
+	// with an OS control laid over the buffer. Geometry is in the buffer's own
+	// pixel coordinates, like everything else here. It is the Surface's parallel
+	// to Elements: where Elements describes the surface for accessibility,
+	// Controls describes the parts of it that should be real OS controls, with
+	// callbacks for the person's input. A host reaches it through the
+	// [Surface.NativeControls] method; an app that wants no native controls leaves
+	// this nil.
+	Controls func() []NativeControl
+}
+
+// NativeControls reports the native controls this surface wants embedded this
+// frame, or nil. It is the method a host backend type-asserts for
+// ("interface{ NativeControls() []NativeControl }") to discover that a root can
+// supply native controls — the same way a damage-aware root is discovered — so
+// the backend never has to know it is talking to a Surface.
+func (s *Surface) NativeControls() []NativeControl {
+	if s.Controls == nil {
+		return nil
+	}
+	return s.Controls()
 }
 
 // SurfaceElement is one thing a [Surface] is showing: what it is, what it says,

@@ -1,6 +1,8 @@
 package toolkit
 
 import (
+	"fmt"
+
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
@@ -220,22 +222,46 @@ func (n *Native) Children() []Widget {
 // never the Native's.
 func (n *Native) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
 
-// NativePlacement is one Native and where it ended up, in surface coordinates.
-// The host reads Control for the kind, configuration and value observables it
-// binds to, and Rect/Clip/Visible for where to put the live control.
-type NativePlacement struct {
-	Control *Native
-	Rect    Rect // where the control wants to be
+// NativeControl is the flat description of one native platform control a host
+// should embed: what it is, where it is, its current value, and how to report
+// the person's changes back. It is the single currency between the toolkit and a
+// host backend — produced either by [WalkNative] from a tree of [Native] widgets
+// or directly by a [Surface] through its NativeControls field — so the backend
+// reconciles one shape regardless of how the app is built.
+//
+// The value fields carry meaning by kind: Text for an entry/secure/label/button/
+// pop-up, On for a checkbox/radio/switch, Number for a slider. The On* callbacks
+// run when the person changes the control; a host also calls OnClaim(true) once
+// it has taken the region over, so a drawn fallback can stand down. Any callback
+// may be nil.
+type NativeControl struct {
+	Kind NativeKind
+	Key  string
+
+	Rect    Rect // where the control wants to be, in surface coordinates
 	Clip    Rect // the part of Rect an enclosing viewport still shows
 	Visible bool // false when Clip is empty
+
+	Text     string // entry/secure/label/button/pop-up value or title
+	On       bool   // checkbox/radio/switch state
+	Number   float64
+	Min, Max float64
+	Items    []string
+
+	OnText     func(string)
+	OnBool     func(bool)
+	OnNumber   func(float64)
+	OnActivate func()
+	OnClaim    func(bool)
 }
 
-// WalkNative returns every [Native] in the tree rooted at w, each with its
-// placement and the clip an enclosing viewport imposes, in visual order. It is
-// the walk a host runs each frame to reconcile its live controls with the
-// layout.
-func WalkNative(w Widget) []NativePlacement {
-	var out []NativePlacement
+// WalkNative returns a [NativeControl] for every [Native] in the tree rooted at
+// w, each with the clip an enclosing viewport imposes and its value and change
+// callbacks wired to the widget's observables, in visual order. It is the
+// producer a host uses for an app built as a widget tree; a [Surface]-based app
+// supplies its own controls through [Surface.NativeControls] instead.
+func WalkNative(w Widget) []NativeControl {
+	var out []NativeControl
 	var walk func(x Widget, dx, dy int, clip Rect, clipped bool)
 	walk = func(x Widget, dx, dy int, clip Rect, clipped bool) {
 		if x == nil {
@@ -248,12 +274,7 @@ func WalkNative(w Widget) []NativePlacement {
 			if clipped {
 				c = intersectRect(r, clip)
 			}
-			out = append(out, NativePlacement{
-				Control: nv,
-				Rect:    r,
-				Clip:    c,
-				Visible: c.W > 0 && c.H > 0,
-			})
+			out = append(out, nv.control(r, c))
 		}
 		if o, ok := x.(childOffsetter); ok {
 			vp := x.Bounds()
@@ -277,6 +298,41 @@ func WalkNative(w Widget) []NativePlacement {
 	}
 	walk(w, 0, 0, Rect{}, false)
 	return out
+}
+
+// control adapts a Native widget to a [NativeControl] descriptor: its value reads
+// the widget's observable, and each change callback writes back through the same
+// observable (or fires the activation handler, or sets Claimed), so a host that
+// speaks descriptors drives a widget-tree app with no knowledge of widgets.
+func (n *Native) control(rect, clip Rect) NativeControl {
+	key := n.Key
+	if key == "" {
+		// A widget-tree app need not name every control: its address is a stable
+		// identity across frames in this retained-mode toolkit, where the same
+		// *Native is laid out frame after frame. A Surface app, which rebuilds its
+		// descriptors each frame, must set Key itself.
+		key = fmt.Sprintf("native:%p", n)
+	}
+	c := NativeControl{
+		Kind: n.Kind, Key: key,
+		Rect: rect, Clip: clip, Visible: clip.W > 0 && clip.H > 0,
+		Min: n.Min, Max: n.Max, Items: n.Items,
+		OnText:     func(s string) { n.Text().Set(s) },
+		OnBool:     func(b bool) { n.On().Set(b) },
+		OnNumber:   func(v float64) { n.Number().Set(v) },
+		OnActivate: n.Activate,
+		OnClaim:    func(b bool) { n.Claimed().Set(b) },
+	}
+	if n.text != nil {
+		c.Text = n.text.Get()
+	}
+	if n.on != nil {
+		c.On = n.on.Get()
+	}
+	if n.number != nil {
+		c.Number = n.number.Get()
+	}
+	return c
 }
 
 // childClipper is a widget that shows its children in a rectangle smaller than
