@@ -539,3 +539,83 @@ func TestTheDotIsRoundAndCentred(t *testing.T) {
 	DrawIconDot(newP(tiny, 4), Rect{X: 0, Y: 0, W: 1, H: 1}, RGB(0xFF, 0, 0))
 	DrawIconDot(newP(tiny, 4), Rect{X: 0, Y: 0, W: 4, H: 4}, RGB(0xFF, 0, 0))
 }
+
+// TestABarKeepsTheThicknessItWasGiven is the defect DrawIconBar exists for.
+//
+// DrawIconDot insets its box by at least two pixels a side, which is right for
+// a dot and fatal for a bar: a four-pixel-tall box comes back EMPTY, silently.
+// A caller asking for a bar has already chosen its thickness.
+func TestABarKeepsTheThicknessItWasGiven(t *testing.T) {
+	const w, h = 48, 24
+	for _, thickness := range []int{2, 3, 4, 8} {
+		buf := makeSurface(w, h)
+		bg := pixelAt(buf, w, 0, 0)
+		box := Rect{X: 8, Y: (h - thickness) / 2, W: 32, H: thickness}
+		DrawIconBar(newP(buf, w), box, RGB(0x00, 0xFF, 0x00))
+
+		minY, maxY, painted := h, -1, 0
+		for y := range h {
+			for x := range w {
+				if pixelAt(buf, w, x, y) != bg {
+					painted++
+					minY, maxY = min(minY, y), max(maxY, y)
+				}
+			}
+		}
+		if painted == 0 {
+			t.Errorf("a %d-pixel bar drew nothing at all", thickness)
+			continue
+		}
+		// The thickness it was given, within the antialiasing of the rounded
+		// ends -- not two pixels less on each side.
+		if got := maxY - minY + 1; got < thickness || got > thickness+1 {
+			t.Errorf("a %d-pixel bar came out %d pixels thick", thickness, got)
+		}
+	}
+
+	// And the SAME box through DrawIconDot draws nothing, which is why this
+	// exists rather than a caller passing a wider rectangle.
+	buf := makeSurface(w, h)
+	bg := pixelAt(buf, w, 0, 0)
+	DrawIconDot(newP(buf, w), Rect{X: 8, Y: 10, W: 32, H: 4}, RGB(0x00, 0xFF, 0x00))
+	for y := range h {
+		for x := range w {
+			if pixelAt(buf, w, x, y) != bg {
+				t.Fatal("DrawIconDot drew a four-pixel bar after all; DrawIconBar is unnecessary")
+			}
+		}
+	}
+}
+
+// TestABarWithNoRoomDrawsNothing rather than a stray pixel or a panic.
+func TestABarWithNoRoomDrawsNothing(t *testing.T) {
+	buf := makeSurface(8, 8)
+	bg := pixelAt(buf, 8, 0, 0)
+	DrawIconBar(newP(buf, 8), Rect{X: 1, Y: 1, W: 0, H: 4}, RGB(0xFF, 0, 0))
+	DrawIconBar(newP(buf, 8), Rect{X: 1, Y: 1, W: 4, H: 0}, RGB(0xFF, 0, 0))
+	for y := range 8 {
+		for x := range 8 {
+			if pixelAt(buf, 8, x, y) != bg {
+				t.Fatalf("something was drawn at %d,%d", x, y)
+			}
+		}
+	}
+}
+
+// TestTheEndsAreRounded: a lit line, not a filled box. The corners of the
+// bounding box are what says which.
+func TestTheEndsAreRounded(t *testing.T) {
+	const w, h = 48, 24
+	buf := makeSurface(w, h)
+	bg := pixelAt(buf, w, 0, 0)
+	box := Rect{X: 8, Y: 6, W: 32, H: 12}
+	DrawIconBar(newP(buf, w), box, RGB(0x00, 0xFF, 0x00))
+	for _, c := range [][2]int{
+		{box.X, box.Y}, {box.X + box.W - 1, box.Y},
+		{box.X, box.Y + box.H - 1}, {box.X + box.W - 1, box.Y + box.H - 1},
+	} {
+		if pixelAt(buf, w, c[0], c[1]) != bg {
+			t.Errorf("the corner at %d,%d is inked; the ends are not rounded", c[0], c[1])
+		}
+	}
+}

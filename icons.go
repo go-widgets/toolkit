@@ -344,3 +344,29 @@ func DrawIconDot(p painter.Painter, r Rect, ink RGBA) {
 	}
 	p.FillRoundRect(Rect{X: x, Y: y, W: w, H: h}, radius/2, ink)
 }
+
+// DrawIconBar paints a filled bar with rounded ends, for a mark that has to be
+// SEEN rather than merely present.
+//
+// It exists because [DrawIconDot] cannot do it. That one insets its box by at
+// least two pixels on every side, which is right for a dot -- it keeps it off
+// whatever it sits on -- and fatal for a bar: a four-pixel-tall box comes back
+// empty, silently, because the inset ate it. Measured on a menu-bar icon at
+// 44x27, where a status light drawn as a dot could not be seen at all next to
+// twenty other icons, and the same light drawn as a line across the glass is
+// unmistakable.
+//
+// The rectangle is filled AS GIVEN, with no inset: a caller asking for a bar
+// has already chosen its thickness, and taking two pixels off each side of that
+// is taking away the decision. The ends are rounded to half the shorter side,
+// which is what makes it read as a lit line rather than a filled box.
+func DrawIconBar(p painter.Painter, r Rect, ink RGBA) {
+	if r.W < 1 || r.H < 1 {
+		return
+	}
+	radius := r.W
+	if r.H < radius {
+		radius = r.H
+	}
+	p.FillRoundRect(r, radius/2, ink)
+}
