@@ -91,6 +91,37 @@ const (
 	// NativePopUp is a drop-down of [Native.Items]; the selected title is
 	// [Native.Text].
 	NativePopUp
+	// NativeProgress is a determinate progress bar over [Native.Min],[Native.Max]
+	// showing [Native.Number]. It is read-only (no handler).
+	NativeProgress
+	// NativeSpinner is an indeterminate activity indicator; [Native.On] runs or
+	// stops the animation. Read-only.
+	NativeSpinner
+	// NativeStepper is a small increment/decrement control over
+	// [Native.Min],[Native.Max] ([Native.Number] two-way via [Native.OnNumber]).
+	NativeStepper
+	// NativeSearch is a search field: an editable [Native.Text] two-way, activation
+	// on commit (Return). Like [NativeEntry] but the platform's search styling.
+	NativeSearch
+	// NativeCombo is an EDITABLE drop-down: [Native.Items] to pick from AND a
+	// free-text [Native.Text] two-way — a person may choose an item or type their
+	// own. ([NativePopUp] is choose-only.)
+	NativeCombo
+	// NativeSegmented is a horizontal row of mutually exclusive segments
+	// [Native.Items]; the selected segment's title is [Native.Text] two-way — the
+	// native equivalent of a row of selection pills.
+	NativeSegmented
+	// NativeTextView is an editable MULTI-LINE text area ([Native.Text] two-way).
+	NativeTextView
+	// NativeLink is a hyperlink-styled button: [Native.Text] is the visible text and
+	// its activation ([Native.OnActivate]) opens or follows it.
+	NativeLink
+	// NativeDate is a date picker; [Native.Text] is the date as an ISO-8601 string
+	// (YYYY-MM-DD) two-way.
+	NativeDate
+	// NativeColor is a colour well; [Native.Text] is the colour as a #RRGGBB hex
+	// string two-way.
+	NativeColor
 )
 
 // NewNativeButton makes a push button. onClick runs when it is activated.
