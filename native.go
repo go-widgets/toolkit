@@ -241,12 +241,33 @@ func (n *Native) Claimed() *mvvm.Observable[bool] {
 	return n.claimed
 }
 
+// SetBounds places this region, and the fallback with it.
+//
+// ⛔ THE FALLBACK HAS TO BE LAID OUT, NOT ONLY PAINTED. Draw used to be the only
+// place that gave it a rectangle, so anything that asked about geometry BEFORE a
+// frame was drawn saw an unplaced widget at {0,0,0,0}: hit-testing, so a
+// fallback button could be drawn and never clicked; accessibility, which reports
+// a control nobody can find; and a layout check, which is how this was caught --
+// "Native > Button: never placed {0 0 0 0}, parent {344 422 96 40}".
+//
+// A fallback is what every platform without a native host shows, so it is the
+// real control there, not a placeholder.
+func (n *Native) SetBounds(r Rect) {
+	n.Base.SetBounds(r)
+	if n.Fallback != nil {
+		n.Fallback.SetBounds(r)
+	}
+}
+
 // Draw paints the fallback while unclaimed; once a host has claimed the region,
 // its own control is above the canvas and the toolkit paints nothing.
 func (n *Native) Draw(p painter.Painter, theme *Theme) {
 	if n.Claimed().Get() || n.Fallback == nil {
 		return
 	}
+	// Placed here as well as in SetBounds: a caller may set Fallback after the
+	// layout ran, and a control that appears one frame late is worse than a
+	// redundant assignment.
 	n.Fallback.SetBounds(n.Bounds())
 	n.Fallback.Draw(p, theme)
 }
