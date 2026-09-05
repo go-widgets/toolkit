@@ -433,6 +433,35 @@ func TestAControlCarriesItsMenuToTheHost(t *testing.T) {
 	}
 }
 
+// TestAControlCarriesItsPictureToTheHost covers what a toolbar is made of: a
+// control that can only carry a title cannot make one.
+func TestAControlCarriesItsPictureToTheHost(t *testing.T) {
+	b := NewNativeButton("Pause", nil)
+	b.SetBounds(Rect{X: 0, Y: 0, W: 30, H: 30})
+	b.Image = []byte{0x89, 'P', 'N', 'G'}
+	b.ImageOnly = true
+
+	got := WalkNative(b)[0]
+	if len(got.Image) != 4 || got.Image[1] != 'P' {
+		t.Errorf("the descriptor carries %v", got.Image)
+	}
+	if !got.ImageOnly {
+		t.Error("the descriptor lost that the picture stands alone")
+	}
+	// The caption stays SET even when the picture stands alone: it is what a
+	// screen reader announces.
+	if got.Text != "Pause" {
+		t.Errorf("an icon-only control reports its caption as %q", got.Text)
+	}
+	// A control nobody gave a picture carries none, rather than an empty slice
+	// a host would have to tell apart from "the same picture as last frame".
+	plain := NewNativeButton("x", nil)
+	plain.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
+	if img := WalkNative(plain)[0].Image; img != nil {
+		t.Errorf("a control with no picture carries %v", img)
+	}
+}
+
 // TestTheFallbackIsPlacedAndNotOnlyPainted.
 //
 // ⛔ IT WAS PLACED ONLY BY Draw, so anything that asked about geometry before a

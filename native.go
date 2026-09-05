@@ -45,6 +45,15 @@ type Native struct {
 	Key string
 
 	// Items are the entries of a [NativePopUp]. Ignored for other kinds.
+	// Image is a picture the control shows, in PNG (or any format the host's
+	// image loader reads). A toolbar is icons, and a control that can only
+	// carry a title cannot make one.
+	Image []byte
+	// ImageOnly says the picture replaces the caption on screen. The caption
+	// stays SET: it is what a screen reader announces, so an icon-only control
+	// that dropped it would be one nobody using assistive technology could
+	// name.
+	ImageOnly bool
 	// Menu is the context menu this control offers on a secondary click, or
 	// nil for none. An item with no Pick is inert rather than absent: a menu
 	// that hides what does not apply moves everything else while a person is
@@ -323,12 +332,14 @@ type NativeControl struct {
 	Clip    Rect // the part of Rect an enclosing viewport still shows
 	Visible bool // false when Clip is empty
 
-	Text     string // entry/secure/label/button/pop-up value or title
-	On       bool   // checkbox/radio/switch state
-	Number   float64
-	Min, Max float64
-	Items    []string
-	Menu     []NativeMenuItem
+	Text      string // entry/secure/label/button/pop-up value or title
+	On        bool   // checkbox/radio/switch state
+	Number    float64
+	Min, Max  float64
+	Items     []string
+	Menu      []NativeMenuItem
+	Image     []byte
+	ImageOnly bool
 
 	OnText     func(string)
 	OnBool     func(bool)
@@ -397,6 +408,7 @@ func (n *Native) control(rect, clip Rect) NativeControl {
 	}
 	c := NativeControl{
 		Kind: n.Kind, Key: key, Menu: n.Menu,
+		Image: n.Image, ImageOnly: n.ImageOnly,
 		Rect: rect, Clip: clip, Visible: clip.W > 0 && clip.H > 0,
 		Min: n.Min, Max: n.Max, Items: n.Items,
 		OnText:     func(s string) { n.Text().Set(s) },
