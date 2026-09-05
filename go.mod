@@ -18,8 +18,8 @@ require github.com/go-widgets/mvvm v0.9.0
 require github.com/go-images/images v0.0.0-20260831115433-23d959d868e3
 
 require (
-	github.com/go-crdt/collab v0.40.0
-	github.com/go-crdt/crdt v0.42.0
+	github.com/go-crdt/collab v0.43.0
+	github.com/go-crdt/crdt v0.43.0
 	github.com/go-gfx/gfx v0.19.0
 	github.com/go-icons/iconoir v0.2.0
 	github.com/go-richdoc/richdoc v0.3.0
