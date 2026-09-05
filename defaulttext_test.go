@@ -188,3 +188,49 @@ func TestTheFaceFollowsTheMetricScale(t *testing.T) {
 		t.Error("the bitmap default lost its advance")
 	}
 }
+
+// TestAFaceNeverCollapsesOrDisappears covers the two ways scaling a face can
+// go wrong.
+func TestAFaceNeverCollapsesOrDisappears(t *testing.T) {
+	saved := MetricScale()
+	defer func() { SetMetricScale(saved); SetFont(nil) }()
+
+	// A scale small enough to round the size to nothing gives one pixel, not
+	// zero: type of size zero is not small type, it is no text at all.
+	SetMetricScale(1)
+	if err := UseOpenTypeTextSize(16); err != nil {
+		t.Fatal(err)
+	}
+	SetMetricScale(0.01)
+	if got := CurrentFont().Height(); got <= 0 {
+		t.Errorf("at a hundredth scale the face is %d high", got)
+	}
+	// And asked for directly.
+	if err := UseOpenTypeTextSize(0); err != nil {
+		t.Fatalf("a zero size reported %v", err)
+	}
+	if got := CurrentFont().Height(); got <= 0 {
+		t.Errorf("a zero size gave a face %d high", got)
+	}
+
+	// A face that cannot be built leaves the working one in place. Dropping
+	// the text because a resize could not re-render it would be worse than
+	// text briefly the wrong size.
+	SetMetricScale(1)
+	if err := UseOpenTypeTextSize(16); err != nil {
+		t.Fatal(err)
+	}
+	before := CurrentFont()
+	keep := defaultFaceTTF
+	defaultFaceTTF = func() []byte { return []byte("not a font") }
+	defer func() { defaultFaceTTF = keep }()
+
+	SetMetricScale(2)
+	if CurrentFont() != before {
+		t.Error("a face that could not be built replaced the one that worked")
+	}
+	// And asked for directly, the error is reported rather than swallowed.
+	if err := UseOpenTypeTextSize(16); err == nil {
+		t.Error("a malformed face reported success")
+	}
+}
