@@ -81,7 +81,15 @@ var activeFont Font
 // SetFont makes f the active font. A nil f gives the built-in bitmap back, at
 // whatever the current [MetricScale] is. All subsequent layout (GlyphHeight /
 // GlyphAdvance) and DrawText use it.
-func SetFont(f Font) { activeFont = f }
+func SetFont(f Font) {
+	activeFont = f
+	if f == nil {
+		// Back to the bitmap means back to the bitmap: the OpenType size a
+		// caller asked for is forgotten too, or the next SetMetricScale would
+		// quietly re-install a face nobody wants any more.
+		openTypeLogicalPx = 0
+	}
+}
 
 // CurrentFont returns the font widgets lay out and draw with: the one a host
 // set, or the built-in bitmap at the current metric scale.

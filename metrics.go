@@ -24,9 +24,19 @@ var metricScale = 1.0
 // SetMetricScale sets the global metric scale. A non-positive value is ignored,
 // so the scale never collapses metrics to zero.
 func SetMetricScale(f float64) {
-	if f > 0 {
-		metricScale = f
+	if f <= 0 {
+		return
 	}
+	if f == metricScale {
+		return
+	}
+	metricScale = f
+	// The text follows. Every other metric here is multiplied by the scale and
+	// the one thing a person actually reads was not, so an application on a
+	// HiDPI display got labels at half the size it asked for and had to
+	// re-render the face itself -- which is per-application work for a
+	// toolkit-wide fact.
+	rescaleText()
 }
 
 // MetricScale returns the current global metric scale (1.0 by default).
