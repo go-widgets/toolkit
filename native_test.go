@@ -70,6 +70,43 @@ func TestNativeConstructors(t *testing.T) {
 	if pu.Kind != NativePopUp || pu.Text().Get() != "b" || len(pu.Items) != 2 {
 		t.Errorf("popup wrong")
 	}
+	li := NewNativeList([]string{"un", "deux", "trois"}, 1)
+	if li.Kind != NativeList || li.Number().Get() != 1 || len(li.Items) != 3 {
+		t.Errorf("list wrong")
+	}
+	// Nothing chosen is -1, not row zero: a list that claims a selection it
+	// does not have makes every caller act on the wrong row.
+	if none := NewNativeList([]string{"un"}, -1); none.Number().Get() != -1 {
+		t.Errorf("a list with no selection reports row %v, want -1", none.Number().Get())
+	}
+}
+
+// TestANativeListCarriesItsRowBothWays covers the one thing a list is for: the
+// person moves the selection, and the model must hear about it.
+func TestANativeListCarriesItsRowBothWays(t *testing.T) {
+	li := NewNativeList([]string{"un", "deux", "trois"}, 0)
+	li.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 60})
+
+	got := WalkNative(li)
+	if len(got) != 1 {
+		t.Fatalf("a list produced %d descriptors, want 1", len(got))
+	}
+	c := got[0]
+	if c.Kind != NativeList {
+		t.Errorf("descriptor kind = %v, want NativeList", c.Kind)
+	}
+	if len(c.Items) != 3 {
+		t.Errorf("descriptor carries %d items, want 3", len(c.Items))
+	}
+	// The host reports a new row through the descriptor; the observable is
+	// what the application reads, so this is the whole two-way path.
+	if c.OnNumber == nil {
+		t.Fatal("a list descriptor has no way to report the chosen row")
+	}
+	c.OnNumber(2)
+	if li.Number().Get() != 2 {
+		t.Errorf("after the host reported row 2 the list holds %v", li.Number().Get())
+	}
 }
 
 func TestNativeLazyAccessors(t *testing.T) {

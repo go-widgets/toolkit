@@ -122,6 +122,17 @@ const (
 	// NativeColor is a colour well; [Native.Text] is the colour as a #RRGGBB hex
 	// string two-way.
 	NativeColor
+	// NativeList is a scrolling list of [Native.Items] a person picks a row
+	// from: [Native.Number] is the chosen row as a zero-based index, -1 when
+	// none is, two-way.
+	//
+	// It is the one kind here a drawn widget cannot stand in for cheaply. A
+	// list is not a picture of rows: it scrolls with the platform's own
+	// physics, it is walked by the keyboard the way every other list on the
+	// machine is, and a screen reader reads it as a list rather than as a
+	// rectangle. The number rides the same observable a slider uses, so a list
+	// binds through a seam that already exists.
+	NativeList
 )
 
 // NewNativeButton makes a push button. onClick runs when it is activated.
@@ -163,6 +174,12 @@ func NewNativeSwitch(on bool) *Native {
 // NewNativeSlider makes a slider over [min,max] positioned at value.
 func NewNativeSlider(min, max, value float64) *Native {
 	return &Native{Kind: NativeSlider, Min: min, Max: max, number: mvvm.NewObservable(value)}
+}
+
+// NewNativeList makes a scrolling list of items with row selected, or -1 for
+// none.
+func NewNativeList(items []string, selected int) *Native {
+	return &Native{Kind: NativeList, Items: items, number: mvvm.NewObservable(float64(selected))}
 }
 
 // NewNativePopUp makes a drop-down of items with the given selection.
