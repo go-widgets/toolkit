@@ -432,3 +432,36 @@ func TestAControlCarriesItsMenuToTheHost(t *testing.T) {
 		t.Errorf("a control with no menu carries %v", m)
 	}
 }
+
+// TestTheFallbackIsPlacedAndNotOnlyPainted.
+//
+// ⛔ IT WAS PLACED ONLY BY Draw, so anything that asked about geometry before a
+// frame was drawn saw {0,0,0,0}: hit-testing, so a fallback button could be
+// drawn and never clicked; accessibility, which would report a control nobody
+// can find; and a layout check, which is how it was caught -- a settings window
+// reporting "Native > Button: never placed {0 0 0 0}, parent {344 422 96 40}".
+//
+// A fallback is the REAL control on every platform with no native host, not a
+// placeholder for one.
+func TestTheFallbackIsPlacedAndNotOnlyPainted(t *testing.T) {
+	inner := NewButton("Save", func() {})
+	n := NewNativeButton("Save", func() {})
+	n.Fallback = inner
+
+	want := Rect{X: 344, Y: 422, W: 96, H: 40}
+	n.SetBounds(want)
+	if got := inner.Bounds(); got != want {
+		t.Errorf("the fallback is at %+v, want %+v -- it cannot be clicked where it is not", got, want)
+	}
+	if got := n.Bounds(); got != want {
+		t.Errorf("the region itself is at %+v", got)
+	}
+
+	// And a Native with no fallback still places itself rather than panicking:
+	// most of them have none, because most hosts claim them.
+	bare := NewNativeSwitch(true)
+	bare.SetBounds(want)
+	if got := bare.Bounds(); got != want {
+		t.Errorf("a fallback-less region is at %+v", got)
+	}
+}
