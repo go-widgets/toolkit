@@ -170,6 +170,46 @@ func TestTimeSeriesChartA11y(t *testing.T) {
 	}
 }
 
+func TestTimeSeriesChartZeroSizeBoundsDrawsNothing(t *testing.T) {
+	c := NewTimeSeriesChart([]TimePoint{{At: 1000, Value: 10}, {At: 2000, Value: 90}}, 0, 100)
+	c.SetBounds(Rect{X: 0, Y: 0, W: 0, H: 0})
+	surf := makeSurface(4, 4)
+	c.Draw(newP(surf, 4), DefaultLight()) // must not panic on an empty rect
+	if got := countInk(surf, 4, 4, DefaultLight().Border); got != 0 {
+		t.Errorf("zero-size bounds drew %d border pixels, want 0", got)
+	}
+}
+
+// TestTimeSeriesChartTooSmallForAPlotDrawsNothing covers the guard for
+// bounds too small to leave a positive plot area once the axis-label
+// columns/rows are subtracted — distinct from zero bounds outright.
+func TestTimeSeriesChartTooSmallForAPlotDrawsNothing(t *testing.T) {
+	c := NewTimeSeriesChart([]TimePoint{{At: 1000, Value: 10}, {At: 2000, Value: 90}}, 0, 100)
+	c.SetBounds(Rect{X: 0, Y: 0, W: 2, H: 2})
+	surf := makeSurface(2, 2)
+	c.Draw(newP(surf, 2), DefaultLight()) // must not panic
+	if got := countInk(surf, 2, 2, DefaultLight().Accent); got != 0 {
+		t.Errorf("a too-small plot area drew %d accent pixels, want 0", got)
+	}
+}
+
+// TestTimeSeriesChartDegenerateSpanDrawsNoCurve covers points whose first
+// and last At are equal (or, pathologically, out of order) — no
+// meaningful span to place a curve or time labels along, so it must draw
+// just the value axis rather than dividing by a zero or negative span.
+func TestTimeSeriesChartDegenerateSpanDrawsNoCurve(t *testing.T) {
+	c := NewTimeSeriesChart([]TimePoint{{At: 5000, Value: 10}, {At: 5000, Value: 90}}, 0, 100)
+	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	surf := makeSurface(120, 60)
+	c.Draw(newP(surf, 120), DefaultLight())
+	if got := countInk(surf, 120, 60, DefaultLight().Accent); got != 0 {
+		t.Errorf("a degenerate (zero-span) series drew %d accent pixels, want 0", got)
+	}
+	if got := countInk(surf, 120, 60, DefaultLight().Border); got == 0 {
+		t.Error("the value axis should still draw even with a degenerate span")
+	}
+}
+
 func TestTimeSeriesChartZeroBoundsDoesNotPanic(t *testing.T) {
 	// Min == Max (a degenerate value range) must not divide by zero.
 	c := NewTimeSeriesChart([]TimePoint{{At: 1000, Value: 5}, {At: 2000, Value: 5}}, 5, 5)
