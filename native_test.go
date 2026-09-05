@@ -390,3 +390,45 @@ func TestWalkNativeClipped(t *testing.T) {
 		t.Errorf("nested control was not walked through the inner viewport")
 	}
 }
+
+// TestAControlCarriesItsMenuToTheHost covers the verbs of a row.
+//
+// A fixed row of buttons is a dialogue's shape: they must all fit, all the
+// time, whether or not any applies to what is selected. A context menu is the
+// other shape — the verbs that apply to THIS row, where the row is.
+func TestAControlCarriesItsMenuToTheHost(t *testing.T) {
+	picked := 0
+	li := NewNativeList([]string{"un", "deux"}, 0)
+	li.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 60})
+	li.Menu = []NativeMenuItem{
+		{Label: "Retry", Pick: func() { picked++ }},
+		{}, // a separator has no name and needs none
+		{Label: "Remove"},
+	}
+
+	got := WalkNative(li)
+	if len(got) != 1 {
+		t.Fatalf("a list produced %d descriptors", len(got))
+	}
+	if len(got[0].Menu) != 3 {
+		t.Fatalf("the descriptor carries %d menu items, want 3", len(got[0].Menu))
+	}
+	if got[0].Menu[1].Label != "" {
+		t.Errorf("the separator came through as %q", got[0].Menu[1].Label)
+	}
+	// A verb that does not apply right now is inert, not missing.
+	if got[0].Menu[2].Pick != nil {
+		t.Error("an item with no handler grew one")
+	}
+	got[0].Menu[0].Pick()
+	if picked != 1 {
+		t.Errorf("choosing the first item ran it %d times", picked)
+	}
+	// A control with no menu carries none, rather than an empty one a host
+	// would have to tell apart from "the same menu as last frame".
+	plain := NewNativeButton("x", nil)
+	plain.SetBounds(Rect{X: 0, Y: 0, W: 10, H: 10})
+	if m := WalkNative(plain)[0].Menu; m != nil {
+		t.Errorf("a control with no menu carries %v", m)
+	}
+}

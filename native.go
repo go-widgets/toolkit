@@ -45,6 +45,11 @@ type Native struct {
 	Key string
 
 	// Items are the entries of a [NativePopUp]. Ignored for other kinds.
+	// Menu is the context menu this control offers on a secondary click, or
+	// nil for none. An item with no Pick is inert rather than absent: a menu
+	// that hides what does not apply moves everything else while a person is
+	// reading it, and an empty Label is a separator.
+	Menu  []NativeMenuItem
 	Items []string
 
 	// Min and Max bound a [NativeSlider]. Ignored for other kinds.
@@ -282,6 +287,13 @@ func (n *Native) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
 // run when the person changes the control; a host also calls OnClaim(true) once
 // it has taken the region over, so a drawn fallback can stand down. Any callback
 // may be nil.
+// NativeMenuItem is one line of a control's context menu. An empty Label is a
+// separator, and a nil Pick is a verb that does not apply right now.
+type NativeMenuItem struct {
+	Label string
+	Pick  func()
+}
+
 type NativeControl struct {
 	Kind NativeKind
 	Key  string
@@ -295,6 +307,7 @@ type NativeControl struct {
 	Number   float64
 	Min, Max float64
 	Items    []string
+	Menu     []NativeMenuItem
 
 	OnText     func(string)
 	OnBool     func(bool)
@@ -362,7 +375,7 @@ func (n *Native) control(rect, clip Rect) NativeControl {
 		key = fmt.Sprintf("native:%p", n)
 	}
 	c := NativeControl{
-		Kind: n.Kind, Key: key,
+		Kind: n.Kind, Key: key, Menu: n.Menu,
 		Rect: rect, Clip: clip, Visible: clip.W > 0 && clip.H > 0,
 		Min: n.Min, Max: n.Max, Items: n.Items,
 		OnText:     func(s string) { n.Text().Set(s) },
