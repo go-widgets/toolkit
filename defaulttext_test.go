@@ -134,3 +134,57 @@ func TestUseOpenTypeTextNonPixelPainter(t *testing.T) {
 		t.Fatalf("cells = %q%q, want \"Hi\"", cp.Cells[0*10+1].Rune, cp.Cells[0*10+2].Rune)
 	}
 }
+
+// TestTheFaceFollowsTheMetricScale covers the one metric this toolkit scaled
+// everything BUT.
+//
+// Every pixel constant here is multiplied by MetricScale. The face was not, so
+// on a display with two device pixels to the point every label came out half
+// the size the caller asked for — and each application had to notice and
+// re-render the face itself, which is per-application work for a toolkit-wide
+// fact.
+func TestTheFaceFollowsTheMetricScale(t *testing.T) {
+	saved := MetricScale()
+	defer func() { SetMetricScale(saved); SetFont(nil) }()
+
+	SetMetricScale(1)
+	if err := UseOpenTypeTextSize(16); err != nil {
+		t.Fatalf("UseOpenTypeTextSize: %v", err)
+	}
+	one := CurrentFont().Height()
+	if one <= 0 {
+		t.Fatal("a face with no height")
+	}
+
+	// Twice the scale is about twice the type. Not exactly, since a rasteriser
+	// rounds, so this asks for the shape of the answer rather than a number.
+	SetMetricScale(2)
+	two := CurrentFont().Height()
+	if two < one*3/2 {
+		t.Errorf("at twice the scale the face is %d high, was %d — it did not follow", two, one)
+	}
+	// And back down again: a window dragged from a Retina display to a plain
+	// one must not keep the larger face.
+	SetMetricScale(1)
+	if got := CurrentFont().Height(); got != one {
+		t.Errorf("back at scale 1 the face is %d high, want %d", got, one)
+	}
+
+	// The bitmap default already followed the scale -- its metrics go through
+	// scaled() like every other constant here. That is what made the OpenType
+	// face the odd one out, and why an application on a Retina display got
+	// bitmap chrome at the right size around type at half of it.
+	SetFont(nil)
+	SetMetricScale(1)
+	bitmap := CurrentFont().Height()
+	SetMetricScale(3)
+	if got := CurrentFont().Height(); got <= bitmap {
+		t.Errorf("the bitmap font is %d high at scale 3, was %d at scale 1", got, bitmap)
+	}
+	// And a scale change with no OpenType face asked for must not install one:
+	// the bitmap advance is a whole number of pixels per character, which a
+	// shaped face is not.
+	if CurrentFont().Advance() <= 0 {
+		t.Error("the bitmap default lost its advance")
+	}
+}

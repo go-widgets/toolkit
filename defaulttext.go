@@ -72,15 +72,53 @@ func DefaultOpenTypeFont(sizePx int) (Font, error) {
 // the bitmap default at any time with SetFont(nil).
 func UseOpenTypeText() error { return UseOpenTypeTextSize(DefaultOpenTypeSizePx) }
 
+// openTypeLogicalPx is the size UseOpenTypeTextSize was last asked for, in
+// LOGICAL pixels, or 0 when the bitmap default is active.
+//
+// It is remembered so [SetMetricScale] can re-render the face: every other
+// metric in this toolkit is multiplied by the scale, and the one thing a
+// person actually reads was not. On a display with two device pixels to the
+// point that made every label half the size the caller asked for -- reported
+// as "small but readable", which is a polite way of saying wrong.
+var openTypeLogicalPx int
+
+// rescaleText re-renders the active face at the current [MetricScale], if the
+// caller asked for an OpenType face at all.
+//
+// A failure leaves the face that is working in place: a toolkit that dropped
+// its text because a resize could not re-render it would be worse than one
+// whose text is briefly the wrong size.
+func rescaleText() {
+	if openTypeLogicalPx <= 0 {
+		return
+	}
+	px := int(float64(openTypeLogicalPx)*metricScale + 0.5)
+	if px < 1 {
+		px = 1
+	}
+	if f, err := DefaultOpenTypeFont(px); err == nil {
+		SetFont(f)
+	}
+}
+
 // UseOpenTypeTextSize is UseOpenTypeText at an explicit pixel size — for apps
 // (or high-DPI surfaces) that want AA text larger or smaller than
 // DefaultOpenTypeSizePx. The active font is only swapped on success; on a parse
 // error it is left untouched and the error is returned.
 func UseOpenTypeTextSize(sizePx int) error {
-	f, err := DefaultOpenTypeFont(sizePx)
+	// LOGICAL pixels, like every other metric this toolkit takes: the face is
+	// rendered at sizePx x MetricScale, and re-rendered whenever that scale
+	// changes. A caller asking for 16 gets type that reads the same size on
+	// every display, which is the whole point of a scale.
+	px := int(float64(sizePx)*metricScale + 0.5)
+	if px < 1 {
+		px = 1
+	}
+	f, err := DefaultOpenTypeFont(px)
 	if err != nil {
 		return err
 	}
 	SetFont(f)
+	openTypeLogicalPx = sizePx
 	return nil
 }
