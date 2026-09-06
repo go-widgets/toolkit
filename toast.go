@@ -84,6 +84,36 @@ type Toast struct {
 	// one-line toast is unchanged.
 	Lines []string
 
+	// MaxW, when positive, is the widest the pill may be drawn. Text is wrapped
+	// across as many rows as it needs so the pill fits, instead of growing past
+	// its host.
+	//
+	// ⛔ WITHOUT IT A LONG SENTENCE IS UNREADABLE, not merely untidy. A toast
+	// sizes itself to its widest line with no upper bound, and a host that
+	// docks it to a centre anchor then paints a pill wider than the view -- so
+	// BOTH ENDS are cut and the reader gets the middle of a sentence. Measured
+	// on a 1920-wide view at the size xrdesk draws its notices: "the camera was
+	// refused; it is turned on again in System Settings > Privacy & Security >
+	// Camera" came to 2373px, and a longer refusal to 4975px -- 2.6 times the
+	// width it had to fit in.
+	//
+	// The zero value keeps the old behaviour exactly: no wrapping, no measuring,
+	// one line. Ignored when Lines is set, since a caller supplying its own rows
+	// has already decided where they break.
+	MaxW int
+
+	// wrapped memoises the last wrap, because lines() is asked three times per
+	// frame (sizing, height, drawing) and wrapping is a measure per word.
+	//
+	// ⚠ THE KEY IS (text, width, glyph height) AND NOT THE FONT ITSELF. A Font
+	// is an interface and comparing one can panic on an uncomparable dynamic
+	// type. Two different fonts of the SAME height would therefore reuse a wrap
+	// computed for the other -- a mis-wrap, never a crash, and it corrects
+	// itself the moment the text or the width changes.
+	wrapped              []string
+	wrapText             string
+	wrapWidth, wrapGlyph int
+
 	// Actions, when non-empty, supplies several action buttons (superseding
 	// the single ActionLabel/Action pair). Buttons are laid out along the
 	// right edge in slice order, each with its own divider + label. The zero
@@ -183,13 +213,48 @@ func toastFace(kind ToastKind, theme *Theme) RGBA {
 	}
 }
 
-// lines returns the message rows: Lines when non-empty, else a single-element
-// slice holding Text (the backward-compatible default).
+// lines returns the message rows: Lines when non-empty, else Text wrapped to
+// MaxW, else a single-element slice holding Text (the backward-compatible
+// default, and what a zero MaxW still gives).
 func (t *Toast) lines() []string {
 	if len(t.Lines) > 0 {
 		return t.Lines
 	}
-	return []string{t.Text}
+	inner := t.wrapWidthFor()
+	if inner <= 0 {
+		return []string{t.Text}
+	}
+	f := t.EffectiveFont()
+	gh := f.Height()
+	if t.wrapped != nil && t.wrapText == t.Text && t.wrapWidth == inner && t.wrapGlyph == gh {
+		return t.wrapped
+	}
+	out := wrapText(f, t.Text, inner)
+	if len(out) == 0 {
+		// All-whitespace or empty: one empty row, so the pill keeps a height
+		// and every caller still gets exactly one line as it did before.
+		out = []string{t.Text}
+	}
+	t.wrapped, t.wrapText, t.wrapWidth, t.wrapGlyph = out, t.Text, inner, gh
+	return out
+}
+
+// wrapWidthFor is how many pixels the message itself may occupy inside a pill
+// capped at MaxW: the cap less the pill's own padding, its icon slot and its
+// action zone. Zero or less means "do not wrap" -- either MaxW is unset, or the
+// furniture already leaves the text no room, and a pill that overflows is still
+// better than one with no words in it.
+func (t *Toast) wrapWidthFor() int {
+	if t.MaxW <= 0 {
+		return 0
+	}
+	inner := t.MaxW - 2*ToastPadX - t.iconSlotW()
+	if aw := t.actionsW(); aw > 0 {
+		// AnchorIn adds actionsW()-ToastPadX on top of the two-sided padding,
+		// so that is exactly what the text loses.
+		inner -= aw - ToastPadX
+	}
+	return inner
 }
 
 // acts returns the action buttons: Actions when non-empty, else a single-element
