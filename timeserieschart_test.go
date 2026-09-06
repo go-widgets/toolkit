@@ -9,7 +9,44 @@ import (
 	"time"
 
 	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
 )
+
+// sentinelPixel is makeSurface's own pre-fill value (see widget_test.go).
+var sentinelPixel = RGBA{R: 0xC8, G: 0xC8, B: 0xC8, A: 0xFF}
+
+// isPainted reports whether (x, y) differs from the surface's untouched
+// sentinel — true for ANY coverage, including a partial one an
+// anti-aliased stroke leaves at the edge of its own path. Exact color
+// equality (countInk) is the wrong tool for a curve drawn via
+// drawCurveLine: its pixels are a blend with whatever the sentinel or a
+// neighbouring stroke already put there, essentially never the pure ink
+// value.
+func isPainted(surf []byte, w, x, y int) bool {
+	return pixelAt(surf, w, x, y) != sentinelPixel
+}
+
+// countPainted counts pixels differing from the sentinel at all.
+func countPainted(surf []byte, w, h int) int {
+	n := 0
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if isPainted(surf, w, x, y) {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+// isCurvePainted is isPainted narrowed to exclude the plain Bresenham
+// gridlines (still an exact theme.Border match, unaffected by
+// drawCurveLine) — for a test that needs to find the CURVE
+// specifically, not just any ink, on a column the gridlines also cross.
+func isCurvePainted(surf []byte, w, x, y int, theme *Theme) bool {
+	px := pixelAt(surf, w, x, y)
+	return px != sentinelPixel && px != theme.Border
+}
 
 func TestTimeSeriesChartEmptyDrawsAxesOnly(t *testing.T) {
 	c := NewTimeSeriesChart(nil, 0, 100)
@@ -37,16 +74,21 @@ func TestTimeSeriesChartSinglePointDrawsNoCurve(t *testing.T) {
 }
 
 func TestTimeSeriesChartDrawsAPolyline(t *testing.T) {
-	c := NewTimeSeriesChart([]TimePoint{
+	noCurve := NewTimeSeriesChart([]TimePoint{{At: 1000, Value: 10}}, 0, 100)
+	withCurve := NewTimeSeriesChart([]TimePoint{
 		{At: 1000, Value: 10},
 		{At: 2000, Value: 50},
 		{At: 3000, Value: 90},
 	}, 0, 100)
-	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
-	surf := makeSurface(120, 60)
-	c.Draw(newP(surf, 120), DefaultLight())
-	if got := countInk(surf, 120, 60, DefaultLight().Accent); got == 0 {
-		t.Error("no curve (Accent) pixels drawn for a 3-point series")
+	noCurve.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	withCurve.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	s1, s2 := makeSurface(120, 60), makeSurface(120, 60)
+	noCurve.Draw(newP(s1, 120), DefaultLight())
+	withCurve.Draw(newP(s2, 120), DefaultLight())
+
+	base, got := countPainted(s1, 120, 60), countPainted(s2, 120, 60)
+	if got <= base {
+		t.Errorf("a 3-point series painted %d pixels, want more than the axes-only baseline (%d)", got, base)
 	}
 }
 
@@ -63,10 +105,10 @@ func TestTimeSeriesChartRisesLeftToRight(t *testing.T) {
 	c.Draw(newP(surf, 120), DefaultLight())
 
 	pl := c.plot()
-	ink := DefaultLight().Accent
+	theme := DefaultLight()
 	topAt := func(x int) (y int, found bool) {
 		for y := 0; y < 60; y++ {
-			if pixelAt(surf, 120, x, y) == ink {
+			if isCurvePainted(surf, 120, x, y, theme) {
 				return y, true
 			}
 		}
@@ -99,10 +141,10 @@ func TestTimeSeriesChartRespectsExplicitBounds(t *testing.T) {
 	// Each chart's own plot().X: a wider Max ("1000" vs "100") measures a
 	// wider label column, so the two plot areas don't necessarily start
 	// at the same x.
+	theme := DefaultLight()
 	find := func(surf []byte, x int) int {
-		ink := DefaultLight().Accent
 		for y := 0; y < 60; y++ {
-			if pixelAt(surf, 120, x, y) == ink {
+			if isCurvePainted(surf, 120, x, y, theme) {
 				return y
 			}
 		}
@@ -117,16 +159,30 @@ func TestTimeSeriesChartRespectsExplicitBounds(t *testing.T) {
 	}
 }
 
+// TestTimeSeriesChartCustomInk proves Ink is actually used by rendering
+// the same series twice with two different explicit colors and checking
+// the two images differ — an anti-aliased curve's own pixels are a
+// blend with the surface underneath, never an exact match for either
+// color, so comparing two renders is the robust way to prove the color
+// choice took effect.
 func TestTimeSeriesChartCustomInk(t *testing.T) {
-	custom := RGB(0x11, 0x22, 0x33)
-	c := NewTimeSeriesChart([]TimePoint{{At: 1000, Value: 10}, {At: 2000, Value: 90}}, 0, 100)
-	c.Ink = custom
-	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
-	surf := makeSurface(120, 60)
-	c.Draw(newP(surf, 120), DefaultLight())
-	if got := countInk(surf, 120, 60, custom); got == 0 {
-		t.Error("no pixels drawn in the explicitly-set Ink color")
+	points := []TimePoint{{At: 1000, Value: 10}, {At: 2000, Value: 90}}
+	a := NewTimeSeriesChart(points, 0, 100)
+	a.Ink = RGB(0x11, 0x22, 0x33)
+	b := NewTimeSeriesChart(points, 0, 100)
+	b.Ink = RGB(0xEE, 0xDD, 0xCC)
+	a.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	b.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	s1, s2 := makeSurface(120, 60), makeSurface(120, 60)
+	a.Draw(newP(s1, 120), DefaultLight())
+	b.Draw(newP(s2, 120), DefaultLight())
+
+	for i := range s1 {
+		if s1[i] != s2[i] {
+			return
+		}
 	}
+	t.Error("two different explicit Ink colors rendered byte-identical images")
 }
 
 func TestTimeSeriesChartDrawsValueAndTimeLabels(t *testing.T) {
@@ -350,10 +406,15 @@ func TestTimeSeriesChartThresholdDrawnAsReferenceLine(t *testing.T) {
 	withThreshold := NewTimeSeriesChart(points, 0, 100)
 	withThreshold.Threshold = []TimePoint{{At: 0, Value: 0}, {At: 7200, Value: 100}}
 
-	base := borderCount(t, without, 120, 60)
-	got := borderCount(t, withThreshold, 120, 60)
+	without.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	withThreshold.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	s1, s2 := makeSurface(120, 60), makeSurface(120, 60)
+	without.Draw(newP(s1, 120), DefaultLight())
+	withThreshold.Draw(newP(s2, 120), DefaultLight())
+
+	base, got := countPainted(s1, 120, 60), countPainted(s2, 120, 60)
 	if got <= base {
-		t.Fatalf("Border pixel count with Threshold set (%d) did not exceed without (%d)", got, base)
+		t.Fatalf("painted pixel count with Threshold set (%d) did not exceed without (%d)", got, base)
 	}
 }
 
@@ -370,24 +431,37 @@ func TestTimeSeriesChartThresholdSinglePointDrawsNothing(t *testing.T) {
 	}
 }
 
-func TestTimeSeriesChartOverInkRecolorsSegmentsAboveThreshold(t *testing.T) {
-	c := NewTimeSeriesChart([]TimePoint{
-		{At: 0, Value: 10},
-		{At: 3600, Value: 90},
-	}, 0, 100)
-	c.Threshold = []TimePoint{{At: 0, Value: 50}, {At: 3600, Value: 50}}
-	over := RGB(0xFF, 0x00, 0x00)
-	c.OverInk = over
-	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
-	surf := makeSurface(120, 60)
-	c.Draw(newP(surf, 120), DefaultLight())
+// TestSegmentInk exercises the exact decision drawCurveLine's color
+// choice hangs on, as a plain value-in-value-out function — no painter,
+// no pixels, no anti-aliasing to fight, unlike sampling drawn pixels for
+// an exact color match (which an AA stroke's own blended output never
+// gives).
+func TestSegmentInk(t *testing.T) {
+	c := &TimeSeriesChart{Threshold: []TimePoint{{At: 0, Value: 50}}}
+	ink := RGB(0, 0xFF, 0)
+	over := RGB(0xFF, 0, 0)
 
-	if got := countInk(surf, 120, 60, over); got == 0 {
-		t.Error("no OverInk pixels drawn for a segment ending above Threshold")
+	c.OverInk = over
+	if got := c.segmentInk(TimePoint{At: 10, Value: 30}, ink); got != ink {
+		t.Errorf("below threshold: segmentInk = %v, want ink %v", got, ink)
+	}
+	if got := c.segmentInk(TimePoint{At: 10, Value: 90}, ink); got != over {
+		t.Errorf("above threshold: segmentInk = %v, want OverInk %v", got, over)
+	}
+
+	c.OverInk = RGBA{}
+	if got := c.segmentInk(TimePoint{At: 10, Value: 90}, ink); got != ink {
+		t.Errorf("OverInk at its zero value: segmentInk = %v, want ink %v (recoloring should be disabled)", got, ink)
 	}
 }
 
-func TestTimeSeriesChartOverInkZeroValueDisablesRecoloring(t *testing.T) {
+// TestTimeSeriesChartOverInkChangesTheRenderedImage is the integration
+// smoke test alongside TestSegmentInk's precise unit coverage: proves
+// Draw actually WIRES segmentInk's choice into what gets painted, by
+// checking that toggling OverInk changes the output image at all.
+// Sampling for an exact OverInk pixel match is not used here since an
+// anti-aliased segment's own pixels are a blend, not a pure color.
+func TestTimeSeriesChartOverInkChangesTheRenderedImage(t *testing.T) {
 	newChart := func() *TimeSeriesChart {
 		c := NewTimeSeriesChart([]TimePoint{
 			{At: 0, Value: 10},
@@ -396,24 +470,24 @@ func TestTimeSeriesChartOverInkZeroValueDisablesRecoloring(t *testing.T) {
 		c.Threshold = []TimePoint{{At: 0, Value: 50}, {At: 3600, Value: 50}}
 		return c
 	}
-	over := RGB(0xFF, 0x00, 0x00)
 
 	withOverInk := newChart()
-	withOverInk.OverInk = over
+	withOverInk.OverInk = RGB(0xFF, 0x00, 0x00)
 	withOverInk.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	s1 := makeSurface(120, 60)
 	withOverInk.Draw(newP(s1, 120), DefaultLight())
-	if countInk(s1, 120, 60, over) == 0 {
-		t.Fatal("setup: expected some OverInk pixels when OverInk is set")
-	}
 
 	withoutOverInk := newChart()
 	withoutOverInk.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	s2 := makeSurface(120, 60)
 	withoutOverInk.Draw(newP(s2, 120), DefaultLight())
-	if got := countInk(s2, 120, 60, over); got != 0 {
-		t.Errorf("OverInk left at its zero value still drew %d pixels in that color", got)
+
+	for i := range s1 {
+		if s1[i] != s2[i] {
+			return
+		}
 	}
+	t.Error("setting OverInk on a series with a stretch above Threshold rendered byte-identical to leaving it unset")
 }
 
 func TestTimeSeriesChartOverInkAllBelowThresholdStaysInk(t *testing.T) {
@@ -538,12 +612,53 @@ func TestVerticalGridTicksDayAligned(t *testing.T) {
 	}
 }
 
+// TestDrawCurveLineFallsBackToBresenhamOnACellPainter proves the
+// non-PathPainter branch: a CellPainter has no notion of partial
+// coverage (drawLine's own doc comment: "each pixel promotes to a
+// filled cell"), so drawCurveLine must delegate to it unchanged rather
+// than attempt an anti-aliased stroke — verified by checking the two
+// paints leave an identical cell grid, not by sampling a blended color
+// (there is none on this back-end).
+func TestDrawCurveLineFallsBackToBresenhamOnACellPainter(t *testing.T) {
+	viaCurveLine := painter.NewCellPainter(20, 10)
+	drawCurveLine(viaCurveLine, 1, 1, 15, 8, RGB(0, 0xFF, 0))
+	viaDrawLine := painter.NewCellPainter(20, 10)
+	drawLine(viaDrawLine, 1, 1, 15, 8, RGB(0, 0xFF, 0))
+
+	for i := range viaCurveLine.Cells {
+		if viaCurveLine.Cells[i] != viaDrawLine.Cells[i] {
+			t.Fatalf("cell %d differs: drawCurveLine=%+v drawLine=%+v", i, viaCurveLine.Cells[i], viaDrawLine.Cells[i])
+		}
+	}
+}
+
 func TestDrawDashedLineZeroLengthDrawsNothing(t *testing.T) {
 	surf := makeSurface(20, 20)
 	drawDashedLine(newP(surf, 20), 5, 5, 5, 5, RGB(0xFF, 0, 0))
 	if got := countInk(surf, 20, 20, RGB(0xFF, 0, 0)); got != 0 {
 		t.Errorf("a zero-length dashed line drew %d pixels, want 0", got)
 	}
+}
+
+// countPaintedColumns counts x columns with at least one painted pixel
+// — the metric TestDrawDashedLineDrawsFewerPixelsThanASolidLine needs:
+// a raw painted-PIXEL count conflates "has gaps" with the fact that an
+// anti-aliased 1-unit stroke straddles two pixel ROWS per unit of
+// length (roughly doubling pixel count per column versus a
+// single-pixel-per-column Bresenham line), which would make a dashed
+// AA line look "more painted" than a solid Bresenham one despite
+// covering less horizontal span.
+func countPaintedColumns(surf []byte, w, h int) int {
+	n := 0
+	for x := 0; x < w; x++ {
+		for y := 0; y < h; y++ {
+			if isPainted(surf, w, x, y) {
+				n++
+				break
+			}
+		}
+	}
+	return n
 }
 
 func TestDrawDashedLineDrawsFewerPixelsThanASolidLine(t *testing.T) {
@@ -553,12 +668,12 @@ func TestDrawDashedLineDrawsFewerPixelsThanASolidLine(t *testing.T) {
 	solid := makeSurface(100, 20)
 	drawLine(newP(solid, 100), 0, 10, 99, 10, color)
 
-	dashedCount := countInk(dashed, 100, 20, color)
-	solidCount := countInk(solid, 100, 20, color)
-	if dashedCount == 0 {
-		t.Fatal("a dashed line over a 100px span drew 0 pixels")
+	dashedCols := countPaintedColumns(dashed, 100, 20)
+	solidCols := countPaintedColumns(solid, 100, 20)
+	if dashedCols == 0 {
+		t.Fatal("a dashed line over a 100px span painted 0 columns")
 	}
-	if dashedCount >= solidCount {
-		t.Errorf("dashed line drew %d pixels, solid drew %d — expected dashed to draw fewer (gaps)", dashedCount, solidCount)
+	if dashedCols >= solidCols {
+		t.Errorf("dashed line painted %d of 100 columns, solid painted %d — expected dashed to cover fewer (gaps)", dashedCols, solidCols)
 	}
 }
