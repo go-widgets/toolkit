@@ -89,10 +89,13 @@ var openTypeLogicalPx int
 // its text because a resize could not re-render it would be worse than one
 // whose text is briefly the wrong size.
 func rescaleText() {
-	if openTypeLogicalPx <= 0 {
+	appearanceMu.RLock()
+	logical, scale := openTypeLogicalPx, metricScale
+	appearanceMu.RUnlock()
+	if logical <= 0 {
 		return
 	}
-	px := int(float64(openTypeLogicalPx)*metricScale + 0.5)
+	px := int(float64(logical)*scale + 0.5)
 	if px < 1 {
 		px = 1
 	}
@@ -110,7 +113,10 @@ func UseOpenTypeTextSize(sizePx int) error {
 	// rendered at sizePx x MetricScale, and re-rendered whenever that scale
 	// changes. A caller asking for 16 gets type that reads the same size on
 	// every display, which is the whole point of a scale.
-	px := int(float64(sizePx)*metricScale + 0.5)
+	appearanceMu.RLock()
+	scale := metricScale
+	appearanceMu.RUnlock()
+	px := int(float64(sizePx)*scale + 0.5)
 	if px < 1 {
 		px = 1
 	}
@@ -118,7 +124,12 @@ func UseOpenTypeTextSize(sizePx int) error {
 	if err != nil {
 		return err
 	}
+	// SetFont takes the lock, so it is called without it held; the size is
+	// recorded after, exactly as before, because SetFont(nil) is the one that
+	// clears it and f is not nil here.
 	SetFont(f)
+	appearanceMu.Lock()
 	openTypeLogicalPx = sizePx
+	appearanceMu.Unlock()
 	return nil
 }

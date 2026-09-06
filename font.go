@@ -82,6 +82,8 @@ var activeFont Font
 // whatever the current [MetricScale] is. All subsequent layout (GlyphHeight /
 // GlyphAdvance) and DrawText use it.
 func SetFont(f Font) {
+	appearanceMu.Lock()
+	defer appearanceMu.Unlock()
 	activeFont = f
 	if f == nil {
 		// Back to the bitmap means back to the bitmap: the OpenType size a
@@ -100,22 +102,30 @@ func SetFont(f Font) {
 // font chose its size too, so that one is left alone: the same rule Menu and
 // Browser follow for their own Scale fields.
 func CurrentFont() Font {
-	if activeFont != nil {
-		return activeFont
+	appearanceMu.RLock()
+	f, scale := activeFont, metricScale
+	appearanceMu.RUnlock()
+	if f != nil {
+		return f
 	}
-	return scaledDefaultFont()
+	return scaledDefaultFont(scale)
 }
 
 // scaledDefaultFont is the built-in bitmap at the current metric scale, cached
 // so the common path allocates nothing.
-func scaledDefaultFont() Font {
-	n := int(MetricScale() + 0.5)
+func scaledDefaultFont(scale float64) Font {
+	n := int(scale + 0.5)
 	if n < 1 {
 		n = 1
 	}
 	if n == 1 {
 		return defaultFont
 	}
+	// The scale is passed in rather than read again: the caller already holds
+	// it, and taking the read lock a second time inside one call is the nested
+	// RLock the invariant in appearance.go forbids.
+	appearanceMu.Lock()
+	defer appearanceMu.Unlock()
 	if cachedScaledFont == nil || cachedScaledFont.Scale != n {
 		cachedScaledFont = &bitmapFont{Scale: n}
 	}

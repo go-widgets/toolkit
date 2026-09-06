@@ -44,14 +44,21 @@ var density = DensityCompact
 // the density never lands on an undefined level (mirroring how [SetMetricScale]
 // ignores a non-positive scale).
 func SetDensity(d DensityLevel) {
-	if d >= DensityCompact && d <= DensityTouch {
-		density = d
+	if d < DensityCompact || d > DensityTouch {
+		return
 	}
+	appearanceMu.Lock()
+	density = d
+	appearanceMu.Unlock()
 }
 
 // Density returns the current global touch profile ([DensityCompact] by
 // default).
-func Density() DensityLevel { return density }
+func Density() DensityLevel {
+	appearanceMu.RLock()
+	defer appearanceMu.RUnlock()
+	return density
+}
 
 // densityFactor is the spacing multiplier a level applies to every base metric
 // on top of [MetricScale]. Compact is exactly 1.0 (byte-identical default);
