@@ -98,6 +98,17 @@ type TimeSeriesChart struct {
 	// plain reference line either way, and Points stays in Ink.
 	OverInk RGBA
 
+	// TimeMin, TimeMax optionally pin the displayed time axis span,
+	// independent of Points' own extent — e.g. always showing a full
+	// 7-day window from the very first render, rather than a span that
+	// only ever covers however much data happens to have accumulated so
+	// far (a chart backed by a day-old history otherwise looks like a
+	// one-day chart, not a mostly-empty week). Ignored unless
+	// TimeMax > TimeMin; the zero value for both (the default)
+	// auto-derives the range from Points[0].At and the last point's At,
+	// exactly as before this field existed.
+	TimeMin, TimeMax int64
+
 	// series is the bindable form of Points, created by Series().
 	series *mvvm.ObservableList[TimePoint]
 	// ceiling is where FollowPeak has the scale now.
@@ -251,18 +262,17 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 		c.drawText(p, tx, y-gh/2, text, label)
 	}
 
-	if len(c.points()) < 2 {
+	rangeStart, rangeEnd, ok := c.timeRange()
+	if !ok {
 		return
 	}
-	pts := c.points()
-	first, last := pts[0], pts[len(pts)-1]
-	span := last.At - first.At
+	span := rangeEnd - rangeStart
 	if span <= 0 {
 		return
 	}
 
-	for _, at := range verticalGridTicks(first.At, last.At) {
-		x := pl.X + int(float64(at-first.At)/float64(span)*float64(pl.W-1))
+	for _, at := range verticalGridTicks(rangeStart, rangeEnd) {
+		x := pl.X + int(float64(at-rangeStart)/float64(span)*float64(pl.W-1))
 		drawLine(p, x, pl.Y, x, pl.Y+pl.H-1, theme.Border)
 	}
 
@@ -272,7 +282,7 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 	}
 	valueSpan := c.Max - c.Min
 	pointAt := func(t TimePoint) (int, int) {
-		frac := min(1, max(0, float64(t.At-first.At)/float64(span)))
+		frac := min(1, max(0, float64(t.At-rangeStart)/float64(span)))
 		x := pl.X + int(frac*float64(pl.W-1))
 		vf := 0.0
 		if valueSpan != 0 {
@@ -292,18 +302,38 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 		}
 	}
 
-	px, py := pointAt(pts[0])
-	for _, pt := range pts[1:] {
-		x, y := pointAt(pt)
-		drawCurveLine(p, px, py, x, y, c.segmentInk(pt, ink))
-		px, py = x, y
+	if pts := c.points(); len(pts) >= 2 {
+		px, py := pointAt(pts[0])
+		for _, pt := range pts[1:] {
+			x, y := pointAt(pt)
+			drawCurveLine(p, px, py, x, y, c.segmentInk(pt, ink))
+			px, py = x, y
+		}
 	}
 
 	ty := pl.Y + pl.H - 1 + scaled(TimeSeriesChartPad)
-	startText := c.formatTime(first.At)
-	endText := c.formatTime(last.At)
+	startText := c.formatTime(rangeStart)
+	endText := c.formatTime(rangeEnd)
 	c.drawText(p, pl.X, ty, startText, label)
 	c.drawText(p, pl.X+pl.W-c.textWidth(endText), ty, endText, label)
+}
+
+// timeRange is the time axis span Draw plots against: the explicit
+// TimeMin..TimeMax when TimeMax > TimeMin, so a caller can show a full
+// window (a week, say) from the start even when only a few hours of
+// real data exist yet. Otherwise (the default) auto-derives the range
+// from Points' own first and last At, exactly as before TimeMin/TimeMax
+// existed. false only when there is no data AND no explicit range to
+// fall back on.
+func (c *TimeSeriesChart) timeRange() (start, end int64, ok bool) {
+	if c.TimeMax > c.TimeMin {
+		return c.TimeMin, c.TimeMax, true
+	}
+	pts := c.points()
+	if len(pts) == 0 {
+		return 0, 0, false
+	}
+	return pts[0].At, pts[len(pts)-1].At, true
 }
 
 // thresholdAt returns the Threshold value in effect at at: the last
