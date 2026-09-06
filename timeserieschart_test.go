@@ -4,9 +4,12 @@
 
 package toolkit
 
-import "github.com/go-widgets/mvvm"
+import (
+	"testing"
+	"time"
 
-import "testing"
+	"github.com/go-widgets/mvvm"
+)
 
 func TestTimeSeriesChartEmptyDrawsAxesOnly(t *testing.T) {
 	c := NewTimeSeriesChart(nil, 0, 100)
@@ -327,5 +330,235 @@ func TestNiceCeilingSpeaksInRoundNumbers(t *testing.T) {
 		if got := NiceCeiling(v); got < v {
 			t.Errorf("NiceCeiling(%v) = %v, below the data", v, got)
 		}
+	}
+}
+
+// borderCount draws c and counts theme.Border pixels — the diagnostic
+// used below to prove the Threshold line adds ink, since gridlines
+// already use the same color and would otherwise mask the comparison.
+func borderCount(t *testing.T, c *TimeSeriesChart, w, h int) int {
+	t.Helper()
+	c.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
+	surf := makeSurface(w, h)
+	c.Draw(newP(surf, w), DefaultLight())
+	return countInk(surf, w, h, DefaultLight().Border)
+}
+
+func TestTimeSeriesChartThresholdDrawnAsReferenceLine(t *testing.T) {
+	points := []TimePoint{{At: 0, Value: 50}, {At: 7200, Value: 50}}
+	without := NewTimeSeriesChart(points, 0, 100)
+	withThreshold := NewTimeSeriesChart(points, 0, 100)
+	withThreshold.Threshold = []TimePoint{{At: 0, Value: 0}, {At: 7200, Value: 100}}
+
+	base := borderCount(t, without, 120, 60)
+	got := borderCount(t, withThreshold, 120, 60)
+	if got <= base {
+		t.Fatalf("Border pixel count with Threshold set (%d) did not exceed without (%d)", got, base)
+	}
+}
+
+func TestTimeSeriesChartThresholdSinglePointDrawsNothing(t *testing.T) {
+	points := []TimePoint{{At: 0, Value: 50}, {At: 7200, Value: 50}}
+	without := NewTimeSeriesChart(points, 0, 100)
+	withOne := NewTimeSeriesChart(points, 0, 100)
+	withOne.Threshold = []TimePoint{{At: 3600, Value: 50}}
+
+	base := borderCount(t, without, 120, 60)
+	got := borderCount(t, withOne, 120, 60)
+	if got != base {
+		t.Fatalf("a single-point Threshold drew %d Border pixels, want exactly %d (no line, nothing to connect)", got, base)
+	}
+}
+
+func TestTimeSeriesChartOverInkRecolorsSegmentsAboveThreshold(t *testing.T) {
+	c := NewTimeSeriesChart([]TimePoint{
+		{At: 0, Value: 10},
+		{At: 3600, Value: 90},
+	}, 0, 100)
+	c.Threshold = []TimePoint{{At: 0, Value: 50}, {At: 3600, Value: 50}}
+	over := RGB(0xFF, 0x00, 0x00)
+	c.OverInk = over
+	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	surf := makeSurface(120, 60)
+	c.Draw(newP(surf, 120), DefaultLight())
+
+	if got := countInk(surf, 120, 60, over); got == 0 {
+		t.Error("no OverInk pixels drawn for a segment ending above Threshold")
+	}
+}
+
+func TestTimeSeriesChartOverInkZeroValueDisablesRecoloring(t *testing.T) {
+	newChart := func() *TimeSeriesChart {
+		c := NewTimeSeriesChart([]TimePoint{
+			{At: 0, Value: 10},
+			{At: 3600, Value: 90},
+		}, 0, 100)
+		c.Threshold = []TimePoint{{At: 0, Value: 50}, {At: 3600, Value: 50}}
+		return c
+	}
+	over := RGB(0xFF, 0x00, 0x00)
+
+	withOverInk := newChart()
+	withOverInk.OverInk = over
+	withOverInk.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	s1 := makeSurface(120, 60)
+	withOverInk.Draw(newP(s1, 120), DefaultLight())
+	if countInk(s1, 120, 60, over) == 0 {
+		t.Fatal("setup: expected some OverInk pixels when OverInk is set")
+	}
+
+	withoutOverInk := newChart()
+	withoutOverInk.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	s2 := makeSurface(120, 60)
+	withoutOverInk.Draw(newP(s2, 120), DefaultLight())
+	if got := countInk(s2, 120, 60, over); got != 0 {
+		t.Errorf("OverInk left at its zero value still drew %d pixels in that color", got)
+	}
+}
+
+func TestTimeSeriesChartOverInkAllBelowThresholdStaysInk(t *testing.T) {
+	c := NewTimeSeriesChart([]TimePoint{
+		{At: 0, Value: 5},
+		{At: 3600, Value: 10},
+	}, 0, 100)
+	c.Threshold = []TimePoint{{At: 0, Value: 50}, {At: 3600, Value: 50}}
+	over := RGB(0xFF, 0x00, 0x00)
+	c.OverInk = over
+	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
+	surf := makeSurface(120, 60)
+	c.Draw(newP(surf, 120), DefaultLight())
+
+	if got := countInk(surf, 120, 60, over); got != 0 {
+		t.Errorf("a series entirely below Threshold drew %d OverInk pixels, want 0", got)
+	}
+}
+
+func TestThresholdAt(t *testing.T) {
+	c := &TimeSeriesChart{Threshold: []TimePoint{
+		{At: 100, Value: 1},
+		{At: 200, Value: 2},
+		{At: 300, Value: 3},
+	}}
+	cases := []struct {
+		name string
+		at   int64
+		want float64
+	}{
+		{"before first", 50, 1},
+		{"exact match", 200, 2},
+		{"between samples", 250, 2},
+		{"after last", 1000, 3},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := c.thresholdAt(tc.at)
+			if !ok {
+				t.Fatalf("thresholdAt(%d): ok = false, want true", tc.at)
+			}
+			if got != tc.want {
+				t.Errorf("thresholdAt(%d) = %v, want %v", tc.at, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestThresholdAtEmptyReturnsFalse(t *testing.T) {
+	c := &TimeSeriesChart{}
+	if _, ok := c.thresholdAt(123); ok {
+		t.Fatal("thresholdAt on an empty Threshold: ok = true, want false")
+	}
+}
+
+func TestVerticalGridInterval(t *testing.T) {
+	cases := []struct {
+		name string
+		span time.Duration
+		want time.Duration
+	}{
+		{"5 hours picks hourly", 5 * time.Hour, time.Hour},
+		{"7 days picks daily", 7 * 24 * time.Hour, 24 * time.Hour},
+		{"100 days falls back to the coarsest interval", 100 * 24 * time.Hour, 7 * 24 * time.Hour},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := verticalGridInterval(tc.span); got != tc.want {
+				t.Errorf("verticalGridInterval(%v) = %v, want %v", tc.span, got, tc.want)
+			}
+		})
+	}
+}
+
+func TestVerticalGridTicksNonPositiveSpanReturnsNil(t *testing.T) {
+	if got := verticalGridTicks(1000, 1000); got != nil {
+		t.Errorf("verticalGridTicks(equal first/last) = %v, want nil", got)
+	}
+	if got := verticalGridTicks(2000, 1000); got != nil {
+		t.Errorf("verticalGridTicks(last before first) = %v, want nil", got)
+	}
+}
+
+// TestVerticalGridTicksHourAligned proves hour-granularity ticks land on
+// the hour (Unix time divisible by 3600, true regardless of the test
+// machine's local timezone since Truncate operates on the absolute
+// instant) even when first itself is not hour-aligned.
+func TestVerticalGridTicksHourAligned(t *testing.T) {
+	first := time.Date(2026, 1, 1, 10, 17, 0, 0, time.UTC).Unix()
+	last := first + int64(5*time.Hour/time.Second)
+	ticks := verticalGridTicks(first, last)
+	if len(ticks) == 0 {
+		t.Fatal("no ticks returned for a 5-hour span")
+	}
+	for _, tk := range ticks {
+		if tk < first || tk > last {
+			t.Errorf("tick %d falls outside [first, last] = [%d, %d]", tk, first, last)
+		}
+		if tk%3600 != 0 {
+			t.Errorf("tick %d is not hour-aligned", tk)
+		}
+	}
+}
+
+// TestVerticalGridTicksDayAligned proves day-granularity ticks land on
+// local midnight.
+func TestVerticalGridTicksDayAligned(t *testing.T) {
+	first := time.Date(2026, 1, 1, 15, 0, 0, 0, time.Local).Unix()
+	last := first + int64(7*24*time.Hour/time.Second)
+	ticks := verticalGridTicks(first, last)
+	if len(ticks) == 0 {
+		t.Fatal("no ticks returned for a 7-day span")
+	}
+	for _, tk := range ticks {
+		if tk < first || tk > last {
+			t.Errorf("tick %d falls outside [first, last] = [%d, %d]", tk, first, last)
+		}
+		lt := time.Unix(tk, 0)
+		if lt.Hour() != 0 || lt.Minute() != 0 || lt.Second() != 0 {
+			t.Errorf("tick %v is not local midnight", lt)
+		}
+	}
+}
+
+func TestDrawDashedLineZeroLengthDrawsNothing(t *testing.T) {
+	surf := makeSurface(20, 20)
+	drawDashedLine(newP(surf, 20), 5, 5, 5, 5, RGB(0xFF, 0, 0))
+	if got := countInk(surf, 20, 20, RGB(0xFF, 0, 0)); got != 0 {
+		t.Errorf("a zero-length dashed line drew %d pixels, want 0", got)
+	}
+}
+
+func TestDrawDashedLineDrawsFewerPixelsThanASolidLine(t *testing.T) {
+	color := RGB(0xFF, 0, 0)
+	dashed := makeSurface(100, 20)
+	drawDashedLine(newP(dashed, 100), 0, 10, 99, 10, color)
+	solid := makeSurface(100, 20)
+	drawLine(newP(solid, 100), 0, 10, 99, 10, color)
+
+	dashedCount := countInk(dashed, 100, 20, color)
+	solidCount := countInk(solid, 100, 20, color)
+	if dashedCount == 0 {
+		t.Fatal("a dashed line over a 100px span drew 0 pixels")
+	}
+	if dashedCount >= solidCount {
+		t.Errorf("dashed line drew %d pixels, solid drew %d — expected dashed to draw fewer (gaps)", dashedCount, solidCount)
 	}
 }
