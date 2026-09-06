@@ -968,3 +968,72 @@ func TestToastWrapIsMemoisedAndInvalidated(t *testing.T) {
 		t.Errorf("%d rows at half the width, was %d: the memo did not notice the width change", after, before)
 	}
 }
+
+// TestToastMaxWCorners covers the three ways the wrap declines to happen: no
+// room left for the text, nothing to wrap, and an action zone that has to be
+// paid for out of the same budget.
+func TestToastMaxWCorners(t *testing.T) {
+	t.Run("a cap too small to hold any text does not wrap", func(t *testing.T) {
+		// Better an overflowing pill than one with no words in it: a wrap to
+		// zero or fewer pixels would put one letter on each of forty rows.
+		tp := NewToast("several words that will not fit", ToastInfo)
+		tp.MaxW = 2 * ToastPadX // exactly the padding: nothing left
+		if got := tp.lines(); len(got) != 1 || got[0] != tp.Text {
+			t.Errorf("lines() = %q, want the single unwrapped Text", got)
+		}
+	})
+
+	t.Run("whitespace stays one row", func(t *testing.T) {
+		// wrapText yields no lines for all-whitespace, and a toast with no rows
+		// would have no height -- so the pill keeps exactly one.
+		tp := NewToast("   ", ToastInfo)
+		tp.MaxW = 200
+		if got := tp.lines(); len(got) != 1 || got[0] != "   " {
+			t.Errorf("lines() = %q, want one row holding the original text", got)
+		}
+	})
+
+	t.Run("the action zone is paid for out of the same width", func(t *testing.T) {
+		const cap = 300
+		plain := NewToast("one two three four five six seven eight", ToastInfo)
+		plain.MaxW = cap
+		acted := NewToast(plain.Text, ToastInfo)
+		acted.MaxW = cap
+		acted.ActionLabel = "Undo"
+
+		// The button takes room the words no longer have, so it must wrap onto
+		// at least as many rows -- and the pill must STILL fit the cap.
+		if len(acted.lines()) < len(plain.lines()) {
+			t.Errorf("%d rows with a button, %d without: the action zone was not charged",
+				len(acted.lines()), len(plain.lines()))
+		}
+		acted.AnchorIn(Rect{W: cap, H: 200}, BottomCenter, 0)
+		if w := acted.Bounds().W; w > cap {
+			t.Errorf("pill %dpx with a button, want at most %dpx", w, cap)
+		}
+	})
+}
+
+// TestWrapTextIsTheOneTheCardsUse: the exported wrapper must be the same
+// routine, not a second implementation that breaks lines to other rules.
+func TestWrapTextIsTheOneTheCardsUse(t *testing.T) {
+	f := CurrentFont()
+	const s = "one two three four five six seven eight nine ten"
+	width := f.Measure("one two three") // room for about three words
+
+	got := WrapText(f, s, width)
+	if len(got) < 2 {
+		t.Fatalf("WrapText gave %d line(s) for %q at %dpx; want it broken up", len(got), s, width)
+	}
+	if joined := strings.Join(got, " "); joined != s {
+		t.Errorf("WrapText changed the words:\n got %q\nwant %q", joined, s)
+	}
+	for _, ln := range got {
+		if w := f.Measure(ln); w > width {
+			t.Errorf("line %q is %dpx, over the %dpx asked for", ln, w, width)
+		}
+	}
+	if got := WrapText(f, "   ", width); got != nil {
+		t.Errorf("WrapText(whitespace) = %q, want no lines", got)
+	}
+}
