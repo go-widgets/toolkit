@@ -6,9 +6,10 @@ package toolkit
 
 import (
 	"fmt"
-	"github.com/go-widgets/mvvm"
+	"math"
 	"time"
 
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -80,6 +81,22 @@ type TimeSeriesChart struct {
 	// spike scrolled off the left -- a graph whose axis keeps moving cannot be
 	// read at all.
 	FollowPeak bool
+
+	// Threshold optionally overlays a second reference line at the same
+	// time/value scale as Points — a ceiling a caller wants Points to
+	// stay under (a sustainable pace, a budget, a capacity limit). It
+	// need not share Points' own timestamps: the value in effect at any
+	// time t is Threshold's last sample at or before t (or its first
+	// sample, if t precedes every one of them) — a step function, not
+	// interpolation. Drawn as a dashed line in theme.Border; nil draws
+	// nothing extra. Fewer than two points draws nothing (matches
+	// Points' own "nothing to connect" convention).
+	Threshold []TimePoint
+	// OverInk is the color a Points segment switches to for any stretch
+	// ending above the Threshold in effect at that time. The zero value
+	// disables recoloring entirely — Threshold, if set, still draws as a
+	// plain reference line either way, and Points stays in Ink.
+	OverInk RGBA
 
 	// series is the bindable form of Points, created by Series().
 	series *mvvm.ObservableList[TimePoint]
@@ -244,13 +261,18 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 		return
 	}
 
+	for _, at := range verticalGridTicks(first.At, last.At) {
+		x := pl.X + int(float64(at-first.At)/float64(span)*float64(pl.W-1))
+		drawLine(p, x, pl.Y, x, pl.Y+pl.H-1, theme.Border)
+	}
+
 	ink := c.Ink
 	if ink == (RGBA{}) {
 		ink = theme.Accent
 	}
 	valueSpan := c.Max - c.Min
 	pointAt := func(t TimePoint) (int, int) {
-		frac := float64(t.At-first.At) / float64(span)
+		frac := min(1, max(0, float64(t.At-first.At)/float64(span)))
 		x := pl.X + int(frac*float64(pl.W-1))
 		vf := 0.0
 		if valueSpan != 0 {
@@ -260,10 +282,26 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 		y := pl.Y + int((1-vf)*float64(pl.H-1))
 		return x, y
 	}
+
+	if len(c.Threshold) >= 2 {
+		tx, ty := pointAt(c.Threshold[0])
+		for _, t := range c.Threshold[1:] {
+			x, y := pointAt(t)
+			drawDashedLine(p, tx, ty, x, y, theme.Border)
+			tx, ty = x, y
+		}
+	}
+
 	px, py := pointAt(pts[0])
 	for _, pt := range pts[1:] {
 		x, y := pointAt(pt)
-		drawLine(p, px, py, x, y, ink)
+		segInk := ink
+		if c.OverInk != (RGBA{}) {
+			if v, ok := c.thresholdAt(pt.At); ok && pt.Value > v {
+				segInk = c.OverInk
+			}
+		}
+		drawLine(p, px, py, x, y, segInk)
 		px, py = x, y
 	}
 
@@ -272,6 +310,116 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 	endText := c.formatTime(last.At)
 	c.drawText(p, pl.X, ty, startText, label)
 	c.drawText(p, pl.X+pl.W-c.textWidth(endText), ty, endText, label)
+}
+
+// thresholdAt returns the Threshold value in effect at at: the last
+// Threshold sample at or before at, or the first sample if at precedes
+// every one of them. false only when Threshold is empty.
+func (c *TimeSeriesChart) thresholdAt(at int64) (float64, bool) {
+	if len(c.Threshold) == 0 {
+		return 0, false
+	}
+	v := c.Threshold[0].Value
+	for _, t := range c.Threshold {
+		if t.At > at {
+			break
+		}
+		v = t.Value
+	}
+	return v, true
+}
+
+// niceTimeIntervals are the calendar-shaped step sizes vertical
+// gridlines choose from, smallest first — hours for a short span, days
+// for a long one, so "a bar per hour" and "a bar per day" are the same
+// mechanism at two different scales rather than two separate features.
+var niceTimeIntervals = []time.Duration{
+	time.Hour, 2 * time.Hour, 3 * time.Hour, 6 * time.Hour, 12 * time.Hour,
+	24 * time.Hour, 2 * 24 * time.Hour, 7 * 24 * time.Hour,
+}
+
+// maxVerticalGridlines caps how many vertical gridlines verticalGridTicks
+// draws, so a long span (a week at hourly ticks) doesn't turn into solid
+// ink instead of a readable set of reference lines.
+const maxVerticalGridlines = 8
+
+// verticalGridInterval picks the smallest niceTimeIntervals entry that
+// keeps span's own gridline count at or under maxVerticalGridlines,
+// falling back to the coarsest entry for a span too long for even that.
+func verticalGridInterval(span time.Duration) time.Duration {
+	for _, d := range niceTimeIntervals {
+		if span/d <= maxVerticalGridlines {
+			return d
+		}
+	}
+	return niceTimeIntervals[len(niceTimeIntervals)-1]
+}
+
+// verticalGridTicks returns the "nice" time boundaries between first and
+// last (inclusive) at verticalGridInterval's chosen granularity. Hour-ish
+// intervals truncate to the hour; day-ish ones align to LOCAL midnight
+// via calendar-day arithmetic (AddDate) rather than adding 24*time.Hour,
+// so a gridline lands on midnight across a DST transition instead of
+// drifting by an hour.
+func verticalGridTicks(first, last int64) []int64 {
+	span := time.Duration(last-first) * time.Second
+	if span <= 0 {
+		return nil
+	}
+	interval := verticalGridInterval(span)
+
+	var ticks []int64
+	if interval < 24*time.Hour {
+		t := time.Unix(first, 0).Truncate(interval)
+		for t.Unix() < first {
+			t = t.Add(interval)
+		}
+		for at := t.Unix(); at <= last; {
+			ticks = append(ticks, at)
+			t = t.Add(interval)
+			at = t.Unix()
+		}
+		return ticks
+	}
+
+	days := int(interval / (24 * time.Hour))
+	start := time.Unix(first, 0)
+	t := time.Date(start.Year(), start.Month(), start.Day(), 0, 0, 0, 0, start.Location())
+	for t.Unix() < first {
+		t = t.AddDate(0, 0, days)
+	}
+	for at := t.Unix(); at <= last; {
+		ticks = append(ticks, at)
+		t = t.AddDate(0, 0, days)
+		at = t.Unix()
+	}
+	return ticks
+}
+
+// drawDashedLine draws segment (x0,y0)-(x1,y1) as alternating dash/gap
+// stretches — a caller's visual cue that this is a REFERENCE line, not
+// sampled data, without inventing a second line style in Theme.
+func drawDashedLine(p painter.Painter, x0, y0, x1, y1 int, color RGBA) {
+	const dash, gap = 4.0, 3.0
+	dx, dy := float64(x1-x0), float64(y1-y0)
+	length := math.Hypot(dx, dy)
+	if length == 0 {
+		return
+	}
+	ux, uy := dx/length, dy/length
+	on := true
+	for d := 0.0; d < length; {
+		step := dash
+		if !on {
+			step = gap
+		}
+		next := math.Min(d+step, length)
+		if on {
+			drawLine(p, x0+int(d*ux), y0+int(d*uy), x0+int(next*ux), y0+int(next*uy), color)
+		}
+		d = next
+		on = !on
+	}
 }
 
 // A11y reports the TimeSeriesChart as an img carrying its point count —
