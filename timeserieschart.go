@@ -69,8 +69,22 @@ type TimeSeriesChart struct {
 	// recorded, so a label missing its date is just a clock.
 	FormatTime func(int64) string
 
+	// FollowPeak makes the chart choose its own Max from the data instead of
+	// being told one: it rises to a new peak AT ONCE and comes back down
+	// slowly. Min is left alone.
+	//
+	// A fixed ceiling is wrong in both directions on live data. Too low and a
+	// burst is drawn off the top, where nobody can measure it; too high and
+	// everything else is a flat line along the bottom. And a ceiling that
+	// simply tracked the peak would rescale the whole picture every time a
+	// spike scrolled off the left -- a graph whose axis keeps moving cannot be
+	// read at all.
+	FollowPeak bool
+
 	// series is the bindable form of Points, created by Series().
 	series *mvvm.ObservableList[TimePoint]
+	// ceiling is where FollowPeak has the scale now.
+	ceiling float64
 }
 
 // NewTimeSeriesChart builds a TimeSeriesChart over points (already in
@@ -145,7 +159,62 @@ func (c *TimeSeriesChart) valueAxisWidth() int {
 
 // Draw paints the value axis (gridlines + labels), the time axis (start
 // + end labels, only when there's a span to label), and the polyline.
+// followPeak moves the scale towards what the data now needs, and reports the
+// ceiling to draw against.
+func (c *TimeSeriesChart) followPeak() {
+	if !c.FollowPeak {
+		return
+	}
+	high := 0.0
+	for _, pt := range c.points() {
+		if pt.Value > high {
+			high = pt.Value
+		}
+	}
+	want := NiceCeiling(high)
+	switch {
+	case c.ceiling <= 0 || want >= c.ceiling:
+		c.ceiling = want
+	default:
+		// A fifth of the distance each draw, so a quiet minute lowers the
+		// scale and a single quiet sample does not.
+		next := c.ceiling - (c.ceiling-want)/5
+		// Approaching by fifths never arrives: the gap halves for ever and the
+		// axis would read 1.0000000000000004 rather than 1. Close enough is
+		// there.
+		if next <= want*1.001 {
+			next = want
+		}
+		c.ceiling = next
+	}
+	c.Max = c.ceiling
+}
+
+// NiceCeiling rounds a value up to a power of two, or to a half or three
+// quarters of one: 1, 1.5, 2, 3, 4, 6, 8 and so on.
+//
+// Those are the gradations a quantity is spoken in -- half a mebibyte, three
+// quarters of a gibibyte -- so an axis reads as a number rather than as
+// whatever the peak happened to be, and two charts sharing a scale land on the
+// same marks.
+func NiceCeiling(v float64) float64 {
+	if v <= 0 {
+		return 1
+	}
+	step := 1.0
+	for step < v {
+		step *= 2
+	}
+	for _, f := range []float64{0.5, 0.75} {
+		if c := step * f; c >= v {
+			return c
+		}
+	}
+	return step
+}
+
 func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
+	c.followPeak()
 	r := c.Bounds()
 	if r.W <= 0 || r.H <= 0 {
 		return
