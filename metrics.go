@@ -27,10 +27,15 @@ func SetMetricScale(f float64) {
 	if f <= 0 {
 		return
 	}
-	if f == metricScale {
+	appearanceMu.Lock()
+	changed := f != metricScale
+	if changed {
+		metricScale = f
+	}
+	appearanceMu.Unlock()
+	if !changed {
 		return
 	}
-	metricScale = f
 	// The text follows. Every other metric here is multiplied by the scale and
 	// the one thing a person actually reads was not, so an application on a
 	// HiDPI display got labels at half the size it asked for and had to
@@ -40,7 +45,11 @@ func SetMetricScale(f float64) {
 }
 
 // MetricScale returns the current global metric scale (1.0 by default).
-func MetricScale() float64 { return metricScale }
+func MetricScale() float64 {
+	appearanceMu.RLock()
+	defer appearanceMu.RUnlock()
+	return metricScale
+}
 
 // scaled rounds a base (logical-pixel) metric to device pixels at the current
 // HiDPI scale AND touch density. It is the single seam every widget's pixel
@@ -53,13 +62,23 @@ func MetricScale() float64 { return metricScale }
 // Under the default [DensityCompact] the factor is exactly 1.0, so this reduces
 // to the pure HiDPI form and every metric is byte-identical to a density-less
 // toolkit.
-func scaled(v int) int { return int(float64(v)*metricScale*densityFactor(density) + 0.5) }
+func scaled(v int) int {
+	appearanceMu.RLock()
+	s, d := metricScale, density
+	appearanceMu.RUnlock()
+	return int(float64(v)*s*densityFactor(d) + 0.5)
+}
 
 // dpiScaled rounds a base (logical-pixel) length to device pixels at the current
 // HiDPI [MetricScale] ONLY — it does NOT apply the touch [Density] factor. It
 // backs [MinHitTarget], whose floor is an absolute reachability guarantee in
 // logical pixels that must grow with panel DPI but not with spacing density.
-func dpiScaled(v int) int { return int(float64(v)*metricScale + 0.5) }
+func dpiScaled(v int) int {
+	appearanceMu.RLock()
+	s := metricScale
+	appearanceMu.RUnlock()
+	return int(float64(v)*s + 0.5)
+}
 
 // Scaled is the exported form of [scaled]: it rounds a base (logical-pixel)
 // metric to device pixels at the current [MetricScale]. Sibling packages that
