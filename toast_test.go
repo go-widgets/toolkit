@@ -5,6 +5,7 @@
 package toolkit
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/go-widgets/painter"
@@ -852,5 +853,187 @@ func TestToastButtonRectsAgreeWithOnEvent(t *testing.T) {
 	if len(log) != 0 || !tt.Visible().Get() {
 		t.Fatalf("click just left of the first button fired %v (visible=%v), want none",
 			log, tt.Visible().Get())
+	}
+}
+
+// TestToastMaxWKeepsThePillInsideItsHost.
+//
+// ⛔ THE DEFECT THIS EXISTS FOR. A Toast sizes itself to its widest line with
+// no upper bound. A host that docks it to a centre anchor then paints a pill
+// wider than the view, so BOTH ENDS are cut and the reader is left with the
+// middle of a sentence -- which is worse than a truncated message, because it
+// does not look truncated.
+//
+// Measured in go-xrkit/desk on a 1920-wide view, at the size it draws notices:
+// an already-shipped refusal came to 2373px and a longer one to 4975px, 2.6
+// times the width it had to fit in.
+func TestToastMaxWKeepsThePillInsideItsHost(t *testing.T) {
+	const host = 300
+	const long = "the camera was refused; it is turned on again in " +
+		"System Settings > Privacy & Security > Camera"
+	view := Rect{W: host, H: 200}
+
+	t.Run("without MaxW the pill grows past its host", func(t *testing.T) {
+		// The control. If this ever passes, either the defect is gone or the
+		// string is too short to show it -- and the test below proves nothing.
+		tp := NewToast(long, ToastError)
+		tp.AnchorIn(view, BottomCenter, 0)
+		if w := tp.Bounds().W; w <= host {
+			t.Fatalf("pill is %dpx and the host %dpx: this string no longer overflows, "+
+				"so the MaxW case below is not measuring anything", w, host)
+		}
+	})
+
+	t.Run("with MaxW it fits", func(t *testing.T) {
+		tp := NewToast(long, ToastError)
+		tp.MaxW = host
+		tp.AnchorIn(view, BottomCenter, 0)
+		if w := tp.Bounds().W; w > host {
+			t.Errorf("pill %dpx, want at most %dpx", w, host)
+		}
+		if n := len(tp.lines()); n < 2 {
+			t.Errorf("%d line(s): a sentence that did not fit must have been broken", n)
+		}
+	})
+
+	t.Run("and says the same words, in order", func(t *testing.T) {
+		// Wrapping may only move the spaces. A wrap that dropped or reordered
+		// words would be a wrap that lies about what happened.
+		tp := NewToast(long, ToastError)
+		tp.MaxW = host
+		if got := strings.Join(tp.lines(), " "); got != long {
+			t.Errorf("wrapping changed the message:\n got %q\nwant %q", got, long)
+		}
+	})
+
+	t.Run("the pill grows taller by exactly the rows it gained", func(t *testing.T) {
+		tp := NewToast(long, ToastError)
+		tp.MaxW = host
+		tp.AnchorIn(view, BottomCenter, 0)
+		n := len(tp.lines())
+		want := n*tp.glyphHeight() + (n-1)*ToastLineGap + 2*ToastPadY
+		if h := tp.Bounds().H; h != want {
+			t.Errorf("pill is %dpx tall, want %dpx for %d rows", h, want, n)
+		}
+	})
+}
+
+// TestToastMaxWZeroChangesNothing pins the opt-in: a toast that never sets MaxW
+// must size, wrap and draw exactly as it did before MaxW existed.
+func TestToastMaxWZeroChangesNothing(t *testing.T) {
+	const long = "a sentence comfortably wider than any pill anybody would want"
+	tp := NewToast(long, ToastInfo)
+	if got := tp.lines(); len(got) != 1 || got[0] != long {
+		t.Errorf("lines() = %q, want the single unwrapped Text", got)
+	}
+	tp.AnchorIn(Rect{W: 50, H: 50}, BottomCenter, 0)
+	if w, want := tp.Bounds().W, tp.textWidth(long)+2*ToastPadX; w != want {
+		t.Errorf("pill %dpx, want %dpx -- an unset MaxW must not measure or wrap", w, want)
+	}
+}
+
+// TestToastLinesBeatMaxW: a caller that supplied its own rows has already
+// decided where they break, and MaxW must not second-guess it.
+func TestToastLinesBeatMaxW(t *testing.T) {
+	tp := NewToast("ignored", ToastInfo)
+	tp.Lines = []string{"a title line that is quite long indeed", "and a body line"}
+	tp.MaxW = 40
+	got := tp.lines()
+	if len(got) != 2 || got[0] != tp.Lines[0] || got[1] != tp.Lines[1] {
+		t.Errorf("lines() = %q, want the rows the caller gave", got)
+	}
+}
+
+// TestToastWrapIsMemoisedAndInvalidated: lines() is asked three times a frame
+// (sizing, height, drawing), so it must not re-wrap each time -- and it must
+// re-wrap the moment the text or the width changes, or a toast would keep
+// showing the previous message's layout.
+func TestToastWrapIsMemoisedAndInvalidated(t *testing.T) {
+	tp := NewToast("one two three four five six seven eight nine ten", ToastInfo)
+	tp.MaxW = 120
+
+	first := tp.lines()
+	if same := tp.lines(); &same[0] != &first[0] {
+		t.Error("lines() re-wrapped an unchanged toast; the memo is not being used")
+	}
+
+	tp.Text = "a completely different sentence that also needs several rows"
+	if got := tp.lines(); strings.Join(got, " ") != tp.Text {
+		t.Errorf("lines() = %q, still the old message: the memo did not notice the text change", got)
+	}
+
+	before := len(tp.lines())
+	tp.MaxW = 60
+	if after := len(tp.lines()); after <= before {
+		t.Errorf("%d rows at half the width, was %d: the memo did not notice the width change", after, before)
+	}
+}
+
+// TestToastMaxWCorners covers the three ways the wrap declines to happen: no
+// room left for the text, nothing to wrap, and an action zone that has to be
+// paid for out of the same budget.
+func TestToastMaxWCorners(t *testing.T) {
+	t.Run("a cap too small to hold any text does not wrap", func(t *testing.T) {
+		// Better an overflowing pill than one with no words in it: a wrap to
+		// zero or fewer pixels would put one letter on each of forty rows.
+		tp := NewToast("several words that will not fit", ToastInfo)
+		tp.MaxW = 2 * ToastPadX // exactly the padding: nothing left
+		if got := tp.lines(); len(got) != 1 || got[0] != tp.Text {
+			t.Errorf("lines() = %q, want the single unwrapped Text", got)
+		}
+	})
+
+	t.Run("whitespace stays one row", func(t *testing.T) {
+		// wrapText yields no lines for all-whitespace, and a toast with no rows
+		// would have no height -- so the pill keeps exactly one.
+		tp := NewToast("   ", ToastInfo)
+		tp.MaxW = 200
+		if got := tp.lines(); len(got) != 1 || got[0] != "   " {
+			t.Errorf("lines() = %q, want one row holding the original text", got)
+		}
+	})
+
+	t.Run("the action zone is paid for out of the same width", func(t *testing.T) {
+		const cap = 300
+		plain := NewToast("one two three four five six seven eight", ToastInfo)
+		plain.MaxW = cap
+		acted := NewToast(plain.Text, ToastInfo)
+		acted.MaxW = cap
+		acted.ActionLabel = "Undo"
+
+		// The button takes room the words no longer have, so it must wrap onto
+		// at least as many rows -- and the pill must STILL fit the cap.
+		if len(acted.lines()) < len(plain.lines()) {
+			t.Errorf("%d rows with a button, %d without: the action zone was not charged",
+				len(acted.lines()), len(plain.lines()))
+		}
+		acted.AnchorIn(Rect{W: cap, H: 200}, BottomCenter, 0)
+		if w := acted.Bounds().W; w > cap {
+			t.Errorf("pill %dpx with a button, want at most %dpx", w, cap)
+		}
+	})
+}
+
+// TestWrapTextIsTheOneTheCardsUse: the exported wrapper must be the same
+// routine, not a second implementation that breaks lines to other rules.
+func TestWrapTextIsTheOneTheCardsUse(t *testing.T) {
+	f := CurrentFont()
+	const s = "one two three four five six seven eight nine ten"
+	width := f.Measure("one two three") // room for about three words
+
+	got := WrapText(f, s, width)
+	if len(got) < 2 {
+		t.Fatalf("WrapText gave %d line(s) for %q at %dpx; want it broken up", len(got), s, width)
+	}
+	if joined := strings.Join(got, " "); joined != s {
+		t.Errorf("WrapText changed the words:\n got %q\nwant %q", joined, s)
+	}
+	for _, ln := range got {
+		if w := f.Measure(ln); w > width {
+			t.Errorf("line %q is %dpx, over the %dpx asked for", ln, w, width)
+		}
+	}
+	if got := WrapText(f, "   ", width); got != nil {
+		t.Errorf("WrapText(whitespace) = %q, want no lines", got)
 	}
 }
