@@ -6,6 +6,7 @@ package toolkit
 
 import (
 	"fmt"
+	"github.com/go-widgets/mvvm"
 	"time"
 
 	"github.com/go-widgets/painter"
@@ -67,12 +68,45 @@ type TimeSeriesChart struct {
 	// whenever someone happens to open it, not only the day a point was
 	// recorded, so a label missing its date is just a clock.
 	FormatTime func(int64) string
+
+	// series is the bindable form of Points, created by Series().
+	series *mvvm.ObservableList[TimePoint]
 }
 
 // NewTimeSeriesChart builds a TimeSeriesChart over points (already in
 // ascending At order) with fixed Y bounds min..max.
 func NewTimeSeriesChart(points []TimePoint, min, max float64) *TimeSeriesChart {
 	return &TimeSeriesChart{Points: points, Min: min, Max: max}
+}
+
+// Series is the chart's points as a shared [mvvm.ObservableList], so a host
+// binds its model to the chart instead of assigning a field and hoping
+// something repaints.
+//
+// A LIST, not an Observable: mvvm.Observable is constrained to comparable
+// types so it can skip a notification when nothing changed, and a slice is not
+// comparable. That constraint is why no chart here had a bindable series at
+// all -- the vehicle for one is ObservableList, which also says WHAT changed
+// rather than only that something did.
+//
+// It is created on first use, seeded from [TimeSeriesChart.Points] -- and from
+// then on IT is what the chart draws. Two sources for one truth is how a chart
+// comes to show last minute's data; the field stays as the way to give initial
+// points to a chart nobody binds, and taking the list settles which one wins.
+func (c *TimeSeriesChart) Series() *mvvm.ObservableList[TimePoint] {
+	if c.series == nil {
+		c.series = mvvm.NewObservableList(c.Points...)
+	}
+	return c.series
+}
+
+// points is what the chart draws: the observable once somebody has taken it,
+// the field until then.
+func (c *TimeSeriesChart) points() []TimePoint {
+	if c.series != nil {
+		return c.series.Slice()
+	}
+	return c.Points
 }
 
 func (c *TimeSeriesChart) formatValue(v float64) string {
@@ -131,10 +165,11 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 		c.drawText(p, tx, y-gh/2, text, label)
 	}
 
-	if len(c.Points) < 2 {
+	if len(c.points()) < 2 {
 		return
 	}
-	first, last := c.Points[0], c.Points[len(c.Points)-1]
+	pts := c.points()
+	first, last := pts[0], pts[len(pts)-1]
 	span := last.At - first.At
 	if span <= 0 {
 		return
@@ -156,8 +191,8 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 		y := pl.Y + int((1-vf)*float64(pl.H-1))
 		return x, y
 	}
-	px, py := pointAt(c.Points[0])
-	for _, pt := range c.Points[1:] {
+	px, py := pointAt(pts[0])
+	for _, pt := range pts[1:] {
 		x, y := pointAt(pt)
 		drawLine(p, px, py, x, y, ink)
 		px, py = x, y
@@ -175,7 +210,7 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 // use, since a full time-value series has no single "current" reading to
 // report the way a Gauge's RoleMeter does.
 func (c *TimeSeriesChart) A11y() A11yInfo {
-	return A11yInfo{Role: RoleImg, Value: fmt.Sprintf("%d points", len(c.Points))}
+	return A11yInfo{Role: RoleImg, Value: fmt.Sprintf("%d points", len(c.points()))}
 }
 
 var _ Accessible = (*TimeSeriesChart)(nil)

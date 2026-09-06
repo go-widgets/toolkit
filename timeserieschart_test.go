@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/mvvm"
+
 import "testing"
 
 func TestTimeSeriesChartEmptyDrawsAxesOnly(t *testing.T) {
@@ -216,4 +218,51 @@ func TestTimeSeriesChartZeroBoundsDoesNotPanic(t *testing.T) {
 	c.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 60})
 	surf := makeSurface(120, 60)
 	c.Draw(newP(surf, 120), DefaultLight()) // must not panic
+}
+
+// TestAChartsSeriesCanBeBound covers the binding these charts did not have.
+//
+// A host had to assign a field and hope something repainted. mvvm.Observable is
+// constrained to comparable types so it can skip a notification when nothing
+// changed, and a slice is not comparable — which is why no chart here had a
+// bindable series at all. ObservableList is the vehicle, and it says WHAT
+// changed rather than only that something did.
+func TestAChartsSeriesCanBeBound(t *testing.T) {
+	c := NewTimeSeriesChart([]TimePoint{{At: 1, Value: 10}}, 0, 100)
+
+	// Until somebody takes the list, the field is what the chart draws: a
+	// chart nobody binds keeps working exactly as it did.
+	if got := len(c.points()); got != 1 {
+		t.Fatalf("the unbound chart draws %d points", got)
+	}
+
+	// Taking it seeds from the field, so nothing is lost at the moment of
+	// binding.
+	list := c.Series()
+	if list.Len() != 1 || list.At(0).Value != 10 {
+		t.Fatalf("the list came back as %+v", list.Slice())
+	}
+	// And from then on the LIST is the truth. Two sources for one truth is how
+	// a chart comes to show last minute's data.
+	list.Append(TimePoint{At: 2, Value: 20})
+	if got := len(c.points()); got != 2 {
+		t.Errorf("after appending, the chart draws %d points", got)
+	}
+	c.Points = nil
+	if got := len(c.points()); got != 2 {
+		t.Errorf("clearing the field changed the bound chart to %d points", got)
+	}
+
+	// A subscriber hears about it, which is the whole reason for binding: the
+	// host repaints because the model changed, not because it polled.
+	heard := 0
+	list.Subscribe(func(mvvm.ListEvent[TimePoint]) { heard++ })
+	list.Append(TimePoint{At: 3, Value: 30})
+	if heard == 0 {
+		t.Error("appending to the series told nobody")
+	}
+	// The same list every time, or two callers would bind to two charts.
+	if c.Series() != list {
+		t.Error("Series() handed out a second list")
+	}
 }
