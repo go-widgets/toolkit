@@ -266,3 +266,66 @@ func TestAChartsSeriesCanBeBound(t *testing.T) {
 		t.Error("Series() handed out a second list")
 	}
 }
+
+// TestAChartCanFollowItsOwnPeak covers an axis on live data.
+//
+// A fixed ceiling is wrong in both directions: too low and a burst is drawn off
+// the top where nobody can measure it, too high and everything else is a flat
+// line along the bottom. And one that simply tracked the peak would rescale the
+// whole picture every time a spike scrolled off the left — a graph whose axis
+// keeps moving cannot be read at all.
+func TestAChartCanFollowItsOwnPeak(t *testing.T) {
+	c := NewTimeSeriesChart(nil, 0, 1)
+	c.FollowPeak = true
+
+	// Up at once, so a burst is never drawn off the top.
+	c.Points = []TimePoint{{At: 1, Value: 3}}
+	c.followPeak()
+	if c.Max < 3 {
+		t.Fatalf("a peak of 3 left the ceiling at %v", c.Max)
+	}
+	high := c.Max
+
+	// Down slowly: one quiet draw must not rescale the picture.
+	c.Points = []TimePoint{{At: 2, Value: 0}}
+	c.followPeak()
+	if c.Max >= high {
+		t.Errorf("the ceiling did not come down at all: %v", c.Max)
+	}
+	if c.Max <= NiceCeiling(0) {
+		t.Errorf("the ceiling fell all the way in one draw: %v", c.Max)
+	}
+	// And it arrives, given enough quiet draws.
+	for i := 0; i < 200; i++ {
+		c.followPeak()
+	}
+	if c.Max != NiceCeiling(0) {
+		t.Errorf("after two hundred quiet draws the ceiling is %v", c.Max)
+	}
+
+	// A chart nobody asked to follow anything keeps the bounds it was given:
+	// this is opt-in, and an existing chart is unchanged.
+	fixed := NewTimeSeriesChart([]TimePoint{{At: 1, Value: 900}}, 0, 100)
+	fixed.followPeak()
+	if fixed.Max != 100 {
+		t.Errorf("a fixed chart rescaled itself to %v", fixed.Max)
+	}
+}
+
+// TestNiceCeilingSpeaksInRoundNumbers covers the gradations an axis is read in.
+func TestNiceCeilingSpeaksInRoundNumbers(t *testing.T) {
+	for _, tc := range []struct{ in, want float64 }{
+		{0, 1}, {-5, 1}, {1, 1}, {3, 3}, {5, 6}, {9, 12}, {13, 16},
+	} {
+		if got := NiceCeiling(tc.in); got != tc.want {
+			t.Errorf("NiceCeiling(%v) = %v, want %v", tc.in, got, tc.want)
+		}
+	}
+	// Never below the data: a ceiling under the peak draws a curve out of its
+	// own chart.
+	for _, v := range []float64{0.1, 7, 1000, 1 << 30} {
+		if got := NiceCeiling(v); got < v {
+			t.Errorf("NiceCeiling(%v) = %v, below the data", v, got)
+		}
+	}
+}
