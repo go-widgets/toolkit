@@ -677,3 +677,68 @@ func TestDrawDashedLineDrawsFewerPixelsThanASolidLine(t *testing.T) {
 		t.Errorf("dashed line painted %d of 100 columns, solid painted %d — expected dashed to cover fewer (gaps)", dashedCols, solidCols)
 	}
 }
+
+func TestTimeRange(t *testing.T) {
+	c := &TimeSeriesChart{Points: []TimePoint{{At: 100, Value: 1}, {At: 200, Value: 2}}}
+	if start, end, ok := c.timeRange(); !ok || start != 100 || end != 200 {
+		t.Errorf("auto-derived from Points: got (%d, %d, %v), want (100, 200, true)", start, end, ok)
+	}
+
+	c.TimeMin, c.TimeMax = 0, 1000
+	if start, end, ok := c.timeRange(); !ok || start != 0 || end != 1000 {
+		t.Errorf("pinned range overrides Points: got (%d, %d, %v), want (0, 1000, true)", start, end, ok)
+	}
+
+	empty := &TimeSeriesChart{}
+	if _, _, ok := empty.timeRange(); ok {
+		t.Error("no Points and no pinned range: ok = true, want false")
+	}
+}
+
+// TestTimeSeriesChartPinnedRangeShowsFullWindowEvenWithSparseData is the
+// actual load-bearing proof: a single real point sitting near the END
+// of a much wider pinned range must still be plotted against — and
+// axis-labeled with — the FULL pinned window, not a span shrunk to
+// that one point's own narrow extent (a day-old history otherwise
+// looks like a one-day chart, not a mostly-empty week).
+func TestTimeSeriesChartPinnedRangeShowsFullWindowEvenWithSparseData(t *testing.T) {
+	c := NewTimeSeriesChart([]TimePoint{{At: 6*24*3600 + 1000, Value: 50}}, 0, 100)
+	c.TimeMin, c.TimeMax = 0, 7*24*3600
+	var calls []int64
+	c.FormatTime = func(at int64) string {
+		calls = append(calls, at)
+		return "x"
+	}
+	c.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
+	surf := makeSurface(200, 80)
+	c.Draw(newP(surf, 200), DefaultLight())
+
+	if len(calls) != 2 {
+		t.Fatalf("FormatTime called %d times, want 2 (start, end)", len(calls))
+	}
+	if calls[0] != c.TimeMin || calls[1] != c.TimeMax {
+		t.Errorf("axis end labels used (%d, %d), want the pinned range (%d, %d)", calls[0], calls[1], c.TimeMin, c.TimeMax)
+	}
+}
+
+// TestTimeSeriesChartPinnedRangeWithNoPointsStillDrawsScaffolding proves
+// a pinned range draws its vertical gridlines even before any real data
+// exists at all — the "empty week" scaffolding a dashboard wants from
+// the very first render.
+func TestTimeSeriesChartPinnedRangeWithNoPointsStillDrawsScaffolding(t *testing.T) {
+	empty := NewTimeSeriesChart(nil, 0, 100)
+	pinned := NewTimeSeriesChart(nil, 0, 100)
+	pinned.TimeMin, pinned.TimeMax = 0, 7*24*3600
+
+	empty.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
+	pinned.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 80})
+	s1, s2 := makeSurface(200, 80), makeSurface(200, 80)
+	empty.Draw(newP(s1, 200), DefaultLight())
+	pinned.Draw(newP(s2, 200), DefaultLight())
+
+	base := countInk(s1, 200, 80, DefaultLight().Border)
+	got := countInk(s2, 200, 80, DefaultLight().Border)
+	if got <= base {
+		t.Errorf("a pinned range with zero points painted %d Border pixels, want more than the truly-empty baseline (%d) — vertical gridlines should still show the full window", got, base)
+	}
+}
