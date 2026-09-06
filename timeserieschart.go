@@ -295,13 +295,7 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 	px, py := pointAt(pts[0])
 	for _, pt := range pts[1:] {
 		x, y := pointAt(pt)
-		segInk := ink
-		if c.OverInk != (RGBA{}) {
-			if v, ok := c.thresholdAt(pt.At); ok && pt.Value > v {
-				segInk = c.OverInk
-			}
-		}
-		drawLine(p, px, py, x, y, segInk)
+		drawCurveLine(p, px, py, x, y, c.segmentInk(pt, ink))
 		px, py = x, y
 	}
 
@@ -327,6 +321,23 @@ func (c *TimeSeriesChart) thresholdAt(at int64) (float64, bool) {
 		v = t.Value
 	}
 	return v, true
+}
+
+// segmentInk is the color a Points segment ENDING at pt draws in: ink,
+// unless OverInk is set and pt.Value is above the Threshold in effect
+// at pt.At, in which case OverInk. Pulled out of Draw as a plain
+// value-in-value-out decision (no painter, no pixels) so it can be
+// tested exactly — an anti-aliased stroke's own pixels are a blend with
+// whatever was already there, never a pure color match, which makes
+// asserting "this segment used OverInk" by sampling drawn pixels the
+// wrong tool for this specific question.
+func (c *TimeSeriesChart) segmentInk(pt TimePoint, ink RGBA) RGBA {
+	if c.OverInk != (RGBA{}) {
+		if v, ok := c.thresholdAt(pt.At); ok && pt.Value > v {
+			return c.OverInk
+		}
+	}
+	return ink
 }
 
 // niceTimeIntervals are the calendar-shaped step sizes vertical
@@ -399,6 +410,25 @@ func verticalGridTicks(first, last int64) []int64 {
 // drawDashedLine draws segment (x0,y0)-(x1,y1) as alternating dash/gap
 // stretches — a caller's visual cue that this is a REFERENCE line, not
 // sampled data, without inventing a second line style in Theme.
+// drawCurveLine draws one diagonal curve/threshold segment with
+// anti-aliasing on a pixel back-end (a painter.PathPainter), falling
+// back to the shared Bresenham drawLine on a CellPainter. Scoped to
+// TimeSeriesChart's own diagonal segments — not the shared drawLine
+// itself, which every chart widget in this package also uses for
+// axis-aligned gridlines and rules, where a 1-unit AA stroke centred on
+// an integer coordinate straddles the pixel boundary and can bleed half
+// a pixel past a widget's own Bounds (see TestWidgetsStayWithinBounds).
+// A diagonal segment inside the plot area carries no such risk, and is
+// exactly the case where Bresenham's staircasing is visible.
+func drawCurveLine(p painter.Painter, x0, y0, x1, y1 int, c RGBA) {
+	if pp, ok := p.(painter.PathPainter); ok {
+		path := painter.NewPath().MoveTo(float64(x0), float64(y0)).LineTo(float64(x1), float64(y1))
+		pp.StrokePath(path, c, 1)
+		return
+	}
+	drawLine(p, x0, y0, x1, y1, c)
+}
+
 func drawDashedLine(p painter.Painter, x0, y0, x1, y1 int, color RGBA) {
 	const dash, gap = 4.0, 3.0
 	dx, dy := float64(x1-x0), float64(y1-y0)
@@ -415,7 +445,7 @@ func drawDashedLine(p painter.Painter, x0, y0, x1, y1 int, color RGBA) {
 		}
 		next := math.Min(d+step, length)
 		if on {
-			drawLine(p, x0+int(d*ux), y0+int(d*uy), x0+int(next*ux), y0+int(next*uy), color)
+			drawCurveLine(p, x0+int(d*ux), y0+int(d*uy), x0+int(next*ux), y0+int(next*uy), color)
 		}
 		d = next
 		on = !on
