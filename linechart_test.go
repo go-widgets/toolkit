@@ -109,3 +109,27 @@ func TestDrawLineDiagonalAndSteep(t *testing.T) {
 		t.Errorf("zero-length line pixel = %+v", got)
 	}
 }
+
+// TestALineChartsValuesCanBeBound is the same binding on the plainer chart:
+// the field until somebody takes the list, the list from then on.
+func TestALineChartsValuesCanBeBound(t *testing.T) {
+	c := NewLineChart([]float64{1, 2, 3})
+	if got := len(c.series()); got != 3 {
+		t.Fatalf("the unbound chart draws %d values", got)
+	}
+	v := c.Values()
+	if v.Len() != 3 {
+		t.Fatalf("the list came back with %d values", v.Len())
+	}
+	v.Append(4)
+	if got := len(c.series()); got != 4 {
+		t.Errorf("after appending, the chart draws %d values", got)
+	}
+	c.Series = nil
+	if got := len(c.series()); got != 4 {
+		t.Errorf("clearing the field changed the bound chart to %d values", got)
+	}
+	if c.Values() != v {
+		t.Error("Values() handed out a second list")
+	}
+}
