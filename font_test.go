@@ -220,3 +220,61 @@ func TestDrawTextHonoursInkAlpha(t *testing.T) {
 		t.Fatalf("half-alpha ink R = %d, want strictly between 0x10 and 0xC8 (blended)", got.R)
 	}
 }
+
+// TestTheBitmapFontCountsRunesNotBytes.
+//
+// ⛔⛔ IT COUNTED BYTES, AND ITS OWN DOC SAID RUNES. Every character outside
+// ASCII was measured two or three times too wide, and Draw walked one cell per
+// BYTE -- so an accent or a curly quote became two or three blanks in a row and
+// pushed everything after it along by that much.
+//
+// ⭐ THAT IS WHERE A RULE IN ANOTHER REPOSITORY CAME FROM. go-xrkit/desk forbids
+// apostrophes in its settings window because "the glasses' own menu bar" came
+// out with a hole in it. The hole was THREE cells wide, because a curly
+// apostrophe is three bytes.
+func TestTheBitmapFontCountsRunesNotBytes(t *testing.T) {
+	f := NewBitmapFont(1)
+	adv := f.Advance()
+
+	for _, c := range []struct {
+		s     string
+		cells int
+	}{
+		{"e", 1},
+		{"é", 1}, // two bytes
+		{"€", 1}, // three
+		{"…", 1}, // three -- the one the toolkit trims with
+		{"abc", 3},
+		{"àbc", 3}, // four bytes, three characters
+		{"", 0},
+	} {
+		if got, want := f.Measure(c.s), c.cells*adv; got != want {
+			t.Errorf("Measure(%q) = %d, want %d (%d cell(s) of %d): %d bytes were counted "+
+				"instead of %d runes", c.s, got, want, c.cells, adv, len(c.s), c.cells)
+		}
+	}
+}
+
+// TestTheEllipsisHasAGlyph.
+//
+// ⛔ ellipsize() appends U+2026, and while the glyph table was keyed by BYTE
+// there was no way to hold one for it. Ellipsis=true therefore shortened the
+// text and drew NOTHING in its place: on screen, indistinguishable from text
+// clipped by its bounds.
+func TestTheEllipsisHasAGlyph(t *testing.T) {
+	if _, ok := font5x7['…']; !ok {
+		t.Fatal("no glyph for U+2026, so an ellipsised label ends in nothing")
+	}
+	// And it must be inked, not an empty box that merely exists.
+	lit := 0
+	for _, col := range font5x7['…'] {
+		for row := 0; row < baseGlyphHeight; row++ {
+			if col&(1<<row) != 0 {
+				lit++
+			}
+		}
+	}
+	if lit != 3 {
+		t.Errorf("the ellipsis glyph lights %d pixels, want 3 dots", lit)
+	}
+}

@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"unicode/utf8"
+
+	"github.com/go-widgets/painter"
+)
 
 // Bitmap font + text-drawing helper. The 5x7 glyph table below is
 // copied verbatim from wasmdesk/wasmbox's dock scene (see
@@ -58,7 +62,19 @@ func (f *bitmapFont) Height() int { return baseGlyphHeight * f.Scale }
 
 // Measure is the width text occupies. The bitmap font is monospace, so every
 // rune (known or unknown) consumes exactly one Advance slot.
-func (f *bitmapFont) Measure(text string) int { return len(text) * f.Advance() }
+//
+// ⛔⛔ IT USED TO COUNT BYTES, AND THE SENTENCE ABOVE HAS ALWAYS SAID RUNES.
+// Everything outside ASCII was measured two or three times too wide. Measured
+// 2026-09-07 at Advance 6: "e" 6, "é" 12, "€" 18, "abc" 18, "àbc" 24.
+//
+// ⭐ AND IT EXPLAINS A RULE SOMEBODY WROTE FROM THE SYMPTOM. go-xrkit/desk
+// forbids apostrophes in its settings window because "the glasses' own menu
+// bar" came out with a hole in it. The hole was THREE cells wide: a curly
+// apostrophe is three bytes, so Draw walked three of them, found no glyph for
+// any, and left three blanks where one character belonged.
+func (f *bitmapFont) Measure(text string) int {
+	return utf8.RuneCountInString(text) * f.Advance()
+}
 
 // NewBitmapFont returns the built-in 5x7 font scaled by the given integer
 // factor (clamped to at least 1). SetFont(NewBitmapFont(2)) doubles all text.
@@ -146,7 +162,13 @@ func GlyphAdvance() int { return CurrentFont().Advance() }
 // glyph: 5 bytes, one per column, low 7 bits encode the rows from top
 // (bit 0) to bottom (bit 6). Characters not in the map render as a
 // blank (the advance is still consumed so columns line up).
-var font5x7 = map[byte][5]byte{
+// ⛔ KEYED BY RUNE, NOT BY BYTE. A byte key can only ever hold ASCII, so every
+// character above 127 was a lookup that could not succeed -- and the ellipsis
+// the toolkit trims text with, U+2026, was one of them: Ellipsis=true drew
+// NOTHING where the ellipsis belonged, and a truncated label was
+// indistinguishable from a clipped one. The literals below are rune constants
+// already, so the table itself did not change.
+var font5x7 = map[rune][5]byte{
 	// Digits.
 	'0': {0x3E, 0x51, 0x49, 0x45, 0x3E},
 	'1': {0x00, 0x42, 0x7F, 0x40, 0x00},
@@ -220,6 +242,13 @@ var font5x7 = map[byte][5]byte{
 	'.': {0x00, 0x60, 0x60, 0x00, 0x00},
 	',': {0x00, 0x50, 0x30, 0x00, 0x00},
 	':': {0x00, 0x36, 0x36, 0x00, 0x00},
+	// ⭐ THE ELLIPSIS THE TOOLKIT TRIMS WITH. ellipsize() appends U+2026, and
+	// until the table was keyed by rune there was no way to hold a glyph for it:
+	// Ellipsis=true drew nothing where the ellipsis belonged, so a truncated
+	// label looked exactly like a clipped one. Three single-pixel dots on the
+	// baseline, at columns 0, 2 and 4 -- lighter than three of the '.' glyph,
+	// which is a 2x2 block and would crowd a five-wide cell.
+	'…': {0x40, 0x00, 0x40, 0x00, 0x40},
 	'-': {0x08, 0x08, 0x08, 0x08, 0x08},
 	'_': {0x40, 0x40, 0x40, 0x40, 0x40},
 	'/': {0x20, 0x10, 0x08, 0x04, 0x02},
@@ -268,12 +297,20 @@ func (f *bitmapFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
 		return
 	}
 	adv := f.Advance()
-	for k := 0; k < len(text); k++ {
-		bits, ok := font5x7[text[k]]
+	// ⛔ ONE CELL PER RUNE, NOT PER BYTE. Walking bytes gave a multi-byte
+	// character one cell for each of its bytes, and no glyph for any of them --
+	// so an accent or a curly quote became two or three blanks in a row, and
+	// everything after it was pushed along by that much.
+	cell := 0
+	for _, r := range text {
+		gx := x + cell*adv
+		cell++
+		// A rune with no glyph draws blank and still takes its one cell, which
+		// is what keeps a column of text lined up.
+		bits, ok := font5x7[r]
 		if !ok {
 			continue
 		}
-		gx := x + k*adv
 		for col := 0; col < 5; col++ {
 			cb := bits[col]
 			for row := 0; row < baseGlyphHeight; row++ {

@@ -161,23 +161,38 @@ func TestLabelEllipsis(t *testing.T) {
 		t.Fatal("Ellipsis=true on an over-wide string must change the render")
 	}
 
-	// The truncated render must fit the bounds width and be narrower than the
-	// (overflowing) full render.
+	// The truncated render must fit the bounds width.
 	clipW := labelPaintedWidth(clip, w, h)
-	fullW := labelPaintedWidth(full, w, h)
 	if clipW > w {
 		t.Fatalf("truncated text width %d must fit bounds width %d", clipW, w)
 	}
-	if !(clipW < fullW) {
-		t.Fatalf("truncated width %d must be shorter than full width %d", clipW, fullW)
+
+	// ⛔ IT IS NOT COMPARED WITH THE FULL RENDER ANY MORE. The full one is
+	// CLIPPED by the bounds, so its painted width is wherever its last surviving
+	// glyph happens to stop -- and an ellipsised render can legitimately paint
+	// FURTHER right, because the ellipsis sits at the far edge of its cell.
+	// Requiring "narrower" measured a coincidence of which letter fell last.
+
+	// ⭐ THE ELLIPSIS MUST BE DRAWN, NOT MERELY APPENDED. Until the glyph table
+	// was keyed by rune it could not hold U+2026 at all, so Ellipsis=true gave a
+	// shortened string ending in NOTHING -- indistinguishable on screen from
+	// text simply clipped by its bounds. Ink in the last cell is what says the
+	// ellipsis is there.
+	if lastCell := w - NewLabel("").glyphAdvance(); clipW <= lastCell {
+		t.Errorf("the truncated render stops at %d in a %d-wide box: nothing was "+
+			"painted in the last cell, so the ellipsis was appended but never drawn",
+			clipW, w)
 	}
 
-	// With the bitmap font the ellipsis is 3 bytes (18px) and each glyph is 6px,
-	// so the widest prefix p with (len(p)+3)*6 <= 60 is 7 bytes: "This is". The
-	// truncated render must therefore equal "This is…" drawn directly.
-	want := drawLabel(w, h, func(l *Label) { l.Text().Set("This is…") })
+	// Each glyph is 6px and the ellipsis is ONE cell, so the widest prefix with
+	// (runes+1)*6 <= 60 is nine runes: "This is a".
+	//
+	// ⚠ THIS NUMBER USED TO BE SEVEN, and the comment here explained why: "the
+	// ellipsis is 3 bytes (18px)". That was the byte-counting defect written
+	// into the test as though it were the rule.
+	want := drawLabel(w, h, func(l *Label) { l.Text().Set("This is a…") })
 	if !bytes.Equal(clip, want) {
-		t.Fatal("truncated render must equal 'This is…' drawn directly")
+		t.Fatal("truncated render must equal 'This is a…' drawn directly")
 	}
 
 	// Ellipsis=true on text that already fits leaves it identical to the plain
