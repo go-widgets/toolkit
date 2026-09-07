@@ -105,7 +105,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"TreeView":  {"Root": true, "RowHeight": true, "MultiSelect": true, "HideRoot": true, "HideScrollbar": true},
 	"TreeTable": {"Columns": true, "Root": true},
 	"ListBox":   {"Items": true, "RowHeight": true, "MultiSelect": true, "Reorderable": true, "Sections": true},
-	"Toast":     {"Text": true, "Kind": true, "ActionLabel": true, "Lines": true, "Actions": true, "Pixels": true, "IW": true, "IH": true, "Icon": true},
+	"Toast":     {"Text": true, "Kind": true, "ActionLabel": true, "Lines": true, "Actions": true, "Pixels": true, "IW": true, "IH": true, "Icon": true, "MaxW": true},
 	"Stat":      {"Title": true},
 	"Sparkline": {"Values": true, "Kind": true, "Fill": true, "ShowLast": true},
 	"Tooltip":   {"Text": true, "Placement": true},

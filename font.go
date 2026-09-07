@@ -298,3 +298,14 @@ func (f *bitmapFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
 func putPixel(p painter.Painter, px, py int, ink RGBA) {
 	p.PutPixel(px, py, ink)
 }
+
+// WrapText greedily breaks text into lines that each fit within width pixels
+// when measured in font f, breaking only at spaces. A single word wider than
+// width is placed on its own line rather than split mid-word. Empty or
+// all-whitespace text yields no lines.
+//
+// It is the same routine the card widgets lay their bodies out with, exported
+// because every widget that shows a sentence eventually needs it -- and a
+// caller that writes its own ends up wrapping to different rules than the card
+// beside it.
+func WrapText(f Font, text string, width int) []string { return wrapText(f, text, width) }
