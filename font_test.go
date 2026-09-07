@@ -278,3 +278,37 @@ func TestTheEllipsisHasAGlyph(t *testing.T) {
 		t.Errorf("the ellipsis glyph lights %d pixels, want 3 dots", lit)
 	}
 }
+
+// TestBitmapCoverageAnswersWhatMeasuringCannot.
+//
+// ⛔ A RUNE WITH NO GLYPH STILL ADVANCES, on purpose, so that a column of text
+// stays lined up. Measuring therefore says nothing about legibility, and the
+// only honest answer comes from the table.
+func TestBitmapCoverageAnswersWhatMeasuringCannot(t *testing.T) {
+	for _, c := range []struct {
+		r     rune
+		drawn bool
+	}{
+		{'a', true}, {'.', true}, {'-', true}, {'(', true},
+		{'…', true}, // added with the rune-keyed table
+		{'\'', false}, {'’', false}, {'—', false}, {'é', false},
+	} {
+		if got := BitmapCovers(c.r); got != c.drawn {
+			t.Errorf("BitmapCovers(%q) = %v, want %v", c.r, got, c.drawn)
+		}
+	}
+
+	// ⭐ AND THE WIDTH IS THE SAME EITHER WAY, which is the whole point.
+	f := NewBitmapFont(1)
+	if f.Measure("a") != f.Measure("’") {
+		t.Error("a covered and an uncovered rune must measure the same; if they " +
+			"differ, callers could have used width to detect coverage")
+	}
+
+	if got := BitmapMissing("Turn this Mac's screen off"); len(got) != 1 || got[0] != '\'' {
+		t.Errorf("BitmapMissing = %q, want just the apostrophe", got)
+	}
+	if got := BitmapMissing("plain - hyphens are fine"); len(got) != 0 {
+		t.Errorf("BitmapMissing = %q, want none: the hyphen draws", got)
+	}
+}

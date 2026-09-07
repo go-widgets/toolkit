@@ -346,3 +346,38 @@ func putPixel(p painter.Painter, px, py int, ink RGBA) {
 // caller that writes its own ends up wrapping to different rules than the card
 // beside it.
 func WrapText(f Font, text string, width int) []string { return wrapText(f, text, width) }
+
+// BitmapCovers reports whether the built-in 5x7 font has a glyph for r.
+//
+// ⭐ WHY A CONSUMER NEEDS TO ASK. A rune with no glyph still ADVANCES -- that is
+// deliberate, it keeps a column of text lined up -- so measuring a string tells
+// you nothing about whether it can be read. The only way to know is to ask the
+// table, and until now the table was unexported and the answer was folklore:
+// go-xrkit/desk carries a hand-written rule forbidding apostrophes in one
+// window, arrived at after "the glasses' own menu bar" came out with a hole in
+// it, and that rule is both incomplete (it says "no dashes" while the plain
+// hyphen draws fine) and unenforced (that same window ships "Turn this Mac's
+// screen off").
+//
+// ⚠ IT ANSWERS FOR THE BUILT-IN FONT ONLY. A TrueType face has its own,
+// far wider coverage; this is the fallback, and the fallback is what a platform
+// with no system face falls back TO.
+func BitmapCovers(r rune) bool {
+	_, ok := font5x7[r]
+	return ok
+}
+
+// BitmapMissing lists the runes of s the built-in font cannot draw, in order,
+// without repeats. Empty means every character in s would be legible.
+func BitmapMissing(s string) []rune {
+	var out []rune
+	seen := map[rune]bool{}
+	for _, r := range s {
+		if BitmapCovers(r) || seen[r] {
+			continue
+		}
+		seen[r] = true
+		out = append(out, r)
+	}
+	return out
+}
