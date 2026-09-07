@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/go-rouge/rouge v0.2.0
-	github.com/go-widgets/toolkit v0.307.0
+	github.com/go-widgets/toolkit v0.314.0
 )
 
 require (
@@ -12,7 +12,7 @@ require (
 	github.com/ajroetker/go-jpeg2000 v0.0.2 // indirect
 	github.com/andybalholm/brotli v1.2.3 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
-	github.com/go-crdt/collab v0.45.0 // indirect
+	github.com/go-crdt/collab v0.54.0 // indirect
 	github.com/go-crdt/crdt v0.46.0 // indirect
 	github.com/go-gfx/gfx v0.19.0 // indirect
 	github.com/go-icons/iconoir v0.2.0 // indirect
