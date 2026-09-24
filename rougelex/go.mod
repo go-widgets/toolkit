@@ -12,8 +12,8 @@ require (
 	github.com/ajroetker/go-jpeg2000 v0.0.2 // indirect
 	github.com/andybalholm/brotli v1.2.4 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
-	github.com/go-crdt/collab v0.60.0 // indirect
-	github.com/go-crdt/crdt v0.47.0 // indirect
+	github.com/go-crdt/collab v0.61.0 // indirect
+	github.com/go-crdt/crdt v0.48.0 // indirect
 	github.com/go-gfx/gfx v0.19.0 // indirect
 	github.com/go-icons/iconoir v0.2.0 // indirect
 	github.com/go-images/images v0.0.0-20260831115433-23d959d868e3 // indirect
