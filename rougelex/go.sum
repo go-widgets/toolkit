@@ -4,8 +4,8 @@ github.com/andybalholm/brotli v1.2.4 h1:649LN6qF+/7JJYNN3Wdu4Dt5PS6eC/yP/Go3Bb0/
 github.com/andybalholm/brotli v1.2.4/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
-github.com/go-crdt/collab v0.70.0 h1:RQ06Ed2QtMLh6lzCkLziRuN3HjghYrkFIgYBqQYkzFQ=
-github.com/go-crdt/collab v0.70.0/go.mod h1:a1C6TAdb45K4B9/cOOzC0FN5vxEFSoGe1IBQQEJduCA=
+github.com/go-crdt/collab v0.71.0 h1:/TOaDmReaz7lrt6AylLPmFtpqvhANmCRWQGo1pguSNI=
+github.com/go-crdt/collab v0.71.0/go.mod h1:a1C6TAdb45K4B9/cOOzC0FN5vxEFSoGe1IBQQEJduCA=
 github.com/go-crdt/crdt v0.51.0 h1:cux4901wTQ13vSvKTAMem3vjZ+vsm5gDaApKfvGyf9o=
 github.com/go-crdt/crdt v0.51.0/go.mod h1:vbfvns9B9FUaMi2sPKzMYttKmbxfgO7EK3Yu82SrlYw=
 github.com/go-gfx/gfx v0.34.0 h1:K46srusNnZls/xkmJRvxpBajlptgrXc6d3exa4ZxhoA=
@@ -14,8 +14,8 @@ github.com/go-icons/iconoir v0.2.0 h1:I5AnDEIPgYfawTmwzemDRJjlYCUbFHuS8GJXrjADhX
 github.com/go-icons/iconoir v0.2.0/go.mod h1:Td/M2vy4xdVv4aOudAskV0nXR9Wv0MlhWvyRIzPBz5U=
 github.com/go-images/gif v0.1.0 h1:g2ZnRd41PutXIt1mCZSZsRpqqUiD0m+UbAjZ5ylC0RU=
 github.com/go-images/gif v0.1.0/go.mod h1:8mk9sA/K3U61jL+rj4U+Yv3TRKeoGp2fMxF25ykOOwY=
-github.com/go-images/images v0.0.0-20260926211103-8ace06e0df2f h1:ZzlQ/8sj5gnXNnCfMky3BOk4sp0RE329aDWUv11q0UE=
-github.com/go-images/images v0.0.0-20260926211103-8ace06e0df2f/go.mod h1:IDqV+fM2Fn9FPurLpALZN6MrB2as8McypqSvOVAY4y4=
+github.com/go-images/images v0.0.0-20260927173152-87444e36aac4 h1:Likv0wVxr9vDo2ITd4A7SOMKCrN3efOHs9CsANj2y+0=
+github.com/go-images/images v0.0.0-20260927173152-87444e36aac4/go.mod h1:bc99LrkZxVUjP+Di3JCmf4SoHzim/PNcHEJfKd1yUtg=
 github.com/go-images/jpeg v0.2.0 h1:dn55cTczPdOJf+NQq+sETCFeov/KeP1haF1ES+FJa+4=
 github.com/go-images/jpeg v0.2.0/go.mod h1:2C1DevAM+HaQlysTLbSdyol8X/RlvmsXmHAXs9teAqo=
 github.com/go-images/jpeg2000 v0.1.0 h1:SiFAZ6NGvGLU+VmxKji74RiSQDeK6TyjUZr1wjlxRzY=

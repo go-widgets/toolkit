@@ -15,10 +15,10 @@ require github.com/go-opentype/fonts v0.10.0
 
 require github.com/go-widgets/mvvm v0.9.0
 
-require github.com/go-images/images v0.0.0-20260926211103-8ace06e0df2f
+require github.com/go-images/images v0.0.0-20260927173152-87444e36aac4
 
 require (
-	github.com/go-crdt/collab v0.70.0
+	github.com/go-crdt/collab v0.71.0
 	github.com/go-crdt/crdt v0.51.0
 	github.com/go-gfx/gfx v0.34.0
 	github.com/go-icons/iconoir v0.2.0
