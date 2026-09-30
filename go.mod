@@ -18,16 +18,16 @@ require github.com/go-widgets/mvvm v0.9.0
 require github.com/go-images/images v0.0.0-20260927173152-87444e36aac4
 
 require (
-	github.com/go-crdt/collab v0.71.0
-	github.com/go-crdt/crdt v0.51.0
+	github.com/go-crdt/collab v0.74.0
+	github.com/go-crdt/crdt v0.55.0
 	github.com/go-gfx/gfx v0.34.0
 	github.com/go-icons/iconoir v0.2.0
-	github.com/go-richdoc/richdoc v0.3.0
+	github.com/go-richdoc/richdoc v0.4.0
 )
 
 require (
 	github.com/ajroetker/go-highway v0.0.4 // indirect
-	github.com/andybalholm/brotli v1.2.4 // indirect
+	github.com/andybalholm/brotli v1.2.5 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/go-images/gif v0.1.0 // indirect
 	github.com/go-images/jpeg v0.2.0 // indirect
