@@ -4,7 +4,7 @@ go 1.26.4
 
 require (
 	github.com/go-rouge/rouge v0.2.0
-	github.com/go-widgets/toolkit v0.321.1
+	github.com/go-widgets/toolkit v0.321.2
 )
 
 require (
