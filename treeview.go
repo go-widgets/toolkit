@@ -52,6 +52,15 @@ type TreeView struct {
 	// byte-identical to before this field existed.
 	RowRenderer func(p painter.Painter, theme *Theme, contentRect Rect, node *TreeNode, selected bool, ink RGBA)
 
+	// extendTo is the MOVING END of a keyboard range extension (Shift + a
+	// movement key), or nil when no extension is in progress. The ANCHOR is
+	// Selected and does not move.
+	//
+	// ⛔ A NODE and not a row index. Expanding or collapsing a subtree
+	// renumbers every row below it, so an index kept between key presses would
+	// come to name a different node -- and the extension would jump.
+	extendTo *TreeNode
+
 	// MultiSelect enables a multi-node selection set on top of the
 	// single-node Selected anchor. When false (the default), TreeView
 	// behaves exactly as before: only Selected is tracked/painted.
@@ -276,8 +285,22 @@ func (t *TreeView) handleKey(ev Event) {
 		return
 	}
 	cur := t.cursorRow()
+	// ⌘ is the command modifier on macOS and Ctrl everywhere else; a widget
+	// cannot tell which platform it is painting on, so it answers to both.
+	cmd := ev.Ctrl || ev.Meta
 	switch ev.Code {
 	case "Enter", " ", "Space":
+		// Ctrl/⌘ + Space toggles the cursor node WITHOUT activating it: the one
+		// gesture that adds a single far-apart node from the keyboard.
+		// Activating collapses the selection to the cursor, which is the
+		// opposite of what this is for.
+		if t.MultiSelect && cmd && ev.Code != "Enter" {
+			if cur >= 0 {
+				t.ToggleSelect(t.rows[cur].node)
+			}
+			t.extendTo = nil
+			return
+		}
 		t.activateCursor()
 		return
 	case "ArrowRight":
@@ -286,10 +309,129 @@ func (t *TreeView) handleKey(ev Event) {
 	case "ArrowLeft":
 		t.collapseOrParent(cur)
 		return
+	case "a", "A":
+		if t.MultiSelect && cmd {
+			t.SelectAll()
+			return
+		}
+	}
+	// ⛔ EVERY key rovingIndex understands extends, not only the arrows. A
+	// Shift + movement that fell through to setCursorRow below did not merely
+	// fail to extend: in MultiSelect mode setCursorRow calls SetSelection, so it
+	// COLLAPSED the whole selection to the cursor node. Measured: a selection of
+	// four nodes became one.
+	if t.MultiSelect && ev.Shift {
+		t.extendSelection(ev.Code)
+		return
 	}
 	if idx, ok := rovingIndex(cur, len(t.rows), t.windowRows(), ev.Code); ok {
 		t.setCursorRow(idx)
+		t.extendTo = nil
 	}
+}
+
+// extendSelection answers Shift + a movement key: it moves the extension's
+// other end and reselects the range from the anchor to there, scrolling the END
+// into view.
+//
+// ⛔ The movement is computed from extendTo and NOT from the anchor, which does
+// not move. Computing it from the anchor would make every Shift-ArrowDown
+// extend by exactly one row and the selection would never pass two nodes.
+func (t *TreeView) extendSelection(code string) {
+	t.flatten()
+	anchor := t.Selected().Get()
+	// Where to move from: the kept end, else the anchor, else the top.
+	//
+	// ⛔ rowOf answers -1 both for a nil node and for one that is no longer
+	// VISIBLE, and the second is the case that matters: collapsing a subtree
+	// hides the end, and an extension that went on using it would describe a
+	// range through a node nobody can see.
+	from := t.rowOf(t.extendTo)
+	if from < 0 {
+		from = t.rowOf(anchor)
+	}
+	if from < 0 {
+		from = 0
+	}
+	// ⛔ Asked BEFORE the anchor is seeded. rovingIndex refuses an empty tree
+	// and a key that means no movement, and asking it first is what makes a
+	// separate "is the tree empty" guard unnecessary -- a guard that, sitting
+	// behind handleKey's own emptiness check, could never be reached or tested.
+	next, ok := rovingIndex(from, len(t.rows), t.windowRows(), code)
+	if !ok {
+		return
+	}
+	if t.rowOf(anchor) < 0 {
+		anchor = t.rows[0].node
+		t.Selected().Set(anchor)
+	}
+	node := t.rows[next].node
+	t.extendTo = node
+	t.selectRangeOnly(anchor, node)
+	t.scrollToRow(next)
+}
+
+// selectRangeOnly selects exactly the nodes between a and b, dropping whatever
+// else was selected.
+//
+// ⛔ It exists because [TreeView.SelectRange] accumulates on purpose (see its
+// doc), and an extension that accumulates cannot be made smaller: every
+// Shift-ArrowUp would describe a range already inside the set and change
+// nothing. Shift means "the range from the anchor to here", which is a
+// statement about what IS selected and not about what to add.
+func (t *TreeView) selectRangeOnly(a, b *TreeNode) {
+	t.selectionSet = nil
+	t.SelectRange(a, b)
+}
+
+// rowOf is n's index in the visible flattened order, or -1 when it is not
+// visible. Callers have already flattened.
+func (t *TreeView) rowOf(n *TreeNode) int {
+	for i, row := range t.rows {
+		if row.node == n {
+			return i
+		}
+	}
+	return -1
+}
+
+// scrollToRow brings the flattened row idx into the window.
+//
+// It exists apart from scrollToSelected because a keyboard range extension
+// follows its MOVING END, which is deliberately not Selected -- the anchor
+// stays put while the other end travels, and scrolling to the anchor would
+// leave the node the user is reaching for off screen.
+func (t *TreeView) scrollToRow(idx int) {
+	wr := t.windowRows()
+	sr := t.ScrollRow().Get()
+	switch {
+	case idx < sr:
+		sr = idx
+	case wr > 0 && idx >= sr+wr:
+		sr = idx - wr + 1
+	}
+	t.ScrollRow().Set(t.clampScrollRow(sr, len(t.rows), wr))
+}
+
+// SelectAll selects every VISIBLE node, leaving the anchor where it is.
+//
+// ⛔ Visible, not every node in the tree. A collapsed subtree is not something
+// the person can see, and a verb that then acted on "everything selected" would
+// act on nodes they were never shown -- which for a delete is the difference
+// between what they meant and what they lose. It is the same rule SelectRange
+// follows.
+//
+// It is exported because the keyboard is not the only way the gesture arrives:
+// a native host routes a command chord (Ctrl/⌘ + A) to its own shortcut sink
+// rather than to the key path, so a host wiring an Edit ▸ Select All menu item
+// needs to ask for it directly.
+func (t *TreeView) SelectAll() {
+	t.flatten()
+	t.selectionSet = make(map[*TreeNode]bool, len(t.rows))
+	for _, row := range t.rows {
+		t.selectionSet[row.node] = true
+	}
+	t.extendTo = nil
 }
 
 // cursorRow returns the flattened-row index of Selected, or -1 when nothing is
@@ -445,6 +587,16 @@ func (t *TreeView) ToggleSelect(n *TreeNode) {
 // currently-visible flattened node order (collapsed subtrees are
 // excluded, matching what the user can actually see). If either node
 // isn't currently visible, SelectRange is a no-op.
+//
+// ⛔ It ADDS to the selection set rather than replacing it -- unlike
+// [ListBox.SelectRange] and [Table.SelectRowRange], whose docs say they
+// replace. That difference is deliberate here and asserted by
+// TestTreeViewSelectRangeAccumulatesAcrossCalls, so it is left alone. The
+// consequence, measured, is that a RANGE cannot shrink through this method: a
+// click on "a" then a Shift-click on "c" gives {a, b, b1, c}, and a Shift-click
+// back on "b" gives {a, b, b1, c} again, because the range now being described
+// is a subset of what is already there. The keyboard extension therefore uses
+// selectRangeOnly instead of changing this.
 func (t *TreeView) SelectRange(a, b *TreeNode) {
 	t.flatten()
 	ai, bi := -1, -1
@@ -759,11 +911,21 @@ func (t *TreeView) OnEvent(ev Event) {
 		switch {
 		case ev.Shift && t.Selected().Get() != nil:
 			t.SelectRange(t.Selected().Get(), row.node)
-		case ev.Ctrl:
+			// The mouse just placed the moving end: a Shift-arrow after a
+			// Shift-click continues from the clicked node, not from the anchor.
+			t.extendTo = row.node
+		case ev.Ctrl, ev.Meta:
+			// ⛔ Command as well as Ctrl. On macOS Ctrl-click IS the secondary
+			// click -- it opens a context menu -- so it cannot also mean "add
+			// this node", and a ⌘-click fell through to the default branch and
+			// acted as a plain click: there was no way to add a node with a Mac
+			// mouse.
 			t.ToggleSelect(row.node)
 			t.Selected().Set(row.node)
+			t.extendTo = nil
 		default:
 			t.SetSelection(row.node)
+			t.extendTo = nil
 		}
 	} else {
 		t.Selected().Set(row.node)
