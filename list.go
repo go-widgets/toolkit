@@ -114,6 +114,19 @@ type ListBox struct {
 	// programmatically before switching the widget into multi mode.
 	selected map[int]bool
 
+	// extendTo is the MOVING END of a keyboard range extension (Shift + an
+	// arrow/page/Home/End), or -1 when no extension is in progress.
+	//
+	// ⛔ A list has ONE index Observable, and it is the ANCHOR: a Shift-click
+	// leaves Selected alone so successive Shift-clicks extend from the same
+	// origin. A Shift-arrow needs the same anchor AND a second end that moves,
+	// and that end must survive between key presses -- without it every
+	// Shift-ArrowDown would extend exactly one row from the anchor and the
+	// selection would never grow. Any gesture that moves the anchor (a plain
+	// click, a toggle, a plain arrow) resets it to -1; a Shift-click sets it to
+	// the clicked row, so a Shift-arrow continues from where the mouse stopped.
+	extendTo int
+
 	// pressedRow is the row hit by the most recent valid EventClick, or
 	// -1 if none has landed yet. DragData reads it to know which row a
 	// drag beginning "now" should carry -- a host starts a drag right
@@ -140,6 +153,7 @@ func NewListBox(items []string) *ListBox {
 		selectedRow:   mvvm.NewObservable(-1),
 		scrollRow:     mvvm.NewObservable(0),
 		RowHeight:     scaled(18),
+		extendTo:      -1,
 		pressedRow:    -1,
 		dropIndicator: -1,
 	}
@@ -394,20 +408,31 @@ func (l *ListBox) scrollToSelected() {
 		l.scrollToSelectedSectioned()
 		return
 	}
-	sel := l.Selected().Get()
-	if sel < 0 {
+	l.scrollToRow(l.Selected().Get())
+}
+
+// scrollToRow nudges ScrollRow so row sits within the visible window. A
+// negative row is a no-op, so a fresh or selection-cleared list is never pulled
+// to a bogus ScrollRow.
+//
+// It exists apart from scrollToSelected because a keyboard range extension
+// follows its MOVING END (extendTo), which is deliberately not Selected -- the
+// anchor stays put while the other end travels, and scrolling to the anchor
+// would leave the row the user is reaching for off screen.
+func (l *ListBox) scrollToRow(row int) {
+	if row < 0 {
 		return
 	}
-	if sel < l.ScrollRow().Get() {
-		l.ScrollTo(sel)
+	if row < l.ScrollRow().Get() {
+		l.ScrollTo(row)
 		return
 	}
 	vr := l.visibleRows()
 	if vr <= 0 {
 		return
 	}
-	if sel >= l.ScrollRow().Get()+vr {
-		l.ScrollTo(sel - vr + 1)
+	if row >= l.ScrollRow().Get()+vr {
+		l.ScrollTo(row - vr + 1)
 	}
 }
 
@@ -508,13 +533,44 @@ func (l *ListBox) OnEvent(ev Event) {
 // Space activate the cursor row exactly like a click. A disabled ListBox
 // ignores every key. Selected doubles as the cursor, so the same Accent
 // highlight a mouse selection shows also tracks keyboard navigation.
+//
+// In MultiSelect mode the keyboard reaches the whole selection set, which is
+// the mirror of the Ctrl/Shift clicks onClick handles:
+//
+//   - Shift + a movement key EXTENDS the selection from the anchor, moving the
+//     other end (see extendTo) and leaving the anchor where it is;
+//   - Ctrl/⌘ + A selects every row;
+//   - Ctrl/⌘ + Space toggles the cursor row WITHOUT activating it -- the one
+//     gesture that adds a single far-apart row from the keyboard;
+//   - a plain movement key still collapses the selection to the cursor row.
+//
+// ⛔ Sectioned mode is single-selection (a caption has no place in a range), so
+// none of this runs there: it falls through to the plain roving cursor.
 func (l *ListBox) handleKey(ev Event) {
 	if l.Disabled().Get() {
 		return
 	}
+	// ⌘ is the command modifier on macOS and Ctrl everywhere else; a widget
+	// cannot tell which platform it is painting on, so it answers to both.
+	cmd := ev.Ctrl || ev.Meta
+	multi := l.MultiSelect && !l.sectioned()
 	switch ev.Code {
 	case "Enter", " ", "Space":
+		if multi && cmd {
+			l.ToggleSelect(l.Selected().Get())
+			l.extendTo = -1
+			return
+		}
 		l.activateCursor()
+		return
+	case "a", "A":
+		if multi && cmd {
+			l.SelectAll()
+			return
+		}
+	}
+	if multi && ev.Shift {
+		l.extendSelection(ev.Code)
 		return
 	}
 	if idx, ok := rovingIndex(l.Selected().Get(), l.itemCount(), l.visibleRows(), ev.Code); ok {
@@ -523,9 +579,68 @@ func (l *ListBox) handleKey(ev Event) {
 		// row becomes the sole selection (and the anchor).
 		if l.MultiSelect {
 			l.SetSelection(idx)
+			l.extendTo = -1
 		}
 		l.scrollToSelected()
 	}
+}
+
+// extendSelection answers Shift + a movement key: it moves the extension's
+// other end by whatever that key means and reselects the range from the anchor
+// to there, scrolling the END into view.
+//
+// ⛔ The movement is computed from extendTo, NOT from Selected. Selected is the
+// anchor and does not move, so computing from it would make every Shift-arrow
+// extend by exactly one row from the anchor and the selection would never grow
+// past two rows.
+//
+// With no anchor yet (Selected < 0, a list nothing has touched) the first row
+// becomes the anchor, so the first Shift-ArrowDown selects rows 0 and 1 rather
+// than doing nothing.
+func (l *ListBox) extendSelection(code string) {
+	anchor := l.Selected().Get()
+	if anchor < 0 {
+		if l.itemCount() <= 0 {
+			return
+		}
+		anchor = 0
+		l.Selected().Set(anchor)
+	}
+	end := l.extendTo
+	if end < 0 {
+		end = anchor
+	}
+	next, ok := rovingIndex(end, l.itemCount(), l.visibleRows(), code)
+	if !ok {
+		return
+	}
+	l.extendTo = next
+	l.SelectRange(anchor, next)
+	l.scrollToRow(next)
+}
+
+// SelectAll selects every row, leaving the anchor (Selected) where it is. An
+// empty list ends up with an empty selection rather than an error.
+//
+// It is exported because the keyboard is not the only way this gesture arrives.
+// A native host routes a command chord (Ctrl/⌘ + A) to its own shortcut sink
+// rather than to the key path -- go-widgets/application does exactly that, and
+// its Key contract has "no room to say which modifiers were held" -- so a host
+// wiring an Edit ▸ Select All menu item, or answering that chord itself, needs
+// to be able to ask for it directly.
+func (l *ListBox) SelectAll() {
+	n := l.itemCount()
+	if n <= 0 {
+		l.ClearSelection()
+		l.extendTo = -1
+		return
+	}
+	set := make(map[int]bool, n)
+	for i := 0; i < n; i++ {
+		set[i] = true
+	}
+	l.selected = set
+	l.extendTo = -1
 }
 
 // activateCursor fires the same selection + OnActivate a plain click on the
@@ -557,8 +672,10 @@ func (l *ListBox) activateCursor() {
 // When MultiSelect is true:
 //   - a plain click selects ONLY idx (clearing any other selected
 //     rows) and moves the anchor (Selected) to idx;
-//   - a Ctrl-click toggles idx's membership in the selection set and
-//     moves the anchor to idx;
+//   - a Ctrl-click -- or a Command (⌘) click, which is the SAME gesture on
+//     macOS, where Ctrl-click is the secondary click that opens a context menu
+//     and so cannot also mean "toggle" -- toggles idx's membership in the
+//     selection set and moves the anchor to idx;
 //   - a Shift-click selects the inclusive range between the current
 //     anchor (Selected) and idx, replacing the selection set, and
 //     leaves the anchor itself unchanged so successive Shift-clicks
@@ -612,12 +729,17 @@ func (l *ListBox) onClick(ev Event) {
 		switch {
 		case ev.Shift:
 			l.SelectRange(l.Selected().Get(), idx)
-		case ev.Ctrl:
+			// The mouse just placed the moving end: a Shift-arrow after a
+			// Shift-click continues from the clicked row, not from the anchor.
+			l.extendTo = idx
+		case ev.Ctrl, ev.Meta:
 			l.ToggleSelect(idx)
 			l.Selected().Set(idx)
+			l.extendTo = -1
 		default:
 			l.SetSelection(idx)
 			l.Selected().Set(idx)
+			l.extendTo = -1
 		}
 	} else {
 		l.Selected().Set(idx)
