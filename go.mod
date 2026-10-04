@@ -1,28 +1,20 @@
 module github.com/go-widgets/toolkit
 
-go 1.26.6
-
-require github.com/go-widgets/painter v0.13.0
-
-require github.com/go-opentype/opentype v0.13.0
-
-require (
-	github.com/go-opentype/shape v0.5.0
-	github.com/go-typeset/bidi v0.3.0
-)
-
-require github.com/go-opentype/fonts v0.10.0
-
-require github.com/go-widgets/mvvm v0.9.0
-
-require github.com/go-images/images v0.0.0-20260927173152-87444e36aac4
+go 1.27.1
 
 require (
 	github.com/go-crdt/collab v0.74.0
 	github.com/go-crdt/crdt v0.55.0
 	github.com/go-gfx/gfx v0.34.0
 	github.com/go-icons/iconoir v0.2.0
+	github.com/go-images/images v0.0.0-20260927173152-87444e36aac4
+	github.com/go-opentype/fonts v0.10.0
+	github.com/go-opentype/opentype v0.13.0
+	github.com/go-opentype/shape v0.5.0
 	github.com/go-richdoc/richdoc v0.4.0
+	github.com/go-typeset/bidi v0.3.0
+	github.com/go-widgets/mvvm v0.9.0
+	github.com/go-widgets/painter v0.13.0
 )
 
 require (
