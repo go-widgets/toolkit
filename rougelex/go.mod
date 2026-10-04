@@ -1,6 +1,6 @@
 module github.com/go-widgets/toolkit/rougelex
 
-go 1.26.4
+go 1.26.6
 
 require (
 	github.com/go-rouge/rouge v0.2.0
