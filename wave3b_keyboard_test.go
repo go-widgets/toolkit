@@ -236,38 +236,62 @@ func TestTableKeyShiftExtendsSelection(t *testing.T) {
 	// Seed Selected directly (selectedRows still nil -> exercises the seed
 	// branch of extendRowSelection).
 	tb.Selected().Set(5)
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true}) // 5 -> 6, {5,6}
-	if tb.Selected().Get() != 6 || !tb.IsRowSelected(5) || !tb.IsRowSelected(6) {
-		t.Fatalf("shift-down: Selected=%d sel5=%v sel6=%v", tb.Selected().Get(), tb.IsRowSelected(5), tb.IsRowSelected(6))
+
+	// ⛔ The ANCHOR stays at 5 throughout. This test used to assert that
+	// Selected followed the extension (5 -> 6 -> 7), which is what the click
+	// path explicitly does NOT do -- it leaves the anchor in place "so repeated
+	// Shift-clicks keep ranging from the same origin". With no fixed anchor
+	// there is no range to recompute, which is why the old code could only ADD
+	// rows: Shift-ArrowUp after two Shift-ArrowDowns left {5,6,7} untouched,
+	// and a selection could not be made smaller from the keyboard at all. The
+	// moving end lives in extendTo now; the growing block is visible because
+	// Draw highlights every row in the set.
+	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true}) // {5,6}
+	if tb.Selected().Get() != 5 || !tb.IsRowSelected(5) || !tb.IsRowSelected(6) {
+		t.Fatalf("shift-down: anchor=%d sel=%v", tb.Selected().Get(), tb.SelectedRows())
 	}
 	tbVisible(t, tb)
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true}) // 6 -> 7, {5,6,7}
-	if tb.Selected().Get() != 7 || !tb.IsRowSelected(7) {
-		t.Fatalf("shift-down 2: Selected=%d sel7=%v", tb.Selected().Get(), tb.IsRowSelected(7))
+	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true}) // {5,6,7}
+	if tb.Selected().Get() != 5 || !tb.IsRowSelected(7) {
+		t.Fatalf("shift-down 2: anchor=%d sel=%v", tb.Selected().Get(), tb.SelectedRows())
 	}
-	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp", Shift: true}) // 7 -> 6
-	if tb.Selected().Get() != 6 {
-		t.Fatalf("shift-up: Selected=%d, want 6", tb.Selected().Get())
+	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp", Shift: true}) // back to {5,6}
+	if tb.IsRowSelected(7) {
+		t.Fatalf("shift-up did not shrink the selection: %v", tb.SelectedRows())
+	}
+	if !tb.IsRowSelected(5) || !tb.IsRowSelected(6) || tb.Selected().Get() != 5 {
+		t.Fatalf("shift-up: anchor=%d sel=%v, want anchor 5 and {5,6}",
+			tb.Selected().Get(), tb.SelectedRows())
 	}
 
 	// Clamp at the edges: Shift+ArrowUp at row 0 stays at 0.
 	tb.Selected().Set(0)
+	tb.extendTo = -1
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowUp", Shift: true})
 	if tb.Selected().Get() != 0 || !tb.IsRowSelected(0) {
-		t.Fatalf("shift-up clamp: Selected=%d", tb.Selected().Get())
+		t.Fatalf("shift-up clamp: anchor=%d sel=%v", tb.Selected().Get(), tb.SelectedRows())
 	}
 	// Shift+ArrowDown at the last row stays.
 	tb.Selected().Set(19)
+	tb.extendTo = -1
 	tb.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true})
-	if tb.Selected().Get() != 19 {
-		t.Fatalf("shift-down clamp: Selected=%d", tb.Selected().Get())
+	if tb.Selected().Get() != 19 || !tb.IsRowSelected(19) {
+		t.Fatalf("shift-down clamp: anchor=%d sel=%v", tb.Selected().Get(), tb.SelectedRows())
 	}
-	// Shift extend from no selection (Selected == -1 -> prev 0).
+	// Shift extend from no selection (Selected == -1 -> the first row becomes
+	// the anchor, so the gesture selects something rather than nothing).
 	fresh := newCursorTable()
 	fresh.MultiSelect = true
 	fresh.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true})
-	if fresh.Selected().Get() != 1 || !fresh.IsRowSelected(0) || !fresh.IsRowSelected(1) {
-		t.Fatalf("shift from none: Selected=%d sel0=%v sel1=%v", fresh.Selected().Get(), fresh.IsRowSelected(0), fresh.IsRowSelected(1))
+	if fresh.Selected().Get() != 0 || !fresh.IsRowSelected(0) || !fresh.IsRowSelected(1) {
+		t.Fatalf("shift from none: anchor=%d sel=%v", fresh.Selected().Get(), fresh.SelectedRows())
+	}
+	// An empty table has nothing to anchor to and must not move Selected.
+	empty := NewTable([]TableColumn{{Title: "a"}}, nil)
+	empty.MultiSelect = true
+	empty.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true})
+	if empty.Selected().Get() != -1 || len(empty.SelectedRows()) != 0 {
+		t.Fatalf("empty table: anchor=%d sel=%v", empty.Selected().Get(), empty.SelectedRows())
 	}
 	// Shift+Arrow without MultiSelect falls through to a plain cursor move.
 	single := newCursorTable()
@@ -275,6 +299,13 @@ func TestTableKeyShiftExtendsSelection(t *testing.T) {
 	single.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown", Shift: true})
 	if single.Selected().Get() != 4 {
 		t.Fatalf("shift w/o multiselect: Selected=%d, want 4", single.Selected().Get())
+	}
+	// Shift with a key rovingIndex does not understand changes nothing.
+	tb.SetRowSelection(3)
+	tb.Selected().Set(3)
+	tb.OnEvent(Event{Kind: EventKeyDown, Code: "F5", Shift: true})
+	if got := tb.SelectedRows(); len(got) != 1 || got[0] != 3 {
+		t.Fatalf("Shift+F5: sel=%v, want {3} unchanged", got)
 	}
 }
 

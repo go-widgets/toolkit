@@ -96,6 +96,12 @@ type Table struct {
 	// byte-for-byte the same as before this field existed.
 	MultiSelect bool
 
+	// extendTo is the MOVING END of a keyboard range extension (Shift + an
+	// arrow/page/Home/End), or -1 when no extension is in progress. It is the
+	// counterpart of the ANCHOR, which is Selected and does not move -- see
+	// extendRowSelection for why both are needed.
+	extendTo int
+
 	// selectedRows is the multi-row selection set. A nil map means
 	// "nothing selected", mirroring how Selected == -1 means no
 	// single-row anchor. It is consulted by Draw/IsRowSelected only
@@ -552,6 +558,7 @@ func NewTable(cols []TableColumn, rows [][]string) *Table {
 		dropIndicator: -1,
 		editRow:       -1,
 		editCol:       -1,
+		extendTo:      -1,
 		GroupBy:       -1,
 		// Reactive state is MVVM-only: seed selected + sortColumn to -1 ("no
 		// selection" / "no sort"), the scroll offsets to 0 and the sort direction
@@ -1866,8 +1873,20 @@ func (t *Table) handleKey(ev Event) {
 	if t.Disabled().Get() || len(t.Rows) == 0 {
 		return
 	}
+	// ⌘ is the command modifier on macOS and Ctrl everywhere else; a widget
+	// cannot tell which platform it is painting on, so it answers to both.
+	cmd := ev.Ctrl || ev.Meta
 	switch ev.Code {
 	case "Enter", " ", "Space":
+		// Ctrl/⌘ + Space toggles the cursor row WITHOUT activating it: the one
+		// gesture that adds a single far-apart row from the keyboard. It must
+		// not also activate, since activating a row (opening it, running it)
+		// while merely picking it is the kind of surprise that loses work.
+		if t.MultiSelect && cmd && ev.Code != "Enter" {
+			t.ToggleRowSelect(t.Selected().Get())
+			t.extendTo = -1
+			return
+		}
 		// In EditOnDoubleClick mode Enter opens the cursor row's first
 		// Editable column (the desktop rename-on-Enter idiom); otherwise it
 		// activates the cursor row exactly as before.
@@ -1876,8 +1895,17 @@ func (t *Table) handleKey(ev Event) {
 		}
 		t.activateCursor()
 		return
+	case "a", "A":
+		if t.MultiSelect && cmd {
+			t.SelectAllRows()
+			return
+		}
 	}
-	if t.MultiSelect && ev.Shift && (ev.Code == "ArrowUp" || ev.Code == "ArrowDown") {
+	// ⛔ EVERY key rovingIndex understands extends, not only the two arrows. A
+	// Shift-PageDown that fell through to the plain branch below did not merely
+	// fail to extend: it COLLAPSED the selection to the cursor row, destroying
+	// what the user had just built.
+	if t.MultiSelect && ev.Shift {
 		t.extendRowSelection(ev.Code)
 		return
 	}
@@ -1887,6 +1915,7 @@ func (t *Table) handleKey(ev Event) {
 		// row becomes the sole selection (and the anchor).
 		if t.MultiSelect {
 			t.SetRowSelection(idx)
+			t.extendTo = -1
 		}
 		t.scrollToSelected()
 	}
@@ -1960,23 +1989,69 @@ func (t *Table) beginEditCursor() bool {
 // lost; a move already at the top/bottom edge simply re-selects the same row.
 // Only reached while MultiSelect is on and Rows is non-empty.
 func (t *Table) extendRowSelection(code string) {
-	prev := t.Selected().Get()
-	if prev < 0 {
-		prev = 0
+	anchor := t.Selected().Get()
+	end := t.extendTo
+	if end < 0 {
+		end = max(anchor, 0)
 	}
-	next := prev
-	if code == "ArrowDown" {
-		next = min(prev+1, len(t.Rows)-1)
-	} else {
-		next = max(prev-1, 0)
+	// ⛔ Asked BEFORE the anchor is seeded. rovingIndex refuses an empty table
+	// and a key that means no movement, and asking it first is what makes a
+	// separate "is the table empty" guard unnecessary -- a guard that, sitting
+	// behind handleKey's own emptiness check, could never be reached or tested.
+	next, ok := rovingIndex(end, len(t.Rows), t.bodyVisibleRows(), code)
+	if !ok {
+		return
 	}
-	if t.selectedRows == nil {
-		t.selectedRows = make(map[int]bool)
+	if anchor < 0 {
+		anchor = 0
+		t.setSelected(anchor)
 	}
-	t.selectedRows[prev] = true
-	t.selectedRows[next] = true
-	t.setSelected(next)
-	t.scrollToSelected()
+	t.extendTo = next
+	t.SelectRowRange(anchor, next)
+	t.scrollToRow(next)
+}
+
+// scrollToRow nudges ScrollRow so row sits within the visible body.
+//
+// It exists apart from scrollToSelected because a keyboard range extension
+// follows its MOVING END, which is deliberately not Selected -- the anchor
+// stays put while the other end travels, and scrolling to the anchor would
+// leave the row the user is reaching for off screen.
+//
+// ⛔ row is a real row and is not guarded against being negative: its only
+// caller takes it from rovingIndex, which clamps to [0, len(Rows)-1]. A guard
+// here would be a statement no test could enter, which is a worse thing to
+// ship than the absence of one -- it would sit in the coverage figure as
+// though it had been exercised. scrollToSelected keeps ITS guard because
+// Selected really can be -1, for "nothing selected".
+func (t *Table) scrollToRow(row int) {
+	vis := t.bodyVisibleRows()
+	if vis <= 0 {
+		return
+	}
+	scroll := t.ScrollRow().Get()
+	switch {
+	case row < scroll:
+		t.ScrollTo(row)
+	case row >= scroll+vis:
+		t.ScrollTo(row - vis + 1)
+	}
+}
+
+// SelectAllRows selects every row, leaving the anchor (Selected) where it is.
+//
+// It is exported because the keyboard is not the only way the gesture arrives:
+// a native host routes a command chord (Ctrl/⌘ + A) to its own shortcut sink
+// rather than to the key path, so a host wiring an Edit ▸ Select All menu item
+// needs to ask for it directly.
+func (t *Table) SelectAllRows() {
+	if len(t.Rows) == 0 {
+		t.ClearRowSelection()
+		t.extendTo = -1
+		return
+	}
+	t.SelectRowRange(0, len(t.Rows)-1)
+	t.extendTo = -1
 }
 
 // IsRowSelected reports whether row i is a member of the multi-row
@@ -2597,11 +2672,20 @@ func (t *Table) OnEvent(ev Event) {
 		switch {
 		case ev.Shift:
 			t.SelectRowRange(t.Selected().Get(), row)
-		case ev.Ctrl:
+			// The mouse just placed the moving end: a Shift-arrow after a
+			// Shift-click continues from the clicked row, not from the anchor.
+			t.extendTo = row
+		case ev.Ctrl, ev.Meta:
+			// ⛔ Command as well as Ctrl. On macOS Ctrl-click IS the secondary
+			// click -- it opens a context menu -- so it cannot also mean "add
+			// this row", and a table consulting only ev.Ctrl was unreachable
+			// with a Mac mouse.
 			t.ToggleRowSelect(row)
+			t.extendTo = -1
 		default:
 			t.SetRowSelection(row)
 			t.setSelected(row)
+			t.extendTo = -1
 		}
 	case EventMouseDrag:
 		// A scrollbar-thumb drag takes precedence over a column resize.
