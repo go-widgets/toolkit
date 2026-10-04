@@ -42,9 +42,9 @@ in headless tests (screenshot-hash regressions).
 
 ## Status
 
-**v0.109.0 — broad GTK 4 / DaisyUI / desktop-shell coverage.** The
+**Broad GTK 4 / DaisyUI / desktop-shell coverage.** The
 widget set has grown well past the early parity passes into a full
-application toolkit: ~150 widget types across inputs, containers,
+application toolkit: widget types across inputs, containers,
 overlays, structural rows, semantic banners, a dashboard/data suite,
 a chart family, desktop-shell pieces (status area, wallpaper,
 command palette), and a loading-screen **Skeleton** family. A
@@ -53,8 +53,31 @@ declarative `Container` + swappable `Layout` model (`FitLayout`,
 the convenience containers (`HBox`/`VBox`/`Grid`/`Frame`/`Dock`/
 `Border`).
 
-~150 widget types + 10 stock icons, ~30 kLoC of widget code, 100%
-statement coverage.
+**159** exported widget types + 10 stock icons, **68 kLoC** of widget
+code across 233 files, 100% statement coverage.
+
+⛔ Those numbers are measured, not remembered, and the headline no
+longer carries a version. It said **v0.109.0**, "~150 widget types"
+and "~30 kLoC" while the repository stood at **v0.323.0** with 159
+types and 68 kLoC — a README is read at whatever tag it ships in, so
+a version written into its prose lies in every later one. The current
+version is whatever `git tag` says; the rest re-measures in one
+command each:
+
+```sh
+grep -hA3 '^type [A-Z][A-Za-z0-9]* struct {' $(ls *.go|grep -v _test)   | grep -cE '^[[:space:]]+Base$'          # exported widget types
+cat $(ls *.go|grep -v _test) | wc -l       # lines of widget code
+grep -lE '^[[:space:]]+MultiSelect bool' $(ls *.go|grep -v _test)
+```
+
+**Multi-row selection** is carried by exactly three widgets —
+`ListBox`, `Table` and `TreeView` — and in all three it is reachable
+from the **mouse and the keyboard**: Ctrl/⌘-click adds a row,
+Shift-click takes a run, Shift + any movement key extends from a
+fixed anchor (and shrinks back), Ctrl/⌘+A selects all, Ctrl/⌘+Space
+toggles the cursor row without activating it. ⌘ is honoured as well
+as Ctrl, because on macOS Ctrl-click is the secondary click and
+cannot also mean "add this row".
 Pure Go, no CGO, stdlib only. Builds for `GOOS=js GOARCH=wasm` and
 every native target Go ships.
 
