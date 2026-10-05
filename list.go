@@ -236,12 +236,14 @@ func (l *ListBox) AcceptsDrop(payload string) bool {
 // top + (i-ScrollRow)*RowHeight. When every row already fits
 // (len(Items) <= visibleRows() and ScrollRow clamps to 0), that
 // window covers the whole list and rendering is byte-identical to a
-// non-scrolling ListBox: no scrollbar, no clipping, full-width rows.
+// non-scrolling ListBox: no scrollbar, full-width rows.
 //
-// When the list overflows the viewport, rows are clipped to the
-// content area (via painter.Clipper, if the backend supports it) so
-// a partially-visible trailing row never bleeds past Bounds().H, and
-// a thin scrollbar track+thumb is painted on the right edge.
+// Rows are always clipped to the content area (via painter.Clipper, if
+// the backend supports it), so a row wider than the list stops at its
+// right edge -- the host's ItemRenderer included. When the list
+// overflows the viewport, the same clip keeps a partially-visible
+// trailing row from bleeding past Bounds().H, and a thin scrollbar
+// track+thumb is painted on the right edge.
 func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 	if l.sectioned() {
 		l.drawSectioned(p, theme)
@@ -256,13 +258,12 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 		cr.W -= scrollGutter()
 	}
 
-	var clr painter.Clipper
-	canClip := false
-	if overflow {
-		clr, canClip = p.(painter.Clipper)
-		if canClip {
-			clr.PushClip(cr)
-		}
+	// Rows are always clipped to the content rect: horizontally so a row wider
+	// than the list stops at its edge (#481), and, while the list overflows,
+	// vertically so a partial trailing row never bleeds past Bounds().H.
+	clr, canClip := p.(painter.Clipper)
+	if canClip {
+		clr.PushClip(cr)
 	}
 
 	start := l.clampedScrollRow()
@@ -299,7 +300,7 @@ func (l *ListBox) Draw(p painter.Painter, theme *Theme) {
 		l.drawDropIndicator(p, theme, cr, start, end)
 	}
 
-	if overflow && canClip {
+	if canClip {
 		clr.PopClip()
 	}
 	if overflow {
@@ -1115,13 +1116,12 @@ func (l *ListBox) drawSectioned(p painter.Painter, theme *Theme) {
 		cr.W -= scrollGutter()
 	}
 
-	var clr painter.Clipper
-	canClip := false
-	if overflow {
-		clr, canClip = p.(painter.Clipper)
-		if canClip {
-			clr.PushClip(cr)
-		}
+	// Rows are always clipped to the content rect: horizontally so a row wider
+	// than the list stops at its edge (#481), and, while the list overflows,
+	// vertically so a partial trailing row never bleeds past Bounds().H.
+	clr, canClip := p.(painter.Clipper)
+	if canClip {
+		clr.PushClip(cr)
 	}
 
 	start := l.clampedScrollRow()
@@ -1154,7 +1154,7 @@ func (l *ListBox) drawSectioned(p painter.Painter, theme *Theme) {
 		}
 	}
 
-	if overflow && canClip {
+	if canClip {
 		clr.PopClip()
 	}
 	if overflow {
