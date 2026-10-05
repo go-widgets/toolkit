@@ -73,8 +73,10 @@ func (f *focusState) drawFocusRing(p painter.Painter, theme *Theme, r Rect) {
 }
 
 // focusEnumerator is implemented by every focus-managing container (Container,
-// HBox, VBox, Grid, Frame): it yields the container's direct child widgets in
-// visual order so the focus walker can descend the widget tree.
+// HBox, VBox, Grid, Frame, Stack, ...): it yields the container's direct child
+// widgets in visual order so the focus walker can descend the widget tree. A
+// container that holds widgets and does not implement it is a dead end: no
+// widget under it can take keyboard focus from an enclosing container.
 type focusEnumerator interface {
 	focusableChildren() []Widget
 }

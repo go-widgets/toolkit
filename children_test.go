@@ -25,6 +25,9 @@ func TestContainersExposeTheirChildren(t *testing.T) {
 	grid := NewGrid(2, 1)
 	grid.Attach(a, 0, 0)
 	grid.Attach(b, 1, 0)
+	stack := NewStack()
+	stack.AddPage("one", a)
+	stack.AddPage("two", b) // hidden: not a child until it is shown
 
 	cases := []struct {
 		name string
@@ -47,6 +50,7 @@ func TestContainersExposeTheirChildren(t *testing.T) {
 		{"paned", &Paned{First: a, Second: b}, []Widget{a, b}},
 		{"popover", NewPopover(a), []Widget{a}},
 		{"scrollview", NewScrollView(a), []Widget{a}},
+		{"stack", stack, []Widget{a}},
 		{"statusbar", &Statusbar{Left: []StatusSegment{{Widget: a}}, Right: []StatusSegment{{Widget: b}}}, []Widget{a, b}},
 		{"window", NewWindow("t", a), []Widget{a}},
 		{"wizard", NewWizard([]WizardStep{{Title: "s", Body: a}}), []Widget{a}},
@@ -89,6 +93,7 @@ func TestContainersSkipNilChildren(t *testing.T) {
 		{"paned", &Paned{Second: a}},
 		{"popover", NewPopover(nil)},
 		{"scrollview", NewScrollView(nil)},
+		{"stack", NewStack()},
 		{"statusbar", &Statusbar{Left: []StatusSegment{{Text: "x"}, {Widget: a}}}},
 		{"window", NewWindow("t", nil)},
 		{"wizard", NewWizard([]WizardStep{{Title: "s"}})},
@@ -171,7 +176,9 @@ func TestEveryContainerExposesItsChildren(t *testing.T) {
 				for _, fl := range st.Fields.List {
 					ft := exprType(fl.Type)
 					fieldTypes[d.Name.Name] = append(fieldTypes[d.Name.Name], ft)
-					if ft != "Widget" && ft != "[]Widget" {
+					// A map of widgets is a holder too: Stack keeps its pages in
+					// one and was missed by this guard until #480.
+					if ft != "Widget" && ft != "[]Widget" && ft != "map[]Widget" {
 						continue
 					}
 					if len(fl.Names) == 0 {
@@ -231,6 +238,8 @@ func exprType(e ast.Expr) string {
 		return t.Name
 	case *ast.ArrayType:
 		return "[]" + exprType(t.Elt)
+	case *ast.MapType:
+		return "map[]" + exprType(t.Value)
 	}
 	return ""
 }
