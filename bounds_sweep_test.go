@@ -79,6 +79,12 @@ func TestWidgetsStayWithinBounds(t *testing.T) {
 			return a
 		}},
 		{"linechart", func() Widget { return NewLineChart([]float64{3, 7, 2, 8, 5, 9}) }},
+		{"xyplot", func() Widget {
+			p := NewXYPlot(PlotSeries{Label: "a", Y: []float64{3, -7, 2, 8}}, PlotSeries{Label: "b", X: []float64{0, 1, 2, 3}, Y: []float64{1, 2, 3, 4}, Style: PlotStem})
+			p.XLabel, p.YLabel = "Hz", "amplitude"
+			p.Hover().Set(true)
+			return p
+		}},
 		{"barchart", func() Widget { return NewBarChart([]float64{4, 7, 2, 8, 5}) }},
 		{"piechart", func() Widget { return NewPieChart([]float64{3, 5, 2, 4}) }},
 		{"areachart", func() Widget { return NewAreaChart([][]float64{{3, 6, 4, 8}, {1, 3, 2, 5}}) }},
