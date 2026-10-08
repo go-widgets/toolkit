@@ -260,6 +260,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"AreaChart":    {"Series": true, "Min": true, "Max": true, "Colors": true},
 	"BarChart":     {"Values": true, "Max": true},
 	"LineChart":    {"Series": true, "Min": true, "Max": true},
+	"XYPlot":       {"XLabel": true, "YLabel": true},
 	"PieChart":     {"Values": true, "Colors": true},
 	"RadarChart":   {"Axes": true, "Series": true, "Max": true, "Colors": true},
 	"ScatterChart": {"Series": true, "Colors": true},

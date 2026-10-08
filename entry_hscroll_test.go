@@ -95,8 +95,9 @@ func TestEntryClickPositionsCaret(t *testing.T) {
 	e := NewEntry("abcdefgh")
 	e.SetBounds(Rect{X: 10, Y: 0, W: 200, H: 20})
 	pad := scaled(entryPadX)
-	// Click at the x of the 3rd rune boundary.
-	target := e.Bounds().X + pad + e.textWidth("abc")
+	// Click at the x of the 3rd rune boundary, in WIDGET-LOCAL coordinates
+	// (the package convention: the Entry sits at X=10, which must not count).
+	target := pad + e.textWidth("abc")
 	e.OnEvent(Event{Kind: EventClick, X: target})
 	if !e.focused {
 		t.Fatal("click did not focus")
@@ -161,5 +162,28 @@ func TestEntryDrawWithoutClipper(t *testing.T) {
 	e.Draw(p, DefaultLight()) // must not panic on the non-Clipper path
 	if e.scrollX <= 0 {
 		t.Fatalf("expected the long value to scroll even without a clipper, got %d", e.scrollX)
+	}
+}
+
+// TestEntryClickThroughAContainer: the caret lands under the click when the
+// Entry is NOT at the surface's left edge and the click arrives through a box,
+// which is how every form reaches it. The Entry used to subtract its own
+// Bounds().X from an already-local X, so here the caret went to 0.
+func TestEntryClickThroughAContainer(t *testing.T) {
+	e := NewEntry("abcdefgh")
+	h := NewHBox()
+	h.AddFixed(NewLabel("name"), 120)
+	h.AddFlex(e, 1)
+	h.SetBounds(Rect{X: 30, Y: 40, W: 400, H: 24})
+	pad := scaled(entryPadX)
+	sx := e.Bounds().X + pad + e.textWidth("abcd") // surface x of the 4th boundary
+	h.OnEvent(Event{Kind: EventClick, X: sx - h.Bounds().X, Y: 10})
+	if e.cursor != 4 {
+		t.Fatalf("click through an HBox put the caret at %d, want 4", e.cursor)
+	}
+	// And typing goes there, not in front of the old value.
+	h.OnEvent(Event{Kind: EventChar, Code: "X"})
+	if got := e.Text().Get(); got != "abcdXefgh" {
+		t.Fatalf("typed into %q, want abcdXefgh", got)
 	}
 }

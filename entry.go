@@ -257,8 +257,12 @@ func (e *Entry) OnEvent(ev Event) {
 		e.focused = true
 		// Place the caret under the click, mapping the click x back through the
 		// left pad and the current scroll offset into the text's own pixel space.
+		// ev.X is WIDGET-LOCAL (the package convention, and what every container
+		// delivers): subtracting Bounds().X again put the caret at 0 for any
+		// Entry not at the surface's left edge — a click in a form field could
+		// not place the caret, and typing went in front of the old value.
 		pad := scaled(entryPadX)
-		e.cursor = e.caretIndexAt(e.display(), ev.X-(e.Bounds().X+pad)+e.scrollX)
+		e.cursor = e.caretIndexAt(e.display(), ev.X-pad+e.scrollX)
 	case EventKeyDown:
 		switch ev.Code {
 		case "Backspace":
