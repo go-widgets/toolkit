@@ -149,3 +149,14 @@ func TestContrastInk(t *testing.T) {
 		}
 	}
 }
+
+// A value Set through Text() (as a two-way binding does) that is shorter than
+// where the caret was must not make the next edit slice past the end.
+func TestEntryCaretClampedAfterExternalSet(t *testing.T) {
+	e := NewEntry("0, 12, 1")
+	e.Text().Set("2")
+	e.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
+	if got := e.Text().Get(); got != "" {
+		t.Fatalf("Backspace after an external Set left %q, want the caret clamped to the end and the 2 deleted", got)
+	}
+}
