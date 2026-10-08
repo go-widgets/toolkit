@@ -245,6 +245,13 @@ func (b *Base) caretIndexAt(shown string, localX int) int {
 // delete.
 func (e *Entry) OnEvent(ev Event) {
 	runes := []rune(e.Text().Get())
+	// A host that Sets Text() directly (a two-way binding pushing a
+	// ViewModel value) leaves the caret where the old text had it. Clamp it
+	// to the new text before editing, or a Backspace after a shorter value
+	// arrived would slice past the end and panic.
+	if e.cursor > len(runes) {
+		e.cursor = len(runes)
+	}
 	switch ev.Kind {
 	case EventClick:
 		e.focused = true

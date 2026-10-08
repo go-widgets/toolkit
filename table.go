@@ -80,6 +80,20 @@ type Table struct {
 	// before this field existed.
 	RowIcon func(row int) (draw TableIconFunc, ok bool)
 
+	// CellFill, when non-nil, gives a body cell its own background colour --
+	// what turns a Table into a heatmap of the numbers it shows (a matrix, a
+	// correlation table, a spectrogram read as values). It is called with a
+	// 0-indexed body row and column and returns the fill plus an ok flag;
+	// ok == false leaves that cell on the row's usual background. A filled
+	// cell's text is inked black or white, whichever contrasts more with the
+	// fill (WCAG relative luminance), so the value stays readable on any
+	// colour the host picks.
+	//
+	// The highlighted (selected) row keeps its accent band: the selection
+	// stays visible over a heatmap. The zero value (nil) is the original
+	// behaviour, byte-for-byte.
+	CellFill func(row, col int) (fill RGBA, ok bool)
+
 	// MultiSelect switches body-row clicks (handled by OnEvent) from
 	// inert to selection-driving: a plain click selects only that row
 	// (clearing any other selection, moving the Selected anchor to
@@ -857,10 +871,16 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 	}
 	fillRect(p, r.X, y, r.W, t.rowH(), bg)
 	cty := y + (t.rowH()-t.glyphHeight())/2
+	// fill is the per-cell heatmap hook; nil on the highlighted row so the
+	// selection band stays visible, and nil whenever CellFill is unset.
+	fill := t.CellFill
+	if highlighted {
+		fill = nil
+	}
 	if !t.hScrollable() {
 		cx := r.X
 		for j := range t.Columns {
-			t.paintCell(p, widths, gutter, cx, cty, y, i, j, ink, row)
+			t.paintFilledCell(p, fill, widths, gutter, cx, cty, y, i, j, ink, row)
 			cx += widths[j]
 		}
 		return
@@ -874,12 +894,26 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 	right := r.X + t.contentWidth()
 	withClip(p, Rect{X: fx, Y: y, W: right - fx, H: t.rowH()}, func() {
 		for j := f; j < len(t.Columns); j++ {
-			t.paintCell(p, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
+			t.paintFilledCell(p, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
 		}
 	})
 	for j := 0; j < f; j++ {
-		t.paintCell(p, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
+		t.paintFilledCell(p, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
 	}
+}
+
+// paintFilledCell paints cell (i, j) through paintCell, first laying down the
+// CellFill background when fill supplies one for it and switching the text to
+// the ink that contrasts with that background. With fill nil, or declining the
+// cell, it is exactly paintCell.
+func (t *Table) paintFilledCell(p painter.Painter, fill func(row, col int) (RGBA, bool), widths []int, gutter, cellX, cty, y, i, j int, ink RGBA, row []string) {
+	if fill != nil {
+		if c, ok := fill(i, j); ok {
+			fillRect(p, cellX, y, widths[j], t.rowH(), c)
+			ink = ContrastInk(c)
+		}
+	}
+	t.paintCell(p, widths, gutter, cellX, cty, y, i, j, ink, row)
 }
 
 // paintCell paints one body cell of row i, column j: column 0's optional
