@@ -118,9 +118,9 @@ func TestDrawTextUnknownCharRendersBlankButAdvances(t *testing.T) {
 	var w, h = 32, GlyphHeight() + 2
 	buf := makeSurface(w, h)
 	ink := RGB(0xAB, 0xCD, 0xEF)
-	// '~' is not in the table; 'I' is. After "~I" the I should still
+	// 'é' is not in the table; 'I' is. After "éI" the I should still
 	// land at x = GlyphAdvance() + 2 (column 2 of the second slot).
-	DrawText(newP(buf, w), 0, 0, "~I", ink)
+	DrawText(newP(buf, w), 0, 0, "éI", ink)
 	// Nothing inked in the first slot.
 	for x := 0; x < GlyphAdvance(); x++ {
 		for y := 0; y < GlyphHeight(); y++ {
@@ -290,8 +290,9 @@ func TestBitmapCoverageAnswersWhatMeasuringCannot(t *testing.T) {
 		drawn bool
 	}{
 		{'a', true}, {'.', true}, {'-', true}, {'(', true},
-		{'…', true}, // added with the rune-keyed table
-		{'\'', false}, {'’', false}, {'—', false}, {'é', false},
+		{'…', true},                                         // added with the rune-keyed table
+		{'\'', true}, {'’', true}, {'—', true}, {'@', true}, // and with the rest of ASCII
+		{'é', false}, {'€', false},
 	} {
 		if got := BitmapCovers(c.r); got != c.drawn {
 			t.Errorf("BitmapCovers(%q) = %v, want %v", c.r, got, c.drawn)
@@ -300,15 +301,34 @@ func TestBitmapCoverageAnswersWhatMeasuringCannot(t *testing.T) {
 
 	// ⭐ AND THE WIDTH IS THE SAME EITHER WAY, which is the whole point.
 	f := NewBitmapFont(1)
-	if f.Measure("a") != f.Measure("’") {
+	if f.Measure("a") != f.Measure("é") {
 		t.Error("a covered and an uncovered rune must measure the same; if they " +
 			"differ, callers could have used width to detect coverage")
 	}
 
-	if got := BitmapMissing("Turn this Mac's screen off"); len(got) != 1 || got[0] != '\'' {
-		t.Errorf("BitmapMissing = %q, want just the apostrophe", got)
+	if got := BitmapMissing("Turn this Mac's screen off"); len(got) != 0 {
+		t.Errorf("BitmapMissing = %q, want none: the apostrophe draws now", got)
+	}
+	if got := BitmapMissing("café à 10 €"); len(got) != 3 || got[0] != 'é' || got[1] != 'à' || got[2] != '€' {
+		t.Errorf("BitmapMissing = %q, want é, à, € in order", got)
 	}
 	if got := BitmapMissing("plain - hyphens are fine"); len(got) != 0 {
 		t.Errorf("BitmapMissing = %q, want none: the hyphen draws", got)
+	}
+}
+
+// Every printable ASCII character draws. Fifteen did not -- @ " $ & ' ; [ \ ]
+// ^ ` { | } ~ -- and each was a blank of the right width: an e-mail lost its
+// @, an IPv6 address its brackets, and nothing said so.
+func TestBitmapCoversPrintableASCII(t *testing.T) {
+	for r := rune(0x20); r < 0x7F; r++ {
+		if !BitmapCovers(r) {
+			t.Errorf("%q (%#x) has no glyph", r, r)
+		}
+		// A glyph that lights nothing is a blank by another name -- except
+		// the space, whose glyph IS blank.
+		if g := font5x7[r]; r != ' ' && g == [5]byte{} {
+			t.Errorf("%q has an empty glyph", r)
+		}
 	}
 }
