@@ -3,7 +3,7 @@ module github.com/go-widgets/toolkit
 go 1.27.2
 
 require (
-	github.com/go-crdt/collab v0.77.1
+	github.com/go-crdt/collab v0.77.2
 	github.com/go-crdt/crdt v0.57.0
 	github.com/go-gfx/gfx v0.35.0
 	github.com/go-icons/iconoir v0.3.0
@@ -13,8 +13,8 @@ require (
 	github.com/go-opentype/shape v0.7.0
 	github.com/go-richdoc/richdoc v0.6.0
 	github.com/go-typeset/bidi v0.3.1
-	github.com/go-widgets/mvvm v0.14.0
-	github.com/go-widgets/painter v0.15.0
+	github.com/go-widgets/mvvm v0.15.0
+	github.com/go-widgets/painter v0.16.0
 )
 
 require (
