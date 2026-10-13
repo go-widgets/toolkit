@@ -4,8 +4,8 @@ github.com/andybalholm/brotli v1.2.6 h1:ftYnfj6usCp+UGV5kSJ3+chpMQgU+gJf/AxsUQ52
 github.com/andybalholm/brotli v1.2.6/go.mod h1:rzTDkvFWvIrjDXZHkuS16NPggd91W3kUSvPlQ1pLaKY=
 github.com/coder/websocket v1.8.15 h1:6B2JPeOGlpff2Uz6vOEH1Vzpi0iUz20A+lPVhPHtNUA=
 github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6pumgx0mVg=
-github.com/go-crdt/collab v0.77.1 h1:eKzzFLIt4eQpM/YLRbbViMbSdHcN6ivSHeA5aldqgzw=
-github.com/go-crdt/collab v0.77.1/go.mod h1:LFqHBOnnr2kRFrTxCVJYWGlaF8jc7l51Z7yVrUY2RnA=
+github.com/go-crdt/collab v0.77.2 h1:oB0o5lp+YqmvmxlQBvVl8z8q7Fd/7LuXOy5CBPKLNIU=
+github.com/go-crdt/collab v0.77.2/go.mod h1:LFqHBOnnr2kRFrTxCVJYWGlaF8jc7l51Z7yVrUY2RnA=
 github.com/go-crdt/crdt v0.57.0 h1:sNLDTVCEnSb20gm77BUuYav8dzj5krmly/z9O7eRMCo=
 github.com/go-crdt/crdt v0.57.0/go.mod h1:zdVTTDLGV5JYAoTJDqCivcAT+/B5gGebDsVd8QNZpVs=
 github.com/go-gfx/gfx v0.35.0 h1:AaXMxDMxNB1hROxzx+3EoO06KxsrQUvnw/10olmSgVo=
@@ -32,10 +32,10 @@ github.com/go-richdoc/richdoc v0.6.0 h1:cema3hE5AAektDXTmvhWyBVnkCcZTVKhnkingwqs
 github.com/go-richdoc/richdoc v0.6.0/go.mod h1:RhxAcqwoUg1pnTYCiRdKILzOZwOmraO0dMJI4N6yY70=
 github.com/go-typeset/bidi v0.3.1 h1:fsTa0b9txt2SkH7M55EZ06+q3N9C4O0Oerf+SPLLGFs=
 github.com/go-typeset/bidi v0.3.1/go.mod h1:ct3cmYT8Qt1FGJQ+2QaakrUxqaP4ZysgdQQg2ym5+Xo=
-github.com/go-widgets/mvvm v0.14.0 h1:T7rDfZkoaWLycULc8XC6ZXYE0fBMhQgqkZRahPRBSS8=
-github.com/go-widgets/mvvm v0.14.0/go.mod h1:LF77YW5D9sfgpS1WBP3uMG4gV4QfJhRUmFfUNPXxPlg=
-github.com/go-widgets/painter v0.15.0 h1:0oeaRDTPcIe5/b0wHtYbAUsnReoidkSapr8y+iZJwDk=
-github.com/go-widgets/painter v0.15.0/go.mod h1:FSLNdrtzfDF3md+vtaORyS4nrOKLW6eLaCT5BuO9EWg=
+github.com/go-widgets/mvvm v0.15.0 h1:VvZiLB7gm+5CIEeQH3GNI53ytUndzOznT/fJvaG8hOQ=
+github.com/go-widgets/mvvm v0.15.0/go.mod h1:ZJj5M8zDg/gdzcvdWnJgZj/fcV0qe84fALq+EQVzUOM=
+github.com/go-widgets/painter v0.16.0 h1:j8FFObisySQChY2JiXS7Di2Mo4cqufIc0PDUnoDPMiA=
+github.com/go-widgets/painter v0.16.0/go.mod h1:3wKWjaM8ZgEhir2HX0UDt8GemePKJ7l/yIjQb/vVSWk=
 github.com/golang/protobuf v1.5.4 h1:i7eJL8qZTpSEXOPTxNKhASYpMn+8e5Q6AdndVa1dWek=
 github.com/golang/protobuf v1.5.4/go.mod h1:lnTiLA8Wa4RWRcIUkrtSVa5nRhsEGBg48fD6rSs7xps=
 github.com/google/go-cmp v0.7.0 h1:wk8382ETsv4JYUZwIsn6YpYiWiBsYLSJiTsyBybVuN8=
