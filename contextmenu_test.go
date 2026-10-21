@@ -85,7 +85,7 @@ func TestContextMenuDrawOnlyWhenOpen(t *testing.T) {
 	// Open: the menu body paints its Border frame somewhere.
 	cm.Popup(10, 10)
 	cm.Draw(newP(surf, 200), DefaultLight())
-	if got := countInk(surf, 200, 200, DefaultLight().Border); got == 0 {
+	if got := countInk(surf, 200, 200, PopupBorder(DefaultLight())); got == 0 {
 		t.Error("open menu drew no border")
 	}
 }

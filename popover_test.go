@@ -79,7 +79,7 @@ func TestPopoverDrawVisibleWithoutTitle(t *testing.T) {
 		t.Fatalf("interior fill = %+v, want Surface", pixelAt(buf, 120, 30, 30))
 	}
 	// Top-left border pixel is Border.
-	if pixelAt(buf, 120, 0, 0) != theme.Border {
+	if pixelAt(buf, 120, 0, 0) != PopupBorder(theme) {
 		t.Fatalf("border pixel = %+v, want Border", pixelAt(buf, 120, 0, 0))
 	}
 	if child.drawCount != 1 {

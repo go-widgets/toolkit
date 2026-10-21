@@ -259,7 +259,7 @@ func (c *CommandPalette) Draw(p painter.Painter, theme *Theme) {
 	}
 	pb := c.panelBounds()
 	fillRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Surface)
-	strokeRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Border)
+	strokePopupBorder(p, pb, theme)
 
 	// Query row.
 	qy := pb.Y + palettePadY

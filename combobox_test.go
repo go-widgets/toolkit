@@ -87,7 +87,7 @@ func TestComboBoxDrawOpenPaintsPopover(t *testing.T) {
 	surf := makeSurface(200, 300)
 	c.Draw(newP(surf, 200), DefaultLight())
 	pb := c.PopoverBounds()
-	if got := pixelAt(surf, 200, pb.X, pb.Y); got != DefaultLight().Border {
+	if got := pixelAt(surf, 200, pb.X, pb.Y); got != PopupBorder(DefaultLight()) {
 		t.Errorf("open popover corner = %+v, want Border", got)
 	}
 }

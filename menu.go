@@ -272,7 +272,7 @@ func (m *Menu) hasCheckGutter() bool {
 func (m *Menu) Draw(p painter.Painter, theme *Theme) {
 	r := m.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	strokePopupBorder(p, r, theme)
 	gutter := 0
 	if m.hasCheckGutter() {
 		gutter = m.sc(MenuCheckGutterW)

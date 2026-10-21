@@ -246,7 +246,7 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 			oy := rowY + (rowH-c.glyphHeight())/2
 			c.drawText(p, pb.X+scaled(comboPadX), oy, opt, theme.OnSurface)
 		}
-		strokeRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Border)
+		strokePopupBorder(p, pb, theme)
 	}
 	c.drawFocusRing(p, theme, r)
 }

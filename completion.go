@@ -630,6 +630,7 @@ func (c *CodeEditor) drawCompletion(p painter.Painter, theme *Theme) {
 	}
 	lb.SetBounds(pb)
 	lb.Draw(p, theme)
+	strokePopupBorder(p, pb, theme) // the list paints no edge of its own
 	c.drawCompletionDoc(p, theme, pb)
 }
 
@@ -673,7 +674,7 @@ func (c *CodeEditor) drawCompletionDoc(p painter.Painter, theme *Theme, list Rec
 		y = list.Y - rowH // flip above, matching a list that opened upward
 	}
 	fillRect(p, list.X, y, list.W, rowH, theme.SurfaceAlt)
-	strokeRect(p, list.X, y, list.W, rowH, theme.Border)
+	strokePopupBorder(p, Rect{X: list.X, Y: y, W: list.W, H: rowH}, theme)
 	ty := y + (rowH-c.glyphHeight())/2
 	c.drawText(p, list.X+scaled(completionPadX), ty, doc, dimInk(theme))
 }

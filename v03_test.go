@@ -440,7 +440,7 @@ func TestMenuPlainLayoutUnchanged(t *testing.T) {
 	want := makeSurface(w, h)
 	wp := newP(want, w)
 	fillRect(wp, 0, 0, w, h, theme.Surface)
-	strokeRect(wp, 0, 0, w, h, theme.Border)
+	strokeRect(wp, 0, 0, w, h, PopupBorder(theme))
 	textY := 2 + (MenuRowH-GlyphHeight())/2
 	DrawText(wp, 8, textY, "Open", theme.OnSurface)
 
