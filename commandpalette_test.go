@@ -376,7 +376,7 @@ func TestDrawVisiblePaintsPanelBorder(t *testing.T) {
 	surf := makeSurface(400, 300)
 	theme := DefaultLight()
 	cp.Draw(newP(surf, 400), theme)
-	if countInk(surf, 400, 300, theme.Border) == 0 {
+	if countInk(surf, 400, 300, PopupBorder(theme)) == 0 {
 		t.Fatal("visible palette drew no border")
 	}
 	// The Selected (row 0) result row is highlighted in Accent.
@@ -392,7 +392,7 @@ func TestDrawEmptyFilteredRendersQueryRowOnly(t *testing.T) {
 	surf := makeSurface(400, 300)
 	theme := DefaultLight()
 	cp.Draw(newP(surf, 400), theme) // must not panic
-	if countInk(surf, 400, 300, theme.Border) == 0 {
+	if countInk(surf, 400, 300, PopupBorder(theme)) == 0 {
 		t.Fatal("empty-filtered palette still draws its panel frame")
 	}
 	// No result rows => no Accent highlight.

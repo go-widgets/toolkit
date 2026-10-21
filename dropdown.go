@@ -111,6 +111,10 @@ func (d *DropDown) Draw(p painter.Painter, theme *Theme) {
 	face, border, ink := theme.Surface, theme.Border, theme.OnSurface
 	if d.Disabled().Get() {
 		face, border, ink = mutedFace(theme), mutedInk(theme), mutedInk(theme)
+	} else if d.Open().Get() {
+		// Open: the field takes the accent edge, as a ComboBox does, so the
+		// control and its list read as one open unit.
+		border = theme.Accent
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, face)
 	strokeRect(p, r.X, r.Y, r.W, r.H, border)
@@ -313,8 +317,12 @@ func (d *DropDown) DrawPopover(p painter.Painter, theme *Theme) {
 	// appears) when the popover is scrolled. At popScroll == 0 this is
 	// byte-identical to an unscrolled list.
 	lb.ScrollRow().Set(d.clampedPopScroll())
-	lb.SetBounds(d.PopoverBounds())
+	pb := d.PopoverBounds()
+	lb.SetBounds(pb)
 	lb.Draw(p, theme)
+	// The list paints no edge of its own, so without this a popup whose rows
+	// are Surface-toned over a Surface-toned page has no visible outline.
+	strokePopupBorder(p, pb, theme)
 }
 
 // PopoverClick routes a click at (x, y) — in the DropDown's own coordinate

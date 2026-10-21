@@ -90,7 +90,7 @@ func (p *Popover) Draw(pnt painter.Painter, theme *Theme) {
 	}
 	r := p.Bounds()
 	fillRect(pnt, r.X, r.Y, r.W, r.H, theme.Surface)
-	strokeRect(pnt, r.X, r.Y, r.W, r.H, theme.Border)
+	strokePopupBorder(pnt, r, theme)
 	if p.Title != "" {
 		p.drawText(pnt, r.X+PopoverPadX, r.Y+PopoverPadY, p.Title, theme.OnSurface)
 	}

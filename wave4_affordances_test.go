@@ -623,7 +623,7 @@ func TestMenuDrawsOpenSubmenuAndHoveredParent(t *testing.T) {
 	surf := makeSurface(320, 120)
 	p.Draw(newP(surf, 320), DefaultLight())
 	// The child paints its Border frame somewhere to the right of the parent.
-	if countInk(surf, 320, 120, DefaultLight().Border) == 0 {
+	if countInk(surf, 320, 120, PopupBorder(DefaultLight())) == 0 {
 		t.Fatal("open submenu drew no border")
 	}
 }

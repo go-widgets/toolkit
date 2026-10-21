@@ -591,7 +591,7 @@ func TestComboBoxDrawOpenHighlightRow(t *testing.T) {
 		t.Fatalf("highlight band = %+v, want SurfaceAlt", got)
 	}
 	// The popover corner stays Border (stroked after the highlight fill).
-	if got := pixelAt(surf, 120, pb.X, pb.Y); got != DefaultLight().Border {
+	if got := pixelAt(surf, 120, pb.X, pb.Y); got != PopupBorder(DefaultLight()) {
 		t.Fatalf("popover corner = %+v, want Border", got)
 	}
 }
