@@ -72,8 +72,8 @@ type PageStrip struct {
 	nres    int // resident bitmaps
 
 	cur    *mvvm.Observable[int]
-	reveal bool // scroll Current into view at the next Draw
-	scroll int  // scroll offset along the strip, device pixels
+	reveal bool                  // scroll Current into view at the next Draw
+	scroll *mvvm.Observable[int] // scroll offset along the strip, device pixels
 	drag   scrollDrag
 
 	// offs[i] is the start of page i along the strip's axis, offs[count] the end,
@@ -115,6 +115,29 @@ func (s *PageStrip) Current() *mvvm.Observable[int] {
 		s.cur.Subscribe(func(int) { s.reveal = true })
 	}
 	return s.cur
+}
+
+// Scroll is the scroll offset along the strip, in device pixels, as a bindable
+// Observable: a host that overlays something on the cards (an HTML thumbnail
+// layer the canvas cannot paint) subscribes to keep it aligned, and may set it.
+// Reads clamp on the fly.
+func (s *PageStrip) Scroll() *mvvm.Observable[int] {
+	if s.scroll == nil {
+		s.scroll = mvvm.NewObservable(0)
+	}
+	return s.scroll
+}
+
+// CardRect is page i's card — the picture, not its number — in the SAME
+// coordinates as Bounds (the surface's), at the current scroll offset; the zero
+// Rect for an out-of-range page. A host overlaying its own content on the cards
+// reads it (with Scroll) to place them.
+func (s *PageStrip) CardRect(i int) Rect {
+	if i < 0 || i >= s.count {
+		return Rect{}
+	}
+	cr, r := s.cardRect(i), s.Bounds()
+	return Rect{X: r.X + cr.X, Y: r.Y + cr.Y, W: cr.W, H: cr.H}
 }
 
 // Count is the number of pages.
@@ -333,7 +356,7 @@ func (s *PageStrip) maxScroll() int {
 }
 
 func (s *PageStrip) clampedScroll() int {
-	sc := s.scroll
+	sc := s.Scroll().Get()
 	if sc < 0 {
 		sc = 0
 	}
@@ -381,8 +404,8 @@ func (s *PageStrip) ScrollTo(i int) {
 	} else if end > sc+s.viewLen() {
 		sc = end - s.viewLen()
 	}
-	s.scroll = sc
-	s.scroll = s.clampedScroll()
+	s.Scroll().Set(sc)
+	s.Scroll().Set(s.clampedScroll())
 }
 
 // cardRect is page i's card, widget-local (the picture, not its number).
@@ -554,7 +577,7 @@ func (s *PageStrip) OnEvent(ev Event) {
 		}
 	case EventMouseDrag:
 		g, ok := s.barGeom()
-		s.drag.drag(g, ok, ev, func(v int) { s.scroll = v })
+		s.drag.drag(g, ok, ev, func(v int) { s.Scroll().Set(v) })
 	case EventMouseUp:
 		s.drag.release()
 	case EventScroll:
@@ -580,8 +603,8 @@ func (s *PageStrip) step() int {
 }
 
 func (s *PageStrip) scrollBy(d int) {
-	s.scroll = s.clampedScroll() + d
-	s.scroll = s.clampedScroll()
+	s.Scroll().Set(s.clampedScroll() + d)
+	s.Scroll().Set(s.clampedScroll())
 }
 
 func (s *PageStrip) onKey(code string) {

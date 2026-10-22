@@ -238,14 +238,14 @@ func TestPageStripScrollbarDragPageAndWheel(t *testing.T) {
 	}
 	s.OnEvent(Event{Kind: EventMouseUp})
 	// Track click pages by one window.
-	s.scroll = 0
+	s.Scroll().Set(0)
 	g, _ = s.barGeom()
 	s.OnEvent(Event{Kind: EventClick, X: x, Y: g.trackStart + g.trackLen - 3})
 	if s.clampedScroll() != s.viewLen() {
 		t.Fatalf("track click scrolled %d, want a window (%d)", s.clampedScroll(), s.viewLen())
 	}
 	// Wheel
-	s.scroll = 0
+	s.Scroll().Set(0)
 	s.OnEvent(Event{Kind: EventScroll, Delta: 3})
 	if s.clampedScroll() != 3*s.step() {
 		t.Fatalf("wheel scrolled %d, want %d", s.clampedScroll(), 3*s.step())
@@ -336,6 +336,29 @@ func TestPageStripAspectsAndCount(t *testing.T) {
 	s.Draw(newP(buf, 170), DefaultLight())
 }
 
+// A host overlaying content on the cards places it from CardRect and follows
+// Scroll: the rectangle is in surface coordinates and moves with the scroll.
+func TestPageStripCardRectAndScrollObservable(t *testing.T) {
+	s := newStrip(100) // X 3, Y 4
+	r0, r1 := s.CardRect(0), s.CardRect(1)
+	if r0.X < s.Bounds().X || r0.Y < s.Bounds().Y || r1.Y <= r0.Y+r0.H {
+		t.Fatalf("CardRect not in surface coordinates / stacked: %v %v", r0, r1)
+	}
+	if s.CardRect(-1) != (Rect{}) || s.CardRect(100) != (Rect{}) {
+		t.Fatal("out-of-range CardRect must be the zero Rect")
+	}
+	var seen []int
+	s.Scroll().Subscribe(func(v int) { seen = append(seen, v) })
+	s.OnEvent(Event{Kind: EventScroll, Delta: 3})
+	if len(seen) == 0 || seen[len(seen)-1] != s.clampedScroll() {
+		t.Fatalf("Scroll observers saw %v, scroll is %d", seen, s.clampedScroll())
+	}
+	moved := s.CardRect(0)
+	if moved.Y != r0.Y-s.clampedScroll() {
+		t.Fatalf("card did not follow the scroll: %v vs %v at scroll %d", moved, r0, s.clampedScroll())
+	}
+}
+
 func TestPageStripEdgeCases(t *testing.T) {
 	e := NewPageStrip(0)
 	e.SetBounds(Rect{W: 100, H: 100})
@@ -423,7 +446,7 @@ func BenchmarkPageStripDraw(b *testing.B) {
 			s.Draw(p, th)
 			b.ResetTimer()
 			for i := 0; i < b.N; i++ {
-				s.scroll = (i * 37) % 5000
+				s.Scroll().Set((i * 37) % 5000)
 				s.Draw(p, th)
 			}
 		})
