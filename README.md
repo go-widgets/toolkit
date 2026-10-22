@@ -97,7 +97,7 @@ every native target Go ships.
 | Structure    | `Card`, `HeaderBar`, `ActionRow`, `Breadcrumbs`, `Steps`, `Avatar`, `Rating`, `Stat`, `Kbd`, `ChatBubble`, `Diff`, `Pagination`, `DropZone` |
 | Navigation   | `Menu` + `MenuItem.Shortcut`, `MenuBar` + `Alt+letter`, `ContextMenu`, `Popover`, `CommandPalette`, `Dialog`, `MessageDialog`, `Wizard` |
 | Window       | `Window`, `WindowDecoration`, `DecoButton` (client-side decorations) |
-| Bars         | `Toolbar`, `PagingToolbar`, `Statusbar`, 10 stock `DrawIcon*` helpers |
+| Bars         | `Toolbar`, `PagingToolbar`, `Statusbar`, `Ribbon` (Office-style tabs of groups of large/small buttons, toggles, split buttons, drop-downs and a gallery; scales down by group priority, collapses, keytips, tooltips with shortcuts; every control is an `Action`, state is `mvvm.Observable`), 10 stock `DrawIcon*` helpers |
 | Composite    | `FileChooser`, `ColorChooser`, `ColorPicker`, `FontChooser`, `Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker`, `MarkdownView`, `MarkdownEditor` |
 | Data suite   | `Table` (cell edit, frozen columns, group rows, aggregates, row-expanders), `TreeTable`, `PropertyGrid`, `Kanban` (drag cards), `Gantt` (drag/resize bars), `Agenda`/`AgendaCalendar` event calendar (week/month/quarter/year, colour-coded calendars, sidebar, inline editor) |
 | Charts       | `LineChart`, `BarChart`, `PieChart`, `AreaChart`, `ScatterChart`, `RadarChart`, `Gauge`, `Sparkline` |
