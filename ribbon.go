@@ -621,3 +621,32 @@ func (r *Ribbon) bodyRect() Rect {
 	b := r.Bounds()
 	return Rect{X: b.X, Y: b.Y + m.tabH + 1, W: b.W, H: m.bodyH + m.labelH + 1}
 }
+
+// TabRect is where tab i's label is, in surface coordinates; false when there is
+// no such tab. A test harness that drives the page with synthetic events clicks
+// there.
+func (r *Ribbon) TabRect(i int) (Rect, bool) {
+	tabs, _ := r.tabRects(r.metrics())
+	if i < 0 || i >= len(tabs) {
+		return Rect{}, false
+	}
+	return tabs[i], true
+}
+
+// ControlRect is where the control (or folded group) labelled label is, in surface
+// coordinates, among those the ribbon shows now; false when it is not shown (on
+// another tab, hidden, or folded into a group's pop-up).
+func (r *Ribbon) ControlRect(label string) (Rect, bool) {
+	for _, c := range r.cells() {
+		l := ""
+		if c.form == formPopup {
+			l = c.grp.Label
+		} else {
+			l = c.ctrl.label()
+		}
+		if l == label {
+			return c.rect, true
+		}
+	}
+	return Rect{}, false
+}
