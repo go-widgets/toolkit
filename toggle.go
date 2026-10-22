@@ -60,6 +60,9 @@ func (t *ToggleButton) Draw(p painter.Painter, theme *Theme) {
 		face = theme.SurfaceAlt
 	}
 	ink, border := theme.OnSurface, theme.Border
+	if t.Pressed().Get() {
+		ink = accentInk(theme) // the label on the accent face, not OnSurface (dark on dark in a light theme)
+	}
 	if t.Disabled().Get() {
 		face, ink, border = mutedFace(theme), mutedInk(theme), mutedInk(theme)
 	}
