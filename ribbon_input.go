@@ -44,6 +44,11 @@ func (r *Ribbon) HitTest(px, py int) bool {
 	return r.peek && r.bodyRect().Contains(px, py)
 }
 
+// Measure is the size the ribbon asks of a box that sizes its children by what
+// they ask for ([VBox.AddNatural]): the whole width offered and the height it
+// needs now, which shrinks when it is collapsed.
+func (r *Ribbon) Measure(availW, availH int) (w, h int) { return availW, r.Height() }
+
 // Tick advances the hover timer by dt seconds: the toolkit's [Animator] contract,
 // so [TickTree] drives it with the rest of the tree and a tooltip shows once the
 // pointer has rested on a control for [Ribbon.TooltipDelayMs].
@@ -332,15 +337,34 @@ func (r *Ribbon) runAction(a *Action) {
 		a.Execute()
 	}
 	r.Dismiss()
+	if r.byKey {
+		r.leave()
+	}
 }
 
-// key routes a key press.
+// key routes a key press. While it runs, a command that runs ends with the focus
+// handed back to the host through OnLeave: keyboard use of the ribbon is a
+// detour, and its end is wherever the user was typing.
 func (r *Ribbon) key(ev Event) {
+	r.byKey = true
+	r.dispatchKey(ev)
+	r.byKey = false
+}
+
+// leave hands the keyboard back to the host (OnLeave), if it asked.
+func (r *Ribbon) leave() {
+	if r.OnLeave != nil {
+		r.OnLeave()
+	}
+}
+
+func (r *Ribbon) dispatchKey(ev Event) {
 	switch {
 	case ev.Ctrl && ev.Code == "F1":
 		r.toggleCollapsed()
 	case ev.Code == "Alt" && r.keytips > 0:
 		r.keytips, r.tipBuf = 0, ""
+		r.leave()
 	case ev.Code == "Alt":
 		r.startKeyTips()
 	case r.keytips > 0:
@@ -375,7 +399,13 @@ func (r *Ribbon) tabKey(ev Event) {
 	case "ArrowDown", "Enter", " ", "Space":
 		r.enterBody()
 	case "Escape":
-		r.peek = false
+		// A peeking body is put away first; with nothing open the keyboard
+		// goes back to where it came from.
+		if r.peek {
+			r.peek = false
+		} else {
+			r.leave()
+		}
 	}
 }
 
@@ -546,6 +576,7 @@ func (r *Ribbon) keyTipKey(ev Event) {
 			r.keytips, r.peek = 1, false
 		} else {
 			r.keytips = 0
+			r.leave()
 		}
 		r.tipBuf = ""
 		return
