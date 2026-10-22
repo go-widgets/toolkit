@@ -34,7 +34,7 @@ func ribbonInk(theme *Theme, enabled bool) RGBA {
 
 // Draw paints the tab strip and, unless the ribbon is collapsed, the body of the
 // active tab. Menus, a collapsed ribbon's body, tooltips and keytips are drawn by
-// [Ribbon.DrawPopup], which a host calls last.
+// [Ribbon.DrawPopover], which a [PopoverHost] calls after the tree.
 func (r *Ribbon) Draw(p painter.Painter, theme *Theme) {
 	b := r.Bounds()
 	m := r.metrics()
@@ -229,10 +229,11 @@ func (r *Ribbon) drawGallery(p painter.Painter, theme *Theme, m ribbonMetrics, c
 	drawDropArrow(p, c.arrow.X+c.arrow.W/2, c.arrow.Y+c.arrow.H/2, ink)
 }
 
-// DrawPopup paints what hangs over the page: a collapsed ribbon's body while it
+// DrawPopover paints what hangs over the page: a collapsed ribbon's body while it
 // peeks, the open menu, list, gallery or folded group, the tooltip of the hovered
-// control and the keytips. A host calls it after everything else is drawn.
-func (r *Ribbon) DrawPopup(p painter.Painter, theme *Theme) {
+// control and the keytips. A [PopoverHost] calls it after the whole tree is drawn
+// (the ribbon is a [PopoverOwner]); a host without one calls it last itself.
+func (r *Ribbon) DrawPopover(p painter.Painter, theme *Theme) {
 	m := r.metrics()
 	if r.Collapsed().Get() && r.peek {
 		r.drawBody(p, theme, m, r.body())

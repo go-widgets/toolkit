@@ -48,9 +48,12 @@ import "github.com/go-widgets/mvvm"
 // a drop-down's selection are [mvvm.Observable]s that a view model binds.
 //
 // A host sizes the ribbon with [Ribbon.Height] (it changes when the ribbon is
-// collapsed), sets its bounds, draws it, and draws [Ribbon.DrawPopup] LAST, over
-// everything else, because the menus, the collapsed bodies, the tooltips and the
-// keytips are drawn there, outside the ribbon's own rectangle.
+// collapsed) and sets its bounds. The menus, a collapsed ribbon's body, the
+// tooltips and the keytips are drawn outside the ribbon's own rectangle, over
+// everything else, so the ribbon is a [PopoverOwner]: under a [PopoverHost] (the
+// root of an application) it needs nothing more; a host without one calls
+// [Ribbon.DrawPopover] last and offers [Ribbon.PopoverClick] the clicks first.
+// It is an [Animator] too: [TickTree] drives its tooltip delay.
 type Ribbon struct {
 	Base
 	focusState

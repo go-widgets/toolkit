@@ -54,7 +54,7 @@ func TestRibbonTooltipOfAFoldedGroup(t *testing.T) {
 	i := rtCell(r, "Theme")
 	x, y := rtCenterOf(r.cells()[i])
 	rtMove(r, x, y)
-	r.Tick(600)
+	r.Tick(0.6)
 	if lines := r.tooltipLines(); len(lines) != 1 || lines[0] != "Theme" {
 		t.Errorf("a folded group's tooltip is its name: %q", lines)
 	}

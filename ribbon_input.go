@@ -44,17 +44,67 @@ func (r *Ribbon) HitTest(px, py int) bool {
 	return r.peek && r.bodyRect().Contains(px, py)
 }
 
-// Tick advances the hover timer by dtMs milliseconds and reports whether the
-// tooltip's visibility changed, i.e. whether the host should redraw. A host with
-// a frame loop calls it every frame; without one, tooltips never show.
-func (r *Ribbon) Tick(dtMs int) bool {
-	if r.hoverCtl < 0 || r.pop != nil {
-		return false
+// Tick advances the hover timer by dt seconds: the toolkit's [Animator] contract,
+// so [TickTree] drives it with the rest of the tree and a tooltip shows once the
+// pointer has rested on a control for [Ribbon.TooltipDelayMs].
+func (r *Ribbon) Tick(dt float64) {
+	if r.hoverCtl >= 0 && r.pop == nil {
+		r.hoverMs += int(dt * 1000)
 	}
-	was := r.tooltipVisible()
-	r.hoverMs += dtMs
-	return was != r.tooltipVisible()
 }
+
+// Animating reports whether a tooltip is waiting for its delay, so a host that
+// repaints only while something animates keeps painting until it shows.
+func (r *Ribbon) Animating() bool {
+	return r.hoverCtl >= 0 && r.pop == nil && !r.tooltipVisible()
+}
+
+// PopoverOpen is whether the ribbon has something to draw over the page: a menu,
+// a drop-down, a folded group, a collapsed ribbon's body, a tooltip or keytips.
+// With [PopoverOwner] the ribbon works under a [PopoverHost] like a [DropDown]:
+// the host draws the floating part after the tree and offers it the clicks.
+func (r *Ribbon) PopoverOpen() bool {
+	return r.pop != nil || r.peek || r.keytips > 0 || r.tooltipVisible()
+}
+
+// PopoverBounds is where the floating part is: the open panel, the peeking body,
+// else the ribbon itself (a tooltip or keytips hang off it).
+func (r *Ribbon) PopoverBounds() Rect {
+	switch {
+	case r.pop != nil:
+		panel, _ := r.popupGeometry(r.pop, r.metrics())
+		return panel
+	case r.peek:
+		return r.bodyRect()
+	}
+	return r.Bounds()
+}
+
+// PopoverClick offers the ribbon a click that may land on its floating part,
+// which lies outside its bounds where no container would route it. A click on the
+// open panel or the peeking body is handled here and consumed; a click anywhere
+// else outside the ribbon closes what is open and goes on to what it landed on.
+func (r *Ribbon) PopoverClick(x, y int) bool {
+	switch {
+	case r.pop != nil:
+		if panel, _ := r.popupGeometry(r.pop, r.metrics()); panel.Contains(x, y) {
+			r.click(x, y)
+			return true
+		}
+	case r.peek:
+		if r.bodyRect().Contains(x, y) {
+			r.click(x, y)
+			return true
+		}
+	}
+	if !r.Bounds().Contains(x, y) {
+		r.Dismiss()
+	}
+	return false
+}
+
+var _ PopoverOwner = (*Ribbon)(nil)
+var _ Animator = (*Ribbon)(nil)
 
 // tooltipVisible is whether the hovered control's tooltip is showing.
 func (r *Ribbon) tooltipVisible() bool {
