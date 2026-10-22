@@ -271,14 +271,17 @@ func TestRibbonTooltipTimerAndText(t *testing.T) {
 	i := rtCell(r, "New slide")
 	x, y := rtCenterOf(r.cells()[i])
 	rtMove(r, x, y)
-	if r.tooltipVisible() || r.Tick(100) || r.Tick(300) {
+	if !r.Animating() {
+		t.Fatal("a hovered control with its tooltip pending keeps the host painting")
+	}
+	r.Tick(0.1)
+	r.Tick(0.3)
+	if r.tooltipVisible() {
 		t.Fatal("the tooltip must wait its delay (500ms by default)")
 	}
-	if !r.Tick(150) || !r.tooltipVisible() {
-		t.Fatal("after 550ms the tooltip shows, and Tick reports the change")
-	}
-	if r.Tick(100) {
-		t.Error("Tick reports only changes")
+	r.Tick(0.15)
+	if !r.tooltipVisible() || r.Animating() {
+		t.Fatal("after 550ms the tooltip shows, and nothing is left animating")
 	}
 	lines := r.tooltipLines()
 	if len(lines) != 2 || lines[0] != "New slide (Ctrl+N)" || lines[1] != "Add a slide after this one" {
@@ -289,18 +292,105 @@ func TestRibbonTooltipTimerAndText(t *testing.T) {
 	j := rtCell(r, "Redo")
 	x, y = rtCenterOf(r.cells()[j])
 	rtMove(r, x, y)
-	if !r.Tick(60) || len(r.tooltipLines()) != 1 {
+	r.Tick(0.06)
+	if !r.tooltipVisible() || len(r.tooltipLines()) != 1 {
 		t.Errorf("custom delay: lines %q", r.tooltipLines())
 	}
-	// An open popup hides the tooltip, and nothing hovered means no timer.
+	// An open popup hides the tooltip and stops the timer, and nothing hovered
+	// means nothing to time.
 	r.activate(rtCell(r, "Style"), partMain)
-	if r.tooltipVisible() || r.Tick(1000) {
-		t.Error("a popup hides the tooltip")
+	ms := r.hoverMs
+	r.Tick(1)
+	if r.tooltipVisible() || r.Animating() || r.hoverMs != ms {
+		t.Error("a popup hides the tooltip and stops its timer")
 	}
 	r.Dismiss()
 	rtMove(r, 5, r.Height()+50)
-	if r.Tick(1000) {
+	r.Tick(1)
+	if r.Animating() || r.hoverMs != 0 {
 		t.Error("nothing hovered: nothing to time")
+	}
+}
+
+// The ribbon is a PopoverOwner: under a PopoverHost its menus, peeking body,
+// tooltips and keytips are drawn after the tree and its clicks are routed to them,
+// with no host code.
+func TestRibbonUnderAPopoverHost(t *testing.T) {
+	run := &sampleRun{}
+	r := run.ribbon()
+	body := NewVBox()
+	body.AddFixed(r, r.Height())
+	body.AddFlex(NewLabel("content"), 1)
+	host := NewPopoverHost(body)
+	host.SetBounds(Rect{W: 1100, H: 400})
+	body.SetBounds(Rect{W: 1100, H: 400})
+	r.SetBounds(Rect{W: 1100, H: r.Height()})
+	if PopoverOwners(host) != nil {
+		t.Fatal("nothing is open yet")
+	}
+	// Open the split menu: the host now sees an open popover over the content.
+	i := rtCell(r, "New slide")
+	c := r.cells()[i]
+	host.OnEvent(Event{Kind: EventClick, X: c.arrow.X + c.arrow.W/2, Y: c.arrow.Y + c.arrow.H/2})
+	owners := PopoverOwners(host)
+	if len(owners) != 1 || owners[0] != PopoverOwner(r) || !r.PopoverOpen() {
+		t.Fatalf("an open menu should be a popover, got %d owners", len(owners))
+	}
+	panel := r.PopoverBounds()
+	if panel.Y+panel.H <= r.Bounds().H {
+		t.Fatal("the menu should hang below the ribbon")
+	}
+	// The host draws it over the content: a pixel inside the panel is the panel's.
+	th := DefaultLight()
+	buf := make([]byte, 1100*400*4)
+	p := painterOver(buf, 1100, 400)
+	host.Draw(p, th)
+	if got := rtPixelAt(buf, 1100, panel.X+panel.W/2, panel.Y+panel.H-2); got != th.Surface {
+		t.Errorf("the host did not draw the menu over the content: %v", got)
+	}
+	// A click on a row (below the ribbon, where no container would route it) runs it.
+	_, rows := r.popupGeometry(r.pop, r.metrics())
+	x, y := rtCenter(rows[1])
+	host.OnEvent(Event{Kind: EventClick, X: x, Y: y})
+	if r.PopoverOpen() || run.ids[len(run.ids)-1] != "slide.code" {
+		t.Errorf("clicking a menu row through the host ran %v", run.ids)
+	}
+	// A click far away closes a popup and is not swallowed.
+	r.activate(rtCell(r, "Style"), partMain)
+	if r.PopoverClick(900, 380) || r.PopoverOpen() {
+		t.Error("a click outside closes the popup and passes through")
+	}
+	// A click on the panel's border is consumed, a click on the ribbon itself is not.
+	r.activate(rtCell(r, "Style"), partMain)
+	pb := r.PopoverBounds()
+	if !r.PopoverClick(pb.X, pb.Y) || !r.PopoverOpen() {
+		t.Error("the panel's border swallows the click")
+	}
+	if r.PopoverClick(5, 5) || !r.PopoverOpen() {
+		t.Error("a click on the ribbon itself is left to OnEvent, which closes the popup there")
+	}
+	r.Dismiss()
+	// A collapsed ribbon's peeking body is a popover too, and clickable.
+	r.Collapsed().Set(true)
+	r.SetBounds(Rect{W: 1100, H: r.Height()})
+	tabs, _ := r.tabRects(r.metrics())
+	x, y = rtCenter(tabs[0])
+	host.OnEvent(Event{Kind: EventClick, X: x, Y: y})
+	if !r.PopoverOpen() || r.PopoverBounds() != r.bodyRect() {
+		t.Fatal("a collapsed ribbon's tab should open its body as a popover")
+	}
+	bx, by := rtCenterOf(r.cells()[rtCell(r, "Duplicate")])
+	host.OnEvent(Event{Kind: EventClick, X: bx, Y: by})
+	if run.ids[len(run.ids)-1] != "slide.dup" || r.PopoverOpen() {
+		t.Errorf("a click on the peeking body ran %v", run.ids)
+	}
+	// Keytips and the tooltip are popovers as well; a click away ends the keytips.
+	rtKey(r, "Alt")
+	if !r.PopoverOpen() || r.PopoverBounds() != r.Bounds() {
+		t.Error("keytips are a popover anchored on the ribbon")
+	}
+	if r.PopoverClick(5, 380) || r.keytips != 0 {
+		t.Error("a click away from the ribbon ends the keytips")
 	}
 }
 

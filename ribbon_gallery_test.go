@@ -25,7 +25,7 @@ func renderRibbon(r *Ribbon, th *Theme, w, h int) *image.RGBA {
 	fillRect(p, 0, 0, w, h, th.Background)
 	r.SetBounds(Rect{X: 0, Y: 0, W: w, H: r.Height()})
 	r.Draw(p, th)
-	r.DrawPopup(p, th)
+	r.DrawPopover(p, th)
 	img := image.NewRGBA(image.Rect(0, 0, w, h))
 	copy(img.Pix, buf)
 	// the pixel buffer is RGBA straight; nothing to convert
@@ -80,7 +80,7 @@ func TestRibbonGallery(t *testing.T) {
 		r = run.ribbon()
 		r.SetBounds(Rect{W: 1100, H: r.Height()})
 		r.hover(r.cells()[0].rect.X+4, r.cells()[0].rect.Y+4)
-		r.Tick(600)
+		r.Tick(0.6)
 		save(tn+"-tooltip", renderRibbon(r, th, 1100, 220))
 		r = run.ribbon()
 		r.SetBounds(Rect{W: 1100, H: r.Height()})

@@ -18,6 +18,15 @@ func ico(name string) IconFunc {
 	return SVGIcon(iconoir.Icon(name))
 }
 
+// painterOver is a pixel painter over buf (w by h, RGBA).
+func painterOver(buf []byte, w, h int) painter.Painter { return painter.NewPixelPainter(buf, w, h) }
+
+// rtPixelAt reads the colour at (x, y) of an RGBA buffer w pixels wide.
+func rtPixelAt(buf []byte, w, x, y int) RGBA {
+	o := (y*w + x) * 4
+	return RGBA{R: buf[o], G: buf[o+1], B: buf[o+2], A: buf[o+3]}
+}
+
 // nilPainter is a small pixel surface for tests that only need somewhere to draw.
 func nilPainter() painter.Painter { return painter.NewPixelPainter(make([]byte, 4*64*64), 64, 64) }
 

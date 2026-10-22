@@ -224,7 +224,7 @@ func TestRibbonTooltipBubbleIsInsideTheDrawing(t *testing.T) {
 	i := rtCell(r, "New slide")
 	x, y := rtCenterOf(r.cells()[i])
 	rtMove(r, x, y)
-	r.Tick(600)
+	r.Tick(0.6)
 	m := r.metrics()
 	anchor := r.cells()[i].rect
 	img := renderRibbon(r, th, 1100, 220)
