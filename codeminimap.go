@@ -27,6 +27,11 @@ const (
 type MinimapMark struct {
 	Line int
 	Kind MarkKind
+	// Color, when its alpha is non-zero, is the tick's colour instead of the one
+	// Kind picks (the minimap still pulls it toward OnSurface if it would sit
+	// under 3:1 on the panel). A CodeEditor sets it on its search-match marks so a
+	// tick wears the colour the match is highlighted in.
+	Color RGBA
 }
 
 // minimapMarkColor is the tick colour for kind on a minimap whose panel is the
@@ -287,7 +292,11 @@ func (m *CodeMinimap) Draw(p painter.Painter, theme *Theme) {
 				continue
 			}
 			row := rowForLine(mk.Line, displayRows, n)
-			fillRect(p, r.X+r.W-tickW, r.Y+row*rowH, tickW, atLeast1(rowH-scaled(1)), minimapMarkColor(theme, mk.Kind))
+			c := minimapMarkColor(theme, mk.Kind)
+			if mk.Color.A != 0 {
+				c = ensureContrast(RGB(mk.Color.R, mk.Color.G, mk.Color.B), theme.SurfaceAlt, theme.OnSurface, 3)
+			}
+			fillRect(p, r.X+r.W-tickW, r.Y+row*rowH, tickW, atLeast1(rowH-scaled(1)), c)
 		}
 	}
 
