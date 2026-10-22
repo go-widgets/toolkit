@@ -67,7 +67,13 @@ type Ribbon struct {
 	// TooltipDelayMs is how long the pointer rests on a control before its
 	// tooltip shows, driven by [Ribbon.Tick]. Zero means 500.
 	TooltipDelayMs int
+	// OnLeave, when set, is called when the keyboard use of the ribbon is over:
+	// a command ran from the keyboard, Escape was pressed on the tabs with
+	// nothing open, or the keytips ended. A host gives the keyboard back to the
+	// editor (or whatever held it) there.
+	OnLeave func()
 
+	byKey     bool
 	active    *mvvm.Observable[int]
 	collapsed *mvvm.Observable[bool]
 
