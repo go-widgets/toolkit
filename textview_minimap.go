@@ -83,7 +83,7 @@ func (t *TextView) drawMinimap(p painter.Painter, theme *Theme) {
 	m := t.syncMinimap()
 	t.mmBuf = append(t.mmBuf[:0], t.mmMarks...)
 	for _, b := range t.matchBands {
-		t.mmBuf = append(t.mmBuf, MinimapMark{Line: b.sel.StartLine, Kind: MarkMatch})
+		t.mmBuf = append(t.mmBuf, MinimapMark{Line: b.sel.StartLine, Kind: MarkMatch, Color: b.color})
 	}
 	m.Marks = t.mmBuf
 	m.Draw(p, theme)

@@ -139,11 +139,17 @@ func TestMinimapMarksAndMatchesDrawn(t *testing.T) {
 		tick := func(line int) RGBA {
 			return pixelAt(buf, 420, c.Bounds().X+rc.X+rc.W-1, c.Bounds().Y+rc.Y+line*rowH)
 		}
+		// a match wears its highlight colour (the editor's MatchColor), made legible
+		bandC := c.matchBands[0].color
+		matchWant := ensureContrast(RGB(bandC.R, bandC.G, bandC.B), th.SurfaceAlt, th.OnSurface, 3)
 		for _, k := range []struct {
 			line int
 			kind MarkKind
 		}{{10, MarkError}, {20, MarkWarning}, {30, MarkMatch}} {
 			want := minimapMarkColor(th, k.kind)
+			if k.kind == MarkMatch {
+				want = matchWant
+			}
 			if got := tick(k.line); got != want {
 				t.Errorf("%s: tick for line %d = %v, want %v", name, k.line, got, want)
 			}
