@@ -119,7 +119,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// reactive state at all. Its only exported field, OnScrollToLine, is a func
 	// hook (auto-allowed), so the empty config set enforces that no imperative
 	// state field is ever added.
-	"CodeMinimap": {},
+	"CodeMinimap": {"Marks": true},
 	// Entry: its committed contents live on the Text() Observable; the cursor
 	// index and the in-flight IME preview are unexported internal editing state;
 	// OnSubmit is an action func hook. Placeholder + Mask are set-once
@@ -202,7 +202,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// unexported internal editing state. Highlighter/RowBackground are func hooks
 	// (auto-allowed). Decorations (host-driven co-editor carets), ShowLineNumbers
 	// and GutterColor are set-once display config.
-	"TextView": {"Decorations": true, "ShowLineNumbers": true, "GutterColor": true, "ShowScrollbars": true},
+	"TextView": {"Decorations": true, "ShowLineNumbers": true, "GutterColor": true, "ShowScrollbars": true, "ShowMinimap": true},
 	// Scroll/overlay/structural batch: each widget's reactive state is now unexported
 	// behind an Observable accessor — ScrollView's offsetX/offsetY, Scrollbar's offset,
 	// Paned's position, ContextMenu's open, CommandPalette's visible, DropZone's hover,

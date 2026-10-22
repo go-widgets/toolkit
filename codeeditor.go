@@ -152,6 +152,7 @@ func NewCodeEditor(initial string) *CodeEditor {
 func (c *CodeEditor) Draw(p painter.Painter, theme *Theme) {
 	c.lastTheme = theme
 	c.refresh(theme)
+	c.TextView.mmSpans = c.cacheSpans // the minimap paints the editor's own token colours
 	c.buildMatchBands(theme)
 	c.TextView.Draw(p, theme)
 	// The completion popup floats over the editor at the caret; drawn last so

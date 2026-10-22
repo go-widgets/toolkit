@@ -74,7 +74,7 @@ func (t *TextView) bars() (v, h bool) {
 	tr := scrollbarTrack()
 	cw := t.contentWidth()
 	for i := 0; i < 3; i++ {
-		tw := r.W - t.textLeftInset() - 1
+		tw := r.W - t.textLeftInset() - 1 - t.minimapW()
 		if v {
 			tw -= tr
 		}
@@ -91,7 +91,7 @@ func (t *TextView) bars() (v, h bool) {
 // textAreaWidth is the width of the window the text scrolls in.
 func (t *TextView) textAreaWidth() int {
 	v, _ := t.bars()
-	w := t.Bounds().W - t.textLeftInset() - 1
+	w := t.Bounds().W - t.textLeftInset() - 1 - t.minimapW()
 	if v {
 		w -= scrollbarTrack()
 	}
@@ -186,7 +186,7 @@ func (t *TextView) hbarGeom() (sbGeom, bool) {
 	}
 	r := t.Bounds()
 	tr := scrollbarTrack()
-	trackLen := r.W - t.textLeftInset() - 1
+	trackLen := r.W - t.textLeftInset() - 1 - t.minimapW()
 	if v {
 		trackLen -= tr
 	}

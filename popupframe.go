@@ -54,6 +54,22 @@ func PopupBorder(theme *Theme) RGBA {
 	return theme.OnSurface
 }
 
+// ensureContrast returns c if it reaches min contrast against ground, otherwise
+// c pulled toward the colour toward in 4% steps until it does (toward itself when
+// no mix gets there). It keeps c's hue wherever it can, so an accent stays an
+// accent while becoming legible on a pale or dark panel.
+func ensureContrast(c, ground, toward RGBA, min float64) RGBA {
+	if contrastRatio(c, ground) >= min {
+		return c
+	}
+	for i := 1; i <= 25; i++ {
+		if m := blendRGBA(toward, c, float64(i)*0.04); contrastRatio(m, ground) >= min {
+			return m
+		}
+	}
+	return toward
+}
+
 // strokePopupBorder outlines a popup's rectangle with [PopupBorder].
 func strokePopupBorder(p painter.Painter, r Rect, theme *Theme) {
 	strokeRect(p, r.X, r.Y, r.W, r.H, PopupBorder(theme))
