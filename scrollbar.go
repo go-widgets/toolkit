@@ -61,7 +61,20 @@ func (s *Scrollbar) geom() (sbGeom, bool) {
 	if r.W <= 0 || r.H <= 0 {
 		return sbGeom{}, false
 	}
-	total, view := s.Total, s.Viewport
+	length := r.H
+	if s.Horizontal {
+		length = r.W
+	}
+	return scrollGeom(s.Horizontal, 0, 0, 0, length, s.Total, s.Viewport, s.Offset().Get()), true
+}
+
+// scrollGeom is the one thumb computation every toolkit scrollbar shares (the
+// standalone Scrollbar and the TextView/CodeEditor bars): given a track
+// [trackStart, trackStart+trackLen) along the scroll axis, the content size
+// total, the viewport size view and the offset off (all clamped into range), it
+// returns the sbGeom whose thumb is sized to view/total and positioned at
+// (trackLen-thumb)*off/(total-view).
+func scrollGeom(horizontal bool, cross0, crossW, trackStart, trackLen, total, view, off int) sbGeom {
 	if total < 1 {
 		total = 1
 	}
@@ -72,17 +85,13 @@ func (s *Scrollbar) geom() (sbGeom, bool) {
 		view = total
 	}
 	maxOff := total - view
-	off := s.Offset().Get()
 	if off < 0 {
 		off = 0
 	}
 	if off > maxOff {
 		off = maxOff
 	}
-	length := r.H
-	if s.Horizontal {
-		length = r.W
-	}
+	length := trackLen
 	// The grabbable minimum thumb routes through scaled so it grows with HiDPI and
 	// touch density, and is additionally floored at the density hit-target so a
 	// dragged thumb is never smaller than a fingertip under DensityTouch. At
@@ -108,13 +117,13 @@ func (s *Scrollbar) geom() (sbGeom, bool) {
 		thumbStart = travelNum * off / travelDen
 	}
 	return sbGeom{
-		horizontal: s.Horizontal,
-		cross0:     0,
-		trackStart: 0, trackLen: length,
-		thumbStart: thumbStart, thumbLen: thumb,
+		horizontal: horizontal,
+		cross0:     cross0, crossW: crossW,
+		trackStart: trackStart, trackLen: length,
+		thumbStart: trackStart + thumbStart, thumbLen: thumb,
 		travelNum: travelNum, travelDen: travelDen,
 		maxScroll: maxOff,
-	}, true
+	}
 }
 
 // ThumbRect returns the thumb's rectangle for the current Total/Viewport/Offset,
@@ -202,8 +211,22 @@ const scrollbarThumbMix = 0.45
 // surrounding surface is itself SurfaceAlt (e.g. a sidebar), where the faint
 // Border would vanish.
 func scrollbarThumbColor(theme *Theme) RGBA {
-	return blendRGBA(theme.OnSurface, theme.SurfaceAlt, scrollbarThumbMix)
+	track := scrollbarTrackColor(theme)
+	c := blendRGBA(theme.OnSurface, theme.SurfaceAlt, scrollbarThumbMix)
+	// WCAG 2.2 1.4.11 (Non-text Contrast): the thumb is the part of the bar a
+	// person has to see, so it keeps at least ScrollbarThumbMinContrast against
+	// the track. The historical mix gives about 2.2:1 to 2.5:1 on the built-in
+	// and playground palettes; pull it toward OnSurface until it reaches 3:1.
+	for m := scrollbarThumbMix; contrastRatio(c, track) < ScrollbarThumbMinContrast && m < 1; {
+		m += 0.05
+		c = blendRGBA(theme.OnSurface, theme.SurfaceAlt, m)
+	}
+	return c
 }
+
+// ScrollbarThumbMinContrast is the least contrast ratio a scrollbar thumb keeps
+// against its track (WCAG 2.2 SC 1.4.11, 3:1).
+const ScrollbarThumbMinContrast = 3.0
 
 // scrollbarTrackMix is how far the track colour sits from SurfaceAlt toward the
 // foreground: a faint tint so the gutter is a visible channel on ANY ground. A
