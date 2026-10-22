@@ -202,7 +202,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// unexported internal editing state. Highlighter/RowBackground are func hooks
 	// (auto-allowed). Decorations (host-driven co-editor carets), ShowLineNumbers
 	// and GutterColor are set-once display config.
-	"TextView": {"Decorations": true, "ShowLineNumbers": true, "GutterColor": true},
+	"TextView": {"Decorations": true, "ShowLineNumbers": true, "GutterColor": true, "ShowScrollbars": true},
 	// Scroll/overlay/structural batch: each widget's reactive state is now unexported
 	// behind an Observable accessor — ScrollView's offsetX/offsetY, Scrollbar's offset,
 	// Paned's position, ContextMenu's open, CommandPalette's visible, DropZone's hover,

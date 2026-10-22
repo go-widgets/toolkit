@@ -128,6 +128,22 @@ type TextView struct {
 	// and the local/remote selections so a match on the caret line still reads.
 	// Empty (nil) for an editor with no active search. See matchhighlight.go.
 	matchBands []matchBand
+
+	// ShowScrollbars, when true, gives the view a vertical scrollbar (when the
+	// buffer is taller than the window) and a horizontal one (when a line is wider
+	// than the text area), drawn in the toolkit's shared scrollbar style inside the
+	// border. Zero value false: no bar, no horizontal scrolling, byte-identical to
+	// before the field existed. CodeEditor turns it on. See textview_scroll.go.
+	ShowScrollbars bool
+
+	// hscroll is the horizontal scroll offset in device pixels (ScrollX); only
+	// non-zero while ShowScrollbars is true. colsOK/colsMax cache the widest line in
+	// runes so the scrollbar geometry is O(1) per draw instead of a pass over the
+	// buffer; sync/adopt/restore invalidate it. vdrag/hdrag carry a thumb grab.
+	hscroll      *mvvm.Observable[int]
+	colsOK       bool
+	colsMax      int
+	vdrag, hdrag scrollDrag
 }
 
 // Text is the committed contents as a shared [mvvm.Observable]: a host binds it
@@ -211,12 +227,16 @@ func (t *TextView) SetCaretVisible(v bool) { t.caretHidden = !v }
 // subscribers. Called at the end of every mutating edit — the OnChange
 // replacement. The Set is idempotent, so re-syncing an unchanged buffer is a
 // no-op.
-func (t *TextView) sync() { t.Text().Set(strings.Join(t.lines, "\n")) }
+func (t *TextView) sync() {
+	t.colsOK = false
+	t.Text().Set(strings.Join(t.lines, "\n"))
+}
 
 // adopt reloads the line buffer from a host-set Text() value and clamps the
 // caret into the new bounds. It does NOT touch the Text() Observable (the caller
 // is that Observable's subscriber), so there is no feedback loop.
 func (t *TextView) adopt(s string) {
+	t.colsOK = false
 	if s == "" {
 		t.lines = []string{""}
 	} else {
@@ -263,6 +283,7 @@ func (t *TextView) snapshot() tvSnapshot {
 // Undo/Redo sync() after restoring.
 func (t *TextView) restore(s tvSnapshot) {
 	t.lines = s.lines
+	t.colsOK = false
 	t.CursorLine().Set(s.line)
 	t.CursorCol().Set(s.col)
 	t.Selection().Set(s.sel)
@@ -351,7 +372,21 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, border)
 	lineH := t.glyphHeight() + 4 // 1-pixel-line font + 4 px line spacing
-	textX := r.X + t.textLeftInset()
+	// With scrollbars the rows are clipped to the window minus the bars, and the
+	// text (not the gutter) to the text area, scrolled left by ScrollX. Without
+	// them clipR is r, txtR is unused and textX is the historical origin.
+	vb, hb := t.bars()
+	clipR := r
+	txtR := Rect{X: r.X + t.textLeftInset(), Y: r.Y, W: r.W - t.textLeftInset(), H: r.H}
+	if vb {
+		clipR.W = r.W - 1 - scrollbarTrack()
+		txtR.W -= 1 + scrollbarTrack()
+	}
+	if hb {
+		clipR.H = r.H - 1 - scrollbarTrack()
+		txtR.H = clipR.H
+	}
+	textX := r.X + t.textLeftInset() - t.clampedScrollX()
 	gutterInk := t.GutterColor
 	if gutterInk.A == 0 {
 		gutterInk = dimInk(theme)
@@ -362,51 +397,74 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	// fits, start is 0 and every line is drawn exactly where it was before.
 	start := t.clampedScrollLine()
 	localSel := t.Selection().Get()
-	withClip(p, r, func() {
+	// A row is four paints: A the full-width row band (current-line highlight,
+	// diff row …; the band brackets the glyph box, 2 px above, one full line pitch
+	// tall, so consecutive bands tile without a seam), B the selection bands then
+	// the search-match bands (under the text so the glyphs stay legible; matches
+	// on top of selections so a match on a selected line still reads), C the gutter
+	// number, right-justified so every number's right edge lands at gutterPadL +
+	// numbersWidth, and D the text. Without scrollbars they run A,B,C,D per row,
+	// as always. With scrollbars the text may be scrolled under the gutter, so
+	// A+C run in one pass clipped to the window and B+D in a second clipped to the
+	// text area: two clip pushes per frame instead of per row, and A/C never
+	// overlap B/D so the picture is the same.
+	rowA := func(i, y int) {
+		if t.RowBackground != nil {
+			if bg, ok := t.RowBackground(i); ok {
+				fillRect(p, r.X+1, y-2, r.W-2, lineH, bg)
+			}
+		}
+	}
+	rowB := func(i, y int) {
+		t.paintSelectionBand(p, i, textX, y, lineH, r, localSel, tintBand(theme.Accent))
+		for _, d := range t.Decorations {
+			t.paintSelectionBand(p, i, textX, y, lineH, r, d.Selection, tintBand(d.Color))
+		}
+		t.paintMatchBands(p, i, textX, y, lineH, r)
+	}
+	rowC := func(i, y int) {
+		if t.ShowLineNumbers {
+			num := strconv.Itoa(i + 1)
+			nx := r.X + t.gutterPadL() + t.numbersWidth() - t.textWidth(num)
+			t.drawText(p, nx, y, num, gutterInk)
+		}
+	}
+	rowD := func(i, y int) {
+		line := t.lines[i]
+		if t.Highlighter == nil {
+			t.drawText(p, textX, y, line, theme.OnSurface)
+			return
+		}
+		t.drawSpans(p, textX, y, line, t.Highlighter(i, line), theme.OnSurface)
+	}
+	eachRow := func(fn func(i, y int)) {
 		for i := start; i < len(t.lines); i++ {
 			y := r.Y + 4 + (i-start)*lineH
-			if y >= r.Y+r.H {
+			if y >= clipR.Y+clipR.H {
 				break // fully below the viewport
 			}
-			line := t.lines[i]
-			// Full-width row band (current-line highlight, search match, diff
-			// row): painted first so the gutter number, ink and caret land on
-			// top. The band brackets the glyph box (2 px above) and spans one
-			// full line pitch, so consecutive bands tile without a seam.
-			if t.RowBackground != nil {
-				if bg, ok := t.RowBackground(i); ok {
-					fillRect(p, r.X+1, y-2, r.W-2, lineH, bg)
-				}
-			}
-			// Selection bands, painted under the text so the glyphs stay
-			// legible: the local selection first (accent tint), then each
-			// remote co-editor's selection in its own tint on top.
-			t.paintSelectionBand(p, i, textX, y, lineH, r, localSel, tintBand(theme.Accent))
-			for _, d := range t.Decorations {
-				t.paintSelectionBand(p, i, textX, y, lineH, r, d.Selection, tintBand(d.Color))
-			}
-			// Search-match bands sit on top of the selection so a highlighted
-			// match on a selected / caret line is still visible.
-			t.paintMatchBands(p, i, textX, y, lineH, r)
-			if t.ShowLineNumbers {
-				num := strconv.Itoa(i + 1)
-				// Right-justify within the numbers column: every number's right
-				// edge lands at gutterPadL + numbersWidth, leaving gutterPadR of
-				// air before the text.
-				nx := r.X + t.gutterPadL() + t.numbersWidth() - t.textWidth(num)
-				t.drawText(p, nx, y, num, gutterInk)
-			}
-			if t.Highlighter == nil {
-				t.drawText(p, textX, y, line, theme.OnSurface)
-				continue
-			}
-			t.drawSpans(p, textX, y, line, t.Highlighter(i, line), theme.OnSurface)
+			fn(i, y)
 		}
-	})
+	}
+	if !t.ShowScrollbars {
+		withClip(p, r, func() {
+			eachRow(func(i, y int) { rowA(i, y); rowB(i, y); rowC(i, y); rowD(i, y) })
+		})
+	} else {
+		withClip(p, clipR, func() { eachRow(func(i, y int) { rowA(i, y); rowC(i, y) }) })
+		withClip(p, txtR, func() { eachRow(func(i, y int) { rowB(i, y); rowD(i, y) }) })
+	}
+	t.drawScrollbars(p, theme, vb, hb)
+	// With scrollbars a caret (or co-editor caret) scrolled out of the text area
+	// is not drawn: it would land on the gutter, a scrollbar or the border.
+	inView := func(cx, cy int) bool {
+		return !t.ShowScrollbars || (cx >= txtR.X && cx < txtR.X+txtR.W &&
+			cy >= r.Y && cy+t.glyphHeight() <= clipR.Y+clipR.H)
+	}
 	if t.Focused().Get() {
 		cx := textX + t.CursorCol().Get()*t.glyphAdvance()
 		cy := r.Y + 4 + (t.CursorLine().Get()-start)*lineH
-		if !t.caretHidden {
+		if !t.caretHidden && inView(cx, cy) {
 			fillRect(p, cx, cy-1, 1, t.glyphHeight()+2, theme.OnSurface)
 		}
 		// IME composition preview: render the pending string in the
@@ -427,7 +485,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 		}
 		cx := textX + d.CursorCol*t.glyphAdvance()
 		cy := r.Y + 4 + (d.CursorLine-start)*lineH
-		if cx < r.X || cx > r.X+r.W {
+		if cx < r.X || cx > r.X+r.W || !inView(cx, cy) {
 			continue
 		}
 		fillRect(p, cx, cy-1, 2, t.glyphHeight()+2, d.Color)
@@ -494,6 +552,9 @@ func (t *TextView) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
 		t.Focused().Set(true)
+		if t.barPress(ev) {
+			return // the click landed on a scrollbar, not on the text
+		}
 		if len(t.lines) == 0 {
 			return
 		}
@@ -511,7 +572,16 @@ func (t *TextView) OnEvent(ev Event) {
 		// both ends). Independent of the caret, exactly like every sibling
 		// content widget that gained native scroll in v0.98.0.
 		t.scrollBy(ev.Delta)
+		if ev.DeltaX != 0 {
+			t.scrollXBy(ev.DeltaX * 3 * t.glyphAdvance())
+		}
+	case EventMouseUp:
+		t.vdrag.release()
+		t.hdrag.release()
 	case EventMouseDrag:
+		if t.barDrag(ev) {
+			return // a scrollbar thumb is being dragged, not a text selection
+		}
 		if len(t.lines) == 0 {
 			return
 		}
@@ -677,8 +747,18 @@ func (t *TextView) cursorRight() {
 // short widget still shows the caret's line and scrolling stays well-defined. A
 // non-positive height or line height both collapse to 0 — no lines fit.
 func (t *TextView) visibleLines() int {
+	_, hb := t.bars()
+	avail := t.Bounds().H
+	if hb {
+		avail -= scrollbarTrack() // the horizontal bar takes the window's last rows
+	}
+	return t.linesFitIn(avail)
+}
+
+// linesFitIn is visibleLines for a window avail pixels tall.
+func (t *TextView) linesFitIn(avail int) int {
 	lineH := t.glyphHeight() + 4 // > 0: glyphHeight is always positive
-	h := t.Bounds().H - 4
+	h := avail - 4
 	if h <= 0 {
 		return 0
 	}
@@ -726,6 +806,7 @@ func (t *TextView) scrollBy(delta int) {
 // past the last visible line. Called after every cursor move so typing or
 // arrowing off the visible region follows the caret (Wave 4 keep-caret-visible).
 func (t *TextView) scrollCaretIntoView() {
+	t.scrollCaretIntoViewX()
 	vis := t.visibleLines()
 	if vis <= 0 {
 		return
@@ -829,7 +910,7 @@ func (t *TextView) caretAt(x, y int) (line, col int) {
 		line = len(t.lines) - 1
 	}
 	adv := t.glyphAdvance() // > 0 for every real font (Draw assumes the same)
-	col = (x - t.textLeftInset() + adv/2) / adv
+	col = (x - t.textLeftInset() + t.clampedScrollX() + adv/2) / adv
 	if col < 0 {
 		col = 0
 	}
@@ -847,7 +928,7 @@ func (t *TextView) caretAt(x, y int) (line, col int) {
 // caretAt: caretAt(CaretPixel(l,c)) == (l,c) for an in-range cell.
 func (t *TextView) CaretPixel(line, col int) (x, y int) {
 	r := t.Bounds()
-	x = r.X + t.textLeftInset() + col*t.glyphAdvance()
+	x = r.X + t.textLeftInset() + col*t.glyphAdvance() - t.clampedScrollX()
 	y = r.Y + 4 + (line-t.clampedScrollLine())*(t.glyphHeight()+4)
 	return x, y
 }

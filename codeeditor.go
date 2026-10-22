@@ -139,6 +139,7 @@ func NewCodeEditor(initial string) *CodeEditor {
 	c := &CodeEditor{TextView: NewTextView(initial)}
 	c.ShowLineNumbers = true
 	c.HighlightCurrentLine = true
+	c.ShowScrollbars = true // vertical + horizontal bars while the text overflows
 	c.TextView.Highlighter = c.lineSpans
 	c.TextView.RowBackground = c.rowBackground
 	return c
