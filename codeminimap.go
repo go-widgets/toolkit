@@ -10,6 +10,53 @@ import (
 	"github.com/go-widgets/painter"
 )
 
+// MarkKind says what a [MinimapMark] flags; it picks the tick's colour.
+type MarkKind int
+
+const (
+	// MarkMatch is a search match (drawn in the theme's accent).
+	MarkMatch MarkKind = iota
+	// MarkError is a build or lint error.
+	MarkError
+	// MarkWarning is a warning.
+	MarkWarning
+)
+
+// MinimapMark flags one 0-based buffer Line on a [CodeMinimap] (and, through
+// [CodeEditor.SetMinimapMarks], on a CodeEditor's minimap).
+type MinimapMark struct {
+	Line int
+	Kind MarkKind
+}
+
+// minimapMarkColor is the tick colour for kind on a minimap whose panel is the
+// theme's SurfaceAlt: the accent for a match, and a red / amber chosen for the
+// panel's lightness so the tick keeps WCAG 2.2 1.4.11's 3:1 against it in the
+// light and the dark theme.
+func minimapMarkColor(theme *Theme, kind MarkKind) RGBA {
+	dark := relativeLuminance(theme.SurfaceAlt) < 0.18
+	switch kind {
+	case MarkError:
+		if dark {
+			return RGB(0xFF, 0x6B, 0x6B)
+		}
+		return RGB(0xC6, 0x28, 0x28)
+	case MarkWarning:
+		if dark {
+			return RGB(0xFF, 0xC1, 0x07)
+		}
+		return RGB(0x9A, 0x5B, 0x00)
+	}
+	return minimapAccent(theme)
+}
+
+// minimapAccent is the theme's accent, pulled toward OnSurface when it would sit
+// under 3:1 on the minimap panel (SurfaceAlt) — the slider's outline and the
+// match ticks are what a person looks for on it.
+func minimapAccent(theme *Theme) RGBA {
+	return ensureContrast(theme.Accent, theme.SurfaceAlt, theme.OnSurface, 3)
+}
+
 // CodeMinimap is a VS Code-style code overview: a scaled-down thumbnail of a
 // source buffer where each line is a row of tiny coloured segments — one short
 // segment per run of non-space characters, coloured by the syntax token under
@@ -40,6 +87,14 @@ type CodeMinimap struct {
 	// a click/drag is a no-op — a host that reads [CodeMinimap.LineAt] itself
 	// need not set it.
 	OnScrollToLine func(line int)
+
+	// Marks are line markers drawn as short ticks on the overview's right edge —
+	// the overview-ruler role of VS Code's minimap: a build error, a warning, a
+	// search match, each at the row its line maps to. A host (or the CodeEditor
+	// that embeds the minimap) refreshes them before a paint; nil draws none. They
+	// are painted over the token segments and under the viewport band, and cost
+	// one fillRect each, so thousands of matches stay cheap.
+	Marks []MinimapMark
 
 	lines   []string     // reference to the editor buffer lines
 	spans   [][]TextSpan // per-line syntax spans (may be shorter/nil)
@@ -222,6 +277,20 @@ func (m *CodeMinimap) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, seg.X, seg.Y, seg.W, seg.H, c)
 	})
 
+	// Line marks (errors, warnings, matches): a tick on the right edge of the row
+	// each line maps to, so a mark is visible whatever the sampling.
+	if len(m.Marks) > 0 {
+		rowH, displayRows := m.metrics()
+		tickW := atLeast1(scaled(3))
+		for _, mk := range m.Marks {
+			if mk.Line < 0 || mk.Line >= n {
+				continue
+			}
+			row := rowForLine(mk.Line, displayRows, n)
+			fillRect(p, r.X+r.W-tickW, r.Y+row*rowH, tickW, atLeast1(rowH-scaled(1)), minimapMarkColor(theme, mk.Kind))
+		}
+	}
+
 	// Viewport indicator: a translucent accent band over the visible range,
 	// mapped through the SAME fixed-row geometry so it lines up with the rows.
 	if m.visible > 0 {
@@ -242,7 +311,7 @@ func (m *CodeMinimap) Draw(p painter.Painter, theme *Theme) {
 			vh = contentH - (vy - r.Y)
 		}
 		fillRect(p, r.X, vy, r.W, vh, RGBA{R: theme.Accent.R, G: theme.Accent.G, B: theme.Accent.B, A: 0x33})
-		strokeRect(p, r.X, vy, r.W, vh, theme.Accent)
+		strokeRect(p, r.X, vy, r.W, vh, minimapAccent(theme))
 	}
 }
 

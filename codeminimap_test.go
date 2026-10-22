@@ -162,11 +162,11 @@ func TestCodeMinimapViewportBand(t *testing.T) {
 		m.Update(tenLines, nil, 2, 3) // displayRows=10, rowH=3 → band y6..14
 		buf := makeSurface(w, h)
 		m.Draw(newP(buf, w), theme)
-		if !scanHasColor(buf, w, 0, 6, w-1, 14, theme.Accent) {
+		if !scanHasColor(buf, w, 0, 6, w-1, 14, minimapAccent(theme)) {
 			t.Fatal("viewport band stroke (Accent) not painted over the visible range")
 		}
 		// No band above the visible range (rows 0..1 carry only OnSurface glyphs).
-		if scanHasColor(buf, w, 0, 0, w-1, 5, theme.Accent) {
+		if scanHasColor(buf, w, 0, 0, w-1, 5, minimapAccent(theme)) {
 			t.Fatal("Accent painted above the visible range — band misplaced")
 		}
 	})
@@ -182,7 +182,7 @@ func TestCodeMinimapViewportBand(t *testing.T) {
 		// The clamped band's bottom stroke lands at y=5 (0+6-1); an unclamped
 		// 3-px band would have its bottom stroke at y=2, so Accent at y=5 proves
 		// the minimum-height clamp fired.
-		if !scanHasColor(buf, w, 0, 5, w-1, 5, theme.Accent) {
+		if !scanHasColor(buf, w, 0, 5, w-1, 5, minimapAccent(theme)) {
 			t.Fatal("min-height clamp did not extend the band to scaled(6)")
 		}
 	})
@@ -196,12 +196,12 @@ func TestCodeMinimapViewportBand(t *testing.T) {
 		buf := makeSurface(w, h)
 		m.Draw(newP(buf, w), theme)
 		// Clamped: band bottom stroke at y=29 (27+3-1), inside the content.
-		if !scanHasColor(buf, w, 0, 27, w-1, 29, theme.Accent) {
+		if !scanHasColor(buf, w, 0, 27, w-1, 29, minimapAccent(theme)) {
 			t.Fatal("band not painted at the bottom of the content")
 		}
 		// Unclamped it would have spilled to y=30..32 (past the 30-tall minimap);
 		// assert nothing painted there.
-		if scanHasColor(buf, w, 0, 30, w-1, h-1, theme.Accent) {
+		if scanHasColor(buf, w, 0, 30, w-1, h-1, minimapAccent(theme)) {
 			t.Fatal("band spilled past the content height — bottom clamp failed")
 		}
 	})

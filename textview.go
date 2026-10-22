@@ -136,6 +136,21 @@ type TextView struct {
 	// before the field existed. CodeEditor turns it on. See textview_scroll.go.
 	ShowScrollbars bool
 
+	// ShowMinimap, when true (and ShowScrollbars is), shows a minimap — a
+	// scaled-down overview of the whole buffer with the visible range as a slider —
+	// left of the vertical scrollbar. Zero value false. See textview_minimap.go.
+	ShowMinimap bool
+
+	// minimap and friends: the embedded overview widget, the syntax spans the
+	// CodeEditor feeds it, the caller's marks (+ scratch buffer for marks plus
+	// matches), and the slider-grab state of a press-drag on it.
+	minimap *CodeMinimap
+	mmSpans [][]TextSpan
+	mmMarks []MinimapMark
+	mmBuf   []MinimapMark
+	mmGrab  int
+	mmDrag  bool
+
 	// hscroll is the horizontal scroll offset in device pixels (ScrollX); only
 	// non-zero while ShowScrollbars is true. colsOK/colsMax cache the widest line in
 	// runes so the scrollbar geometry is O(1) per draw instead of a pass over the
@@ -382,6 +397,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 		clipR.W = r.W - 1 - scrollbarTrack()
 		txtR.W -= 1 + scrollbarTrack()
 	}
+	txtR.W -= t.minimapW()
 	if hb {
 		clipR.H = r.H - 1 - scrollbarTrack()
 		txtR.H = clipR.H
@@ -455,6 +471,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 		withClip(p, txtR, func() { eachRow(func(i, y int) { rowB(i, y); rowD(i, y) }) })
 	}
 	t.drawScrollbars(p, theme, vb, hb)
+	t.drawMinimap(p, theme)
 	// With scrollbars a caret (or co-editor caret) scrolled out of the text area
 	// is not drawn: it would land on the gutter, a scrollbar or the border.
 	inView := func(cx, cy int) bool {
@@ -552,8 +569,8 @@ func (t *TextView) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
 		t.Focused().Set(true)
-		if t.barPress(ev) {
-			return // the click landed on a scrollbar, not on the text
+		if t.barPress(ev) || t.minimapPress(ev) {
+			return // the click landed on a scrollbar or the minimap, not on the text
 		}
 		if len(t.lines) == 0 {
 			return
@@ -578,8 +595,9 @@ func (t *TextView) OnEvent(ev Event) {
 	case EventMouseUp:
 		t.vdrag.release()
 		t.hdrag.release()
+		t.mmDrag = false
 	case EventMouseDrag:
-		if t.barDrag(ev) {
+		if t.barDrag(ev) || t.minimapDrag(ev) {
 			return // a scrollbar thumb is being dragged, not a text selection
 		}
 		if len(t.lines) == 0 {
