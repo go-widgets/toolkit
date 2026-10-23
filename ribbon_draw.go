@@ -264,6 +264,10 @@ func (r *Ribbon) drawPopupPanel(p painter.Painter, theme *Theme, m ribbonMetrics
 		return
 	}
 	accent := ribbonAccent(theme)
+	if pp.kind == popGrid {
+		r.drawGridPanel(p, theme, m, pp, panel, rows)
+		return
+	}
 	for i, rc := range rows {
 		if i == pp.focus {
 			fillRect(p, rc.X, rc.Y, rc.W, rc.H, theme.SurfaceAlt)
@@ -292,6 +296,32 @@ func (r *Ribbon) drawPopupPanel(p painter.Painter, theme *Theme, m ribbonMetrics
 			}
 		}
 	}
+}
+
+// drawGridPanel paints a grid popup: its cells, those from the corner to the one
+// the highlight is on filled with the accent, a border on each, and the caption
+// ("3 × 2") under them.
+func (r *Ribbon) drawGridPanel(p painter.Painter, theme *Theme, m ribbonMetrics, pp *ribbonPopup, panel Rect, cells []Rect) {
+	cols, _ := pp.ctrl.gridSize()
+	fc, fr := -1, -1
+	if pp.focus >= 0 {
+		fc, fr = pp.focus%cols, pp.focus/cols
+	}
+	accent := ribbonAccent(theme)
+	for i, rc := range cells {
+		in := i%cols <= fc && i/cols <= fr
+		if in {
+			fillRect(p, rc.X, rc.Y, rc.W, rc.H, blendRGBA(theme.Surface, accent, 0.35))
+		}
+		edge := ribbonLine(theme)
+		if in {
+			edge = accent
+		}
+		strokeRect(p, rc.X+m.gap/2, rc.Y+m.gap/2, rc.W-m.gap, rc.H-m.gap, edge)
+	}
+	last := cells[len(cells)-1]
+	cap := pp.gridCaption()
+	r.drawText(p, panel.X+(panel.W-r.textWidth(cap))/2, last.Y+last.H+(m.rowH-m.gh)/2, cap, theme.OnSurface)
 }
 
 // tooltipLines is the text of the hovered control's tooltip: its name with its

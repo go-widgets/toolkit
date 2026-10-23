@@ -4,7 +4,11 @@
 
 package toolkit
 
-import "github.com/go-widgets/mvvm"
+import (
+	"strconv"
+
+	"github.com/go-widgets/mvvm"
+)
 
 // popupKind is what an open ribbon popup holds.
 type popupKind int
@@ -18,6 +22,8 @@ const (
 	popGallery
 	// popGroup is a group folded into a button, shown open.
 	popGroup
+	// popGrid is a grid control's cells, with a caption under them.
+	popGrid
 )
 
 // galleryCols is how many columns a gallery's drop-down grid has at most.
@@ -37,10 +43,37 @@ type ribbonPopup struct {
 // popupLen is the number of rows (or cells) a menu, list or gallery popup lists.
 // (A folded group has no rows and is never asked.)
 func (pp *ribbonPopup) popupLen() int {
-	if pp.kind == popList {
+	switch pp.kind {
+	case popList:
 		return len(pp.ctrl.Options)
+	case popGrid:
+		cols, rows := pp.ctrl.gridSize()
+		return cols * rows
 	}
 	return len(pp.ctrl.Items)
+}
+
+// popupCols is how many cells make a row of a popup: a gallery's or a grid's
+// columns, else 1.
+func (pp *ribbonPopup) popupCols() int {
+	switch pp.kind {
+	case popGallery:
+		return min(galleryCols, len(pp.ctrl.Items))
+	case popGrid:
+		cols, _ := pp.ctrl.gridSize()
+		return cols
+	}
+	return 1
+}
+
+// gridCaption is what a grid popup says under its cells: "3 × 2" for the cell the
+// highlight is on, or the control's label before anything is.
+func (pp *ribbonPopup) gridCaption() string {
+	cols, _ := pp.ctrl.gridSize()
+	if pp.focus < 0 || pp.focus >= pp.popupLen() {
+		return pp.ctrl.label()
+	}
+	return strconv.Itoa(pp.focus%cols+1) + " × " + strconv.Itoa(pp.focus/cols+1)
 }
 
 // text is the label of a menu entry or a gallery cell.
@@ -82,6 +115,14 @@ func (r *Ribbon) popupGeometry(pp *ribbonPopup, m ribbonMetrics) (panel Rect, ro
 		panel = Rect{X: pp.anchor.X, Y: top, W: cols*cw + 2, H: ((n+cols-1)/cols)*ch + 2}
 		for i := 0; i < n; i++ {
 			rows = append(rows, Rect{X: panel.X + 1 + (i%cols)*cw, Y: panel.Y + 1 + (i/cols)*ch, W: cw, H: ch})
+		}
+		return panel, rows
+	case popGrid:
+		cols, nrows := pp.ctrl.gridSize()
+		cs := m.rowH
+		panel = Rect{X: pp.anchor.X, Y: top, W: max(cols*cs+2, r.textWidth(pp.ctrl.label())+2*m.padX), H: nrows*cs + m.rowH + 2}
+		for i := 0; i < cols*nrows; i++ {
+			rows = append(rows, Rect{X: panel.X + 1 + (i%cols)*cs, Y: panel.Y + 1 + (i/cols)*cs, W: cs, H: cs})
 		}
 		return panel, rows
 	}
