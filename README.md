@@ -89,7 +89,7 @@ every native target Go ships.
 | Input        | `Entry`, `TextView` + `Selection` + IME preview + optional `Highlighter` (syntax spans) + `ShowLineNumbers` gutter, `SpinButton`, `Scale`, `RangeSlider`, `SearchEntry`, `TagField`, `ComboBox`, `FormField`, `Validate`/`Rule` |
 | Terminal     | `TerminalView` (Cols×Rows `TermCell` grid, block cursor, wrap/scroll, per-cell FG/BG) |
 | Selection    | `ListBox`, `TreeView`, `DropDown`                                  |
-| Containers   | `Container` + swappable `Layout` (`FitLayout`, `BoxLayout`, `BorderLayout`, `CardLayout`, `FlowLayout`); convenience wrappers `HBox`, `VBox`, `Grid`, `Frame`, `Dock`, `Border`, `Stack`, `Overlay`, `Paned`, `Expander`, `Accordion`; declarative `Node` builder + `ViewController` (`LookupAs`) |
+| Containers   | `Container` + swappable `Layout` (`FitLayout`, `BoxLayout`, `BorderLayout`, `CardLayout`, `FlowLayout`); convenience wrappers `HBox`, `VBox`, `Grid`, `Frame`, `Dock`, `Border`, `Stack`, `Overlay`, `Paned`, `Splitter` (N panes with draggable, focusable dividers after the WAI-ARIA window-splitter pattern: fixed panes sized by an `mvvm.Observable`, flexible ones by weight, min/max, collapse on double-click, Enter or a drag to the minimum, arrows/Home/End/Enter, 3:1 divider and focus ring, resize cursor), `Expander`, `Accordion`; declarative `Node` builder + `ViewController` (`LookupAs`) |
 | Tabs         | `Notebook`, `ViewSwitcher`, `Carousel`                             |
 | Scroll       | `ScrollView`, `Scrollbar`                                          |
 | Feedback     | `ProgressBar`, `ProgressCircle`, `LevelBar`, `Spinner`, `Image`, `Tooltip`, `Notification`, `Toast`, `Banner`, `Alert`, `Badge`, `LoadMask`, `Backdrop`, `FocusRing` |
