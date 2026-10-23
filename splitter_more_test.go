@@ -241,6 +241,14 @@ func TestSplitterWeightsWithNoFlexiblePaneLeftToWrite(t *testing.T) {
 	}
 }
 
+func TestSplitterHandleAt(t *testing.T) {
+	d := newIDE(t, 1200)
+	r, _ := d.s.HandleRect(1)
+	if d.s.HandleAt(r.X+1, 5) != 1 || d.s.HandleAt(r.X-20, 5) != -1 {
+		t.Fatal("HandleAt finds the divider under a surface point")
+	}
+}
+
 func TestSplitterCollapsesAPaneAfterItsDivider(t *testing.T) {
 	d := newIDE(t, 1200)
 	d.helpPane.Collapsible = true

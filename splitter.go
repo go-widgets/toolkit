@@ -526,6 +526,10 @@ func (s *Splitter) handleAt(x, y int) int {
 	return -1
 }
 
+// HandleAt is the divider at surface point (x, y), or -1: a host that keeps the
+// keyboard itself clears the dividers' focus (Blur) on a press anywhere else.
+func (s *Splitter) HandleAt(x, y int) int { return s.handleAt(x, y) }
+
 // HandleRect is divider j's rectangle (surface coordinates); ok is false while
 // it is off (fewer than j+2 panes are on).
 func (s *Splitter) HandleRect(j int) (Rect, bool) {
