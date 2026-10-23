@@ -234,6 +234,14 @@ func (r *Ribbon) choose(pp *ribbonPopup, i int) {
 	case popGallery:
 		r.pickGallery(pp.ctrl, i)
 		return
+	case popGrid:
+		cols, _ := pp.ctrl.gridSize()
+		c := pp.ctrl
+		r.Dismiss()
+		if c.OnGrid != nil {
+			c.OnGrid(i%cols+1, i/cols+1)
+		}
+		return
 	}
 	r.Dismiss()
 }
@@ -311,6 +319,14 @@ func (r *Ribbon) activate(idx, part int) {
 			return
 		}
 		r.openPopup(&ribbonPopup{kind: popGallery, ctrl: c, anchor: cell.rect, focus: c.selection().Get()})
+	case RibbonGrid:
+		// opened with the keyboard the corner cell is lit; with the pointer, none
+		// is until it moves over one
+		focus := -1
+		if r.byKey {
+			focus = 0
+		}
+		r.openPopup(&ribbonPopup{kind: popGrid, ctrl: c, anchor: cell.rect, focus: focus})
 	case RibbonSplit:
 		if part == partArrow {
 			r.openPopup(&ribbonPopup{kind: popMenu, ctrl: c, anchor: cell.rect})
@@ -491,7 +507,7 @@ func (r *Ribbon) openFocused(cells []ribbonCell, cur int) {
 	case c == nil || !c.enabled():
 	case c.Kind == RibbonSplit:
 		r.activate(cur, partArrow)
-	case c.Kind == RibbonDropdown || c.Kind == RibbonGallery:
+	case c.Kind == RibbonDropdown || c.Kind == RibbonGallery || c.Kind == RibbonGrid:
 		r.activate(cur, partMain)
 	}
 }
@@ -531,21 +547,19 @@ func verticalNeighbour(cells []ribbonCell, cur, dir int) int {
 func (r *Ribbon) popupKey(ev Event) {
 	pp := r.pop
 	n := pp.popupLen()
-	step := 1
-	if pp.kind == popGallery {
-		step = min(galleryCols, n)
-	}
+	step := pp.popupCols()
+	sideways := pp.kind == popGallery || pp.kind == popGrid
 	switch ev.Code {
 	case "ArrowDown":
-		pp.focus = min(pp.focus+step, n-1)
+		pp.focus = max(min(pp.focus+step, n-1), 0)
 	case "ArrowUp":
 		pp.focus = max(pp.focus-step, 0)
 	case "ArrowRight":
-		if pp.kind == popGallery {
-			pp.focus = min(pp.focus+1, n-1)
+		if sideways {
+			pp.focus = max(min(pp.focus+1, n-1), 0)
 		}
 	case "ArrowLeft":
-		if pp.kind == popGallery {
+		if sideways {
 			pp.focus = max(pp.focus-1, 0)
 		}
 	case "Home":

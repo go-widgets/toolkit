@@ -125,6 +125,11 @@ const (
 	// RibbonGallery shows the first few of Items as a strip, with an arrow that
 	// opens all of them; the chosen index is Selected.
 	RibbonGallery
+	// RibbonGrid opens a grid of GridCols by GridRows cells under it, as the Table
+	// button of a word processor does: the pointer (or the arrow keys) lights the
+	// cells from the corner up to the one it is on, a caption says "3 × 2", and
+	// choosing calls OnGrid with that many columns and rows.
+	RibbonGrid
 )
 
 // RibbonControl is one control of a group. Only the fields its Kind needs are
@@ -150,6 +155,23 @@ type RibbonControl struct {
 	Options []string
 	// Selected is a drop-down's or a gallery's chosen index.
 	Selected *mvvm.Observable[int]
+	// GridCols and GridRows are the size of a grid's popup, in cells (8 by 6 when
+	// zero, at most 16 by 16); OnGrid is called with the columns and rows chosen.
+	GridCols, GridRows int
+	OnGrid             func(cols, rows int)
+}
+
+// gridSize is the size of a grid control's popup: its GridCols by GridRows, 8 by 6
+// by default, kept between 1 and 16 each.
+func (c *RibbonControl) gridSize() (cols, rows int) {
+	cols, rows = c.GridCols, c.GridRows
+	if cols <= 0 {
+		cols = 8
+	}
+	if rows <= 0 {
+		rows = 6
+	}
+	return min(cols, 16), min(rows, 16)
 }
 
 // RibbonItem is a menu entry or a gallery cell. A menu entry runs Action; a
@@ -294,7 +316,7 @@ func (c *RibbonControl) icon() IconFunc {
 
 // hasArrow is whether the control opens something from an arrow part.
 func (c *RibbonControl) hasArrow() bool {
-	return c.Kind == RibbonSplit || c.Kind == RibbonDropdown || c.Kind == RibbonGallery
+	return c.Kind == RibbonSplit || c.Kind == RibbonDropdown || c.Kind == RibbonGallery || c.Kind == RibbonGrid
 }
 
 // visibleControls are the group's shown controls, in order.
