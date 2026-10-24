@@ -5,7 +5,7 @@ go 1.27.2
 require (
 	github.com/go-crdt/collab v0.77.4
 	github.com/go-crdt/crdt v0.57.0
-	github.com/go-gfx/gfx v0.36.0
+	github.com/go-gfx/gfx v0.36.1
 	github.com/go-icons/iconoir v0.3.0
 	github.com/go-images/images v0.1.0
 	github.com/go-opentype/fonts v0.14.0
@@ -22,7 +22,7 @@ require (
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/go-images/gif v0.2.0 // indirect
 	github.com/go-images/jpeg v0.3.0 // indirect
-	github.com/go-images/jpeg2000 v0.13.7 // indirect
+	github.com/go-images/jpeg2000 v0.13.8 // indirect
 	github.com/go-images/png v0.2.0 // indirect
 	github.com/go-simd/highway v0.0.14 // indirect
 	github.com/sergeymakinen/go-bmp v1.0.0 // indirect
