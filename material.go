@@ -8,7 +8,9 @@ import (
 	"image"
 	"math"
 
-	"github.com/go-images/images"
+	// The codec-free half of go-images: importing the root package would link
+	// every image decoder through their init-time registration.
+	images "github.com/go-images/images/ops"
 	"github.com/go-widgets/painter"
 )
 
@@ -81,7 +83,7 @@ const (
 //     SURFACE coordinates — a compositor has the desktop wallpaper, a window
 //     shell has the pixels drawn before the material — because the Painter has
 //     no read-back, exactly as Thumbnail takes an explicit source buffer. The
-//     Gaussian is [github.com/go-images/images.GaussianBlur], the fleet's image
+//     Gaussian is [github.com/go-images/images/ops.GaussianBlur], the fleet's image
 //     library, not a kernel written here.
 //
 // With no Source and no native backing the material degrades to a plain

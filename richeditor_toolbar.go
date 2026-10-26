@@ -79,34 +79,40 @@ type reToolbarSpec struct {
 // reToolbarGroups is the button layout: three groups (inline, block, lists) with
 // a divider drawn between consecutive groups. The iconoir names are verified to
 // exist at build time; an absent one falls back to the text glyph.
-var reToolbarGroups = [][]reToolbarSpec{
-	{
-		{icon: "bold", glyph: "B", verb: (*RichEditor).ToggleStrong,
-			active: func(e *RichEditor) bool { return e.ActiveInlineStyles().Strong }},
-		{icon: "italic", glyph: "I", verb: (*RichEditor).ToggleEmph,
-			active: func(e *RichEditor) bool { return e.ActiveInlineStyles().Emph }},
-		{icon: "strikethrough", glyph: "S", verb: (*RichEditor).ToggleStrikethrough,
-			active: func(e *RichEditor) bool { return e.ActiveInlineStyles().Strikethrough }},
-		{icon: "code", glyph: "<>", verb: (*RichEditor).ToggleCode,
-			active: func(e *RichEditor) bool { return e.ActiveInlineStyles().Code }},
-	},
-	{
-		{icon: "text", glyph: "P", verb: setBlock(BlockParagraph),
-			active: blockIs(BlockParagraph)},
-		{icon: "", glyph: "H1", verb: setBlock(BlockH1), active: blockIs(BlockH1)},
-		{icon: "", glyph: "H2", verb: setBlock(BlockH2), active: blockIs(BlockH2)},
-		{icon: "", glyph: "H3", verb: setBlock(BlockH3), active: blockIs(BlockH3)},
-		{icon: "quote", glyph: "\"", verb: setBlock(BlockQuoteKind),
-			active: blockIs(BlockQuoteKind)},
-		{icon: "code-brackets", glyph: "{}", verb: setBlock(BlockCodeKind),
-			active: blockIs(BlockCodeKind)},
-	},
-	{
-		{icon: "list", glyph: "UL", verb: func(e *RichEditor) { e.ToggleList(false) },
-			active: listIs(false)},
-		{icon: "numbered-list-left", glyph: "OL", verb: func(e *RichEditor) { e.ToggleList(true) },
-			active: listIs(true)},
-	},
+//
+// It is a function rather than a package-level table: a table's initializer
+// runs in the package's init task, a linker root, and its verb closures kept
+// the whole RichEditor (and go-richdoc) alive in every toolkit program.
+func reToolbarGroups() [][]reToolbarSpec {
+	return [][]reToolbarSpec{
+		{
+			{icon: "bold", glyph: "B", verb: (*RichEditor).ToggleStrong,
+				active: func(e *RichEditor) bool { return e.ActiveInlineStyles().Strong }},
+			{icon: "italic", glyph: "I", verb: (*RichEditor).ToggleEmph,
+				active: func(e *RichEditor) bool { return e.ActiveInlineStyles().Emph }},
+			{icon: "strikethrough", glyph: "S", verb: (*RichEditor).ToggleStrikethrough,
+				active: func(e *RichEditor) bool { return e.ActiveInlineStyles().Strikethrough }},
+			{icon: "code", glyph: "<>", verb: (*RichEditor).ToggleCode,
+				active: func(e *RichEditor) bool { return e.ActiveInlineStyles().Code }},
+		},
+		{
+			{icon: "text", glyph: "P", verb: setBlock(BlockParagraph),
+				active: blockIs(BlockParagraph)},
+			{icon: "", glyph: "H1", verb: setBlock(BlockH1), active: blockIs(BlockH1)},
+			{icon: "", glyph: "H2", verb: setBlock(BlockH2), active: blockIs(BlockH2)},
+			{icon: "", glyph: "H3", verb: setBlock(BlockH3), active: blockIs(BlockH3)},
+			{icon: "quote", glyph: "\"", verb: setBlock(BlockQuoteKind),
+				active: blockIs(BlockQuoteKind)},
+			{icon: "code-brackets", glyph: "{}", verb: setBlock(BlockCodeKind),
+				active: blockIs(BlockCodeKind)},
+		},
+		{
+			{icon: "list", glyph: "UL", verb: func(e *RichEditor) { e.ToggleList(false) },
+				active: listIs(false)},
+			{icon: "numbered-list-left", glyph: "OL", verb: func(e *RichEditor) { e.ToggleList(true) },
+				active: listIs(true)},
+		},
+	}
 }
 
 // setBlock returns a verb that converts the caret block to kind.
@@ -172,7 +178,7 @@ func (t *RichEditorToolbar) iconInset() int { return t.iconSize() / 5 }
 func (t *RichEditorToolbar) build() {
 	t.box = NewHBox()
 	t.box.Spacing = t.spacing()
-	for gi, group := range reToolbarGroups {
+	for gi, group := range reToolbarGroups() {
 		if gi > 0 {
 			t.box.AddFixed(&reToolbarSeparator{}, t.sepW())
 		}
@@ -280,7 +286,7 @@ func (t *RichEditorToolbar) SetBounds(r Rect) {
 // size the toolbar to its content.
 func (t *RichEditorToolbar) Measure(availW, availH int) (w, h int) {
 	n := len(t.buttons)
-	seps := len(reToolbarGroups) - 1
+	seps := len(reToolbarGroups()) - 1
 	children := n + seps
 	w = n*t.iconSize() + seps*t.sepW()
 	if children > 1 {

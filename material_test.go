@@ -8,7 +8,7 @@ import (
 	"image"
 	"testing"
 
-	"github.com/go-images/images"
+	images "github.com/go-images/images/ops"
 	"github.com/go-widgets/painter"
 )
 

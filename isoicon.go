@@ -147,20 +147,31 @@ func (r *IsoIconRegistry) IDs() []string {
 	return out
 }
 
-// defaultIsoIcons is the package-global registry, seeded once with the built-in
-// architecture icons.
-var defaultIsoIcons = newBuiltinIsoIcons()
+// defaultIsoIcons returns the package-global registry, seeded with the built-in
+// architecture icons on first use. It is built by a function, not by a
+// package-level initializer, because an initializer runs in the package's init
+// task — a linker root — and so linked every built-in icon into every toolkit
+// program, iso diagram or not.
+func defaultIsoIcons() *IsoIconRegistry {
+	defaultIsoIconsOnce.Do(func() { defaultIsoIconsReg = newBuiltinIsoIcons() })
+	return defaultIsoIconsReg
+}
+
+var (
+	defaultIsoIconsOnce sync.Once
+	defaultIsoIconsReg  *IsoIconRegistry
+)
 
 // IsoDefaultIcons returns the package-global icon registry. [RegisterIcon] and
 // [RegisterIconPack] mutate it, and an [IsoDiagram] whose own Icons field is nil
 // draws through it.
-func IsoDefaultIcons() *IsoIconRegistry { return defaultIsoIcons }
+func IsoDefaultIcons() *IsoIconRegistry { return defaultIsoIcons() }
 
 // RegisterIcon registers icon under id in the default registry ([IsoDefaultIcons]).
-func RegisterIcon(id string, icon IsoIcon) { defaultIsoIcons.Register(id, icon) }
+func RegisterIcon(id string, icon IsoIcon) { defaultIsoIcons().Register(id, icon) }
 
 // RegisterIconPack registers a whole pack in the default registry.
-func RegisterIconPack(p IsoIconPack) { defaultIsoIcons.RegisterPack(p) }
+func RegisterIconPack(p IsoIconPack) { defaultIsoIcons().RegisterPack(p) }
 
 // IsoBuiltinIconIDs are the ids of the primitive-composed architecture icons the
 // default registry ships with. They are stylised, code-authored isometric icons

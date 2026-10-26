@@ -66,7 +66,7 @@ func TestToolbarButtonPositionsGrouped(t *testing.T) {
 	icon, sp, sepW := tb.iconSize(), tb.spacing(), tb.sepW()
 	var widths []int
 	var isButton []bool
-	for gi, group := range reToolbarGroups {
+	for gi, group := range reToolbarGroups() {
 		if gi > 0 {
 			widths = append(widths, sepW)
 			isButton = append(isButton, false)
@@ -120,7 +120,7 @@ func TestReToolbarIconResolution(t *testing.T) {
 }
 
 func TestEveryDeclaredIconExists(t *testing.T) {
-	for _, group := range reToolbarGroups {
+	for _, group := range reToolbarGroups() {
 		for _, spec := range group {
 			if spec.icon == "" {
 				continue // heading buttons intentionally use a text glyph
@@ -278,7 +278,7 @@ func TestIconoirDrawPaintsInk(t *testing.T) {
 	// over go-gfx).
 	const sz = 24
 	ink := RGBA{R: 0x10, G: 0x20, B: 0x30, A: 0xFF}
-	for _, group := range reToolbarGroups {
+	for _, group := range reToolbarGroups() {
 		for _, spec := range group {
 			if spec.icon == "" {
 				continue
@@ -362,8 +362,8 @@ func TestToolbarMeasure(t *testing.T) {
 	_, tb := newToolbarOn(paraDoc("hi"), Rect{X: 0, Y: 0, W: 600, H: 28})
 	wgot, hgot := tb.Measure(1000, 1000)
 	icon, sp, sepW := tb.iconSize(), tb.spacing(), tb.sepW()
-	children := len(tb.buttons) + (len(reToolbarGroups) - 1)
-	wantW := len(tb.buttons)*icon + (len(reToolbarGroups)-1)*sepW + (children-1)*sp
+	children := len(tb.buttons) + (len(reToolbarGroups()) - 1)
+	wantW := len(tb.buttons)*icon + (len(reToolbarGroups())-1)*sepW + (children-1)*sp
 	if wgot != wantW || hgot != icon {
 		t.Fatalf("Measure = (%d,%d), want (%d,%d)", wgot, hgot, wantW, icon)
 	}

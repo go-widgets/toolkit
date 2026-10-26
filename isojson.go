@@ -143,6 +143,14 @@ func isoColorFromHex(s string) (RGBA, error) {
 	return RGBA{R: b[0], G: b[1], B: b[2], A: b[3]}, nil
 }
 
+// ColorHex renders c as the lowercase "#rrggbbaa" string the iso JSON format
+// and collaborative presence carry, or "" for the zero colour (A == 0).
+func ColorHex(c RGBA) string { return isoColorToHex(c) }
+
+// ParseColorHex parses a [ColorHex] string back to a colour; "" is the zero
+// colour, and anything else that is not "#" plus eight hex digits is an error.
+func ParseColorHex(s string) (RGBA, error) { return isoColorFromHex(s) }
+
 // --- enum codecs --------------------------------------------------------
 
 // isoShapeToStr names a node shape; the default cube writes the empty string
