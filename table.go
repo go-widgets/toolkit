@@ -184,6 +184,12 @@ type Table struct {
 	// fires OnSort, never touching Rows.
 	SelfSort bool
 
+	// Framed draws the table's outer 1-px edge in theme.Border (a table set
+	// directly on a page has no parent frame to own it). RowLines draws a
+	// 1-px theme.Border line under every body row. Both zero values keep
+	// the original, unframed, zebra-only look, byte for byte.
+	Framed, RowLines bool
+
 	// ShowSummary, when true, appends a grand-total footer line (a distinct
 	// SurfaceAlt band, drawn as the LAST visual line of the body) that shows
 	// each column's aggregate over every row -- blank for a column whose
@@ -770,6 +776,13 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// EventDragLeave / a fresh drop reset it to -1, and NewTable seeds
 	// it there too). Drawn inside the same clip as the body rows so it
 	// never spills past Bounds() any more than a row itself would.
+	// Row lines: a 1-px theme.Border stroke under each visible body line,
+	// so rows read as delimited without relying on the zebra tint alone.
+	if t.RowLines {
+		for vi := scroll; vi < end; vi++ {
+			fillRect(p, r.X, bodyY+(vi-scroll+1)*t.rowH()-1, r.W, 1, theme.Border)
+		}
+	}
 	if t.reorderActive() && t.dropIndicator >= 0 && t.dropIndicator <= len(t.Rows) {
 		iy := bodyY + (t.dropIndicator-scroll)*t.rowH()
 		fillRect(p, r.X, iy-1, r.W, 2, theme.Accent)
@@ -823,6 +836,13 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 	// otherwise skipped entirely, so a fit-to-width table is unchanged.
 	if t.hScrollable() {
 		t.drawHScrollbar(p, theme, r, widths)
+	}
+
+	// --- Frame -------------------------------------------------------
+	// Framed draws the outer 1-px edge itself, in theme.Border, for a table
+	// that sits directly on a page rather than inside a parent frame.
+	if t.Framed {
+		strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	}
 
 	// Inline cell editor overlay, on top of everything: when an edit is in
