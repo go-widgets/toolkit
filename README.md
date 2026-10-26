@@ -101,6 +101,7 @@ every native target Go ships.
 | Composite    | `FileChooser`, `FileTree` (an Explorer over paths: rename in place, new file/folder, delete with confirmation, drag to move, drop from outside, context menu, APG treeview keys, type-ahead), `ColorChooser`, `ColorPicker`, `FontChooser`, `Calendar`, `DatePicker`, `DateRangePicker`, `TimePicker`, `MarkdownView`, `MarkdownEditor` |
 | Data suite   | `Table` (cell edit, frozen columns, group rows, aggregates, row-expanders), `TreeTable`, `PropertyGrid`, `Kanban` (drag cards), `Gantt` (drag/resize bars), `Agenda`/`AgendaCalendar` event calendar (week/month/quarter/year, colour-coded calendars, sidebar, inline editor) |
 | Charts       | `LineChart`, `BarChart`, `PieChart`, `AreaChart`, `ScatterChart`, `RadarChart`, `Gauge`, `Sparkline` |
+| Graphs       | `GraphView` over a `GraphViewModel` (clusters, nodes, edges, selection and filter as `mvvm` lists and observables): nodes in cluster boxes on a stable grid that never moves on an edge update, edge width by weight, denied edges dashed in the error colour, category colours (Okabe-Ito by default), legend, click and arrow-key selection, filter dimming |
 | Shell        | `StatusIcon`, `StatusArea`, `Wallpaper`, `Thumbnail`               |
 | Motion       | `Easing`/`Tween` (`Linear`, `EaseIn*/Out*/InOut*`), `GestureRecognizer` |
 | Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
