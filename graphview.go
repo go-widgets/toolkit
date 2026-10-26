@@ -302,8 +302,10 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 		for _, n := range nodes {
 			visible[n.ID] = g.matches(n, labels[n.Cluster])
 		}
-		for _, e := range g.Model.Edges.Slice() {
-			g.drawEdge(p, theme, e, sel == "edge:"+e.ID, visible[e.From] || visible[e.To])
+		edges := g.Model.Edges.Slice()
+		lanes := edgeLanes(edges)
+		for _, e := range edges {
+			g.drawEdge(p, theme, e, lanes[e.ID], sel == "edge:"+e.ID, visible[e.From] || visible[e.To])
 		}
 		for _, n := range nodes {
 			box, ok := g.nodeBox[n.ID]
@@ -332,16 +334,61 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 	g.drawFocusRing(p, theme, r)
 }
 
-// drawEdge strokes one edge between node centres; an edge with an end that is
-// not drawn is skipped.
-func (g *GraphView) drawEdge(p painter.Painter, theme *Theme, e GraphEdge, selected, visible bool) {
+// graphLaneGap separates edges that join the same two nodes.
+const graphLaneGap = 5
+
+// edgeLanes numbers the edges that join the same pair of nodes (in either
+// direction) 0, 1, 2, ... so that each is drawn in its own lane: two flows
+// between the same containers, say one allowed and one refused, never hide
+// each other.
+func edgeLanes(edges []GraphEdge) map[string]int {
+	seen := map[[2]string]int{}
+	lanes := make(map[string]int, len(edges))
+	for _, e := range edges {
+		k := [2]string{e.From, e.To}
+		if e.To < e.From {
+			k = [2]string{e.To, e.From}
+		}
+		lanes[e.ID] = seen[k]
+		seen[k]++
+	}
+	return lanes
+}
+
+// laneOffset is lane 0 -> 0, 1 -> +gap, 2 -> -gap, 3 -> +2gap, ...
+func laneOffset(lane int) int {
+	n := (lane + 1) / 2 * graphLaneGap
+	if lane%2 == 0 {
+		return -n
+	}
+	return n
+}
+
+// edgeEnds is an edge's segment in its lane, perpendicular to its main axis.
+func (g *GraphView) edgeEnds(e GraphEdge, lane int) (x0, y0, x1, y1 int, ok bool) {
 	a, ok1 := g.nodeBox[e.From]
 	b, ok2 := g.nodeBox[e.To]
 	if !ok1 || !ok2 {
+		return 0, 0, 0, 0, false
+	}
+	x0, y0 = graphCenter(a)
+	x1, y1 = graphCenter(b)
+	off := laneOffset(lane)
+	if absInt(x1-x0) >= absInt(y1-y0) {
+		y0, y1 = y0+off, y1+off
+	} else {
+		x0, x1 = x0+off, x1+off
+	}
+	return x0, y0, x1, y1, true
+}
+
+// drawEdge strokes one edge between node centres, in its lane; an edge with
+// an end that is not drawn is skipped.
+func (g *GraphView) drawEdge(p painter.Painter, theme *Theme, e GraphEdge, lane int, selected, visible bool) {
+	x0, y0, x1, y1, ok := g.edgeEnds(e, lane)
+	if !ok {
 		return
 	}
-	x0, y0 := graphCenter(a)
-	x1, y1 := graphCenter(b)
 	col := theme.OnBackground
 	switch e.State {
 	case GraphEdgeDenied:
@@ -415,14 +462,13 @@ func (g *GraphView) drawLegend(p painter.Painter, theme *Theme) {
 // edgeAt returns the edge whose segment passes within graphHitSlack of (x,y).
 func (g *GraphView) edgeAt(x, y int) (string, bool) {
 	best, bestD := "", float64(graphHitSlack)+0.5
-	for _, e := range g.Model.Edges.Slice() {
-		a, ok1 := g.nodeBox[e.From]
-		b, ok2 := g.nodeBox[e.To]
-		if !ok1 || !ok2 {
+	edges := g.Model.Edges.Slice()
+	lanes := edgeLanes(edges)
+	for _, e := range edges {
+		x0, y0, x1, y1, ok := g.edgeEnds(e, lanes[e.ID])
+		if !ok {
 			continue
 		}
-		x0, y0 := graphCenter(a)
-		x1, y1 := graphCenter(b)
 		if d := segDist(float64(x), float64(y), float64(x0), float64(y0), float64(x1), float64(y1)); d < bestD {
 			best, bestD = e.ID, d
 		}
