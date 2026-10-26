@@ -334,6 +334,11 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Wallpaper":        {"Bottom": true, "IH": true, "IW": true, "Interactive": true, "Mode": true, "Pixels": true, "Top": true},
 	"Window":           {"Body": true, "Closable": true, "Maximizable": true, "Minimizable": true, "Resizable": true, "Title": true},
 	"WindowDecoration": {"Border": true, "BorderColor": true, "Buttons": true, "Grip": true, "GripColor": true, "Hairline": true, "Shadow": true, "ShowGrip": true, "Title": true, "TitleCenter": true, "TitleColor": true, "TitleInk": true, "Titlebar": true},
+	// GraphView: everything reactive is on the GraphViewModel's Observables and
+	// ObservableLists (nodes, edges, selection, filter); Model is the set-once
+	// composition of that view model, Palette/MaxEdgeWidth/ShowLegend are
+	// appearance config, OnActivate is a func hook.
+	"GraphView": {"Model": true, "Palette": true, "MaxEdgeWidth": true, "ShowLegend": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
