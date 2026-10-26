@@ -157,7 +157,6 @@ const (
 	graphNodeH    = 18
 	graphGap      = 6
 	graphTitleH   = 14
-	graphLegendH  = 16
 	graphHitSlack = 3
 )
 
@@ -190,7 +189,7 @@ func (g *GraphView) layout() {
 	}
 	area := r
 	if g.ShowLegend {
-		area.H -= graphLegendH
+		area.H -= g.legendHeight()
 	}
 	// Nodes per row inside a cluster, then cluster columns to fill the width.
 	perRow := int(math.Ceil(math.Sqrt(float64(most))))
@@ -441,22 +440,40 @@ func drawDashed(p painter.Painter, x0, y0, x1, y1 int, c RGBA) {
 	}
 }
 
-// drawLegend draws one swatch per category seen, and the denied style.
+// graphLegendPad is the space above and below the legend's line, and
+// graphSwatch the side of a category swatch.
+const (
+	graphLegendPad = 3
+	graphSwatch    = 10
+)
+
+// legendHeight is the legend strip's height, from the widget's font: one
+// line of text (or a swatch, if the font is smaller) with its padding.
+func (g *GraphView) legendHeight() int {
+	return max(g.glyphHeight(), graphSwatch) + 2*graphLegendPad
+}
+
+// drawLegend draws one swatch per category seen, and the denied style, on a
+// line centred in the legend strip.
 func (g *GraphView) drawLegend(p painter.Painter, theme *Theme) {
 	r := g.Bounds()
-	y := r.Y + r.H - graphLegendH + 3
+	h := g.legendHeight()
+	line := h - 2*graphLegendPad
+	top := r.Y + r.H - h + graphLegendPad
+	ty := top + (line-g.glyphHeight())/2 // text
+	sy := top + (line-graphSwatch)/2     // swatch
 	x := r.X + graphGap
 	names := make([]string, len(g.categories))
 	for cat, i := range g.categories {
 		names[i] = cat
 	}
 	for _, cat := range names {
-		fillRect(p, x, y, 10, 10, g.categoryColor(cat))
-		g.drawText(p, x+13, y+1, cat, theme.OnBackground)
+		fillRect(p, x, sy, graphSwatch, graphSwatch, g.categoryColor(cat))
+		g.drawText(p, x+13, ty, cat, theme.OnBackground)
 		x += 13 + g.textWidth(cat) + 10
 	}
-	drawDashed(p, x, y+5, x+16, y+5, graphDeniedInk(theme))
-	g.drawText(p, x+20, y+1, "denied", theme.OnBackground)
+	drawDashed(p, x, sy+graphSwatch/2, x+16, sy+graphSwatch/2, graphDeniedInk(theme))
+	g.drawText(p, x+20, ty, "denied", theme.OnBackground)
 }
 
 // edgeAt returns the edge whose segment passes within graphHitSlack of (x,y).
