@@ -322,6 +322,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"StatusIcon":     {"Badge": true, "IH": true, "IW": true, "Icon": true, "Ink": true, "Pixels": true, "Tooltip": true},
 	"StatusArea":     {"Background": true, "Gap": true, "IconSize": true, "Icons": true},
 	"SwipeActions":   {"ActionWidth": true, "Content": true, "DestructiveDen": true, "DestructiveFull": true, "DestructiveNum": true, "Leading": true, "Projection": true, "Trailing": true},
+	"Terminal":       {"Palette": true},
 	"TerminalView":   {"CellH": true, "CellW": true, "Cells": true, "Cols": true, "DefaultBG": true, "DefaultFG": true, "Rows": true},
 	"Timeline":       {"Events": true, "Horizontal": true},
 	"Toolbar":        {"ButtonH": true, "ButtonW": true, "Items": true, "Orientation": true},
