@@ -106,6 +106,38 @@ every native target Go ships.
 | Motion       | `Easing`/`Tween` (`Linear`, `EaseIn*/Out*/InOut*`), `GestureRecognizer` |
 | Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
 
+### Binary size: a program links what it uses
+
+The toolkit is one large package, and that is fine for the linker: Go's
+dead-code elimination keeps only what is reachable from `main.main` **and
+from the init tasks of every imported package**
+(`cmd/link/internal/ld/deadcode.go`). Widgets a program never touches are
+dropped. What is not dropped is anything a package-level initializer or an
+imported package's `init` reaches — so the toolkit keeps its own initializers
+empty of work and avoids importing packages whose `init` drags code in:
+
+- `Material` and `Thumbnail` use the codec-free `github.com/go-images/images/ops`,
+  not `github.com/go-images/images`, whose decoders register themselves in `init`
+  (about 1.7 MB of WebAssembly code).
+- `CollabText` moved to **`github.com/go-widgets/toolkit/collabui`**: it needs a
+  live `go-crdt/collab` session, whose transports pull `net/http` and `crypto/tls`.
+  `CollabSheet` and `IsoCRDTDocument` need only `go-crdt/crdt` and stay here.
+- The e-mail `Rule`'s regexp, the built-in iso icon registry and the
+  `RichEditorToolbar` button table are built on first use, not by initializers.
+
+Measured with `go build -ldflags=-dumpdep` on a `GOOS=js GOARCH=wasm` program
+that draws one `Label` (`-ldflags="-s -w"`, gzip -9):
+
+| | raw | gzip |
+|---|---|---|
+| before | 10.49 MB | 2.88 MB |
+| after  |  7.48 MB | 2.13 MB |
+
+What remains is mostly the runtime and the OpenType stack the text renderer
+needs. To see what keeps a symbol in your own program, build with
+`-ldflags=-dumpdep` and follow the first-parent chain from the symbol back to
+`main.main` or `go:main.inittasks`.
+
 ### v0.6 breaking change
 
 `Widget.Draw` signature moved from

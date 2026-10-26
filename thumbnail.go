@@ -7,7 +7,9 @@ package toolkit
 import (
 	"image"
 
-	"github.com/go-images/images"
+	// The codec-free half of go-images: importing the root package would link
+	// every image decoder through their init-time registration.
+	images "github.com/go-images/images/ops"
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )

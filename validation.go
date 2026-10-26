@@ -7,6 +7,7 @@ package toolkit
 import (
 	"errors"
 	"regexp"
+	"sync"
 )
 
 // Rule validates a single string value. It returns a non-nil error --
@@ -60,11 +61,28 @@ func Pattern(re *regexp.Regexp, msg string) Rule {
 // implement the full RFC 5322 grammar -- that would reject plenty of
 // addresses real users type -- it's the same "good enough" heuristic
 // most form libraries ship.
-var emailPattern = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+//
+// It is compiled on first use, by a function only Email reaches. A
+// package-level initializer — `regexp.MustCompile(...)`, or even
+// `sync.OnceValue(func() ...)`, whose closure the initializer stores — runs in
+// the package's init task, which the linker treats as a root, so it linked the
+// whole regexp compiler into every toolkit program, used or not (measured with
+// -ldflags=-dumpdep: regexp.MustCompile <- toolkit.init.func9 <- toolkit.init).
+func emailPattern() *regexp.Regexp {
+	emailOnce.Do(func() {
+		emailRe = regexp.MustCompile(`^[^\s@]+@[^\s@]+\.[^\s@]+$`)
+	})
+	return emailRe
+}
+
+var (
+	emailOnce sync.Once
+	emailRe   *regexp.Regexp
+)
 
 // Email rejects a value that does not look like an email address.
 func Email(msg string) Rule {
-	return Pattern(emailPattern, msg)
+	return Pattern(emailPattern(), msg)
 }
 
 // All combines rules into a single Rule that runs them in order and

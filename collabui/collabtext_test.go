@@ -2,7 +2,7 @@
 // Use of this source code is governed by a BSD-3-Clause license that can be
 // found in the LICENSE file at the root of this repository.
 
-package toolkit
+package collabui
 
 import (
 	"context"
@@ -160,7 +160,7 @@ func (p *collabPeer) setText(s string) { p.do(func() { p.ed.SetText(s) }) }
 // setCaret moves the caret as a user would, collapsing any selection.
 func (p *collabPeer) setCaret(line, col int) {
 	p.do(func() {
-		p.ed.Selection().Set(Selection{line, col, line, col})
+		p.ed.Selection().Set(sel(line, col, line, col))
 		p.ed.CursorLine().Set(line)
 		p.ed.CursorCol().Set(col)
 	})
@@ -266,10 +266,10 @@ func TestCollabTextReflectsSelectionAndDeletion(t *testing.T) {
 	bo.await(t, "base text", func() bool { return bo.ed.Text().Get() == "hello world" })
 
 	// A forward selection: caret at the end (0,5), anchor at (0,0).
-	ada.selectRange(Selection{0, 0, 0, 5}, 0, 5)
+	ada.selectRange(sel(0, 0, 0, 5), 0, 5)
 	bo.await(t, "ada's forward selection", func() bool {
 		for _, d := range bo.ed.Decorations {
-			if d.Label == "ada" && d.Selection == (Selection{0, 0, 0, 5}) && d.CursorCol == 5 {
+			if d.Label == "ada" && d.Selection == sel(0, 0, 0, 5) && d.CursorCol == 5 {
 				return true
 			}
 		}
@@ -279,10 +279,10 @@ func TestCollabTextReflectsSelectionAndDeletion(t *testing.T) {
 	// A backward selection over the same span: caret at the start (0,2), anchor at
 	// (0,5). It must canonicalise to the same range but with the caret at 2 — this
 	// exercises the other branch of the anchor/head choice.
-	ada.selectRange(Selection{0, 2, 0, 5}, 0, 2)
+	ada.selectRange(sel(0, 2, 0, 5), 0, 2)
 	bo.await(t, "ada's backward selection", func() bool {
 		for _, d := range bo.ed.Decorations {
-			if d.Label == "ada" && d.Selection == (Selection{0, 2, 0, 5}) && d.CursorCol == 2 {
+			if d.Label == "ada" && d.Selection == sel(0, 2, 0, 5) && d.CursorCol == 2 {
 				return true
 			}
 		}

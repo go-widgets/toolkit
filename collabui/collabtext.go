@@ -2,7 +2,22 @@
 // Use of this source code is governed by a BSD-3-Clause license that can be
 // found in the LICENSE file at the root of this repository.
 
-package toolkit
+// Package collabui holds the go-widgets bindings that need a live
+// [github.com/go-crdt/collab] session — today [CollabText].
+//
+// They live outside package toolkit for the linker. go-crdt/collab carries its
+// network transports (WebSocket over net/http, gRPC on native targets), and
+// every package a program imports runs its init functions, which the Go linker
+// treats as roots (cmd/link/internal/ld/deadcode.go floods from main.main and
+// each imported package's init task). While CollabText sat in package toolkit,
+// every toolkit program linked net/http, crypto/tls and their init-time
+// self-tests whether or not it ever opened a session. Import collabui only in
+// programs that do.
+//
+// The CRDT-only bindings that need no session — [toolkit.CollabSheet] and
+// [toolkit.IsoCRDTDocument] — stay in package toolkit: go-crdt/crdt links no
+// transport.
+package collabui
 
 import (
 	"strings"
@@ -12,10 +27,12 @@ import (
 	"github.com/go-crdt/collab"
 	"github.com/go-crdt/crdt"
 	"github.com/go-crdt/crdt/awareness"
+
+	"github.com/go-widgets/toolkit"
 )
 
 // Presence metadata keys. A participant publishes its display name and caret
-// colour under these keys, and a peer reads them back to paint a [Decoration].
+// colour under these keys, and a peer reads them back to paint a [toolkit.Decoration].
 // They are this binding's private contract with itself — the awareness core
 // carries the map verbatim and interprets none of it.
 const (
@@ -23,17 +40,17 @@ const (
 	// as the tag beside its remote caret.
 	MetaName = "name"
 	// MetaColor is the presence key carrying a participant's caret colour, as the
-	// "#rrggbbaa" string [Decoration.Color] is painted in.
+	// "#rrggbbaa" string [toolkit.Decoration] Color is painted in.
 	MetaColor = "color"
 )
 
-// CollabText is the live binding between a [CodeEditor] (or its embedded
-// [TextView]) and one text part of a [github.com/go-crdt/collab] session: it
+// CollabText is the live binding between a [toolkit.CodeEditor] (or its embedded
+// [toolkit.TextView]) and one text part of a [github.com/go-crdt/collab] session: it
 // turns the editor into one replica of a shared document, so any number of peers
 // edit the same buffer at once and each sees the others' carets and selections
-// painted in place. It is the text-editor analogue of [SyncSpreadsheet] over a
-// [CollabSheet] and of an [IsoDiagram] over an [IsoCRDTDocument] — the reusable
-// "CRDT ⇄ editor" glue, with no widget change: the [CodeEditor] edits exactly as
+// painted in place. It is the text-editor analogue of [toolkit.SyncSpreadsheet] over a
+// [toolkit.CollabSheet] and of an [toolkit.IsoDiagram] over an [toolkit.IsoCRDTDocument] — the reusable
+// "CRDT ⇄ editor" glue, with no widget change: the [toolkit.CodeEditor] edits exactly as
 // before, its edits now flow into the shared document, and a merged remote edit
 // (text or presence) flows back into it.
 //
@@ -49,7 +66,7 @@ const (
 //     offsets) carrying this participant's [CollabText.Name] and [CollabText.Color].
 //   - Shared → local. A pump goroutine wakes on the session's coalesced change
 //     signal, loads the part's current text into the editor, and rebuilds the
-//     editor's [TextView.Decorations] from the session's peers — one Decoration
+//     editor's [toolkit.TextView] Decorations from the session's peers — one Decoration
 //     per other participant, its caret and selection mapped from rune offsets to
 //     (line, col) and painted in the peer's own colour and name.
 //
@@ -61,7 +78,7 @@ const (
 // signal, but it NEVER touches editor state from that goroutine. Instead it hands
 // each remote application to the host over [CollabText.Updates] as a closure the
 // host runs on its own UI goroutine — the same "the host calls back on its own UI
-// thread" contract [Browser] uses, marshalled here through a channel so there is
+// thread" contract [toolkit.Browser] uses, marshalled here through a channel so there is
 // a clean happens-before and no field to race on. A host drains it with
 //
 //	for apply := range ct.Updates() {
@@ -77,7 +94,7 @@ const (
 // the pump selects on its stop signal even while offering an update, a host that
 // has stopped draining never wedges Close.
 type CollabText struct {
-	ed     *CodeEditor
+	ed     *toolkit.CodeEditor
 	text   *collab.Text
 	client *collab.Client
 	self   crdt.SiteID
@@ -89,10 +106,10 @@ type CollabText struct {
 	// Color is this participant's caret colour, published with every caret move.
 	// Its zero value (A == 0) publishes no colour key, and a peer paints the
 	// caret in the theme default.
-	Color RGBA
+	Color toolkit.RGBA
 
 	// OnRemoteChange, when set, is called at the end of every remote application —
-	// a repaint seam for the host, the analogue of [CollabSheet.Subscribe]. It
+	// a repaint seam for the host, the analogue of [toolkit.CollabSheet.Subscribe]. It
 	// runs on the UI goroutine, inside the apply closure the host ran.
 	OnRemoteChange func()
 
@@ -121,7 +138,7 @@ type CollabText struct {
 // malformed; see [crdt.Part]) is returned as an error and nothing is wired.
 //
 // The returned binding owns a pump goroutine; call [CollabText.Close] to stop it.
-func NewCollabText(ed *CodeEditor, client *collab.Client, textName string) (*CollabText, error) {
+func NewCollabText(ed *toolkit.CodeEditor, client *collab.Client, textName string) (*CollabText, error) {
 	handle, err := client.Text(textName)
 	if err != nil {
 		return nil, err
@@ -207,7 +224,7 @@ func (c *CollabText) meta() map[string]string {
 	if c.Name != "" {
 		m[MetaName] = c.Name
 	}
-	if col := isoColorToHex(c.Color); col != "" {
+	if col := toolkit.ColorHex(c.Color); col != "" {
 		m[MetaColor] = col
 	}
 	return m
@@ -276,20 +293,20 @@ func (c *CollabText) applyRemote() {
 // (line, col) over buf. A departed peer is simply absent from Peers, so its
 // decoration is gone; an empty peer set clears them all.
 func (c *CollabText) rebuildDecorations(buf string) {
-	var decs []Decoration
+	var decs []toolkit.Decoration
 	for _, p := range c.client.Peers() {
 		if p.Site == c.self {
 			continue
 		}
 		headLine, headCol := lineCol(buf, p.Cursor.Head)
 		anchorLine, anchorCol := lineCol(buf, p.Cursor.Anchor)
-		color, _ := isoColorFromHex(p.Meta[MetaColor])
-		decs = append(decs, Decoration{
+		color, _ := toolkit.ParseColorHex(p.Meta[MetaColor])
+		decs = append(decs, toolkit.Decoration{
 			Label:      p.Meta[MetaName],
 			Color:      color,
 			CursorLine: headLine,
 			CursorCol:  headCol,
-			Selection:  SelectionRange(anchorLine, anchorCol, headLine, headCol),
+			Selection:  toolkit.SelectionRange(anchorLine, anchorCol, headLine, headCol),
 		})
 	}
 	c.ed.Decorations = decs
