@@ -31,19 +31,13 @@ func DrawIconoir(p painter.Painter, r Rect, name string, ink RGBA) {
 // [DrawIconoir] accepts), from go-icons/iconoir.
 func IconoirNames() []string { return iconoir.Names() }
 
-// iconRasterPx is the pixel size an icon SVG is rasterised to before the painter
-// scales it into the (usually smaller) target box. It bounds the work and memory
-// regardless of the SVG's own viewBox — an icon authored on a 960-unit grid and
-// one on a 24-unit grid both rasterise to roughly this many pixels, not 960×2 vs
-// 24×2. Chosen a touch above a comfortable HiDPI row height, so the downscale to
-// a ~14–28 px tree row stays crisp.
-const iconRasterPx = 64.0
-
 // SVGIcon returns an icon drawer that renders the SVG document doc into the box
 // it is handed — for a [TreeTableNode.Icon], or anywhere a
 // func(painter.Painter, Rect, RGBA) drawer is wanted. The SVG is rasterised
-// ONCE per (document, ink) and cached; each draw just scales the cached bitmap
-// into the target box through the painter's DrawImage, so a file tree can show a
+// ONCE per (document, ink, box size) at the box's own size — anti-aliased by
+// the rasteriser at the pixels it will be shown at, so a HiDPI host (a larger
+// box under a larger MetricScale) gets a sharper glyph, not an enlarged one —
+// and cached; each draw blits the cached bitmap 1:1, so a file tree can show a
 // real icon-pack glyph without re-parsing the SVG every frame.
 //
 // ink recolours the SVG's default / currentColor fills; a pack whose icons carry
@@ -60,13 +54,28 @@ func SVGIcon(doc string) func(p painter.Painter, r Rect, ink RGBA) {
 		if !ok {
 			return
 		}
-		ras := rasterizeIcon(doc, ink)
+		ras := rasterizeIcon(doc, ink, iconTargetPx(r))
 		if ras.pix == nil {
 			return
 		}
-		ip.DrawImage(Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}, ras.pix, ras.w, ras.h)
+		// The raster is the box's own size (when the SVG has a viewBox), so the
+		// blit is 1:1: DrawImage samples nearest-neighbour, and squeezing a
+		// 64-px raster into a 14-px box dropped most of each stroke -- the
+		// jagged icons a HiDPI-aware host still showed.
+		dst := Rect{X: r.X + (r.W-ras.w)/2, Y: r.Y + (r.H-ras.h)/2, W: ras.w, H: ras.h}
+		if ras.w > r.W || ras.h > r.H {
+			dst = r // no viewBox: the rasteriser's default size, scaled to fit
+		}
+		ip.DrawImage(dst, ras.pix, ras.w, ras.h)
 	}
 }
+
+// maxIconPx bounds the raster an icon box may ask for (a 512-px icon is
+// already a page-sized glyph).
+const maxIconPx = 512
+
+// iconTargetPx is the raster size for box r: its longer side, bounded.
+func iconTargetPx(r Rect) int { return min(max(r.W, r.H), maxIconPx) }
 
 // iconRaster is a cached rasterised icon: straight-alpha RGBA, w*h pixels.
 type iconRaster struct {
@@ -74,27 +83,31 @@ type iconRaster struct {
 	w, h int
 }
 
-// iconKey identifies a cached raster by its source document and recolour ink.
+// iconKey identifies a cached raster by its source document, recolour ink and
+// pixel size.
 type iconKey struct {
-	doc string
-	ink RGBA
+	doc  string
+	ink  RGBA
+	size int
 }
 
-// iconCache memoises rasterised icons so the SVG is parsed once per (doc, ink),
-// not once per frame. It is safe for concurrent use (a native host may draw off
-// the main goroutine); the wasm host is single-threaded and pays nothing.
+// iconCache memoises rasterised icons so the SVG is parsed once per (doc, ink,
+// size), not once per frame. It is safe for concurrent use (a native host may
+// draw off the main goroutine); the wasm host is single-threaded and pays
+// nothing.
 var iconCache sync.Map // iconKey -> iconRaster
 
-// rasterizeIcon renders doc at the default scale, recoloured to ink, with a
-// transparent background, and caches the result (empty on any parse error).
-func rasterizeIcon(doc string, ink RGBA) iconRaster {
-	key := iconKey{doc: doc, ink: ink}
+// rasterizeIcon renders doc so its viewBox's longer side is size pixels,
+// recoloured to ink, with a transparent background, and caches the result
+// (empty on any parse error).
+func rasterizeIcon(doc string, ink RGBA, size int) iconRaster {
+	key := iconKey{doc: doc, ink: ink, size: size}
 	if v, ok := iconCache.Load(key); ok {
 		return v.(iconRaster)
 	}
 	var ras iconRaster
 	res, err := svg.Rasterize(doc, svg.Options{
-		Scale: iconScale(doc),
+		Scale: iconScale(doc, float64(size)),
 		Ink:   color.RGBA{R: ink.R, G: ink.G, B: ink.B, A: ink.A},
 	})
 	if err == nil && res != nil && res.Image != nil && res.Image.W > 0 && res.Image.H > 0 {
@@ -104,13 +117,13 @@ func rasterizeIcon(doc string, ink RGBA) iconRaster {
 	return ras
 }
 
-// iconScale returns the svg.Rasterize scale that renders doc's viewBox to about
-// iconRasterPx on its larger side, so the raster size is bounded no matter what
-// coordinate grid the icon was authored on. A doc with no readable viewBox falls
-// back to the rasteriser's own default (a small icon rendered at 1:1-ish).
-func iconScale(doc string) float64 {
+// iconScale returns the svg.Rasterize scale that renders doc's viewBox to px
+// pixels on its larger side, whatever coordinate grid the icon was authored
+// on. A doc with no readable viewBox falls back to the rasteriser's own
+// default (a small icon rendered at 1:1-ish).
+func iconScale(doc string, px float64) float64 {
 	if longest := svgViewBoxLongestSide(doc); longest > 0 {
-		return iconRasterPx / longest
+		return px / longest
 	}
 	return 0 // svg.Rasterize treats <=0 as its default scale
 }

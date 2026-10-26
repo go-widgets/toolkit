@@ -127,19 +127,40 @@ func TestSVGViewBoxLongestSide(t *testing.T) {
 	}
 }
 
-// TestIconScaleBoundsLargeViewBox: an icon on a large grid rasterises to about
-// iconRasterPx, not viewBox-sized — iconScale shrinks it, and a small grid falls
-// back to the rasteriser default.
-func TestIconScaleBoundsLargeViewBox(t *testing.T) {
-	if s := iconScale(`<svg viewBox="0 0 960 960"><rect/></svg>`); s <= 0 || s > 0.1 {
-		t.Errorf("large viewBox scale = %g, want a small positive (~%g/960)", s, iconRasterPx)
+// TestIconRastersAtTheBoxSize: an icon rasterises at the size of the box it is
+// drawn in (whatever its viewBox grid), bounded, and is blitted 1:1 — the
+// nearest-neighbour squeeze of a 64-px raster into a small box is what made
+// small icons jagged.
+func TestIconRastersAtTheBoxSize(t *testing.T) {
+	if s := iconScale(`<svg viewBox="0 0 960 960"><rect/></svg>`, 16); s != 16.0/960 {
+		t.Errorf("scale = %g, want 16/960", s)
 	}
-	if s := iconScale(`<svg><rect/></svg>`); s != 0 {
+	if s := iconScale(`<svg><rect/></svg>`, 16); s != 0 {
 		t.Errorf("no-viewBox scale = %g, want 0 (rasteriser default)", s)
 	}
-	// End to end: a 960-grid SVG rasterises to a bounded ~iconRasterPx square.
-	res := rasterizeIcon(`<svg viewBox="0 0 960 960"><rect width="960" height="960" fill="#000"/></svg>`, RGBA{A: 255})
-	if res.w <= 0 || res.w > int(iconRasterPx)+2 {
-		t.Errorf("rastered width = %d, want ~%g (bounded)", res.w, iconRasterPx)
+	res := rasterizeIcon(`<svg viewBox="0 0 960 960"><rect width="960" height="960" fill="#000"/></svg>`, RGBA{A: 255}, 16)
+	if res.w != 16 || res.h != 16 {
+		t.Errorf("raster = %dx%d, want 16x16", res.w, res.h)
+	}
+	if iconTargetPx(Rect{W: 14, H: 20}) != 20 || iconTargetPx(Rect{W: 5000, H: 9}) != maxIconPx {
+		t.Error("iconTargetPx")
+	}
+	// An Iconoir stroke glyph in a 14-px box keeps grey (anti-aliased) edge
+	// pixels: more than two distinct alpha values.
+	const sz = 14
+	buf := make([]byte, sz*sz*4)
+	DrawIconoir(painter.NewPixelPainter(buf, sz, sz), Rect{W: sz, H: sz}, "box", RGB(0, 0, 0))
+	alphas := map[byte]bool{}
+	for i := 3; i < len(buf); i += 4 {
+		alphas[buf[i]] = true
+	}
+	if len(alphas) < 4 {
+		t.Errorf("a 14-px icon has %d alpha levels, want anti-aliased edges", len(alphas))
+	}
+	// No viewBox: the rasteriser's default size, scaled into the box.
+	big := make([]byte, 8*8*4)
+	SVGIcon(`<svg width="40" height="40"><rect width="40" height="40" fill="#ff0000"/></svg>`)(painter.NewPixelPainter(big, 8, 8), Rect{W: 8, H: 8}, RGBA{A: 255})
+	if big[(4*8+4)*4] < 180 {
+		t.Error("a viewBox-less icon was not scaled into its box")
 	}
 }

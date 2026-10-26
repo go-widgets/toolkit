@@ -101,7 +101,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// state is unexported behind accessors; the values below are config (data
 	// slices, layout flags, static captions; func hooks auto-allowed). ListBox is
 	// now fully migrated (its ScrollRow joined Selected) so it finally joins here.
-	"Table":     {"Columns": true, "Rows": true, "MultiSelect": true, "FrozenColumns": true, "EditActivation": true, "GroupBy": true, "Reorderable": true, "SelfSort": true, "ShowSummary": true},
+	"Table":     {"Columns": true, "Rows": true, "MultiSelect": true, "FrozenColumns": true, "EditActivation": true, "GroupBy": true, "Reorderable": true, "SelfSort": true, "ShowSummary": true, "Framed": true, "RowLines": true},
 	"TreeView":  {"Root": true, "RowHeight": true, "MultiSelect": true, "HideRoot": true, "HideScrollbar": true},
 	"TreeTable": {"Columns": true, "Root": true},
 	"ListBox":   {"Items": true, "RowHeight": true, "MultiSelect": true, "Reorderable": true, "Sections": true},
