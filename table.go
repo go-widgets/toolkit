@@ -708,6 +708,9 @@ func (t *Table) Draw(p painter.Painter, theme *Theme) {
 		tx := r.X + (r.W-tw)/2
 		ty := bodyY + (t.rowH()-t.glyphHeight())/2
 		t.drawText(p, tx, ty, tableEmptyPlaceholder, theme.OnSurface)
+		if t.Framed {
+			strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+		}
 		return
 	}
 	// Resolve which body row is highlighted -- Selected out of range

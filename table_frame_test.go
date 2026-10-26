@@ -32,6 +32,15 @@ func TestTableFrameAndRowLines(t *testing.T) {
 			t.Errorf("(%d,%d) = %v, want the border", pt[0], pt[1], got)
 		}
 	}
+	// An empty table is framed too.
+	empty := NewTable([]TableColumn{{Title: "A"}}, nil)
+	empty.Framed = true
+	empty.SetBounds(Rect{W: w, H: h})
+	buf := makeSurface(w, h)
+	empty.Draw(newP(buf, w), theme)
+	if pixelAt(buf, w, 0, h/2) != theme.Border || pixelAt(buf, w, w/2, h-1) != theme.Border {
+		t.Error("an empty framed table has no frame")
+	}
 }
 
 func tb0RowH() int {
