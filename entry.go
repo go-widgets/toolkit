@@ -34,7 +34,11 @@ type Entry struct {
 
 	// Mask, when non-zero, is the rune each character is displayed as (e.g. '•')
 	// instead of the real text — for secrets/passwords. Text/Value keep the real
-	// contents; only the display is masked.
+	// contents for the program; nothing else sees them: the accessibility value
+	// is the masked text, and Ctrl+C / Ctrl+X do not put the secret on the
+	// clipboard (HTML's password state: "obscure the value so that people
+	// other than the user cannot see it" — an accessibility tree and a
+	// clipboard are read by other software).
 	Mask rune
 
 	// text is the committed contents, reactive via the Text() accessor.
@@ -289,12 +293,13 @@ func (e *Entry) OnEvent(ev Event) {
 			}
 		case "Ctrl+C":
 			// Entry has no selection concept: Ctrl+C copies the whole
-			// value, mirroring "select all + copy".
-			if t := e.Text().Get(); t != "" {
+			// value, mirroring "select all + copy". A masked entry's secret
+			// never reaches the clipboard.
+			if t := e.Text().Get(); t != "" && e.Mask == 0 {
 				SetClipboardText(t)
 			}
 		case "Ctrl+X":
-			if e.Text().Get() != "" {
+			if e.Text().Get() != "" && e.Mask == 0 {
 				SetClipboardText(e.Text().Get())
 				e.cursor = 0
 				e.Text().Set("")
