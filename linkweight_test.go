@@ -38,6 +38,7 @@ func TestRootImportsNoInitHeavyPackage(t *testing.T) {
 		"github.com/go-images/images",   // every decoder self-registers in init
 		"github.com/go-gfx/gfx/codec",   // the decoder registry itself
 		"github.com/go-images/jpeg2000", // ~350 KB of wasm code via its init
+		"net/http",                      // + crypto/tls inits (once came via andybalholm/brotli)
 	}
 	if !listDeps(t, "./collabui")["github.com/go-crdt/collab"] {
 		t.Fatal("control failed: collabui does not import go-crdt/collab, so this check sees nothing")
