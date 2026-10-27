@@ -130,8 +130,9 @@ that draws one `Label` (`-ldflags="-s -w"`, gzip -9):
 
 | | raw | gzip |
 |---|---|---|
-| before | 10.49 MB | 2.88 MB |
-| after  |  7.48 MB | 2.13 MB |
+| v0.343.1 | 10.49 MB | 2.88 MB |
+| v0.345.0 (this list) |  7.48 MB | 2.13 MB |
+| v0.345.1 (go-opentype WOFF2 inflates without `net/http`) |  5.66 MB | 1.61 MB |
 
 What remains is mostly the runtime and the OpenType stack the text renderer
 needs. To see what keeps a symbol in your own program, build with
