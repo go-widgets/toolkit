@@ -48,8 +48,8 @@ func NewFileChooser(root *TreeNode, listFiles func(dir *TreeNode) []string) *Fil
 	f.tree = NewTreeView(root)
 	f.list = NewListBox(nil)
 	f.pathEntry = NewEntry("")
-	f.openButton = NewButton("Open", nil)
-	f.cancelButton = NewButton("Cancel", nil)
+	f.openButton = NewButton(Tr("filechooser.open", "Open"), nil)
+	f.cancelButton = NewButton(Tr("filechooser.cancel", "Cancel"), nil)
 
 	f.tree.OnActivate = func(n *TreeNode) {
 		f.currentDir = n

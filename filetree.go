@@ -468,19 +468,19 @@ func (f *FileTree) validate() {
 	case name == "":
 		e.msg = "A file or folder name must be provided."
 	case strings.HasPrefix(name, "/") || strings.HasPrefix(name, `\`):
-		e.msg = "A file or folder name cannot start with a slash."
+		e.msg = Tr("filetree.err.slash", "A file or folder name cannot start with a slash.")
 	case !validFileName(name):
-		e.msg = "The name '" + name + "' is not valid as a file or folder name. Please choose a different name."
+		e.msg = Trf("filetree.err.invalid", "The name '%s' is not valid as a file or folder name. Please choose a different name.", name)
 	case f.edit.action == FileRename && f.editTarget() == f.edit.path:
 		e.block = false
 	case f.exists(f.editTarget()):
-		e.msg = "A file or folder '" + name + "' already exists at this location. Please choose a different name."
+		e.msg = Trf("filetree.err.exists", "A file or folder '%s' already exists at this location. Please choose a different name.", name)
 	case f.edit.action == FileRename && strings.HasPrefix(f.editTarget()+"/", f.edit.path+"/"):
-		e.msg = "The name '" + name + "' is not valid as a file or folder name. Please choose a different name."
+		e.msg = Trf("filetree.err.invalid", "The name '%s' is not valid as a file or folder name. Please choose a different name.", name)
 	default:
 		e.block = false
 		if raw != name {
-			e.msg = "Leading or trailing whitespace detected in file or folder name."
+			e.msg = Tr("filetree.warn.space", "Leading or trailing whitespace detected in file or folder name.")
 		}
 	}
 }
@@ -545,16 +545,16 @@ func (f *FileTree) Context(x, y int) {
 	var items []MenuItem
 	if dir {
 		items = append(items,
-			MenuItem{Label: "New File…", Action: func() { f.BeginCreate(p, false) }},
-			MenuItem{Label: "New Folder…", Action: func() { f.BeginCreate(p, true) }})
+			MenuItem{Label: Tr("filetree.new_file", "New File…"), Action: func() { f.BeginCreate(p, false) }},
+			MenuItem{Label: Tr("filetree.new_folder", "New Folder…"), Action: func() { f.BeginCreate(p, true) }})
 	}
 	if p != "" {
 		if len(items) > 0 {
 			items = append(items, MenuItem{Separator: true})
 		}
 		items = append(items,
-			MenuItem{Label: "Rename…", Shortcut: "F2", Action: func() { f.BeginRename(p) }},
-			MenuItem{Label: "Delete", Shortcut: "Del", Action: func() { f.AskDelete(p) }})
+			MenuItem{Label: Tr("filetree.rename", "Rename…"), Shortcut: "F2", Action: func() { f.BeginRename(p) }},
+			MenuItem{Label: Tr("filetree.delete", "Delete"), Shortcut: "Del", Action: func() { f.AskDelete(p) }})
 	}
 	if f.MenuExtra != nil {
 		if extra := f.MenuExtra(p, dir); len(extra) > 0 {
@@ -820,7 +820,7 @@ func (f *FileTree) drawFooter(p painter.Painter, theme *Theme) {
 		return
 	}
 	x := r.X + scaled(6)
-	for i, label := range []string{"Delete", "Cancel"} {
+	for i, label := range []string{Tr("filetree.delete", "Delete"), Tr("filetree.cancel", "Cancel")} {
 		b := NewButton(label, nil)
 		b.Selected().Set(i == 0)
 		br := Rect{X: x, Y: ly, W: b.PreferredWidth() + scaled(12), H: f.rowH()}

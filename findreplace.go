@@ -5,8 +5,6 @@
 package toolkit
 
 import (
-	"strconv"
-
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
@@ -109,8 +107,8 @@ func NewFindReplace() *FindReplace {
 		countLabel:    NewLabel(""),
 		prevBtn:       NewButton("<", nil),
 		nextBtn:       NewButton(">", nil),
-		replaceBtn:    NewButton("Replace", nil),
-		replaceAllBtn: NewButton("All", nil),
+		replaceBtn:    NewButton(Tr("find.replace", "Replace"), nil),
+		replaceAllBtn: NewButton(Tr("find.replace_all", "All"), nil),
 		closeBtn:      NewButton("x", nil),
 		regexBtn:      NewButton(".*", nil),
 		caseBtn:       NewButton("Aa", nil),
@@ -243,10 +241,10 @@ func (f *FindReplace) CountText() string {
 // total.
 func formatCount(total, current int, invalid bool) string {
 	if invalid {
-		return "Bad pattern"
+		return Tr("find.bad_pattern", "Bad pattern")
 	}
 	if total <= 0 {
-		return "No results"
+		return Tr("find.no_results", "No results")
 	}
 	idx := current
 	if idx < 0 {
@@ -255,7 +253,7 @@ func formatCount(total, current int, invalid bool) string {
 	if idx >= total {
 		idx = total - 1
 	}
-	return strconv.Itoa(idx+1) + " of " + strconv.Itoa(total)
+	return Trf("find.count", "%d of %d", idx+1, total)
 }
 
 // Open shows the bar and moves keyboard focus to the query field.
@@ -290,7 +288,7 @@ func (f *FindReplace) Children() []Widget { return f.controls() }
 // A11y reports the bar as a group named for its purpose; the query, buttons and
 // readout inside describe themselves through the child walk.
 func (f *FindReplace) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: "Find and replace"}
+	return A11yInfo{Role: RoleGroup, Name: Tr("find.a11y", "Find and replace")}
 }
 
 // panelRect is the top-right anchored panel rectangle within the bar's bounds.
