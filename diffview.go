@@ -303,9 +303,15 @@ func (v *DiffView) Draw(p painter.Painter, theme *Theme) {
 			fillRect(p, body.X, y, body.W, h, theme.SurfaceAlt)
 			// the old title over the left half, the new over the right, in
 			// both layouts (inline: where the old and the new line numbers are)
+			// each clipped to its half: a long title does not run under the other
 			ty := y + (h-v.glyphHeight())/2
-			v.drawText(p, body.X+scaled(4), ty, v.OldTitle, theme.OnSurface)
-			v.drawText(p, body.X+body.W/2+scaled(4), ty, v.NewTitle, theme.OnSurface)
+			half := body.W / 2
+			withClip(p, Rect{X: body.X, Y: y, W: half - scaled(4), H: h}, func() {
+				v.drawText(p, body.X+scaled(4), ty, v.OldTitle, theme.OnSurface)
+			})
+			withClip(p, Rect{X: body.X + half, Y: y, W: body.W - half, H: h}, func() {
+				v.drawText(p, body.X+half+scaled(4), ty, v.NewTitle, theme.OnSurface)
+			})
 			y += h
 		}
 		end := min(v.top+v.visible()+1, len(v.rows))
@@ -316,9 +322,11 @@ func (v *DiffView) Draw(p painter.Painter, theme *Theme) {
 		for i := v.top; i < end; i++ {
 			row := v.rows[i]
 			if v.SideBySide {
+				// each side clipped to its column: a long line stops at the middle
 				half := body.W / 2
-				v.drawSide(p, theme, c, Rect{X: body.X, Y: y, W: half, H: rh}, row, true, numW)
-				v.drawSide(p, theme, c, Rect{X: body.X + half, Y: y, W: body.W - half, H: rh}, row, false, numW)
+				lc, rc := Rect{X: body.X, Y: y, W: half, H: rh}, Rect{X: body.X + half, Y: y, W: body.W - half, H: rh}
+				withClip(p, lc, func() { v.drawSide(p, theme, c, lc, row, true, numW) })
+				withClip(p, rc, func() { v.drawSide(p, theme, c, rc, row, false, numW) })
 				fillRect(p, body.X+half, y, 1, rh, theme.Border)
 			} else {
 				v.drawInline(p, theme, c, Rect{X: body.X, Y: y, W: body.W, H: rh}, row, numW)

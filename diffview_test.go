@@ -190,6 +190,27 @@ func TestDiffViewDraw(t *testing.T) {
 	}
 }
 
+// A long title and long lines stay in their half: nothing of the left side is
+// painted over the right one.
+func TestDiffViewClipsEachHalf(t *testing.T) {
+	th := DefaultLight()
+	const w, h = 200, 60
+	long := strings.Repeat("W", 80)
+	v := NewDiffView(long+"\n", long+"x\n")
+	v.OldTitle, v.NewTitle = long, ""
+	v.SetBounds(Rect{W: w, H: h})
+	buf := makeSurface(w, h)
+	v.Draw(newP(buf, w), th)
+	half := (w - scaled(6)) / 2
+	for y := 1; y < v.rowH()-1; y++ {
+		for x := half + 2; x < w-scaled(6)-2; x++ {
+			if px := pixelAt(buf, w, x, y); px != th.SurfaceAlt {
+				t.Fatalf("the old title ran into the right half at (%d,%d): %+v", x, y, px)
+			}
+		}
+	}
+}
+
 func TestDiffViewEdgeCases(t *testing.T) {
 	th := DefaultLight()
 	// empty against empty: no rows, the ruler draws nothing
