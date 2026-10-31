@@ -79,6 +79,12 @@ type TextView struct {
 	// field existed.
 	RowBackground func(lineIndex int) (RGBA, bool)
 
+	// OnHistory, when non-nil, is called after the undo history changes:
+	// edit is true when an edit was recorded (a new step, which drops the
+	// redo steps), false after Undo, Redo, SetHistory or ClearHistory. A
+	// host enables its Undo/Redo controls from CanUndo/CanRedo here.
+	OnHistory func(edit bool)
+
 	// lines is the working buffer (one element per visible line). The Text()
 	// Observable mirrors strings.Join(lines, "\n"); edits mutate lines then
 	// sync(). It stays a plain slice (not an Observable) because slices are not
@@ -316,6 +322,7 @@ func (t *TextView) pushUndo() {
 		t.undo = t.undo[len(t.undo)-maxUndo:]
 	}
 	t.redo = nil
+	t.historyChanged(true)
 }
 
 // Undo restores the buffer + cursor + selection to the state before
@@ -330,6 +337,7 @@ func (t *TextView) Undo() {
 	t.undo = t.undo[:len(t.undo)-1]
 	t.restore(last)
 	t.sync()
+	t.historyChanged(false)
 }
 
 // Redo re-applies the most recently undone mutation, pushing the
@@ -344,6 +352,7 @@ func (t *TextView) Redo() {
 	t.redo = t.redo[:len(t.redo)-1]
 	t.restore(last)
 	t.sync()
+	t.historyChanged(false)
 }
 
 // NewTextView builds a TextView pre-loaded with initial text (split
