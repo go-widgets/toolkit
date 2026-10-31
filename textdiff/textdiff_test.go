@@ -17,7 +17,15 @@ func apply(t testing.TB, a, b []string, edits []Edit) {
 	t.Helper()
 	var got []string
 	ai, bi := 0, 0
-	for _, e := range edits {
+	for i, e := range edits {
+		// in a run of changes, no deletion after an insertion (diff -u order)
+		if i > 0 && e.Op == Delete && edits[i-1].Op == Insert {
+			t.Fatalf("a deletion after an insertion at %d", i)
+		}
+		// the position in the other text is where the edit happens
+		if (e.Op == Delete && e.B != bi) || (e.Op == Insert && e.A != ai) {
+			t.Fatalf("%v at a%d b%d gives the wrong position %+v", e.Op, ai, bi, e)
+		}
 		switch e.Op {
 		case Equal:
 			if e.A != ai || e.B != bi || a[e.A] != b[e.B] {

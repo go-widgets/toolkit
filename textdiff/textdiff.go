@@ -94,7 +94,51 @@ func LinesWith(a, b []string, o Options) []Edit {
 	}
 	d.edits = make([]Edit, 0, max(len(a), len(b)))
 	d.seq(0, len(a), 0, len(b))
-	return d.edits
+	return deletesFirst(d.edits)
+}
+
+// deletesFirst puts, in each run of changes, the deletions before the
+// insertions, as diff -u prints them (the search may find them in either
+// order), and fixes the position each edit gives in the text it does not
+// index: a deletion sits where the run starts in b, an insertion where it
+// ends in a.
+func deletesFirst(edits []Edit) []Edit {
+	for i := 0; i < len(edits); {
+		if edits[i].Op == Equal {
+			i++
+			continue
+		}
+		j := i
+		for j < len(edits) && edits[j].Op != Equal {
+			j++
+		}
+		var dels, ins []Edit
+		for _, e := range edits[i:j] {
+			if e.Op == Delete {
+				dels = append(dels, e)
+			} else {
+				ins = append(ins, e)
+			}
+		}
+		aEnd, bStart := edits[i].A, edits[i].B
+		if len(dels) > 0 {
+			aEnd = dels[len(dels)-1].A + 1
+		}
+		if len(ins) > 0 {
+			bStart = ins[0].B
+		}
+		k := i
+		for _, e := range dels {
+			edits[k] = Edit{Delete, e.A, bStart}
+			k++
+		}
+		for _, e := range ins {
+			edits[k] = Edit{Insert, aEnd, e.B}
+			k++
+		}
+		i = j
+	}
+	return edits
 }
 
 // Split cuts a text into lines, without their "\n". A final newline does not
