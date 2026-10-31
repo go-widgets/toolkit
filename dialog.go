@@ -522,6 +522,6 @@ func (d *Dialog) moveBy(dx, dy int) {
 // dialog: a title, a Label as content, and an OK button that calls
 // onOK + closes the dialog via the caller's OnClose hook.
 func NewMessageDialog(title, message string, onOK func()) *Dialog {
-	ok := NewButton("OK", onOK)
+	ok := NewButton(Tr("dialog.ok", "OK"), onOK)
 	return NewDialog(title, NewLabel(message), ok)
 }

@@ -12,7 +12,7 @@ func (r *Ribbon) A11y() A11yInfo {
 	if t := r.activeTab(); t != nil {
 		v = t.Label
 	}
-	return A11yInfo{Role: RoleToolbar, Name: "Ribbon", Value: v}
+	return A11yInfo{Role: RoleToolbar, Name: Tr("ribbon.a11y", "Ribbon"), Value: v}
 }
 
 // ribbonNode is a synthetic, non-drawing stand-in for one part of the ribbon
@@ -42,7 +42,7 @@ var (
 func (r *Ribbon) Children() []Widget {
 	m := r.metrics()
 	tabs, _ := r.tabRects(m)
-	list := &ribbonNode{info: A11yInfo{Role: RoleTablist, Name: "Ribbon tabs"}}
+	list := &ribbonNode{info: A11yInfo{Role: RoleTablist, Name: Tr("ribbon.a11y_tabs", "Ribbon tabs")}}
 	act := r.activeIndex()
 	for i, t := range r.Tabs {
 		n := &ribbonNode{info: A11yInfo{Role: RoleTab, Name: t.Label, Value: stateValue(i == act, "selected")}}
