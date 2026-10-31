@@ -48,6 +48,20 @@ type PageStrip struct {
 	// to fit a narrower strip.
 	ThumbSize int
 
+	// Fluid makes the cards follow the strip: a card is as wide (as tall in a
+	// horizontal strip) as the strip's cross size less the padding, the number and
+	// the scrollbar, between MinThumbSize and MaxThumbSize, keeping each page's
+	// aspect ratio. Resizing the strip then resizes the cards: the first visible
+	// page stays put, only the pages in the window are laid out, and the host is
+	// asked for new bitmaps (only for those pages) once the card has changed by a
+	// quarter since it last asked, not on every pixel of a drag; the bitmap it has
+	// is drawn scaled meanwhile. Zero value false: cards are ThumbSize, shrunk to fit.
+	Fluid bool
+
+	// MinThumbSize and MaxThumbSize bound a Fluid card, in logical pixels; 0 means
+	// 48 and 480.
+	MinThumbSize, MaxThumbSize int
+
 	// PageW and PageH give the default page aspect (0 means 16:9).
 	PageW, PageH int
 
@@ -80,6 +94,10 @@ type PageStrip struct {
 	// for the cross size crossUsed; rebuilt when either changes.
 	offs      []int
 	crossUsed int
+	// askSize[i] is the card size the host was last asked for page i's bitmap at
+	// (Fluid): a page in the window is asked again once the card is a quarter
+	// larger or smaller, so a drag through every size does not re-render at each.
+	askSize []int
 }
 
 type pageAspect struct{ w, h int }
@@ -279,7 +297,25 @@ func (s *PageStrip) cross() int {
 	}
 	avail -= 2*scaled(stripPad) + scrollbarTrack() + s.numW()
 	c := s.thumb()
-	if avail < c {
+	if s.Fluid {
+		lo, hi := s.MinThumbSize, s.MaxThumbSize
+		if lo <= 0 {
+			lo = 48
+		}
+		if hi <= 0 {
+			hi = 480
+		}
+		c = avail
+		if c > scaled(hi) {
+			c = scaled(hi)
+		}
+		if c < scaled(lo) {
+			c = scaled(lo)
+		}
+		if avail < c && avail >= 1 { // a strip narrower than the minimum still shows a whole card
+			c = avail
+		}
+	} else if avail < c {
 		c = avail
 	}
 	if c < 1 {
@@ -305,8 +341,21 @@ func (s *PageStrip) layout() {
 	if s.offs != nil && s.crossUsed == c && len(s.offs) == s.count+1 {
 		return
 	}
+	// A strip resized under a scrolled window keeps its first visible page: the
+	// scroll moves in proportion to the content.
+	oldLen, oldCross := 0, s.crossUsed
+	if s.offs != nil && len(s.offs) == s.count+1 && s.count > 0 {
+		oldLen = s.offs[s.count] - scaled(stripGap) + scaled(stripPad)
+	}
 	s.crossUsed = c
 	s.offs = make([]int, s.count+1)
+	defer func() {
+		if oldLen > 0 && oldCross != c {
+			if newLen := s.contentLen(); newLen > 0 {
+				s.Scroll().Set(int(int64(s.Scroll().Get()) * int64(newLen) / int64(oldLen)))
+			}
+		}
+	}()
 	pos := scaled(stripPad)
 	gap := scaled(stripGap)
 	for i := 0; i < s.count; i++ {
@@ -516,8 +565,17 @@ func (s *PageStrip) request(first, last int) {
 }
 
 func (s *PageStrip) ask(i int) {
+	for len(s.askSize) < len(s.asked) {
+		s.askSize = append(s.askSize, 0)
+	}
+	if s.asked[i] && s.Fluid && s.askSize[i] > 0 {
+		if d := s.crossUsed - s.askSize[i]; d*4 >= s.askSize[i] || -d*4 >= s.askSize[i] {
+			s.asked[i] = false
+		}
+	}
 	if !s.asked[i] {
 		s.asked[i] = true
+		s.askSize[i] = s.crossUsed
 		s.NeedImage(i)
 	}
 }
