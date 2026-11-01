@@ -150,6 +150,105 @@ func TestDiffViewContrast(t *testing.T) {
 		check("ruler window", th.OnSurface, th.SurfaceAlt, 3)
 		check("outline on added", th.Accent, c.addFill, 3)
 		check("outline on removed", th.Accent, c.delFill, 3)
+		check("added text on a changed word", c.addInk, c.addWord, 4.5)
+		check("removed text on a changed word", c.delInk, c.delWord, 4.5)
+		// the changed word's fill must stand out from its row's
+		check("changed word on its added row", c.addWord, c.addFill, 1.25)
+		check("changed word on its removed row", c.delWord, c.delFill, 1.25)
+	}
+}
+
+func TestWordChanges(t *testing.T) {
+	a, b := WordChanges("# Hello, {{ .name }}!Q", "# Hello, {{ .name }}!Q (draft 2)")
+	if len(a) != 0 || len(b) != 1 || "# Hello, {{ .name }}!Q (draft 2)"[b[0][0]:b[0][1]] != " (draft 2)" {
+		t.Fatalf("a %v b %v", a, b)
+	}
+	a, b = WordChanges("the quick brown fox", "the quick red fox")
+	if "the quick brown fox"[a[0][0]:a[0][1]] != "brown" || "the quick red fox"[b[0][0]:b[0][1]] != "red" {
+		t.Fatalf("a %v b %v", a, b)
+	}
+	if a, b := WordChanges(strings.Repeat("x", 5000), "y"); a != nil || b != nil {
+		t.Fatal("a long line was split")
+	}
+	if got := words("ab  c,d"); len(got) != 5 {
+		t.Fatalf("words %v", got)
+	}
+}
+
+// The coordinator's case: a narrow side-by-side view, a change past column
+// 40. The changed words must be on screen: their fill painted, and ink (non
+// background pixels) inside the region it covers.
+func TestDiffViewShowsAChangePastColumn40(t *testing.T) {
+	th := DefaultLight()
+	c := diffColors(th)
+	head := strings.Repeat("abcde ", 8) // 48 columns, then the change
+	for _, sbs := range []bool{true, false} {
+		const w, h = 360, 200
+		v := NewDiffView(head+"old ending\n", head+"new ending (draft 2)\n")
+		v.SetLayout(sbs)
+		v.SetBounds(Rect{W: w, H: h})
+		buf := makeSurface(w, h)
+		v.Draw(newP(buf, w), th)
+		// the right side's changed words: their bounding box
+		x0, y0, x1, y1 := w, h, -1, -1
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				if pixelAt(buf, w, x, y) == c.addWord {
+					x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
+				}
+			}
+		}
+		if x1 < 0 {
+			t.Fatalf("side-by-side=%v: the changed words are not shown", sbs)
+		}
+		ink := 0
+		for y := y0; y <= y1; y++ {
+			for x := x0; x <= x1; x++ {
+				if px := pixelAt(buf, w, x, y); px != c.addWord && px != c.addFill {
+					ink++
+				}
+			}
+		}
+		if ink < 20 {
+			t.Fatalf("side-by-side=%v: only %d ink pixels in the changed region", sbs, ink)
+		}
+		// and the long line wrapped: its row is taller than one line
+		changed := 0
+		for i, r := range v.rows {
+			if r.kind != dvEqual && v.heights[i] > 1 {
+				changed++
+			}
+		}
+		if changed == 0 {
+			t.Fatalf("side-by-side=%v: the long changed line did not wrap", sbs)
+		}
+	}
+}
+
+// Wrapping keeps every character: the pieces cover the line end to end, each
+// within the width, and a break falls after a space when there is one.
+func TestDiffViewWrapCoversTheLine(t *testing.T) {
+	v := NewDiffView("", "")
+	for _, s := range []string{"", "short", strings.Repeat("word ", 40), strings.Repeat("x", 300), "été à l’école, ça va"} {
+		w := v.glyphAdvance() * 12
+		ps := v.wrap(s, w)
+		at := 0
+		for _, p := range ps {
+			if p[0] != at {
+				t.Fatalf("%q: gap at %d", s, at)
+			}
+			if p[1] > p[0]+1 && v.width(s[p[0]:p[1]]) > w {
+				t.Fatalf("%q: piece %q too wide", s, s[p[0]:p[1]])
+			}
+			at = p[1]
+		}
+		if at != len(s) {
+			t.Fatalf("%q: ends at %d", s, at)
+		}
+	}
+	ps := v.wrap(strings.Repeat("word ", 10), v.width("word word "))
+	if s := strings.Repeat("word ", 10); s[ps[0][0]:ps[0][1]] != "word word " {
+		t.Fatalf("not broken at a space: %q", s[ps[0][0]:ps[0][1]])
 	}
 }
 
