@@ -5,7 +5,7 @@ go 1.27.2
 require (
 	github.com/go-crdt/collab v0.77.4
 	github.com/go-crdt/crdt v0.57.0
-	github.com/go-gfx/gfx v0.36.1
+	github.com/go-gfx/gfx v0.37.0
 	github.com/go-icons/iconoir v0.3.0
 	github.com/go-images/images v0.1.1-0.20261026203936-4ac989d310a1
 	github.com/go-opentype/fonts v0.14.0
