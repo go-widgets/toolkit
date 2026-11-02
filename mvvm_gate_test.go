@@ -331,7 +331,10 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// and Collapsed() Observables; a toggle's Checked and a drop-down's Selected
 	// are Observables on their (config) RibbonControl; the hover, the focus, the
 	// open popup and the keytips are internal interaction state.
-	"Ribbon":           {"Tabs": true, "Keymap": true, "TooltipDelayMs": true},
+	// Quick, the quick access bar, is set-once composition exactly as Tabs is:
+	// the controls on it are built with the ribbon, and everything reactive
+	// about one of them lives on its Action and its Checked Observable.
+	"Ribbon":           {"Tabs": true, "Quick": true, "Keymap": true, "TooltipDelayMs": true},
 	"Wallpaper":        {"Bottom": true, "IH": true, "IW": true, "Interactive": true, "Mode": true, "Pixels": true, "Top": true},
 	"Window":           {"Body": true, "Closable": true, "Maximizable": true, "Minimizable": true, "Resizable": true, "Title": true},
 	"WindowDecoration": {"Border": true, "BorderColor": true, "Buttons": true, "Grip": true, "GripColor": true, "Hairline": true, "Shadow": true, "ShowGrip": true, "Title": true, "TitleCenter": true, "TitleColor": true, "TitleInk": true, "Titlebar": true},

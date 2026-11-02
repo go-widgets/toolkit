@@ -6,6 +6,7 @@ package toolkit
 
 import (
 	"github.com/go-icons/iconoir"
+	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
 )
 
@@ -73,4 +74,20 @@ func (s *sampleRun) ribbon() *Ribbon {
 			{Kind: RibbonToggle, Action: s.act("thumbs", "Thumbnails", "view-grid")}}},
 	}}
 	return NewRibbon(home, insert, view)
+}
+
+// withQuick gives a ribbon the quick access bar a slide editor would have:
+// save, and the two commands that are wanted from every tab.
+//
+// Save is on NO tab of the sample, which is the reference's own allowance —
+// "the QAT can contain unique Commands that are not available elsewhere in the
+// ribbon UI" — and makes the bar the only way to reach it, so a test that
+// presses it cannot be passing because something else ran.
+func (s *sampleRun) withQuick(r *Ribbon) *Ribbon {
+	r.Quick = []*RibbonControl{
+		{Kind: RibbonButton, Action: s.act("save", "Save", "floppy-disk"), Tip: "Write the deck to disk"},
+		{Kind: RibbonButton, Action: s.act("quick.undo", "Undo", "undo")},
+		{Kind: RibbonToggle, Action: s.act("quick.wrap", "Word wrap", "text"), Checked: mvvm.NewObservable(false)},
+	}
+	return r
 }
