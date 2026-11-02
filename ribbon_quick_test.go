@@ -179,25 +179,165 @@ func TestAQuickCommandSaysWhatItDoes(t *testing.T) {
 }
 
 // TestAQuickTooltipIsPulledBackInsideTheRibbon covers the edge the bar lives
-// on: it is at the RIGHT end of the row, so a bubble hung off its left edge
-// would otherwise run out past the window.
+// on: it is at the RIGHT end of the row, so a bubble hung off the left edge of
+// one of its marks would otherwise run out past the window.
 func TestAQuickTooltipIsPulledBackInsideTheRibbon(t *testing.T) {
 	r, _ := rtQuickRibbon(900)
+	// Long enough that it cannot fit between the mark and the right edge,
+	// whatever face is installed.
+	r.Quick[0].Tip = "Write the deck to disk, and everything that came with it, " +
+		"under the name it was opened with, in the folder it was opened from"
 	rc, _ := r.QuickRect("Save")
 	x, y := rtCenter(rc)
 	rtMove(r, x, y)
 	r.Tick(10)
 
-	buf := make([]byte, 4*900*r.Height())
-	p := painterOver(buf, 900, r.Height())
-	r.DrawPopover(p, DefaultLight()) // would panic on a buffer it drew past
 	m := r.metrics()
-	w := 0
-	for _, l := range r.tooltipLines() {
-		w = max(w, r.textWidth(l))
+	lines := r.tooltipLines()
+	box := r.tooltipBox(m, lines)
+	if box.X+box.W > r.Bounds().X+r.Bounds().W {
+		t.Errorf("the bubble runs from %d to %d and the ribbon ends at %d",
+			box.X, box.X+box.W, r.Bounds().X+r.Bounds().W)
 	}
-	if anchor := r.tooltipAnchor(m); anchor.X+w+2*m.padX <= r.Bounds().X+r.Bounds().W {
-		t.Skip("the bubble fits at this width, so there is nothing to pull back")
+	if box.X < r.Bounds().X {
+		t.Errorf("pulling the bubble back took it off the left edge, to %d", box.X)
+	}
+	// And it is pulled back from where it would have hung, or this proves
+	// nothing about the pulling.
+	if anchor := r.tooltipAnchor(m); box.X >= anchor.X {
+		t.Errorf("the bubble is at %d and its mark at %d, so it was never too wide to begin with",
+			box.X, anchor.X)
+	}
+	buf := make([]byte, 4*900*r.Height())
+	r.DrawPopover(painterOver(buf, 900, r.Height()), DefaultLight())
+}
+
+func TestTheQuickTipsAreDrawn(t *testing.T) {
+	r, _ := rtQuickRibbon(900)
+	r.SetFocused(true)
+	rtKey(r, "Alt")
+	h := r.Height()
+	buf := make([]byte, 4*900*h)
+	theme := DefaultLight()
+	r.Draw(painterOver(buf, 900, h), theme)
+	before := rtQuickInk(r, theme, h, "Save")
+	r.DrawPopover(painterOver(buf, 900, h), theme)
+
+	rc, _ := r.QuickRect("Save")
+	ink := 0
+	for y := rc.Y; y < rc.Y+rc.H; y++ {
+		for x := rc.X; x < rc.X+rc.W; x++ {
+			if c := rtPixelAt(buf, 900, x, y); c != theme.Background {
+				ink++
+			}
+		}
+	}
+	if ink <= before {
+		t.Error("Alt drew no keytip badge over the quick access bar, so nothing says which digit runs it")
+	}
+}
+
+func TestTheQuickBarShowsWhereTheKeyboardIs(t *testing.T) {
+	// ⛔ The focus ring and the hover highlight are the only things that say
+	// which mark a press would reach. A widget that compiles draws neither.
+	r, _ := rtQuickRibbon(900)
+	theme := DefaultLight()
+	h := r.Height()
+	plain := rtQuickInk(r, theme, h, "Save")
+
+	rc, _ := r.QuickRect("Save")
+	x, y := rtCenter(rc)
+	rtMove(r, x, y)
+	if hovered := rtQuickInk(r, theme, h, "Save"); hovered <= plain {
+		t.Errorf("a mark under the pointer has %d pixels of ink and an untouched one %d",
+			hovered, plain)
+	}
+	rtMove(r, 1, 1)
+	r.SetFocused(true)
+	r.zone, r.focusQuick = ribbonZoneQuick, 0
+	if focused := rtQuickInk(r, theme, h, "Save"); focused <= plain {
+		t.Errorf("the mark the keyboard is on has %d pixels of ink and an untouched one %d",
+			focused, plain)
+	}
+}
+
+func TestTheRestOfTheQuickBarsKeys(t *testing.T) {
+	r, run := rtQuickRibbon(900)
+	r.SetFocused(true)
+	r.zone, r.focusQuick = ribbonZoneQuick, 2
+
+	rtKey(r, "ArrowLeft")
+	if r.focusQuick != 1 {
+		t.Errorf("Left inside the bar went to %d", r.focusQuick)
+	}
+	rtKey(r, "Home")
+	if r.focusQuick != 0 {
+		t.Errorf("Home went to %d", r.focusQuick)
+	}
+	rtKey(r, "End")
+	if r.focusQuick != 2 {
+		t.Errorf("End went to %d", r.focusQuick)
+	}
+	// Down goes into the body, which is the row below.
+	rtKey(r, "ArrowDown")
+	if r.zone != ribbonZoneBody {
+		t.Errorf("Down off the bar left the keyboard in zone %d", r.zone)
+	}
+
+	// Escape hands the keyboard back to whatever had it.
+	left := false
+	r.OnLeave = func() { left = true }
+	r.zone, r.focusQuick = ribbonZoneQuick, 0
+	rtKey(r, "Escape")
+	if !left {
+		t.Error("Escape on the bar did not hand the keyboard back")
+	}
+	// Enter on a command that cannot run does nothing at all.
+	run.ids = nil
+	r.Quick[0].Action.Enabled.Set(false)
+	r.zone, r.focusQuick = ribbonZoneQuick, 0
+	rtKey(r, "Enter")
+	if len(run.ids) != 0 {
+		t.Errorf("Enter on a greyed command ran %v", run.ids)
+	}
+}
+
+func TestTheQuickBarsKeysWithNothingOnIt(t *testing.T) {
+	// A ribbon whose bar was emptied after the keyboard had gone into it: the
+	// keys go back to the tabs rather than indexing an empty slice.
+	r, _ := rtQuickRibbon(900)
+	r.SetFocused(true)
+	r.zone, r.focusQuick = ribbonZoneQuick, 0
+	r.Quick = nil
+	rtKey(r, "ArrowRight")
+	if r.zone != ribbonZoneTabs {
+		t.Errorf("with an empty bar the keyboard stayed in zone %d", r.zone)
+	}
+}
+
+func TestTheKeyboardSkipsOverGreyedQuickCommands(t *testing.T) {
+	r, _ := rtQuickRibbon(900)
+	r.SetFocused(true)
+	r.Quick[1].Action.Enabled.Set(false)
+	r.zone, r.focusQuick = ribbonZoneQuick, 0
+	rtKey(r, "ArrowRight")
+	if r.focusQuick != 2 {
+		t.Errorf("Right landed on %d, want it to step over the greyed one", r.focusQuick)
+	}
+	// And with none of them usable it stays put rather than spinning.
+	for _, c := range r.Quick {
+		c.Action.Enabled.Set(false)
+	}
+	r.focusQuick = 1
+	rtKey(r, "ArrowRight")
+	if r.focusQuick != 1 {
+		t.Errorf("with every command greyed, Right moved to %d", r.focusQuick)
+	}
+	// Left with none usable leaves the bar for the tabs, since there is
+	// nothing to its left inside it either.
+	rtKey(r, "ArrowLeft")
+	if r.zone != ribbonZoneTabs {
+		t.Errorf("Left with every command greyed left the keyboard in zone %d", r.zone)
 	}
 }
 

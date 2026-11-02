@@ -368,25 +368,35 @@ func (r *Ribbon) tooltipAnchor(m ribbonMetrics) Rect {
 	return r.cells()[r.hoverCtl].rect
 }
 
-// drawTooltip paints the tooltip bubble under the hovered control.
-func (r *Ribbon) drawTooltip(p painter.Painter, theme *Theme, m ribbonMetrics) {
-	lines := r.tooltipLines()
-	if len(lines) == 0 {
-		return
-	}
+// tooltipBox is where the bubble goes: under the hovered control, and pulled
+// back until it fits inside the ribbon's own width.
+//
+// ⛔ ONE PLACE, which the drawing and the test that checks it both read. The
+// quick access bar sits at the RIGHT end of the tab row, so a bubble hung off
+// the left edge of its last mark runs out past the window — and a test that
+// worked the rectangle out for itself would be a second copy of this layout,
+// free to agree with a version of it that is no longer drawn.
+func (r *Ribbon) tooltipBox(m ribbonMetrics, lines []string) Rect {
 	w := 0
 	for _, l := range lines {
 		w = max(w, r.textWidth(l))
 	}
 	anchor := r.tooltipAnchor(m)
 	box := Rect{X: anchor.X, Y: anchor.Y + anchor.H + scaled(2), W: w + 2*m.padX, H: len(lines)*m.gh + 2*m.gap}
-	// ⛔ Kept inside the ribbon's width. The quick access bar sits at the RIGHT
-	// end of the tab row, so a tooltip hung off its left edge runs out past the
-	// window: the bubble is pulled back until it fits, which is what a bubble
-	// anywhere near an edge has to do.
-	if right := r.Bounds().X + r.Bounds().W; box.X+box.W > right {
-		box.X = max(r.Bounds().X, right-box.W)
+	b := r.Bounds()
+	if box.X+box.W > b.X+b.W {
+		box.X = max(b.X, b.X+b.W-box.W)
 	}
+	return box
+}
+
+// drawTooltip paints the tooltip bubble under the hovered control.
+func (r *Ribbon) drawTooltip(p painter.Painter, theme *Theme, m ribbonMetrics) {
+	lines := r.tooltipLines()
+	if len(lines) == 0 {
+		return
+	}
+	box := r.tooltipBox(m, lines)
 	fillRect(p, box.X, box.Y, box.W, box.H, theme.OnSurface)
 	strokeRect(p, box.X, box.Y, box.W, box.H, ribbonLine(theme))
 	for i, l := range lines {
