@@ -50,6 +50,7 @@ func (r *Ribbon) Draw(p painter.Painter, theme *Theme) {
 	for i, t := range r.Tabs {
 		r.drawTab(p, theme, m, t, tabs[i], line, i == act && !collapsed, i == r.hoverTab)
 	}
+	r.drawQuick(p, theme, m)
 	r.drawCollapse(p, theme, chev, collapsed)
 	if r.Focused() && r.zone == ribbonZoneTabs && r.keytips == 0 && len(tabs) > 0 {
 		f := tabs[min(r.focusTab, len(tabs)-1)]
@@ -328,6 +329,12 @@ func (r *Ribbon) drawGridPanel(p painter.Painter, theme *Theme, m ribbonMetrics,
 // shortcut, then its description when it has one. The Windows guidelines ask for
 // exactly this and for tooltips that "avoid simply restating the label".
 func (r *Ribbon) tooltipLines() []string {
+	// ⛔ The quick access bar FIRST, and it is the one surface here that cannot
+	// do without a tooltip: its cells are marks with no caption, so the tooltip
+	// is the only place a reader is ever told what one of them does.
+	if r.hoverQuick >= 0 && r.hoverQuick < r.quickCount() {
+		return r.controlTip(r.Quick[r.hoverQuick])
+	}
 	cells := r.cells()
 	if r.hoverCtl < 0 || r.hoverCtl >= len(cells) {
 		return nil
@@ -336,14 +343,29 @@ func (r *Ribbon) tooltipLines() []string {
 	if c.form == formPopup {
 		return []string{c.grp.Label}
 	}
-	head := c.ctrl.label()
-	if sc := r.shortcutFor(c.ctrl.Action); sc != "" {
+	return r.controlTip(c.ctrl)
+}
+
+// controlTip is one control's tooltip: its name with its shortcut, then its
+// description when it has one.
+func (r *Ribbon) controlTip(c *RibbonControl) []string {
+	head := c.label()
+	if sc := r.shortcutFor(c.Action); sc != "" {
 		head += " (" + sc + ")"
 	}
-	if c.ctrl.Tip == "" {
+	if c.Tip == "" {
 		return []string{head}
 	}
-	return []string{head, c.ctrl.Tip}
+	return []string{head, c.Tip}
+}
+
+// tooltipAnchor is the rectangle the bubble hangs under: the hovered quick
+// access mark, else the hovered cell of the body.
+func (r *Ribbon) tooltipAnchor(m ribbonMetrics) Rect {
+	if r.hoverQuick >= 0 && r.hoverQuick < r.quickCount() {
+		return r.quickRects(m)[r.hoverQuick]
+	}
+	return r.cells()[r.hoverCtl].rect
 }
 
 // drawTooltip paints the tooltip bubble under the hovered control.
@@ -356,8 +378,15 @@ func (r *Ribbon) drawTooltip(p painter.Painter, theme *Theme, m ribbonMetrics) {
 	for _, l := range lines {
 		w = max(w, r.textWidth(l))
 	}
-	anchor := r.cells()[r.hoverCtl].rect
+	anchor := r.tooltipAnchor(m)
 	box := Rect{X: anchor.X, Y: anchor.Y + anchor.H + scaled(2), W: w + 2*m.padX, H: len(lines)*m.gh + 2*m.gap}
+	// ⛔ Kept inside the ribbon's width. The quick access bar sits at the RIGHT
+	// end of the tab row, so a tooltip hung off its left edge runs out past the
+	// window: the bubble is pulled back until it fits, which is what a bubble
+	// anywhere near an edge has to do.
+	if right := r.Bounds().X + r.Bounds().W; box.X+box.W > right {
+		box.X = max(r.Bounds().X, right-box.W)
+	}
 	fillRect(p, box.X, box.Y, box.W, box.H, theme.OnSurface)
 	strokeRect(p, box.X, box.Y, box.W, box.H, ribbonLine(theme))
 	for i, l := range lines {
@@ -373,6 +402,13 @@ func (r *Ribbon) drawKeyTips(p painter.Painter, theme *Theme, m ribbonMetrics) {
 		tabs, _ := r.tabRects(m)
 		for i, tip := range r.tabTips() {
 			r.drawBadge(p, theme, m, tip, tabs[i].X+tabs[i].W/2, tabs[i].Y+tabs[i].H-m.gh/2)
+		}
+		// The quick access bar is tipped on the SAME pass as the tabs, because
+		// it is reached in one keystroke from Alt rather than by choosing a tab
+		// first — which is the whole of what it is for.
+		quick := r.quickRects(m)
+		for i, tip := range r.quickTips() {
+			r.drawBadge(p, theme, m, tip, quick[i].X+quick[i].W/2, quick[i].Y+quick[i].H-m.gh/2)
 		}
 		return
 	}

@@ -61,6 +61,16 @@ type Ribbon struct {
 	// Tabs are the tabs in order. Set once (config); the active one is
 	// [Ribbon.ActiveTab].
 	Tabs []*RibbonTab
+	// Quick is the quick access bar: the commands that stay reachable whatever
+	// tab is chosen, drawn as marks at the right of the tab row — and still
+	// there when the ribbon is collapsed, which is when it matters most.
+	//
+	// It is what a ribbon needs and a tab strip cannot give. Save and Undo
+	// belong to ONE tab, so without this, saving means leaving the tab being
+	// worked in. [RibbonButton] and [RibbonToggle] are read; at most [QuickMax]
+	// are shown, and each must carry an Icon, since the row has no room for a
+	// caption. They may be commands that appear on no tab at all.
+	Quick []*RibbonControl
 	// Keymap, when set, supplies the live accelerator shown for each Action
 	// (otherwise the Action's own default Shortcut).
 	Keymap *Keymap
@@ -77,17 +87,19 @@ type Ribbon struct {
 	active    *mvvm.Observable[int]
 	collapsed *mvvm.Observable[bool]
 
-	zone     ribbonZone
-	focusCtl int // index into the visible cells, when zone is ribbonZoneBody
-	focusTab int
-	peek     bool // a collapsed ribbon is showing its active tab's body
-	pop      *ribbonPopup
-	hoverTab int
-	hoverCtl int
-	hoverMs  int
-	chevHot  bool
-	keytips  int // 0 off, 1 choosing a tab, 2 choosing a control
-	tipBuf   string
+	zone       ribbonZone
+	focusCtl   int // index into the visible cells, when zone is ribbonZoneBody
+	focusTab   int
+	focusQuick int  // index into Quick, when zone is ribbonZoneQuick
+	peek       bool // a collapsed ribbon is showing its active tab's body
+	pop        *ribbonPopup
+	hoverTab   int
+	hoverCtl   int
+	hoverQuick int
+	hoverMs    int
+	chevHot    bool
+	keytips    int // 0 off, 1 choosing a tab, 2 choosing a control
+	tipBuf     string
 }
 
 // RibbonTab is one tab: a label and the groups it holds.
@@ -202,6 +214,9 @@ type ribbonZone int
 const (
 	ribbonZoneTabs ribbonZone = iota
 	ribbonZoneBody
+	// ribbonZoneQuick is the quick access bar, which shares the tab row: Left
+	// off its start goes back to the tabs physically to its left.
+	ribbonZoneQuick
 )
 
 // ribbonForm is how one control is drawn.
@@ -225,7 +240,7 @@ type ribbonMetrics struct {
 
 // NewRibbon builds a ribbon over tabs, showing the first one, expanded.
 func NewRibbon(tabs ...*RibbonTab) *Ribbon {
-	return &Ribbon{Tabs: tabs, hoverTab: -1, hoverCtl: -1}
+	return &Ribbon{Tabs: tabs, hoverTab: -1, hoverCtl: -1, hoverQuick: -1}
 }
 
 // ActiveTab is the index of the shown tab as a shared [mvvm.Observable]: a view

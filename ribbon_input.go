@@ -53,15 +53,20 @@ func (r *Ribbon) Measure(availW, availH int) (w, h int) { return availW, r.Heigh
 // so [TickTree] drives it with the rest of the tree and a tooltip shows once the
 // pointer has rested on a control for [Ribbon.TooltipDelayMs].
 func (r *Ribbon) Tick(dt float64) {
-	if r.hoverCtl >= 0 && r.pop == nil {
+	if r.hovering() && r.pop == nil {
 		r.hoverMs += int(dt * 1000)
 	}
 }
 
+// hovering is whether the pointer is resting on something that has a tooltip:
+// a control of the body, or a mark on the quick access bar — which needs one
+// most, having no caption of its own.
+func (r *Ribbon) hovering() bool { return r.hoverCtl >= 0 || r.hoverQuick >= 0 }
+
 // Animating reports whether a tooltip is waiting for its delay, so a host that
 // repaints only while something animates keeps painting until it shows.
 func (r *Ribbon) Animating() bool {
-	return r.hoverCtl >= 0 && r.pop == nil && !r.tooltipVisible()
+	return r.hovering() && r.pop == nil && !r.tooltipVisible()
 }
 
 // PopoverOpen is whether the ribbon has something to draw over the page: a menu,
@@ -117,7 +122,7 @@ func (r *Ribbon) tooltipVisible() bool {
 	if d <= 0 {
 		d = 500
 	}
-	return r.hoverCtl >= 0 && r.pop == nil && r.hoverMs >= d
+	return r.hovering() && r.pop == nil && r.hoverMs >= d
 }
 
 // OnEvent drives the ribbon: the pointer (a move hovers, a click presses) and the
@@ -150,6 +155,9 @@ func (r *Ribbon) hover(x, y int) {
 		}
 	}
 	r.chevHot = chev.Contains(x, y)
+	if idx := r.quickAt(x, y); idx != r.hoverQuick {
+		r.hoverQuick, r.hoverMs = idx, 0
+	}
 	if r.pop != nil && r.pop.kind != popGroup {
 		_, rows := r.popupGeometry(r.pop, m)
 		for i, rc := range rows {
@@ -173,6 +181,11 @@ func (r *Ribbon) click(x, y int) {
 	tabs, chev := r.tabRects(m)
 	if chev.Contains(x, y) {
 		r.toggleCollapsed()
+		return
+	}
+	if i := r.quickAt(x, y); i >= 0 {
+		r.zone, r.focusQuick = ribbonZoneQuick, i
+		r.runQuick(i)
 		return
 	}
 	for i, t := range tabs {
@@ -387,6 +400,8 @@ func (r *Ribbon) dispatchKey(ev Event) {
 		r.keyTipKey(ev)
 	case r.pop != nil && r.pop.kind != popGroup:
 		r.popupKey(ev)
+	case r.zone == ribbonZoneQuick:
+		r.quickKey(ev)
 	case r.zone == ribbonZoneTabs:
 		r.tabKey(ev)
 	default:
@@ -407,6 +422,14 @@ func (r *Ribbon) tabKey(ev Event) {
 	case "ArrowLeft":
 		r.moveTab((r.focusTab + n - 1) % n)
 	case "ArrowRight":
+		// ⛔ Off the last tab the keyboard goes into the quick access bar
+		// rather than wrapping round to the first. The bar shares this row and
+		// is drawn to the RIGHT of the tabs, so wrapping past it would make it
+		// the one thing on the row the arrow keys cannot reach. With no bar,
+		// the tabs wrap as they did.
+		if r.focusTab == n-1 && r.enterQuick() {
+			return
+		}
 		r.moveTab((r.focusTab + 1) % n)
 	case "Home":
 		r.moveTab(0)
@@ -601,6 +624,17 @@ func (r *Ribbon) keyTipKey(ev Event) {
 	buf := r.tipBuf + strings.ToUpper(ev.Code)
 	var tips []string
 	if r.keytips == 1 {
+		// ⛔ The quick access bar is tried FIRST, and it is tried at this
+		// level rather than after a tab has been chosen. Its tips are digits
+		// and a tab's are letters, so the two sets cannot collide — and one
+		// keystroke after Alt is the point of the bar: Alt then 1 saves
+		// without leaving the tab being worked in.
+		if i, ok := matchQuickTip(r.quickTips(), buf); ok {
+			r.keytips, r.tipBuf = 0, ""
+			r.zone, r.focusQuick = ribbonZoneQuick, i
+			r.runQuick(i)
+			return
+		}
 		tips = r.tabTips()
 	} else {
 		tips = r.cellTips(r.cells())
@@ -620,6 +654,18 @@ func (r *Ribbon) keyTipKey(ev Event) {
 	default:
 		r.tipBuf = ""
 	}
+}
+
+// matchQuickTip finds buf among the quick access bar's tips. They are single
+// digits, so there is nothing to narrow: a tip either is what was typed or is
+// not.
+func matchQuickTip(tips []string, buf string) (int, bool) {
+	for i, t := range tips {
+		if t != "" && t == buf {
+			return i, true
+		}
+	}
+	return 0, false
 }
 
 // matchTip finds buf among tips: the index of an exact match (-1 for none), and
