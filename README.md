@@ -108,6 +108,40 @@ every native target Go ships.
 | Motion       | `Easing`/`Tween` (`Linear`, `EaseIn*/Out*/InOut*`), `GestureRecognizer` |
 | Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
 
+### Several people in one buffer: where a keystroke lands
+
+`collabui.CollabText` binds a `CodeEditor` to one text part of a
+[`go-crdt/collab`](https://github.com/go-crdt/collab) session. The merge is the
+CRDT's and the binding adds none of it — but **where** an edit is applied is the
+binding's, and the two are not the same question.
+
+A peer's edit merges into this replica the moment it arrives off the wire. The
+editor is repainted later, when the host runs the closure the binding handed it.
+In between, the screen shows one text and the replica holds another, and a
+keystroke in that window was aimed at the screen. Replayed at its raw offset it
+lands somewhere else — and both replicas agree on the result, which is why it
+does not look like a bug. It was one:
+
+| the person did | and got, before | now |
+|---|---|---|
+| typed `Y` at the end of the `abc` on screen, while `Xabc` had merged | `XabYc` | `XabcY` |
+| deleted the `bc` on screen, while a peer's `X` had landed between them | `acd` — **the peer's `X` destroyed** | `aXd` |
+
+So a local edit is carried across that gap before it is applied — the inclusion
+transformation of Ellis & Gibbs (SIGMOD '89), on the one side Jupiter
+(Nichols et al., UIST '95) transforms on: our own operation against what has
+already merged. Two rules, both in `rebase.go`:
+
+- An offset moves with what landed before it, stays put at it, and goes the
+  same distance into what replaced it — never to the start of the span.
+- **A deletion takes the characters the person could see and not the ones they
+  could not.** A peer's insertion inside the deleted range is not part of what
+  was selected, so the range is deleted around it. Placement is a guess; a
+  character that was on somebody's screen a moment ago is not.
+
+Shown in `collabui` by two real sessions over a loopback WebSocket, driven into
+the losing interleaving on purpose rather than raced for, and fuzzed.
+
 ### Binary size: a program links what it uses
 
 The toolkit is one large package, and that is fine for the linker: Go's
