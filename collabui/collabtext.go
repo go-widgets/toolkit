@@ -175,20 +175,36 @@ func (c *CollabText) Updates() <-chan func() { return c.apply }
 // syncLocal replays a user edit into the shared text. It is the editor's
 // Text()-changed observer; a change the binding itself just applied is skipped
 // via applyingRemote so it is not echoed back.
+//
+// The edit is expressed against the buffer the person was looking at, which is
+// not always the text the replica holds: a peer's edit merges the moment it
+// arrives, and the editor is repainted only once the host runs the closure this
+// binding handed it. [replay] carries the edit across that gap; rebase.go says
+// why, and what it costs when nothing does.
 func (c *CollabText) syncLocal() {
 	if c.applyingRemote {
 		return
 	}
 	next := c.ed.Text().Get()
-	// ChangesFrom reduces previous↔next to the single contiguous edit between
-	// their common prefix and suffix, expressed in rune offsets — exactly the
-	// text part's Insert/Delete coordinates.
+	// What the replica has taken on since the editor was last painted. prev is the
+	// buffer on the screen and every earlier local edit is already in the replica,
+	// so the difference between the two is exactly the remote delta. ChangesFrom
+	// reduces any two texts to ONE contiguous edit, in rune offsets — so there is
+	// at most one of each and no sequence to compose.
+	var pending crdt.Change
+	for _, ch := range crdt.ChangesFrom(c.prev, c.text.String()) {
+		pending = ch
+	}
 	for _, ch := range crdt.ChangesFrom(c.prev, next) {
-		if ch.Removed > 0 {
-			_ = c.text.Delete(ch.Pos, ch.Removed)
-		}
-		if ch.Text != "" {
-			_ = c.text.Insert(ch.Pos, ch.Text)
+		// Both are exact deltas from the same base, so a rebased offset is within
+		// the replica by construction and these calls cannot be out of range.
+		for _, op := range replay(ch, pending) {
+			if op.Removed > 0 {
+				_ = c.text.Delete(op.Pos, op.Removed)
+			}
+			if op.Text != "" {
+				_ = c.text.Insert(op.Pos, op.Text)
+			}
 		}
 	}
 	c.prev = next

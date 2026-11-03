@@ -200,6 +200,37 @@ func (p *collabPeer) await(t *testing.T, what string, cond func() bool) {
 	}
 }
 
+// replica reads the shared text as this peer's own replica holds it. While
+// draining is held that is NOT what the editor shows: the replica goes on merging
+// what arrives off the wire whatever the screen is doing, and the gap between the
+// two is where a local edit can be put in the wrong place.
+func (p *collabPeer) replica() string {
+	var s string
+	p.do(func() { s = p.ct.text.String() })
+	return s
+}
+
+// until blocks until cond holds on the UI goroutine, polling rather than waiting
+// on a remote-apply signal. It is the one shape await cannot serve: a peer whose
+// draining is held applies nothing and so signals nothing, and these tests wait
+// for exactly that peer's replica to move.
+func (p *collabPeer) until(t *testing.T, what string, cond func() bool) {
+	t.Helper()
+	deadline := time.Now().Add(collabSettle)
+	for {
+		var ok bool
+		p.do(func() { ok = cond() })
+		if ok {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("timed out waiting for %s; the editor shows %q and the replica holds %q",
+				what, p.text(), p.replica())
+		}
+		time.Sleep(time.Millisecond)
+	}
+}
+
 // close stops the binding on the UI goroutine, then the UI goroutine itself, then
 // leaves the session (so a peer watching this one sees it depart). The client's
 // own t.Cleanup close is idempotent.
@@ -368,6 +399,112 @@ func TestCollabTextConcurrentEditsConverge(t *testing.T) {
 			t.Fatalf("witness sees %q, want %q", h.String(), "XabcY")
 		}
 	}
+}
+
+// pending drives the one interleaving TestCollabTextConcurrentEditsConverge used
+// to reach by luck: a peer types while a remote edit has merged into its replica
+// and has NOT yet been painted. The peer's edit is computed against what it could
+// see; it must land where the person put it, not at that offset of a buffer they
+// were never shown.
+//
+// Holding the drain and then waiting for the replica to move makes the losing
+// interleaving the only one, so this is a statement rather than a race: with the
+// local edit replayed at its raw offset it fails every run.
+func whilePending(t *testing.T, doc, base, seen, typed, want string) {
+	t.Helper()
+	url := serveCollab(t)
+	ada := newCollabPeer(t, url, doc, "ada", RGBA{R: 0xff, A: 0xff}, 1)
+	bo := newCollabPeer(t, url, doc, "bo", RGBA{B: 0xff, A: 0xff}, 2)
+	defer ada.close()
+	defer bo.close()
+
+	ada.setText(base)
+	bo.await(t, "the base on bo", func() bool { return bo.ed.Text().Get() == base })
+
+	// bo stops painting. Its replica does not stop merging.
+	bo.do(func() { bo.drainOff = true })
+	ada.setText(seen)
+	bo.until(t, "ada's edit to reach bo's replica but not bo's screen", func() bool {
+		return bo.ct.text.String() == seen && bo.ed.Text().Get() == base
+	})
+
+	// bo edits the buffer in front of it — the base, still.
+	bo.do(func() { bo.ed.SetText(typed) })
+	bo.do(func() { bo.drainOff = false })
+	bo.do(func() {}) // re-enter the select now that draining is back on
+
+	ada.await(t, "ada to settle", func() bool { return ada.ed.Text().Get() == want })
+	bo.await(t, "bo to settle", func() bool { return bo.ed.Text().Get() == want })
+	if a, b := ada.text(), bo.text(); a != want || b != want {
+		t.Fatalf("ada=%q bo=%q, want %q (bo edited %q into %q while its replica already held %q)",
+			a, b, want, base, typed, seen)
+	}
+}
+
+func TestATypedCharacterLandsWhereTheUserPutItWhileARemoteInsertIsPending(t *testing.T) {
+	// bo appends Y to the "abc" it can see, while its replica already holds ada's
+	// "Xabc". Offset 3 of what bo saw is offset 4 of what the replica holds.
+	whilePending(t, "pend-after", "abc", "Xabc", "abcY", "XabcY")
+}
+
+func TestATypedCharacterBeforeAPendingInsertDoesNotMove(t *testing.T) {
+	// The other side of the rule: bo types at offset 0, ahead of ada's insert at
+	// offset 3, so the offset is already right and must be left alone.
+	whilePending(t, "pend-before", "abc", "abcY", "Zabc", "ZabcY")
+}
+
+// ⛔ THE CASE THAT DECIDED THE RULE, MEASURED RATHER THAN ASSUMED. The binding
+// learns what the replica took on by comparing it with the screen, and
+// [crdt.ChangesFrom] answers any two texts with ONE contiguous edit — so two
+// remote edits far apart come back as a single span covering the untouched line
+// between them.
+//
+// An offset inside that span is NOT sent to its start. It goes the same distance
+// into what replaced it, which for a line whose length did not change is exactly
+// where it was typed. Collapsing to the start would have put bo's character at
+// the beginning of the line — worse than the raw offset this whole file exists to
+// correct, which is how the rule came to be written this way.
+//
+// Where the span's length DID change the result is an estimate, and the half that
+// is not an estimate is asserted beside it: no character anybody wrote is gone.
+// Asking Client.TakeChanges for the real edits instead of comparing two whole
+// texts removes the estimate; that is go-widgets/toolkit#527.
+func TestSeveralRemoteEditsAtOnceStillPlaceAKeystrokeWhereItWasTyped(t *testing.T) {
+	url := serveCollab(t)
+	ada := newCollabPeer(t, url, "wide", "ada", RGBA{R: 0xff, A: 0xff}, 1)
+	bo := newCollabPeer(t, url, "wide", "bo", RGBA{B: 0xff, A: 0xff}, 2)
+	defer ada.close()
+	defer bo.close()
+
+	ada.setText("hello world")
+	bo.await(t, "the base on bo", func() bool { return bo.ed.Text().Get() == "hello world" })
+
+	// Two edits, one at each end, with the whole line between them untouched.
+	bo.do(func() { bo.drainOff = true })
+	ada.setText("Hello world")
+	ada.setText("Hello worlD")
+	bo.until(t, "both of ada's edits to reach bo's replica", func() bool {
+		return bo.ct.text.String() == "Hello worlD" && bo.ed.Text().Get() == "hello world"
+	})
+
+	// bo types in the middle of the line it can see.
+	bo.do(func() { bo.ed.SetText("hello Xworld") })
+	bo.do(func() { bo.drainOff = false })
+	bo.do(func() {})
+
+	const want = "Hello XworlD"
+	bo.await(t, "bo to settle", func() bool { return bo.ed.Text().Get() == want })
+	ada.await(t, "ada to settle", func() bool { return ada.ed.Text().Get() == want })
+	if a, b := ada.text(), bo.text(); a != want || b != want {
+		t.Fatalf("ada=%q bo=%q, want %q — bo typed X between \"hello \" and \"world\"", a, b, want)
+	}
+}
+
+func TestADeletionTakesTheCharactersTheUserCouldSeeAndNotTheOnesTheyCouldNot(t *testing.T) {
+	// ada drops "X" into the middle of "abcd" — bo never saw it — and bo then
+	// deletes "bc", the two characters it could see. ada's X stays: a person
+	// cannot have meant to delete a character that was not on their screen.
+	whilePending(t, "pend-delete", "abcd", "abXcd", "ad", "aXd")
 }
 
 func TestCollabTextCloseStopsPumpAndIsIdempotent(t *testing.T) {
