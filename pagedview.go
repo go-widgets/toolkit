@@ -226,6 +226,39 @@ func (pv *PagedView) SetPageSizes(sizes []image.Point) {
 	pv.clampCurrent(len(sizes))
 }
 
+// SetPageBitmap gives one 1-based page its bitmap, or takes it back with nil,
+// WITHOUT disturbing the page set [PagedView.SetPageSizes] declared.
+//
+// ⛔ This is the seam a document whose pages are expensive to rasterise needs,
+// and neither setter above can express it. SetPages derives the sizes from the
+// bitmaps, so a page with no bitmap lays out as nothing; SetPageSizes clears
+// the bitmaps. A viewer of a five-hundred-page PDF has to do BOTH at once: lay
+// out every page, so the scrollbar is honest and a page number means what it
+// says, while holding bitmaps for only a window around the reader. Rendering
+// all five hundred to have something to show is the cost the window exists to
+// avoid.
+//
+// A page outside [1, PageCount] is ignored rather than an error: the window
+// moves as the reader scrolls and as the document is replaced, so a bitmap
+// finishing after its page has gone is ordinary, not exceptional.
+//
+// ⛔ The DECLARED size stays authoritative for layout, and a bitmap of some
+// other size is scaled to it. That is deliberate: it lets a viewer put a
+// coarse, already-available rendering in place — a thumbnail it has, a page at
+// half resolution — and replace it with a sharper one when that arrives,
+// without the page changing shape underneath the reader.
+func (pv *PagedView) SetPageBitmap(page int, img *image.RGBA) {
+	if page < 1 || page > len(pv.sizes) {
+		return
+	}
+	if len(pv.pages) < len(pv.sizes) {
+		grown := make([]*image.RGBA, len(pv.sizes))
+		copy(grown, pv.pages)
+		pv.pages = grown
+	}
+	pv.pages[page-1] = img
+}
+
 // clampCurrent brings CurrentPage back into range after the page set changed:
 // to the last page if it now points past the end, to 1 if the set is empty or
 // the page was below 1.
