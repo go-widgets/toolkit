@@ -166,12 +166,18 @@ func TestPagedViewManualZoomClearsFitPage(t *testing.T) {
 // TestPagedViewFitButtonsShowWhichIsOn: the two fit buttons are sticky state,
 // so exactly the active one reads Selected — a reader who cannot see which fit
 // is on cannot tell a fitted page from a page that happens to be that size.
+//
+// ⛔ Driven through clickButton rather than SetFit, which is the difference
+// between testing the mode and testing the BUTTON. The first version called
+// SetFit and left fitPage — the button's own action — unreached; the coverage
+// gate said so, and it was right to: a button wired to nothing lights up
+// exactly like one that works.
 func TestPagedViewFitButtonsShowWhichIsOn(t *testing.T) {
 	pv := NewPagedView(nil)
 	pv.SetPageSizes([]image.Point{{X: 300, Y: 900}})
 	pv.SetBounds(Rect{X: 0, Y: 0, W: 800, H: 500})
 
-	check := func(what string, wantW, wantP bool) {
+	check := func(what string, wantW, wantP bool, wantFit PagedFit) {
 		t.Helper()
 		if got := pv.btnFit.Selected().Get(); got != wantW {
 			t.Errorf("%s: fit-width button Selected = %v, want %v", what, got, wantW)
@@ -179,14 +185,38 @@ func TestPagedViewFitButtonsShowWhichIsOn(t *testing.T) {
 		if got := pv.btnFitPage.Selected().Get(); got != wantP {
 			t.Errorf("%s: fit-page button Selected = %v, want %v", what, got, wantP)
 		}
+		if got := pv.Fit(); got != wantFit {
+			t.Errorf("%s: Fit() = %d, want %d — the button did not reach the mode", what, got, wantFit)
+		}
 	}
-	check("fresh", false, false)
-	pv.SetFit(PagedFitWidth)
-	check("after fit-width", true, false)
-	pv.SetFit(PagedFitPage)
-	check("after fit-page", false, true)
+	check("fresh", false, false, PagedFitNone)
+	clickButton(pv, pv.btnFit)
+	check("after pressing fit-width", true, false, PagedFitWidth)
+	clickButton(pv, pv.btnFitPage)
+	check("after pressing fit-page", false, true, PagedFitPage)
 	pv.zoomIn()
-	check("after a manual zoom", false, false)
+	check("after a manual zoom", false, false, PagedFitNone)
+}
+
+// TestPagedViewSetFitWidthOffClearsTheFit: SetFitWidth(false) is the one way
+// the old two-state API can say "no fit", and it has to mean PagedFitNone
+// rather than "not width", or turning fit-width off while fit-page is on would
+// leave the view fitting.
+func TestPagedViewSetFitWidthOffClearsTheFit(t *testing.T) {
+	pv := NewPagedView(nil)
+	pv.SetPageSizes([]image.Point{{X: 300, Y: 900}})
+	pv.SetBounds(Rect{X: 0, Y: 0, W: 800, H: 500})
+
+	pv.SetFit(PagedFitPage)
+	pv.SetFitWidth(false)
+	if got := pv.Fit(); got != PagedFitNone {
+		t.Errorf("SetFitWidth(false) left Fit() = %d, want PagedFitNone", got)
+	}
+	chosen := pv.Zoom().Get()
+	pv.SetBounds(Rect{X: 0, Y: 0, W: 800, H: 1000}) // a resize must not re-fit now
+	if pv.Zoom().Get() != chosen {
+		t.Errorf("a resize re-fitted after SetFitWidth(false): %d -> %d", chosen, pv.Zoom().Get())
+	}
 }
 
 // TestPagedViewFitPageDoesNotOscillate: the fit subtracts the scrollbar gutter
