@@ -605,7 +605,7 @@ func TestPagedViewA11y(t *testing.T) {
 // TestPagedViewIconsExist confirms every toolbar icon name resolves in iconoir.
 func TestPagedViewIconsExist(t *testing.T) {
 	for _, name := range []string{
-		"zoom-in", "zoom-out", "expand",
+		"zoom-in", "zoom-out", "expand", "scale-frame-reduce",
 		"nav-arrow-left", "nav-arrow-right",
 		"multiple-pages", "page",
 	} {
