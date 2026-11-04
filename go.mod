@@ -15,6 +15,7 @@ require (
 	github.com/go-typeset/bidi v0.3.1
 	github.com/go-widgets/mvvm v0.15.0
 	github.com/go-widgets/painter v0.16.0
+	github.com/go-widgets/textinput v0.1.0
 )
 
 require (
