@@ -57,21 +57,21 @@ type PagedView struct {
 	current *mvvm.Observable[int]
 	zoom    *mvvm.Observable[int]
 
-	// fitToWidth, when set, re-derives the zoom from the pane width on every
-	// relayout (a resize, a page change, a new document) so the current page
-	// keeps filling the width — until a manual zoom-in / zoom-out turns it off.
-	// The fit toolbar button turns it on. Off by default: a bare PagedView opens
-	// at the fixed default zoom.
-	fitToWidth bool
+	// fit, when not PagedFitNone, re-derives the zoom on every relayout (a
+	// resize, a page change, a new document) so the current page keeps filling
+	// the pane — until a manual zoom-in / zoom-out turns it off. A fit toolbar
+	// button turns it on. PagedFitNone by default: a bare PagedView opens at the
+	// fixed default zoom.
+	fit PagedFit
 
 	// Owned sub-widgets: the scrollable pane over the page content, and the
 	// toolbar icon buttons.
 	scroll  *ScrollView
 	content *pagedContent
 
-	btnContinuous, btnPaginated   *Button
-	btnZoomOut, btnZoomIn, btnFit *Button
-	btnPrev, btnNext              *Button
+	btnContinuous, btnPaginated               *Button
+	btnZoomOut, btnZoomIn, btnFit, btnFitPage *Button
+	btnPrev, btnNext                          *Button
 
 	// lay is the current page layout (card rects + content size), recomputed each
 	// relayout so Draw and the scroll-into-view helpers share one geometry.
@@ -89,6 +89,26 @@ const (
 	PagedContinuous PagedMode = iota
 	// PagedPaginated shows one page at a time, centred, with prev/next paging.
 	PagedPaginated
+)
+
+// PagedFit selects which measurement of the pane the zoom is re-derived from on
+// every relayout. A fit is STICKY: it survives a resize, a page change and a new
+// document, and a manual zoom turns it off, because the reader has taken the
+// zoom into their own hands.
+type PagedFit int
+
+const (
+	// PagedFitNone leaves the zoom where it was put.
+	PagedFitNone PagedFit = iota
+	// PagedFitWidth scales the current page's width to fill the pane. The page
+	// may then be taller than the pane, and scrolls.
+	PagedFitWidth
+	// PagedFitPage scales the current page so the WHOLE of it is visible — the
+	// smaller of the two fits, so neither edge spills. This is what a document
+	// viewer calls "fit page", and the reason it is a separate mode rather than
+	// a one-off zoom is that it has to be re-derived: a page fitted once and
+	// then resized is a page that no longer fits.
+	PagedFitPage
 )
 
 // Toolbar + page-card layout metrics, in LOGICAL pixels (routed through scaled
@@ -235,6 +255,7 @@ func (pv *PagedView) ensure() {
 	pv.btnZoomOut = pv.iconButton("zoom-out", pv.zoomOut)
 	pv.btnZoomIn = pv.iconButton("zoom-in", pv.zoomIn)
 	pv.btnFit = pv.iconButton("expand", pv.fitWidth)
+	pv.btnFitPage = pv.iconButton("scale-frame-reduce", pv.fitPage)
 	pv.btnPrev = pv.iconButton("nav-arrow-left", func() { pv.setPage(pv.cur()-1, false) })
 	pv.btnNext = pv.iconButton("nav-arrow-right", func() { pv.setPage(pv.cur()+1, false) })
 }
@@ -281,11 +302,11 @@ func (pv *PagedView) relayout() {
 		pane.H = 0
 	}
 	pv.scroll.SetBounds(pane)
-	// Sticky fit-to-width: re-derive the zoom from the just-set pane width before
-	// laying the page out, so a resize or a new document keeps the page filling
-	// the width. Set the observable directly (not setZoom) — this IS the relayout.
-	if pv.fitToWidth {
-		if z, ok := pv.fitWidthZoom(); ok {
+	// Sticky fit: re-derive the zoom from the just-set pane size before laying
+	// the page out, so a resize or a new document keeps the page fitting. Set the
+	// observable directly (not setZoom) — this IS the relayout.
+	if pv.fit != PagedFitNone {
+		if z, ok := pv.fitZoom(pv.fit); ok {
 			pv.zoom.Set(clampZoom(z))
 		}
 	}
@@ -396,6 +417,7 @@ func (pv *PagedView) layoutToolbar(r Rect, tbH int) {
 	x += pw + gap
 	place(pv.btnZoomIn)
 	place(pv.btnFit)
+	place(pv.btnFitPage)
 	if pv.Mode().Get() == PagedPaginated {
 		x += gap
 		place(pv.btnPrev)
@@ -416,6 +438,12 @@ func (pv *PagedView) syncButtonStates() {
 	z := pv.Zoom().Get()
 	pv.btnZoomOut.Disabled().Set(z <= pagedZoomMin)
 	pv.btnZoomIn.Disabled().Set(z >= pagedZoomMax)
+	// A sticky fit reads Selected for the same reason the mode buttons do: it is
+	// a state the view is left in, not a one-off command, and a reader who
+	// cannot see which fit is on cannot tell a fitted page from a page that
+	// happens to be that size.
+	pv.btnFit.Selected().Set(pv.fit == PagedFitWidth)
+	pv.btnFitPage.Selected().Set(pv.fit == PagedFitPage)
 	cur, cnt := pv.cur(), pv.PageCount()
 	pv.btnPrev.Disabled().Set(cur <= 1)
 	pv.btnNext.Disabled().Set(cur >= cnt)
@@ -424,7 +452,7 @@ func (pv *PagedView) syncButtonStates() {
 // toolbarButtons is the drawn / hit-tested button set for the current mode: the
 // prev/next pair only exists in paginated mode.
 func (pv *PagedView) toolbarButtons() []*Button {
-	bs := []*Button{pv.btnContinuous, pv.btnPaginated, pv.btnZoomOut, pv.btnZoomIn, pv.btnFit}
+	bs := []*Button{pv.btnContinuous, pv.btnPaginated, pv.btnZoomOut, pv.btnZoomIn, pv.btnFit, pv.btnFitPage}
 	if pv.Mode().Get() == PagedPaginated {
 		bs = append(bs, pv.btnPrev, pv.btnNext)
 	}
@@ -743,8 +771,8 @@ func (pv *PagedView) scrollCardIntoView(n int) {
 // zoomIn / zoomOut are the manual zoom controls: they step the zoom and turn
 // sticky fit-to-width OFF, because the reader has taken the zoom into their own
 // hands and a later resize should no longer override it.
-func (pv *PagedView) zoomIn()  { pv.fitToWidth = false; pv.setZoom(pv.Zoom().Get() + pagedZoomStep) }
-func (pv *PagedView) zoomOut() { pv.fitToWidth = false; pv.setZoom(pv.Zoom().Get() - pagedZoomStep) }
+func (pv *PagedView) zoomIn()  { pv.fit = PagedFitNone; pv.setZoom(pv.Zoom().Get() + pagedZoomStep) }
+func (pv *PagedView) zoomOut() { pv.fit = PagedFitNone; pv.setZoom(pv.Zoom().Get() - pagedZoomStep) }
 
 // clampZoom confines a zoom percent to [pagedZoomMin, pagedZoomMax].
 func clampZoom(z int) int {
@@ -764,43 +792,68 @@ func (pv *PagedView) setZoom(z int) {
 	pv.relayout()
 }
 
-// SetFitWidth turns sticky fit-to-width on or off. When on, the current page's
-// natural width is scaled to fill the pane and RE-fits on every relayout (a
-// resize, a page change, a new document), so the preview keeps using the whole
-// width instead of leaving the fixed-zoom page adrift in empty margins — until
-// the reader zooms manually, which turns it back off. The fit toolbar button
-// turns it on. Safe before any page or bounds exist: the fit is applied once
-// there is a current page with a positive width.
-func (pv *PagedView) SetFitWidth(on bool) {
+// SetFit turns a sticky fit on, or off with [PagedFitNone]. The zoom is then
+// re-derived on every relayout (a resize, a page change, a new document), so the
+// preview keeps fitting instead of leaving a fixed-zoom page adrift in empty
+// margins — until the reader zooms manually, which turns it back off. The two
+// fit toolbar buttons Set it. Safe before any page or bounds exist: the fit is
+// applied once there is a current page with a positive size.
+func (pv *PagedView) SetFit(f PagedFit) {
 	pv.ensure()
-	pv.fitToWidth = on
+	pv.fit = f
 	pv.relayout()
 }
 
-// FitWidth reports whether sticky fit-to-width is currently on.
-func (pv *PagedView) FitWidth() bool { return pv.fitToWidth }
+// Fit reports which sticky fit is currently on.
+func (pv *PagedView) Fit() PagedFit { return pv.fit }
 
-// fitWidthZoom is the zoom percent at which the current page's natural width
-// fills the pane (less the page margins), and whether it could be computed (a
-// current page with a positive width and a laid-out pane).
-func (pv *PagedView) fitWidthZoom() (int, bool) {
+// SetFitWidth and FitWidth are [PagedView.SetFit] and [PagedView.Fit] for the
+// width case alone, kept because they were this widget's whole fit API before
+// there was a second one to choose from.
+func (pv *PagedView) SetFitWidth(on bool) {
+	if on {
+		pv.SetFit(PagedFitWidth)
+		return
+	}
+	pv.SetFit(PagedFitNone)
+}
+
+// FitWidth reports whether sticky fit-to-width is currently on.
+func (pv *PagedView) FitWidth() bool { return pv.fit == PagedFitWidth }
+
+// fitZoom is the zoom percent at which the current page meets fit f, and
+// whether it could be computed (a current page with a positive size and a
+// laid-out pane).
+//
+// ⛔ The scrollbar gutter is subtracted on BOTH axes, including for a fit that
+// will leave nothing to scroll. Giving the fit the gutter back would be a few
+// pixels larger and could never settle: fitting into the full width removes the
+// scrollbar, which widens the pane, which re-fits larger, which brings the
+// scrollbar back. A viewer that breathes at every repaint is worse than one a
+// scrollbar's width short.
+func (pv *PagedView) fitZoom(f PagedFit) (int, bool) {
 	idx := pv.cur() - 1
 	if idx < 0 || idx >= len(pv.sizes) {
 		return 0, false
 	}
-	w := pv.sizes[idx].X
-	if w <= 0 {
+	nat := pv.sizes[idx]
+	if nat.X <= 0 {
 		return 0, false
 	}
-	usableW := pv.scroll.Bounds().W - scrollGutter() - 2*scaled(pagedMargin)
-	if usableW < 1 {
-		usableW = 1
+	gutter := scrollGutter()
+	margins := 2 * scaled(pagedMargin)
+	usableW := max(pv.scroll.Bounds().W-gutter-margins, 1)
+	byWidth := usableW * 100 / nat.X
+	if f == PagedFitWidth || nat.Y <= 0 {
+		return byWidth, true
 	}
-	return usableW * 100 / w, true
+	usableH := max(pv.scroll.Bounds().H-gutter-margins, 1)
+	return min(byWidth, usableH*100/nat.Y), true
 }
 
-// fitWidth is the fit toolbar button's action: turn sticky fit-to-width on.
-func (pv *PagedView) fitWidth() { pv.SetFitWidth(true) }
+// fitWidth and fitPage are the two fit buttons' actions.
+func (pv *PagedView) fitWidth() { pv.SetFit(PagedFitWidth) }
+func (pv *PagedView) fitPage()  { pv.SetFit(PagedFitPage) }
 
 // pagedContent is the ScrollView's child: a thin adapter that draws the page
 // cards its owning PagedView laid out. It has no state of its own — the layout
