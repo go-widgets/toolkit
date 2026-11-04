@@ -107,6 +107,14 @@ type TextView struct {
 	// Text() sees only committed input.
 	composition string
 
+	// rev counts the edits (see InputRevision); marked, markStart and markEnd
+	// are the input-method composition range, in UTF-16 units over the whole
+	// buffer. Unlike composition, the marked text IS in the buffer. See
+	// textview_input.go.
+	rev                uint64
+	marked             bool
+	markStart, markEnd int
+
 	// caretHidden suppresses the insertion caret while it is true, even when the
 	// view is focused — the seam a host uses to blink the caret (it toggles this on
 	// a timer). Zero value false keeps the caret visible, so nothing changes for a
@@ -250,6 +258,8 @@ func (t *TextView) SetCaretVisible(v bool) { t.caretHidden = !v }
 // no-op.
 func (t *TextView) sync() {
 	t.colsOK = false
+	t.rev++
+	t.marked = false // any edit ends a composition; SetMarkedInput re-marks after
 	t.Text().Set(strings.Join(t.lines, "\n"))
 }
 
@@ -258,6 +268,8 @@ func (t *TextView) sync() {
 // is that Observable's subscriber), so there is no feedback loop.
 func (t *TextView) adopt(s string) {
 	t.colsOK = false
+	t.rev++
+	t.marked = false
 	if s == "" {
 		t.lines = []string{""}
 	} else {
