@@ -71,6 +71,20 @@ func TestTextViewInputSelectionDirection(t *testing.T) {
 	}
 }
 
+// A selection made backwards (focus before anchor) is still replaced whole by
+// ReplaceInput(-1, -1, ...), and the caret ends after the new text.
+func TestTextViewReplaceInputBackwardSelection(t *testing.T) {
+	v := NewTextView("hello world")
+	v.SetInputSelection(5, 0) // "hello", anchor after focus
+	v.ReplaceInput(-1, -1, "bye")
+	if v.InputText() != "bye world" {
+		t.Fatalf("got %q", v.InputText())
+	}
+	if p, _ := caretOf(t, v); p != 3 {
+		t.Fatalf("caret = %d, want 3", p)
+	}
+}
+
 func TestTextViewReplaceInput(t *testing.T) {
 	v := NewTextView("hello world")
 	v.SetInputSelection(0, 5)
