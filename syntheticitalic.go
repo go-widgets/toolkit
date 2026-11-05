@@ -73,7 +73,7 @@ func (f *syntheticItalicFont) Ascent() int {
 // each row shifted right by (height-1-row)*num/den so the top leans forward. A
 // non-pixel back-end can't be sheared this way, so it gets the upright run.
 func (f *syntheticItalicFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
-	pp, ok := p.(*painter.PixelPainter)
+	pp, ok := p.(painter.RasterPainter)
 	if !ok {
 		f.base.Draw(p, x, y, text, ink)
 		return

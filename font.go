@@ -303,7 +303,7 @@ func DrawText(p painter.Painter, x, y int, text string, ink RGBA) {
 	CurrentFont().Draw(p, x, y, text, ink)
 }
 
-// Draw paints text with the bitmap font. On a *painter.PixelPainter (the WUI +
+// Draw paints text with the bitmap font. On a painter.RasterPainter (the WUI +
 // GUI path) each lit bit of the 5x7 glyph becomes a Scale×Scale block whose
 // origin is (x + k*Advance, y) for the k-th rune, so the font scales cleanly.
 // On any other painter (a *painter.CellPainter for a TUI, an SvgPainter for
@@ -317,7 +317,10 @@ func (f *bitmapFont) Draw(p painter.Painter, x, y int, text string, ink RGBA) {
 	// Arrange logical text into visual order so mixed / right-to-left text is
 	// consistent with the TrueType path; DirLTR keeps all-LTR text byte-identical.
 	text = visualText(text)
-	if _, isPixel := p.(*painter.PixelPainter); !isPixel {
+	// A RasterPainter, not only *PixelPainter: a painter that draws
+	// PixelPainter's pixels another way (go-widgets/gpupainter, on the GPU)
+	// must get the same glyph bits, not its own font through Text.
+	if _, isPixel := p.(painter.RasterPainter); !isPixel {
 		p.Text(x, y, text, ink)
 		return
 	}
