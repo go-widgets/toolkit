@@ -670,9 +670,9 @@ func (g *Grid) OnEvent(ev Event) {
 // OnEvent forwards to the child with translated coordinates.
 type Frame struct {
 	Base
-	// Padding is the inset (in pixels) between Frame's border + its
-	// child. Defaults to 4 when left at zero; negative values are
-	// clamped to zero at layout time.
+	// Padding is the inset (in LOGICAL pixels, scaled by [MetricScale])
+	// between Frame's border + its child. Defaults to 4 when left at zero;
+	// negative values are clamped to zero at layout time.
 	Padding int
 	// Title, when non-empty, draws a title bar across the top of the frame
 	// (inside the border), turning the plain group-box into a titled panel.
@@ -700,7 +700,8 @@ func (f *Frame) Collapsed() *mvvm.Observable[bool] {
 	return f.collapsed
 }
 
-// FrameTitleH is the pixel height of a Frame's optional title bar.
+// FrameTitleH is the height of a Frame's optional title bar in LOGICAL pixels;
+// the Frame lays it out at scaled(FrameTitleH) device pixels.
 const FrameTitleH = 22
 
 // NewFrame wraps child in a Frame. child may be nil (the Frame then
@@ -711,7 +712,7 @@ func NewFrame(child Widget) *Frame { return &Frame{child: child} }
 // collapsible, else 0 (the plain border-only box, unchanged from before).
 func (f *Frame) headerH() int {
 	if f.Title != "" || f.Collapsible {
-		return FrameTitleH
+		return scaled(FrameTitleH)
 	}
 	return 0
 }
@@ -727,7 +728,7 @@ func (f *Frame) inset() int {
 	if pad < 0 {
 		pad = 0
 	}
-	return 1 + pad
+	return strokeWidth() + scaled(pad)
 }
 
 // Measure reports the height the frame needs at this width: its child's, plus
@@ -745,7 +746,7 @@ func (f *Frame) Measure(width int) int {
 		return chrome
 	}
 	if f.Collapsed().Get() && f.headerH() > 0 {
-		return 2 + f.headerH()
+		return 2*strokeWidth() + f.headerH()
 	}
 	inner := width - 2*f.inset()
 	switch m := f.child.(type) {
@@ -785,13 +786,14 @@ func (f *Frame) SetBounds(r Rect) {
 // drawTitleBar paints the title-bar fill, the optional collapse chevron and
 // the title text.
 func (f *Frame) drawTitleBar(p painter.Painter, theme *Theme, r Rect, hh int) {
-	fillRect(p, r.X+1, r.Y+1, r.W-2, hh, theme.SurfaceAlt)
-	tx := r.X + 6
+	bw := strokeWidth()
+	fillRect(p, r.X+bw, r.Y+bw, r.W-2*bw, hh, theme.SurfaceAlt)
+	tx := r.X + scaled(6)
 	if f.Collapsible {
-		drawDisclosureChevron(p, r.X+6, r.Y+1+hh/2, !f.Collapsed().Get(), theme.OnSurface)
-		tx = r.X + 16
+		drawDisclosureChevron(p, r.X+scaled(6), r.Y+bw+hh/2, !f.Collapsed().Get(), theme.OnSurface)
+		tx = r.X + scaled(16)
 	}
-	ty := r.Y + 1 + (hh-f.glyphHeight())/2
+	ty := r.Y + bw + (hh-f.glyphHeight())/2
 	f.drawText(p, tx, ty, f.Title, theme.OnSurface)
 }
 
@@ -801,7 +803,7 @@ func (f *Frame) Draw(p painter.Painter, theme *Theme) {
 	r := f.Bounds()
 	hh := f.headerH()
 	if f.Collapsed().Get() && hh > 0 {
-		strokeRect(p, r.X, r.Y, r.W, hh+2, theme.Border)
+		strokeRect(p, r.X, r.Y, r.W, hh+2*strokeWidth(), theme.Border)
 		f.drawTitleBar(p, theme, r, hh)
 		return
 	}
@@ -837,7 +839,8 @@ func (f *Frame) OnEvent(ev Event) {
 	// [1, 1+hh) (the 1-px top border sits at Y == 0); match it exactly so a
 	// click on the border above the bar, or the first content row below it,
 	// does not toggle.
-	if f.Collapsible && ev.Kind == EventClick && ev.Y >= 1 && ev.Y < 1+hh {
+	bw := strokeWidth()
+	if f.Collapsible && ev.Kind == EventClick && ev.Y >= bw && ev.Y < bw+hh {
 		f.Collapsed().Set(!f.Collapsed().Get())
 		return
 	}
