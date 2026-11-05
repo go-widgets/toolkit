@@ -191,8 +191,9 @@ func fillPolygon(p painter.Painter, pts [][2]int, col RGBA) {
 			maxY = pt[1]
 		}
 	}
+	xs := make([]int, 0, len(pts)) // one crossing list, reused by every scanline
 	for y := minY; y <= maxY; y++ {
-		var xs []int
+		xs = xs[:0]
 		for i := range pts {
 			j := (i + 1) % len(pts)
 			y0, y1 := pts[i][1], pts[j][1]
