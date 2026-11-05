@@ -46,15 +46,16 @@ const (
 )
 
 // DiffLineH is the vertical stride between successive lines: one
-// glyph tall plus two pixels of separation.
-func DiffLineH() int { return GlyphHeight() + 2 }
+// glyph tall plus two logical pixels of separation (scaled by [MetricScale]).
+func DiffLineH() int { return GlyphHeight() + scaled(2) }
 
-// DiffPadX is the horizontal padding between the widget's outer
-// border and the leading prefix glyph.
+// DiffPadX is the horizontal padding (logical pixels, scaled by
+// [MetricScale]) between the widget's outer border and the leading prefix
+// glyph.
 const DiffPadX = 4
 
-// DiffPadY is the vertical padding above the first line and below
-// the last line.
+// DiffPadY is the vertical padding (logical pixels, scaled by [MetricScale])
+// above the first line and below the last line.
 const DiffPadY = 2
 
 // diffAddedFill is the row tint painted behind DiffAdded lines.
@@ -95,7 +96,7 @@ func (d *Diff) Draw(p painter.Painter, theme *Theme) {
 	// graceful degradation Table/Notebook rely on.
 	withClip(p, r, func() {
 		for i, line := range d.Lines {
-			y := r.Y + DiffPadY + i*DiffLineH()
+			y := r.Y + scaled(DiffPadY) + i*DiffLineH()
 			fill := theme.Surface
 			ink := theme.OnSurface
 			prefix := " "
@@ -110,8 +111,8 @@ func (d *Diff) Draw(p painter.Painter, theme *Theme) {
 				prefix = "-"
 			}
 			fillRect(p, r.X+1, y, r.W-2, DiffLineH(), fill)
-			d.drawText(p, r.X+DiffPadX, y, prefix, ink)
-			d.drawText(p, r.X+DiffPadX+d.glyphAdvance(), y, line.Text, ink)
+			d.drawText(p, r.X+scaled(DiffPadX), y, prefix, ink)
+			d.drawText(p, r.X+scaled(DiffPadX)+d.glyphAdvance(), y, line.Text, ink)
 		}
 	})
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
