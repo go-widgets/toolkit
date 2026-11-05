@@ -61,19 +61,31 @@ func TestAScrollViewFillsItselfWithAShortChild(t *testing.T) {
 	}
 }
 
-// TestAScrollViewLeavesAnUnmeasurableChildAlone, and a nil one is harmless.
+// TestAScrollViewKeepsAnUnmeasurableChildsSizeAndTakesItsPlace, and a nil
+// child is harmless.
 //
-// This is what keeps every existing caller working: one that lays the child out
+// This is what keeps every existing caller working: one that sizes the child
 // itself and declares the extent by hand must not have either overwritten.
-func TestAScrollViewLeavesAnUnmeasurableChildAlone(t *testing.T) {
+//
+// ⛔ ITS SIZE, NOT ITS PLACE. This test used to assert that X and Y survived
+// too, under a comment about leaving the caller's layout alone — and Draw
+// overwrote both on the first paint anyway (scroll.go, the SetBounds call
+// there). So the promise was never kept; it was only kept until something was
+// painted, which is the worst of the three possible contracts: a caller
+// reading bounds got one answer before a frame and a different one after it.
+// Now SetBounds says the same thing Draw does, and the child's own width and
+// height are still the caller's.
+func TestAScrollViewKeepsAnUnmeasurableChildsSizeAndTakesItsPlace(t *testing.T) {
 	plain := &Label{}
 	plain.SetBounds(Rect{X: 1, Y: 2, W: 33, H: 44})
 	sv := NewScrollView(plain)
 	sv.SetContentSize(500, 600)
-	sv.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 200})
+	sv.SetBounds(Rect{X: 7, Y: 9, W: 300, H: 200})
 
-	if got := plain.Bounds(); got != (Rect{X: 1, Y: 2, W: 33, H: 44}) {
-		t.Errorf("the child was re-laid-out to %+v", got)
+	vp := sv.viewport()
+	if got := plain.Bounds(); got != (Rect{X: vp.X, Y: vp.Y, W: 33, H: 44}) {
+		t.Errorf("the child is at %+v; it should keep 33x44 at the viewport %d,%d",
+			got, vp.X, vp.Y)
 	}
 	if sv.contentW != 500 || sv.contentH != 600 {
 		t.Errorf("the declared extent became %dx%d", sv.contentW, sv.contentH)

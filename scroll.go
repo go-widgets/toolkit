@@ -239,11 +239,26 @@ func (s *ScrollView) SetBounds(r Rect) {
 	if s.Child == nil {
 		return
 	}
-	h, ok := scrollNatural(s.Child, s.viewport().W)
+	vp := s.viewport()
+	h, ok := scrollNatural(s.Child, vp.W)
 	if !ok {
+		// ⛔ A child that cannot be MEASURED is still PLACED. Its size stays the
+		// caller's, as the paragraph above promises -- but its POSITION is not
+		// the caller's to keep, because the caller cannot know it: the viewport
+		// moves with this widget, and a child left at wherever it was built is
+		// a child at the origin of nothing.
+		//
+		// Until now only Draw placed it (see the SetBounds call there, which
+		// does exactly this). Geometry that exists only during a paint is the
+		// defect Draw's own comment is about, one level up: anything reading
+		// bounds BETWEEN frames reads a lie. An application hit-testing a
+		// rebuilt column found the wrong child under the pointer -- not none,
+		// which would have been visible, but the WRONG ONE, because a stale
+		// content-local rectangle still contains plausible points.
+		cb := s.Child.Bounds()
+		s.Child.SetBounds(Rect{X: vp.X, Y: vp.Y, W: cb.W, H: cb.H})
 		return
 	}
-	vp := s.viewport()
 	if h < vp.H {
 		h = vp.H
 	}
