@@ -53,6 +53,10 @@ declarative `Container` + swappable `Layout` model (`FitLayout`,
 the convenience containers (`HBox`/`VBox`/`Grid`/`Frame`/`Dock`/
 `Border`).
 
+**HiDPI.** `SetMetricScale(2)` scales every pixel metric and the text
+face. As of v0.355.0 that includes a `Frame`'s title bar, border and
+padding (`Frame.Padding` is in logical pixels); at scale 1 nothing changes.
+
 **159** exported widget types + 10 stock icons, **68 kLoC** of widget
 code across 233 files, 100% statement coverage.
 
