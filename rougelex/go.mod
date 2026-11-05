@@ -10,7 +10,7 @@ require (
 require (
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/go-crdt/crdt v0.57.0 // indirect
-	github.com/go-gfx/gfx v0.37.0 // indirect
+	github.com/go-gfx/gfx v0.41.0 // indirect
 	github.com/go-icons/iconoir v0.3.0 // indirect
 	github.com/go-images/images v0.1.1-0.20261026203936-4ac989d310a1 // indirect
 	github.com/go-opentype/fonts v0.14.0 // indirect
@@ -21,7 +21,7 @@ require (
 	github.com/go-ruby-regexp/regexp v0.1.1 // indirect
 	github.com/go-typeset/bidi v0.3.1 // indirect
 	github.com/go-widgets/mvvm v0.15.0 // indirect
-	github.com/go-widgets/painter v0.16.0 // indirect
+	github.com/go-widgets/painter v0.17.0 // indirect
 	github.com/go-widgets/textinput v0.1.0 // indirect
 )
 
