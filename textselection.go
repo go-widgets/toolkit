@@ -280,10 +280,31 @@ func endsOrStartsSpace(a, b string) bool {
 // col. Nothing is drawn for an empty selection. Runs are highlighted from their
 // start-char x to their end-char x, full run height.
 func (s *TextSelection) Draw(p painter.Painter, col RGBA) {
+	for _, r := range s.SelectedRects() {
+		p.FillRect(painter.Rect{X: r.X, Y: r.Y, W: r.W, H: r.H}, col)
+	}
+}
+
+// SelectedRects is the rectangles the selection covers, in the same coordinate
+// space the runs were given in — one per covered run span, in document order.
+// It is empty for an empty selection.
+//
+// ⛔ IT IS WHAT Draw PAINTS, BY CONSTRUCTION. Draw is a loop over this, so a
+// host that acts on a selection — writing a PDF highlight annotation over the
+// words, say — marks exactly what the reader sees lit. The two could not be
+// kept in step by writing the same rule twice: a host that re-derived the
+// covered spans from the runs and the caret positions would be a second
+// implementation of charAt, prefixWidth and the wrapped-line case below, and
+// the first divergence would show as a mark that is not where the highlight is.
+//
+// SelectedText answers "what does it say"; this answers "where is it". A host
+// needs both, and before this it could only have the first.
+func (s *TextSelection) SelectedRects() []Rect {
 	if s.IsEmpty() {
-		return
+		return nil
 	}
 	start, end := s.order()
+	var out []Rect
 	for ri := start.run; ri <= end.run; ri++ {
 		run := s.runs[ri]
 		runes := []rune(run.Text)
@@ -306,8 +327,9 @@ func (s *TextSelection) Draw(p painter.Painter, col RGBA) {
 				continue
 			}
 		}
-		p.FillRect(painter.Rect{X: x0, Y: run.Bounds.Y, W: x1 - x0, H: run.Bounds.H}, col)
+		out = append(out, Rect{X: x0, Y: run.Bounds.Y, W: x1 - x0, H: run.Bounds.H})
 	}
+	return out
 }
 
 // prefixWidth is the pixel width of the first n runes of run (0 when n<=0 or the
