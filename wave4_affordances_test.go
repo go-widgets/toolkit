@@ -157,7 +157,7 @@ func TestTextViewClickPlacesCaretAndDragSelects(t *testing.T) {
 
 	// Click line 1 ("world"), col 2.
 	tv.OnEvent(Event{Kind: EventClick, X: 4 + 2*adv, Y: 4 + 1*lineH})
-	if !tv.Focused().Get() {
+	if !tv.HasFocus().Get() {
 		t.Fatal("click did not focus")
 	}
 	if tv.CursorLine().Get() != 1 || tv.CursorCol().Get() != 2 {
@@ -198,7 +198,7 @@ func TestTextViewCaretClampsAndEmptyGuard(t *testing.T) {
 	// a drag is a safe no-op.
 	empty := &TextView{}
 	empty.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
-	if !empty.Focused().Get() {
+	if !empty.HasFocus().Get() {
 		t.Fatal("empty click should still focus")
 	}
 	empty.OnEvent(Event{Kind: EventMouseDrag, X: 5, Y: 5}) // must not panic

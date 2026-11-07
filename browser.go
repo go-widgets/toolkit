@@ -334,7 +334,7 @@ func NewBrowser() *Browser {
 	// field's state Observables — no per-frame state copy, no read-back. The URL
 	// Observable is published by the Browser (the source of truth) in layoutAddr.
 	b.addr.Commit = mvvm.NewCommand(func() { b.Navigate(normalizeURL(b.addr.Editing().Get())) }, nil)
-	for _, o := range []mvvm.Changeable{b.addr.Editing(), b.addr.Focused(), b.addr.Copied(), b.addr.Bookmarked()} {
+	for _, o := range []mvvm.Changeable{b.addr.Editing(), b.addr.HasFocus(), b.addr.Copied(), b.addr.Bookmarked()} {
 		o.SubscribeChanged(b.changed)
 	}
 	return b
@@ -1148,12 +1148,12 @@ func unionRect(a, b Rect) Rect {
 // AddressFocused reports whether the address field currently holds keyboard
 // focus (a prior click landed in it), so a host can route a copy chord to
 // [Browser.CopyAddress] instead of its own copy action.
-func (b *Browser) AddressFocused() bool { return b.addr.Focused().Get() }
+func (b *Browser) AddressFocused() bool { return b.addr.HasFocus().Get() }
 
 // AddressText returns the text the address field shows: the editable buffer
 // while focused, else the current page URL.
 func (b *Browser) AddressText() string {
-	if b.addr.Focused().Get() {
+	if b.addr.HasFocus().Get() {
 		return b.addr.Value()
 	}
 	return b.CurrentURL()

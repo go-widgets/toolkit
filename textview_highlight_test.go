@@ -167,7 +167,7 @@ func TestTextViewLineNumberGutter(t *testing.T) {
 	// paints the caret stroke at textX + col*advance.
 	cur := NewTextView("hello")
 	cur.ShowLineNumbers = true
-	cur.Focused().Set(true)
+	cur.HasFocus().Set(true)
 	cur.CursorCol().Set(2)
 	cur.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
 	bufCur := makeSurface(w, h)

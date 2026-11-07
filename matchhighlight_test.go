@@ -94,7 +94,7 @@ func TestCodeEditorCurrentMatchOutline(t *testing.T) {
 	th := DefaultLight()
 	// Not focused: the only accent-coloured pixels are the outline box (a focused
 	// editor would also paint an accent border).
-	c.Focused().Set(false)
+	c.HasFocus().Set(false)
 	c.SetCurrentMatch(Selection{StartLine: 0, StartCol: 0, EndLine: 0, EndCol: 4})
 	surf := drawInto(c, th, 160, 60)
 

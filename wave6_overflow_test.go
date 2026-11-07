@@ -274,7 +274,7 @@ func wave6TextView(lines int) *TextView {
 
 func TestTextViewScrolls(t *testing.T) {
 	tv := wave6TextView(30)
-	tv.Focused().Set(true)
+	tv.HasFocus().Set(true)
 	// lineH = glyphHeight(7)+4 = 11; H=40 → visibleLines = (40-4)/11 = 3.
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 40})
 	if got := tv.visibleLines(); got != 3 {

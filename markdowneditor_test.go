@@ -232,7 +232,7 @@ func TestMarkdownEditorClickInSourceFocuses(t *testing.T) {
 	me := NewMarkdownEditor("hello")
 	me.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60}) // source pane = x in [0,50)
 	me.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
-	if !me.Source.Focused().Get() {
+	if !me.Source.HasFocus().Get() {
 		t.Error("click inside the source pane should focus it")
 	}
 }
@@ -241,7 +241,7 @@ func TestMarkdownEditorClickInPreviewIsNoOp(t *testing.T) {
 	me := NewMarkdownEditor("hello")
 	me.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60}) // preview pane = x in [51,100)
 	me.OnEvent(Event{Kind: EventClick, X: 70, Y: 30})
-	if me.Source.Focused().Get() {
+	if me.Source.HasFocus().Get() {
 		t.Error("click inside the preview pane must not focus Source")
 	}
 	if me.Source.Text().Get() != "hello" || me.Preview.Source != "hello" {
@@ -253,7 +253,7 @@ func TestMarkdownEditorClickOnDividerIsNoOp(t *testing.T) {
 	me := NewMarkdownEditor("hello")
 	me.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60}) // divider at x == 50
 	me.OnEvent(Event{Kind: EventClick, X: 50, Y: 30})
-	if me.Source.Focused().Get() {
+	if me.Source.HasFocus().Get() {
 		t.Error("click on the divider must not focus Source")
 	}
 }
@@ -275,7 +275,7 @@ func TestMarkdownEditorOnEventNonZeroOrigin(t *testing.T) {
 	// Widget-local click (per the Widget.OnEvent contract) at (10,10) must
 	// land in the source pane even though Bounds() is offset.
 	me.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
-	if !me.Source.Focused().Get() {
+	if !me.Source.HasFocus().Get() {
 		t.Error("widget-local click inside source pane should focus it despite non-zero origin")
 	}
 }

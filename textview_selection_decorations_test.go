@@ -19,13 +19,13 @@ func TestTextViewPaintsSelectionBand(t *testing.T) {
 
 	bare := NewTextView("hello world\nsecond line")
 	bare.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	bare.Focused().Set(true)
+	bare.HasFocus().Set(true)
 	b0 := makeSurface(w, h)
 	bare.Draw(newP(b0, w), theme)
 
 	sel := NewTextView("hello world\nsecond line")
 	sel.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	sel.Focused().Set(true)
+	sel.HasFocus().Set(true)
 	sel.Selection().Set(Selection{StartLine: 0, StartCol: 0, EndLine: 0, EndCol: 5}) // "hello"
 	b1 := makeSurface(w, h)
 	sel.Draw(newP(b1, w), theme)

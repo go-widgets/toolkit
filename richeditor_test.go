@@ -263,7 +263,7 @@ func TestClickPlacesCaret(t *testing.T) {
 	e := newSample()
 	x, y := e.CaretPixel(DocPos{1, 3})
 	e.OnEvent(Event{Kind: EventClick, X: x, Y: y})
-	if !e.Focused().Get() {
+	if !e.HasFocus().Get() {
 		t.Error("click did not focus")
 	}
 	if e.Caret().Get() != (DocPos{1, 3}) {
@@ -830,7 +830,7 @@ func TestBareEditorWorks(t *testing.T) {
 func TestFocusBorder(t *testing.T) {
 	e := newSample()
 	unfocused := reRender(e, 240, 400, DefaultLight())
-	e.Focused().Set(true)
+	e.HasFocus().Set(true)
 	focused := reRender(e, 240, 400, DefaultLight())
 	if pixAt(unfocused, 240, 0, 0) == pixAt(focused, 240, 0, 0) {
 		t.Error("focus did not change the border colour")
