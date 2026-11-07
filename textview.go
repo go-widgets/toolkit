@@ -233,14 +233,21 @@ func (t *TextView) Selection() *mvvm.Observable[Selection] {
 	return t.sel
 }
 
-// Focused reports (and drives) keyboard focus as a bindable Observable: Draw
-// paints the accent border + caret while it is true.
-func (t *TextView) Focused() *mvvm.Observable[bool] {
+// HasFocus reports (and drives) keyboard focus as a bindable Observable: Draw
+// paints the accent border + caret while it is true. It is the single source of
+// truth behind the Focusable methods below.
+func (t *TextView) HasFocus() *mvvm.Observable[bool] {
 	if t.focus == nil {
 		t.focus = mvvm.NewObservable(false)
 	}
 	return t.focus
 }
+
+// SetFocused implements Focusable: it writes HasFocus().
+func (t *TextView) SetFocused(focused bool) { t.HasFocus().Set(focused) }
+
+// Focused implements Focusable: it reads HasFocus().
+func (t *TextView) Focused() bool { return t.HasFocus().Get() }
 
 // CaretVisible reports whether the insertion caret is currently drawn (when the
 // view is focused). It is true by default.
@@ -402,7 +409,7 @@ func (t *TextView) SetText(s string) {
 func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	border := theme.Border
-	if t.Focused().Get() {
+	if t.HasFocus().Get() {
 		border = theme.Accent
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
@@ -499,7 +506,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 		return !t.ShowScrollbars || (cx >= txtR.X && cx < txtR.X+txtR.W &&
 			cy >= r.Y && cy+t.glyphHeight() <= clipR.Y+clipR.H)
 	}
-	if t.Focused().Get() {
+	if t.HasFocus().Get() {
 		cx := textX + t.CursorCol().Get()*t.glyphAdvance()
 		cy := r.Y + 4 + (t.CursorLine().Get()-start)*lineH
 		if !t.caretHidden && inView(cx, cy) {
@@ -589,7 +596,7 @@ func tagInk(c RGBA) RGBA {
 func (t *TextView) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
-		t.Focused().Set(true)
+		t.HasFocus().Set(true)
 		if t.barPress(ev) || t.minimapPress(ev) {
 			return // the click landed on a scrollbar or the minimap, not on the text
 		}

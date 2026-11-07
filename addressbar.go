@@ -75,14 +75,21 @@ func (a *AddressBar) Editing() *mvvm.Observable[string] {
 	return a.editing
 }
 
-// Focused reports (and drives) keyboard focus. A view model can observe it; the
-// widget flips it on click / Blur.
-func (a *AddressBar) Focused() *mvvm.Observable[bool] {
+// HasFocus reports (and drives) keyboard focus. A view model can observe it; the
+// widget flips it on click / Blur. It is the single source of truth behind the
+// Focusable methods below.
+func (a *AddressBar) HasFocus() *mvvm.Observable[bool] {
 	if a.focused == nil {
 		a.focused = mvvm.NewObservable(false)
 	}
 	return a.focused
 }
+
+// SetFocused implements Focusable: it writes HasFocus().
+func (a *AddressBar) SetFocused(focused bool) { a.HasFocus().Set(focused) }
+
+// Focused implements Focusable: it reads HasFocus().
+func (a *AddressBar) Focused() bool { return a.HasFocus().Get() }
 
 // Bookmarked is the bookmark toggle state. A host binds it to its bookmark store;
 // clicking the bookmark slot flips it. Subscribe to it instead of a callback.
@@ -107,7 +114,7 @@ func (a *AddressBar) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value:
 
 // Value returns the text the field shows: the edit buffer while focused, else URL.
 func (a *AddressBar) Value() string {
-	if a.Focused().Get() {
+	if a.HasFocus().Get() {
 		return a.Editing().Get()
 	}
 	return a.URL().Get()
@@ -116,7 +123,7 @@ func (a *AddressBar) Value() string {
 // Blur defocuses the field and clears the copy highlight. The container calls it
 // when a click lands outside the field.
 func (a *AddressBar) Blur() {
-	a.Focused().Set(false)
+	a.HasFocus().Set(false)
 	a.Copied().Set(false)
 }
 
@@ -153,7 +160,7 @@ func (a *AddressBar) Draw(p painter.Painter, theme *Theme) {
 	if r.W <= 0 || r.H <= 0 {
 		return
 	}
-	focused := a.Focused().Get()
+	focused := a.HasFocus().Get()
 	ring := theme.Border
 	if focused {
 		ring = theme.Accent
@@ -216,21 +223,21 @@ func (a *AddressBar) OnEvent(ev Event) {
 		r := a.Bounds()
 		ax, ay := r.X+ev.X, r.Y+ev.Y
 		if _, _, star := a.zones(r); a.BookmarkIcon != nil && star.Contains(ax, ay) {
-			a.Focused().Set(false)
+			a.HasFocus().Set(false)
 			a.toggleBookmark()
 			return
 		}
-		a.Focused().Set(true)
+		a.HasFocus().Set(true)
 		a.Editing().Set(a.URL().Get())
 		a.Copied().Set(false)
 	case EventChar:
-		if !a.Focused().Get() || ev.Code == "" {
+		if !a.HasFocus().Get() || ev.Code == "" {
 			return
 		}
 		a.Copied().Set(false) // an edit dismisses the copied-highlight
 		a.Editing().Set(a.Editing().Get() + ev.Code)
 	case EventKeyDown:
-		if !a.Focused().Get() {
+		if !a.HasFocus().Get() {
 			return
 		}
 		switch ev.Code {
@@ -253,7 +260,7 @@ func (a *AddressBar) OnEvent(ev Event) {
 // defocuses. An empty buffer just defocuses. The host's command reads Editing.
 func (a *AddressBar) commit() {
 	raw := strings.TrimSpace(a.Editing().Get())
-	a.Focused().Set(false)
+	a.HasFocus().Set(false)
 	a.Copied().Set(false)
 	if raw != "" && a.Commit != nil {
 		a.Commit.Execute()
@@ -265,7 +272,7 @@ func (a *AddressBar) commit() {
 // Commit. Escape triggers it, so a stray edit never navigates.
 func (a *AddressBar) cancel() {
 	a.Editing().Set(a.URL().Get())
-	a.Focused().Set(false)
+	a.HasFocus().Set(false)
 	a.Copied().Set(false)
 }
 
@@ -273,7 +280,7 @@ func (a *AddressBar) cancel() {
 // a select-all highlight, reporting the text and whether anything was copied. It
 // is a no-op returning ("", false) when the field is not focused or is empty.
 func (a *AddressBar) CopySelectAll() (string, bool) {
-	if !a.Focused().Get() {
+	if !a.HasFocus().Get() {
 		return "", false
 	}
 	txt := a.Value()

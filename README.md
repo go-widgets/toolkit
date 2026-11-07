@@ -180,6 +180,15 @@ needs. To see what keeps a symbol in your own program, build with
 `-ldflags=-dumpdep` and follow the first-parent chain from the symbol back to
 `main.main` or `go:main.inittasks`.
 
+### v0.357 breaking change: `Focused()` is now `HasFocus()` on the editors
+
+`TextView`, `CodeEditor` (through its embedded `TextView`), `RichEditor` and
+`AddressBar` used to return their focus `*mvvm.Observable[bool]` from
+`Focused()`, which collided with `Focusable.Focused() bool`. The accessor is
+now `HasFocus()` (`ed.Focused().Get()` becomes `ed.HasFocus().Get()`), and all
+four implement `Focusable` — `Focused()` reads and `SetFocused(bool)` writes
+that same observable — so Tab traversal in a container now reaches them.
+
 ### v0.6 breaking change
 
 `Widget.Draw` signature moved from

@@ -52,7 +52,7 @@ func TestTextViewSetTextNonEmpty(t *testing.T) {
 func TestTextViewClickFocuses(t *testing.T) {
 	v := NewTextView("a")
 	v.OnEvent(Event{Kind: EventClick})
-	if !v.Focused().Get() {
+	if !v.HasFocus().Get() {
 		t.Fatal("click should focus")
 	}
 }
@@ -213,7 +213,7 @@ func TestTextViewDrawFocusedAndUnfocused(t *testing.T) {
 	const w, h = 100, 60
 	theme := DefaultLight()
 	v := NewTextView("hello\nworld")
-	v.Focused().Set(true)
+	v.HasFocus().Set(true)
 	v.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 60})
 	buf := makeSurface(w, h)
 	v.Draw(newP(buf, w), theme)
@@ -221,7 +221,7 @@ func TestTextViewDrawFocusedAndUnfocused(t *testing.T) {
 	if pixelAt(buf, w, 0, 0) != theme.Accent {
 		t.Fatalf("focused border = %+v, want Accent", pixelAt(buf, w, 0, 0))
 	}
-	v.Focused().Set(false)
+	v.HasFocus().Set(false)
 	buf2 := makeSurface(w, h)
 	v.Draw(newP(buf2, w), theme)
 	if pixelAt(buf2, w, 0, 0) != theme.Border {
@@ -1295,7 +1295,7 @@ func TestTextViewCompositionDrawPreview(t *testing.T) {
 	// gets covered.
 	tv := NewTextView("hi")
 	tv.CursorCol().Set(2)
-	tv.Focused().Set(true)
+	tv.HasFocus().Set(true)
 	tv.composition = "^"
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 120, H: 40})
 	tv.Draw(newP(makeSurface(120, 40), 120), DefaultLight())

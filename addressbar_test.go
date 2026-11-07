@@ -45,7 +45,7 @@ func abCountColor(buf []byte, w, h int, want RGBA) int {
 func TestAddressBarStateIsObservableOnly(t *testing.T) {
 	a := &AddressBar{Radius: 4, TextPad: 4}
 	a.URL().Set("http://x")
-	if a.Focused().Get() || a.Copied().Get() || a.Bookmarked().Get() {
+	if a.HasFocus().Get() || a.Copied().Get() || a.Bookmarked().Get() {
 		t.Fatal("new field: focus/copy/bookmark should be false")
 	}
 	if a.Value() != "http://x" {
@@ -57,13 +57,13 @@ func TestAddressBarStateIsObservableOnly(t *testing.T) {
 	// A view model observing focus sees the click flip it (no field assignment
 	// exists — the accessors are the only mutation path).
 	var focusChanges int
-	a.Focused().Subscribe(func(bool) { focusChanges++ })
+	a.HasFocus().Subscribe(func(bool) { focusChanges++ })
 	abClick(a, 5, 10) // plain click focuses, seeds Editing from URL
-	if !a.Focused().Get() || a.Value() != "http://x" || focusChanges != 1 {
-		t.Fatalf("focus click: focused=%v value=%q changes=%d", a.Focused().Get(), a.Value(), focusChanges)
+	if !a.HasFocus().Get() || a.Value() != "http://x" || focusChanges != 1 {
+		t.Fatalf("focus click: focused=%v value=%q changes=%d", a.HasFocus().Get(), a.Value(), focusChanges)
 	}
 	a.Blur()
-	if a.Focused().Get() || a.Copied().Get() {
+	if a.HasFocus().Get() || a.Copied().Get() {
 		t.Fatal("Blur should clear focus and the copy highlight")
 	}
 }
@@ -91,8 +91,8 @@ func TestAddressBarEditing(t *testing.T) {
 	}
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"}) // unrelated key: no-op
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})     // commit
-	if committed != "seed" || a.Focused().Get() {
-		t.Fatalf("commit: committed=%q focused=%v", committed, a.Focused().Get())
+	if committed != "seed" || a.HasFocus().Get() {
+		t.Fatalf("commit: committed=%q focused=%v", committed, a.HasFocus().Get())
 	}
 	// Backspace down to empty then once more (the len==0 guard).
 	abClick(a, 5, 10)
@@ -108,23 +108,23 @@ func TestAddressBarCommitVariants(t *testing.T) {
 	called := false
 	a.Commit = mvvm.NewCommand(func() { called = true }, nil)
 	// Whitespace-only buffer: Commit not run, just defocus.
-	a.Focused().Set(true)
+	a.HasFocus().Set(true)
 	a.Editing().Set("   ")
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if called || a.Focused().Get() {
-		t.Fatalf("empty commit ran=%v focused=%v", called, a.Focused().Get())
+	if called || a.HasFocus().Get() {
+		t.Fatalf("empty commit ran=%v focused=%v", called, a.HasFocus().Get())
 	}
 	// Non-empty with a nil Commit: safe no-op, still defocuses.
 	a.Commit = nil
-	a.Focused().Set(true)
+	a.HasFocus().Set(true)
 	a.Editing().Set("hello")
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if a.Focused().Get() {
+	if a.HasFocus().Get() {
 		t.Fatal("nil-Commit Enter should still defocus")
 	}
 	// Non-empty with a bound Commit: runs.
 	a.Commit = mvvm.NewCommand(func() { called = true }, nil)
-	a.Focused().Set(true)
+	a.HasFocus().Set(true)
 	a.Editing().Set("go")
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if !called {
@@ -137,7 +137,7 @@ func TestAddressBarCopySelectAll(t *testing.T) {
 	if _, ok := a.CopySelectAll(); ok {
 		t.Fatal("copy while unfocused should be a no-op")
 	}
-	a.Focused().Set(true) // focused but empty value
+	a.HasFocus().Set(true) // focused but empty value
 	if _, ok := a.CopySelectAll(); ok {
 		t.Fatal("copy of an empty value should be a no-op")
 	}
@@ -160,11 +160,11 @@ func TestAddressBarBookmark(t *testing.T) {
 	a.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 30})
 	_, _, star := a.zones(a.Bounds())
 	abClick(a, star.X+star.W/2, star.Y+star.H/2) // star toggles, not focus
-	if !a.Bookmarked().Get() || a.Focused().Get() || len(toggled) != 1 || !toggled[0] {
-		t.Fatalf("star click: bookmarked=%v focused=%v toggled=%v", a.Bookmarked().Get(), a.Focused().Get(), toggled)
+	if !a.Bookmarked().Get() || a.HasFocus().Get() || len(toggled) != 1 || !toggled[0] {
+		t.Fatalf("star click: bookmarked=%v focused=%v toggled=%v", a.Bookmarked().Get(), a.HasFocus().Get(), toggled)
 	}
 	abClick(a, 10, 15) // text zone focuses instead
-	if !a.Focused().Get() {
+	if !a.HasFocus().Get() {
 		t.Fatal("text-zone click should focus")
 	}
 	a.toggleBookmark() // back off
@@ -223,7 +223,7 @@ func TestAddressBarPlaceholder(t *testing.T) {
 	// Focus (editing) with an empty buffer hides the placeholder too — the field
 	// is being edited, so only the caret shows (exercises the !focused branch).
 	a.URL().Set("")
-	a.Focused().Set(true)
+	a.HasFocus().Set(true)
 	a.Editing().Set("")
 	buf = abRender(a, w, h, th)
 	if abCountColor(buf, w, h, muted) != 0 {
@@ -260,8 +260,8 @@ func TestAddressBarEscapeCancels(t *testing.T) {
 	if a.Editing().Get() != "http://committed" {
 		t.Fatalf("Escape did not revert the buffer: %q", a.Editing().Get())
 	}
-	if a.Focused().Get() || a.Copied().Get() {
-		t.Fatalf("Escape should defocus and clear copy: focused=%v copied=%v", a.Focused().Get(), a.Copied().Get())
+	if a.HasFocus().Get() || a.Copied().Get() {
+		t.Fatalf("Escape should defocus and clear copy: focused=%v copied=%v", a.HasFocus().Get(), a.Copied().Get())
 	}
 	if committed != "" {
 		t.Fatalf("Escape must not commit, but Commit ran with %q", committed)
@@ -270,11 +270,11 @@ func TestAddressBarEscapeCancels(t *testing.T) {
 	// Escape with no committed value reverts to the empty URL (no-committed-value
 	// branch) and still does not commit.
 	a.URL().Set("")
-	a.Focused().Set(true)
+	a.HasFocus().Set(true)
 	a.Editing().Set("typed")
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Escape"})
-	if a.Editing().Get() != "" || a.Focused().Get() || committed != "" {
-		t.Fatalf("Escape with empty URL: buffer=%q focused=%v committed=%q", a.Editing().Get(), a.Focused().Get(), committed)
+	if a.Editing().Get() != "" || a.HasFocus().Get() || committed != "" {
+		t.Fatalf("Escape with empty URL: buffer=%q focused=%v committed=%q", a.Editing().Get(), a.HasFocus().Get(), committed)
 	}
 
 	// Enter still commits, unchanged by the new Escape path.
@@ -282,8 +282,8 @@ func TestAddressBarEscapeCancels(t *testing.T) {
 	abClick(a, 5, 10)
 	a.OnEvent(Event{Kind: EventChar, Code: "!"})
 	a.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if committed != "http://committed!" || a.Focused().Get() {
-		t.Fatalf("Enter should still commit: committed=%q focused=%v", committed, a.Focused().Get())
+	if committed != "http://committed!" || a.HasFocus().Get() {
+		t.Fatalf("Enter should still commit: committed=%q focused=%v", committed, a.HasFocus().Get())
 	}
 }
 
@@ -307,7 +307,7 @@ func TestAddressBarDraw(t *testing.T) {
 	leadN, starN := 0, 0
 	a.LeadingIcon = func(p painter.Painter, r Rect, ink RGBA) { leadN++ }
 	a.BookmarkIcon = func(p painter.Painter, r Rect, ink RGBA, on bool) { starN++ }
-	a.Focused().Set(true)
+	a.HasFocus().Set(true)
 	a.Editing().Set("http://example.com/an/even/longer/overflowing/path?with=query")
 	a.Copied().Set(true)
 	buf := abRender(a, w, h, th)

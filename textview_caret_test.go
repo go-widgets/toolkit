@@ -14,7 +14,7 @@ func TestTextViewCaretVisibility(t *testing.T) {
 	theme := DefaultLight()
 	v := NewTextView("")
 	v.SetBounds(Rect{X: 0, Y: 0, W: w, H: h})
-	v.Focused().Set(true)
+	v.HasFocus().Set(true)
 
 	if !v.CaretVisible() {
 		t.Fatal("caret should be visible by default")

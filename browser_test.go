@@ -639,7 +639,7 @@ func TestBrowserDrawAddressFocusAndCaret(t *testing.T) {
 	}
 
 	// Focus + type: an Accent ring appears and a caret (OnSurface) is painted.
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	b.addr.Editing().Set("hi")
 	buf2 := makeSurface(browserBounds.W, browserBounds.H)
 	b.Draw(newP(buf2, browserBounds.W), theme)
@@ -801,8 +801,8 @@ func TestBrowserClickToolbarButtons(t *testing.T) {
 	// Address focus.
 	axc, ayc := center(addr)
 	b.OnEvent(Event{Kind: EventClick, X: axc, Y: ayc})
-	if !b.addr.Focused().Get() || b.addr.Editing().Get() != "http://c" {
-		t.Fatalf("address click: focused=%v buf=%q", b.addr.Focused().Get(), b.addr.Editing().Get())
+	if !b.addr.HasFocus().Get() || b.addr.Editing().Get() != "http://c" {
+		t.Fatalf("address click: focused=%v buf=%q", b.addr.HasFocus().Get(), b.addr.Editing().Get())
 	}
 }
 
@@ -888,10 +888,10 @@ func TestBrowserClickContentLink(t *testing.T) {
 
 func TestBrowserClickContentNoTab(t *testing.T) {
 	b, _, _, _ := newTestBrowser()
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	cr := b.contentRect()
 	b.OnEvent(Event{Kind: EventClick, X: cr.X + 1, Y: cr.Y + 1}) // no tab: link hit skipped
-	if b.addr.Focused().Get() {
+	if b.addr.HasFocus().Get() {
 		t.Fatal("content click should defocus the address field")
 	}
 }
@@ -925,12 +925,12 @@ func TestBrowserLinkAtDispHZeroGuard(t *testing.T) {
 func TestBrowserClickOutsideEverythingDefocuses(t *testing.T) {
 	b, _, _, _ := newTestBrowser()
 	b.Open("http://a", "")
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	tr := b.toolbarRect()
 	// The right pad of the toolbar row: not a button, not the address field, not
 	// the content area → the final defocus fallthrough.
 	b.OnEvent(Event{Kind: EventClick, X: tr.X + tr.W - 1, Y: tr.Y + tr.H/2})
-	if b.addr.Focused().Get() {
+	if b.addr.HasFocus().Get() {
 		t.Fatal("click outside all regions should defocus the address field")
 	}
 }
@@ -946,7 +946,7 @@ func TestBrowserAddressTyping(t *testing.T) {
 		t.Fatalf("unfocused char leaked: buf=%q", b.addr.Editing().Get())
 	}
 	// Focus and type.
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	b.addr.Editing().Set("")
 	b.OnEvent(Event{Kind: EventChar, Code: ""}) // empty code ignored
 	b.OnEvent(Event{Kind: EventChar, Code: "e"})
@@ -955,9 +955,9 @@ func TestBrowserAddressTyping(t *testing.T) {
 		t.Fatalf("addrBuf = %q, want eg", b.addr.Editing().Get())
 	}
 	// KeyDown while unfocused ignored.
-	b.addr.Focused().Set(false)
+	b.addr.HasFocus().Set(false)
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	// Backspace on non-empty then empty.
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
 	if b.addr.Editing().Get() != "e" {
@@ -974,21 +974,21 @@ func TestBrowserAddressCommit(t *testing.T) {
 	b, navT, _, _ := newTestBrowser()
 	b.Open("http://a", "")
 	n := len(*navT)
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	b.addr.Editing().Set("   ")
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
-	if b.addr.Focused().Get() || len(*navT) != n {
-		t.Fatalf("empty commit: focused=%v navs=%d", b.addr.Focused().Get(), len(*navT)-n)
+	if b.addr.HasFocus().Get() || len(*navT) != n {
+		t.Fatalf("empty commit: focused=%v navs=%d", b.addr.HasFocus().Get(), len(*navT)-n)
 	}
 	// Enter with a scheme: navigated verbatim.
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	b.addr.Editing().Set("http://typed")
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if b.CurrentURL() != "http://typed" {
 		t.Fatalf("scheme commit URL = %q", b.CurrentURL())
 	}
 	// Enter with a bare host: https:// is added.
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	b.addr.Editing().Set("bare.example")
 	b.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if b.CurrentURL() != "https://bare.example" {
@@ -1361,10 +1361,10 @@ func TestBrowserClickZoomButtons(t *testing.T) {
 		t.Fatalf("disabled zoom-out click changed zoom to %v", b.Zoom())
 	}
 
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	zx, zy = center(zi)
 	b.OnEvent(Event{Kind: EventClick, X: zx, Y: zy})
-	if b.addr.Focused().Get() {
+	if b.addr.HasFocus().Get() {
 		t.Fatal("a zoom-button click should defocus the address field")
 	}
 }
@@ -1454,12 +1454,12 @@ func TestBrowserClickFitButton(t *testing.T) {
 	b.SetZoom(BrowserMaxZoom)
 	_, _, _, _, _, fit, _ = b.toolbarLayout()
 	fx, fy = center(fit)
-	b.addr.Focused().Set(true)
+	b.addr.HasFocus().Set(true)
 	b.OnEvent(Event{Kind: EventClick, X: fx, Y: fy})
 	if !(b.Zoom() < 1.0) {
 		t.Fatalf("fit-button click zoom = %v, want < 1.0", b.Zoom())
 	}
-	if b.addr.Focused().Get() {
+	if b.addr.HasFocus().Get() {
 		t.Fatal("a fit-button click should defocus the address field")
 	}
 }
@@ -1563,12 +1563,12 @@ func TestBrowserAddressLeadingAndBookmark(t *testing.T) {
 
 	// Clicking the star flips the shared bookmark Observable on (subscriber sees it), not focus.
 	click(star.X+star.W/2, star.Y+star.H/2)
-	if !b.Bookmarked().Get() || len(toggled) != 1 || !toggled[0] || b.addr.Focused().Get() {
-		t.Fatalf("star click: bookmarked=%v toggled=%v focused=%v", b.Bookmarked().Get(), toggled, b.addr.Focused().Get())
+	if !b.Bookmarked().Get() || len(toggled) != 1 || !toggled[0] || b.addr.HasFocus().Get() {
+		t.Fatalf("star click: bookmarked=%v toggled=%v focused=%v", b.Bookmarked().Get(), toggled, b.addr.HasFocus().Get())
 	}
 	// Clicking the text zone focuses the field (not the bookmark).
 	click(tz.X+3, tz.Y+tz.H/2)
-	if !b.addr.Focused().Get() {
+	if !b.addr.HasFocus().Get() {
 		t.Fatal("text-zone click should focus the address field")
 	}
 	// A second star click toggles off.
@@ -1734,7 +1734,7 @@ func TestBrowserHideChromeClicksInert(t *testing.T) {
 	}
 	axc, ayc := center(addr)
 	b.OnEvent(Event{Kind: EventClick, X: axc, Y: ayc}) // over a would-be address field
-	if b.addr.Focused().Get() {
+	if b.addr.HasFocus().Get() {
 		t.Fatal("address field must not focus when chrome hidden")
 	}
 	// Programmatic navigation still drives the chromeless page view.

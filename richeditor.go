@@ -131,14 +131,21 @@ func (e *RichEditor) Selection() *mvvm.Observable[DocSelection] {
 	return e.sel
 }
 
-// Focused reports (and drives) keyboard focus; Draw paints the caret + accent
-// border while it is true.
-func (e *RichEditor) Focused() *mvvm.Observable[bool] {
+// HasFocus reports (and drives) keyboard focus; Draw paints the caret + accent
+// border while it is true. It is the single source of truth behind the
+// Focusable methods below.
+func (e *RichEditor) HasFocus() *mvvm.Observable[bool] {
 	if e.focus == nil {
 		e.focus = mvvm.NewObservable(false)
 	}
 	return e.focus
 }
+
+// SetFocused implements Focusable: it writes HasFocus().
+func (e *RichEditor) SetFocused(focused bool) { e.HasFocus().Set(focused) }
+
+// Focused implements Focusable: it reads HasFocus().
+func (e *RichEditor) Focused() bool { return e.HasFocus().Get() }
 
 // ScrollOffset is the vertical scroll position in device pixels (0 == top),
 // bindable. Reads clamp on the fly, so a stale value after the document shrank is
@@ -465,7 +472,7 @@ func (e *RichEditor) Draw(p painter.Painter, theme *Theme) {
 	e.lastTheme = theme
 	r := e.Bounds()
 	border := theme.Border
-	if e.Focused().Get() {
+	if e.HasFocus().Get() {
 		border = theme.Accent
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
@@ -499,7 +506,7 @@ func (e *RichEditor) Draw(p painter.Painter, theme *Theme) {
 				e.drawRun(p, run, y)
 			}
 		}
-		if e.Focused().Get() {
+		if e.HasFocus().Get() {
 			if ln, cell, ok := e.caretLineFor(lay, caret); ok {
 				cx := ln.cellX[cell]
 				cy := ln.textY - scroll
@@ -587,7 +594,7 @@ func (e *RichEditor) drawScrollbar(p painter.Painter, theme *Theme, lay reLayout
 func (e *RichEditor) OnEvent(ev Event) {
 	switch ev.Kind {
 	case EventClick:
-		e.Focused().Set(true)
+		e.HasFocus().Set(true)
 		lay := e.buildLayout(e.theme())
 		pos := e.posAtLocal(lay, ev.X, ev.Y)
 		e.Caret().Set(pos)
