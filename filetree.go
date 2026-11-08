@@ -24,6 +24,92 @@ type FileEntry struct {
 	Path string
 	Dir  bool
 	Size int64
+	// Status marks the entry's state in a versioned working tree. The zero value
+	// is [FileUnchanged], so a host that does not track versions sets nothing and
+	// sees nothing.
+	Status FileStatus
+}
+
+// FileStatus is an entry's state in a versioned working tree.
+//
+// ⛔ IT IS NOT "GIT STATUS", DELIBERATELY. These six states are the vocabulary
+// git, Mercurial, Subversion, Jujutsu and Fossil all share, and naming the type
+// after one of them would make it unusable by the other four — while teaching the
+// widget what a commit is would put version control inside a file explorer. The
+// tree knows what mark to draw; the host knows why.
+//
+// A versioned working tree is also the case this widget was already being
+// avoided for: a consumer with a repository to show has to hand-roll a file view
+// to get these marks, and loses rename, delete, move, drag-and-drop and the
+// context menu doing it.
+type FileStatus int
+
+const (
+	// FileUnchanged is the zero value: no mark. Every FileEntry literal written
+	// before this existed means exactly this, which is why it is first.
+	FileUnchanged FileStatus = iota
+	// FileModified is tracked and edited.
+	FileModified
+	// FileAdded is newly tracked — git's staged-new, hg's added, svn's A.
+	FileAdded
+	// FileDeleted is tracked and gone from the working tree. The entry is still
+	// listed, because a deletion a reader has not committed is still something
+	// they must be able to see and undo.
+	FileDeleted
+	// FileUntracked is present and not under version control.
+	FileUntracked
+	// FileConflicted needs a human: a merge left it with both sides in it.
+	FileConflicted
+)
+
+// ⛔ There is no FileIgnored. It would render exactly like FileUnchanged — no
+// mark — so it would be a state a consumer could set and never see, which is a
+// promise the widget does not keep. A host that wants ignored files dimmed or
+// absent controls that where it already controls it: by what it puts in Entries.
+
+// fileStatusMark is the one or two characters drawn for a status, or "" for none.
+// They are the marks `git status --short`, `hg status` and `svn status` all use,
+// so a reader who knows one knows this.
+func fileStatusMark(s FileStatus) string {
+	switch s {
+	case FileModified:
+		return "M"
+	case FileAdded:
+		return "A"
+	case FileDeleted:
+		return "D"
+	case FileUntracked:
+		return "?"
+	case FileConflicted:
+		return "!"
+	}
+	return ""
+}
+
+// fileStatusInk is the mark's colour, chosen for CONTRAST rather than for being
+// the expected hue: each status offers a light-background and a dark-background
+// candidate and the first that clears 4.5:1 against the row wins, with the row's
+// own ink as the fallback. A mark nobody can read is a decoration.
+func fileStatusInk(theme *Theme, s FileStatus, ink RGBA) RGBA {
+	var candidates []RGBA
+	switch s {
+	case FileModified:
+		candidates = []RGBA{RGB(0x8a, 0x55, 0x00), RGB(0xff, 0xc1, 0x07)}
+	case FileAdded:
+		candidates = []RGBA{RGB(0x1b, 0x5e, 0x20), RGB(0x81, 0xc7, 0x84)}
+	case FileDeleted, FileConflicted:
+		candidates = []RGBA{RGB(0xb4, 0x23, 0x18), RGB(0xff, 0x8a, 0x80)}
+	case FileUntracked:
+		candidates = []RGBA{RGB(0x45, 0x4f, 0x54), RGB(0xb0, 0xbe, 0xc5)}
+	default:
+		return ink
+	}
+	for _, c := range candidates {
+		if contrastRatio(c, theme.SurfaceAlt) >= 4.5 {
+			return c
+		}
+	}
+	return ink
 }
 
 // FileAction is what a [FileRequest] asks the host to do.
@@ -122,6 +208,7 @@ type fileNode struct {
 	path    string
 	dir     bool
 	size    int64
+	status  FileStatus
 	pending bool // the row of a name being typed for a new entry
 }
 
@@ -217,13 +304,22 @@ func (f *FileTree) rebuild() {
 		}
 		n := f.folder(path.Dir(p))
 		if e.Dir {
-			f.folder(p)
+			// An explicit folder entry may carry a status of its own — a
+			// submodule, a directory a merge left conflicted. It is assigned here
+			// rather than in folder(), which also builds the IMPLIED parents of
+			// every file and has no entry to take a status from.
+			f.folder(p).Data.(*fileNode).status = e.Status
 			continue
 		}
 		if f.nodes[p] != nil {
 			continue
 		}
-		leaf := &TreeNode{Label: path.Base(p), Data: &fileNode{path: p, size: e.Size}}
+		// ⛔ A folder's status is NOT derived from its children. "A folder holding
+		// a modified file" is a policy, not a fact — git says nothing about
+		// folders at all — so guessing one here would be wrong for some VCS and
+		// unaskable for the rest. A host that wants one sets it on a Dir entry,
+		// which the branch above carries.
+		leaf := &TreeNode{Label: path.Base(p), Data: &fileNode{path: p, size: e.Size, status: e.Status}}
 		f.nodes[p] = leaf
 		n.Children = append(n.Children, leaf)
 	}
@@ -707,6 +803,13 @@ func (f *FileTree) drawRow(p painter.Painter, theme *Theme, r Rect, n *TreeNode,
 		f.drawText(p, right, ty, s, ink)
 		right -= scaled(8)
 	}
+	// The status mark sits inboard of the size, so turning sizes on does not move
+	// it and a column of marks stays a column.
+	if mark := fileStatusMark(fn.status); mark != "" {
+		right -= f.textWidth(mark)
+		f.drawText(p, right, ty, mark, fileStatusInk(theme, fn.status, ink))
+		right -= scaled(6)
+	}
 	f.drawText(p, x, ty, elideToWidth(n.Label, right-x, f.textWidth), ink)
 }
 
@@ -1057,7 +1160,37 @@ func (f *FileTree) expandSiblings() {
 	}
 }
 
-// A11y describes the tree: its name and the selected path.
+// A11y describes the tree: its name and the selected path, with that entry's
+// status spelled out when it has one.
+//
+// ⛔ The mark is a glyph in a colour, and both are unavailable to a screen
+// reader — so a status that only reached drawRow would be information for
+// sighted users and decoration for everyone else. "main.tex, modified" is the
+// same fact the M carries.
 func (f *FileTree) A11y() A11yInfo {
-	return A11yInfo{Role: RoleTree, Name: f.Label, Value: f.selected.Get()}
+	value := f.selected.Get()
+	if n := f.nodes[value]; n != nil && value != "" {
+		if s := fileStatusName(n.Data.(*fileNode).status); s != "" {
+			value += ", " + s
+		}
+	}
+	return A11yInfo{Role: RoleTree, Name: f.Label, Value: value}
+}
+
+// fileStatusName is the status in words, for assistive technology. Empty for
+// [FileUnchanged], which has nothing to announce.
+func fileStatusName(s FileStatus) string {
+	switch s {
+	case FileModified:
+		return "modified"
+	case FileAdded:
+		return "added"
+	case FileDeleted:
+		return "deleted"
+	case FileUntracked:
+		return "untracked"
+	case FileConflicted:
+		return "conflicted"
+	}
+	return ""
 }
