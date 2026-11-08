@@ -38,7 +38,7 @@ func (t *TextView) MinimapMarks() []MinimapMark { return t.mmMarks }
 
 // minimapW is the minimap's width, 0 when it is off or the window is too narrow.
 func (t *TextView) minimapW() int {
-	if !t.ShowScrollbars || !t.ShowMinimap {
+	if !t.ShowScrollbars || !t.ShowMinimap || t.NoVerticalScroll {
 		return 0
 	}
 	w := scaled(minimapWidth)

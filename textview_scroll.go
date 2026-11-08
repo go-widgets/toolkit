@@ -83,7 +83,7 @@ func (t *TextView) bars() (v, h bool) {
 		if h {
 			avail -= tr
 		}
-		v = len(t.lines) > t.linesFitIn(avail)
+		v = !t.NoVerticalScroll && len(t.lines) > t.linesFitIn(avail)
 	}
 	return v, h
 }
