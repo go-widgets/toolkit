@@ -154,6 +154,17 @@ type TextView struct {
 	// before the field existed. CodeEditor turns it on. See textview_scroll.go.
 	ShowScrollbars bool
 
+	// NoVerticalScroll, when true, lays out every line (the view never scrolls
+	// vertically: ScrollLine stays 0, no vertical bar, no minimap, the wheel's
+	// vertical delta is ignored) so a host can size the view to PreferredHeight and
+	// let the page scroll. The horizontal bar (ShowScrollbars) is kept for long
+	// lines, and the caret, selection and IME work as usual. Zero value false. See
+	// textview_height.go.
+	NoVerticalScroll bool
+
+	// prefH is the lazily created PreferredHeight Observable.
+	prefH *mvvm.Observable[int]
+
 	// ShowMinimap, when true (and ShowScrollbars is), shows a minimap — a
 	// scaled-down overview of the whole buffer with the visible range as a slider —
 	// left of the vertical scrollbar. Zero value false. See textview_minimap.go.
@@ -271,6 +282,7 @@ func (t *TextView) sync() {
 	t.colsOK = false
 	t.rev++
 	t.marked = false // any edit ends a composition; SetMarkedInput re-marks after
+	t.refreshPreferredHeight()
 	t.Text().Set(strings.Join(t.lines, "\n"))
 }
 
@@ -287,6 +299,7 @@ func (t *TextView) adopt(s string) {
 		t.lines = strings.Split(s, "\n")
 	}
 	t.clampCursorToBuffer()
+	t.refreshPreferredHeight()
 }
 
 // clampCursorToBuffer pins the caret line into [0, len(lines)-1] and its column
@@ -411,6 +424,7 @@ func (t *TextView) SetText(s string) {
 // painted-but-clipped by the raster helpers; wrap in a ScrollView
 // for proper scrollable behaviour.
 func (t *TextView) Draw(p painter.Painter, theme *Theme) {
+	t.refreshPreferredHeight() // catches a font change inherited via CurrentFont
 	r := t.Bounds()
 	border := theme.Border
 	if t.HasFocus().Get() {
@@ -797,6 +811,9 @@ func (t *TextView) cursorRight() {
 // short widget still shows the caret's line and scrolling stays well-defined. A
 // non-positive height or line height both collapse to 0 — no lines fit.
 func (t *TextView) visibleLines() int {
+	if t.NoVerticalScroll {
+		return max(len(t.lines), 1) // every line is laid out
+	}
 	_, hb := t.bars()
 	avail := t.Bounds().H
 	if hb {
