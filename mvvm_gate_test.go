@@ -124,7 +124,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// index and the in-flight IME preview are unexported internal editing state;
 	// OnSubmit is an action func hook. Placeholder + Mask are set-once
 	// appearance config, so they are the only allowlisted fields.
-	"Entry": {"Placeholder": true, "Mask": true},
+	"Entry": {"Placeholder": true, "Mask": true, "AccessibleName": true},
 	// FolderTabs: the active-tab index is unexported behind the Selected
 	// Observable accessor; OnSelect / OnClose are func hooks (auto-allowed). Labels
 	// (tab captions) and Closable (whether tabs show a × close affordance) are
@@ -202,7 +202,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// unexported internal editing state. Highlighter/RowBackground are func hooks
 	// (auto-allowed). Decorations (host-driven co-editor carets), ShowLineNumbers
 	// and GutterColor are set-once display config.
-	"TextView": {"Decorations": true, "ShowLineNumbers": true, "GutterColor": true, "ShowScrollbars": true, "ShowMinimap": true},
+	"TextView": {"Decorations": true, "ShowLineNumbers": true, "GutterColor": true, "ShowScrollbars": true, "ShowMinimap": true, "AccessibleName": true},
 	// Scroll/overlay/structural batch: each widget's reactive state is now unexported
 	// behind an Observable accessor — ScrollView's offsetX/offsetY, Scrollbar's offset,
 	// Paned's position, ContextMenu's open, CommandPalette's visible, DropZone's hover,

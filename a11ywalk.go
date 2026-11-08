@@ -4,6 +4,12 @@
 
 package toolkit
 
+import (
+	"reflect"
+	"strconv"
+	"strings"
+)
+
 // A11yNode is one accessible element together with WHERE it is.
 //
 // [CollectA11y] answers what a tree contains; this answers where each thing is,
@@ -23,6 +29,16 @@ type A11yNode struct {
 	// origin. Accumulating offsets during the walk, the obvious reading of
 	// "placement within its parent surface", would double every position.
 	Rect Rect
+
+	// Key identifies the element across frames, so a host (the webcanvas
+	// accessibility mirror) can diff two walks by it instead of rebuilding
+	// nodes and losing a screen reader's position. It is the path of segments
+	// from the root, "/"-separated: each segment is "@<id>" when the widget
+	// implements [A11yIdentified], else "<Type>#<n>" with n the ordinal among
+	// its siblings of that type. It depends only on tree structure and model
+	// identity, never on bounds, scroll offset, focus or paint, and no two
+	// nodes of one walk share a Key.
+	Key string
 }
 
 // WalkA11y returns every meaningful element of the tree rooted at w, each with
@@ -43,8 +59,8 @@ type A11yNode struct {
 // knows what its own screen reader does with one.
 func WalkA11y(w Widget) []A11yNode {
 	var out []A11yNode
-	var walk func(x Widget, dx, dy int)
-	walk = func(x Widget, dx, dy int) {
+	var walk func(x Widget, dx, dy int, key string)
+	walk = func(x Widget, dx, dy int, key string) {
 		if x == nil {
 			return
 		}
@@ -52,7 +68,7 @@ func WalkA11y(w Widget) []A11yNode {
 			if info := a.A11y(); info.Role != RolePresentation {
 				r := x.Bounds()
 				r.X, r.Y = r.X+dx, r.Y+dy
-				out = append(out, A11yNode{A11yInfo: info, Rect: r})
+				out = append(out, A11yNode{A11yInfo: info, Rect: r, Key: key})
 			}
 		}
 		if o, ok := x.(childOffsetter); ok {
@@ -60,14 +76,89 @@ func WalkA11y(w Widget) []A11yNode {
 			dx, dy = dx+ox, dy+oy
 		}
 		if c, ok := x.(childContainer); ok {
-			for _, child := range c.Children() {
-				walk(child, dx, dy)
+			kids := c.Children()
+			segs := a11ySegments(kids)
+			for i, child := range kids {
+				walk(child, dx, dy, key+"/"+segs[i])
 			}
 		}
 	}
-	walk(w, 0, 0)
+	walk(w, 0, 0, a11ySegment(w, 0))
 	return out
 }
+
+// A11yIdentified is implemented by a widget that has an identity of its own,
+// independent of where it sits among its siblings: a row's model key, an
+// entity's ID. A container that creates or recycles children (a list that
+// virtualizes its rows, a diagram's proxies) sets it from the MODEL key, never
+// from the row slot, so [A11yNode.Key] survives scrolling, insertion and
+// removal of other siblings. An empty string means "no identity".
+type A11yIdentified interface {
+	A11yID() string
+}
+
+// a11ySegments names every child of one parent, distinct from its siblings.
+//
+// A child with an explicit [A11yIdentified] ID is "@<id>"; the others are
+// "<type>#<n>", n counting only the siblings of that type WITHOUT an explicit
+// ID, so inserting or removing a sibling of another type (or one with an ID)
+// never renumbers the rest. A second child claiming an ID already used gets
+// "~2", "~3" ... appended in order, because two siblings must never share a
+// Key (a mirror diffs by it). A nil child takes no ordinal.
+func a11ySegments(kids []Widget) []string {
+	segs := make([]string, len(kids))
+	typeN := map[string]int{}
+	idN := map[string]int{}
+	for i, k := range kids {
+		if k == nil {
+			continue
+		}
+		if id := a11yID(k); id != "" {
+			s := "@" + a11yEscape(id)
+			idN[s]++
+			if n := idN[s]; n > 1 {
+				s += "~" + strconv.Itoa(n)
+			}
+			segs[i] = s
+			continue
+		}
+		t := a11yTypeName(k)
+		segs[i] = t + "#" + strconv.Itoa(typeN[t])
+		typeN[t]++
+	}
+	return segs
+}
+
+// a11ySegment is the segment of a single widget with no siblings (the root),
+// or at ordinal n among its own type.
+func a11ySegment(w Widget, n int) string {
+	if w == nil {
+		return ""
+	}
+	if id := a11yID(w); id != "" {
+		return "@" + a11yEscape(id)
+	}
+	return a11yTypeName(w) + "#" + strconv.Itoa(n)
+}
+
+func a11yID(w Widget) string {
+	if i, ok := w.(A11yIdentified); ok {
+		return i.A11yID()
+	}
+	return ""
+}
+
+// a11yTypeName is the widget's Go type name without package or pointer ("Button").
+func a11yTypeName(w Widget) string {
+	t := reflect.TypeOf(w)
+	for t.Kind() == reflect.Pointer {
+		t = t.Elem()
+	}
+	return t.Name()
+}
+
+// a11yEscape keeps "/" (the path separator) and "%" out of an explicit ID.
+var a11yEscape = strings.NewReplacer("%", "%25", "/", "%2F").Replace
 
 // childOffsetter is implemented by a widget that PAINTS its children at a
 // translated origin — a scrolled viewport being the only case today.

@@ -34,7 +34,7 @@ func TestA11yActionInputWidgets(t *testing.T) {
 		{"iconbutton", NewIconButton("trash", nil), A11yInfo{Role: RoleButton, Name: "trash"}},
 		{"splitbutton", NewSplitButton("Save", nil), A11yInfo{Role: RoleButton, Name: "Save"}},
 		{"searchentry", NewSearchEntry("golang"), A11yInfo{Role: RoleSearchbox, Value: "golang"}},
-		{"textview", NewTextView("line1\nline2"), A11yInfo{Role: RoleTextbox, Value: "line1\nline2"}},
+		{"textview", NewTextView("line1\nline2"), A11yInfo{Role: RoleTextbox, Value: "line1\nline2", Multiline: true}},
 		{"spinbutton", NewSpinButton(0, 10, 4, 1), A11yInfo{Role: RoleSpinbutton, Value: "4", HasRange: true, Min: 0, Max: 10, Now: 4}},
 		{"rangeslider", NewRangeSlider(0, 100, 20, 80), A11yInfo{Role: RoleGroup, Value: "20..80", HasRange: true, Min: 0, Max: 100, Now: 20}},
 		{"dropdown", NewDropDown([]string{"a", "b", "c"}, 1), A11yInfo{Role: RoleCombobox, Name: "b"}},

@@ -32,6 +32,10 @@ type Entry struct {
 	// composition is in flight (a hint like "search…" or "client id").
 	Placeholder string
 
+	// AccessibleName is the field's accessible name ("Email address"), reported
+	// as A11yInfo.Name. Placeholder is a visual hint, not a name.
+	AccessibleName string
+
 	// Mask, when non-zero, is the rune each character is displayed as (e.g. '•')
 	// instead of the real text — for secrets/passwords. Text/Value keep the real
 	// contents for the program; nothing else sees them: the accessibility value

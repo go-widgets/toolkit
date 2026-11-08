@@ -1247,9 +1247,9 @@ func (l *ListBox) Children() []Widget {
 		y := r.Y + (i-start)*rh
 		var pr *isoProxy
 		if row.header {
-			pr = &isoProxy{info: A11yInfo{Role: RoleHeading, Name: row.text}}
+			pr = &isoProxy{info: A11yInfo{Role: RoleHeading, Name: row.text}, id: "header:" + row.text}
 		} else {
-			pr = &isoProxy{info: A11yInfo{Role: RoleListItem, Name: row.text, Value: stateValue(row.item == sel, "selected")}}
+			pr = &isoProxy{info: A11yInfo{Role: RoleListItem, Name: row.text, Value: stateValue(row.item == sel, "selected")}, id: "item:" + row.text}
 		}
 		pr.SetBounds(Rect{X: r.X, Y: y, W: r.W, H: rh})
 		out = append(out, pr)

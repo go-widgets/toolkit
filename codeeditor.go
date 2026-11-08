@@ -165,7 +165,11 @@ func (c *CodeEditor) Draw(p painter.Painter, theme *Theme) {
 // current buffer text. It shadows the promoted TextView.A11y so a screen
 // reader hears the code editor, not a bare textbox.
 func (c *CodeEditor) A11y() A11yInfo {
-	return A11yInfo{Role: RoleTextbox, Name: c.Language, Value: c.TextView.Text().Get()}
+	info := c.TextView.A11y()
+	if info.Name == "" {
+		info.Name = c.Language
+	}
+	return info
 }
 
 // refresh re-runs the highlighter when (and only when) an input it depends on
