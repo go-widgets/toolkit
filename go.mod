@@ -9,7 +9,7 @@ require (
 	github.com/go-icons/iconoir v0.3.0
 	github.com/go-images/images v0.3.0
 	github.com/go-opentype/fonts v0.14.0
-	github.com/go-opentype/opentype v0.18.0
+	github.com/go-opentype/opentype v0.20.0
 	github.com/go-opentype/shape v0.7.0
 	github.com/go-richdoc/richdoc v0.7.0
 	github.com/go-typeset/bidi v0.3.1

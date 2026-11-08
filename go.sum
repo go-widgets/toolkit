@@ -17,8 +17,8 @@ github.com/go-images/images v0.3.0 h1:uj0bNC9HTvMZF4HvHf5XNVlXYB6zAr8uAdbieTMzuv
 github.com/go-images/images v0.3.0/go.mod h1:ep6TePdcpU6ESk2yHuapG9ybfznNsxgHOFOeRKsinZ8=
 github.com/go-opentype/fonts v0.14.0 h1:WHw7k9gkHT1pu9B2yyvd0FWyQqn/4NKFQoKhvMYt3Mo=
 github.com/go-opentype/fonts v0.14.0/go.mod h1:od2QcmdpKo7QCqo6Jb16y4GULk+h2Hhfq6x3xfvn62Q=
-github.com/go-opentype/opentype v0.18.0 h1:kxYj8r6on63QwPML6Y41xGrSH7A9ap9tKWioI4yFs9Y=
-github.com/go-opentype/opentype v0.18.0/go.mod h1:cyTZyPcwVFR4MTHnCj7a6tk2tGIB6deakpefu/apDjg=
+github.com/go-opentype/opentype v0.20.0 h1:5YePvRwcnfseDSdP4oDHp7uBDtPxQd1I3Q2ZbOxFLfs=
+github.com/go-opentype/opentype v0.20.0/go.mod h1:cyTZyPcwVFR4MTHnCj7a6tk2tGIB6deakpefu/apDjg=
 github.com/go-opentype/shape v0.7.0 h1:hXUkI4xdpkzq31ZYf/6zfkDAgRLZnTjI1q8DWLu5MGQ=
 github.com/go-opentype/shape v0.7.0/go.mod h1:n8pMQ/MH4Oscxwd9J0B7RiZ5gKlD0yagRQKYsAmJ9Rw=
 github.com/go-richdoc/richdoc v0.7.0 h1:vhHypa0y26ulrOz6Aw1RIzeLjSMsFJyU1SzK5jd90lg=
