@@ -29,6 +29,16 @@ in headless tests (screenshot-hash regressions).
 - **A11y bridge**: core widgets implement an opt-in `Accessible`
   interface (`A11y() A11yInfo`) so a host can `CollectA11y` and
   publish them to screen readers without rewriting every widget.
+  `A11yInfo` carries role, name, value, range and the textbox states
+  `Focused`, `Disabled`, `ReadOnly` and `Multiline` (WAI-ARIA 1.2
+  aria-disabled / aria-readonly / aria-multiline; `Focused` is read from
+  the widget's own focus state). `WalkA11y` returns each element with its
+  bounds and a stable `Key` (a `/`-separated path of `@<id>` or
+  `<Type>#<n>` segments) so a host can diff trees between frames: a
+  widget that has a model identity implements `A11yID() string`
+  (`A11yIdentified`), and keys survive scrolling, repaint and the
+  insertion of siblings. `TextView`, `CodeEditor` and `Entry` take an
+  `AccessibleName`.
 
 ## Non-goals
 

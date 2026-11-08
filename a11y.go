@@ -52,6 +52,23 @@ type A11yInfo struct {
 	Name  string
 	Value string
 
+	// Focused reports that the widget holds keyboard focus. It is read from the
+	// widget's own focus state (the Focusable source of truth), never kept in a
+	// second field. WAI-ARIA 1.2 §4.3 (managing focus) leaves focus to the host
+	// language (tabindex) or aria-activedescendant, so a mirror turns this into
+	// real DOM focus rather than an ARIA attribute.
+	Focused bool
+	// Disabled maps to aria-disabled: "perceivable but disabled, so it is not
+	// editable or otherwise operable". It reads [Base.Disabled].
+	Disabled bool
+	// ReadOnly maps to aria-readonly: "not editable, but is otherwise operable".
+	// No built-in text widget has a read-only mode yet, so it is always false
+	// today; the field exists so a host need not change when one does.
+	ReadOnly bool
+	// Multiline maps to aria-multiline: "whether a text box accepts multiple
+	// lines of input or only a single line". True for TextView and CodeEditor.
+	Multiline bool
+
 	// HasRange reports whether Min, Max and Now carry a meaningful reading.
 	HasRange bool
 	// Min, Max and Now are the numeric range and current position of a
@@ -122,9 +139,18 @@ func (b *Button) A11y() A11yInfo {
 // A11y reports the Label as static text.
 func (l *Label) A11y() A11yInfo { return A11yInfo{Role: RoleText, Name: l.Text().Get()} }
 
-// A11y reports the Entry as a textbox carrying its current text, masked when
-// the Entry is (a secret is exposed as its bullets, never as itself).
-func (e *Entry) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: e.display()} }
+// A11y reports the Entry as a single-line textbox carrying its current text,
+// masked when the Entry is (a secret is exposed as its bullets, never as
+// itself). Name is AccessibleName; Focused and Disabled come from the widget.
+func (e *Entry) A11y() A11yInfo {
+	return A11yInfo{
+		Role:     RoleTextbox,
+		Name:     e.AccessibleName,
+		Value:    e.display(),
+		Focused:  e.Focused(),
+		Disabled: e.Disabled().Get(),
+	}
+}
 
 // A11y reports the CheckButton as a checkbox with its checked state.
 func (c *CheckButton) A11y() A11yInfo {

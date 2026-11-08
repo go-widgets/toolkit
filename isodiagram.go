@@ -1975,7 +1975,7 @@ func (d *IsoDiagram) Children() []Widget {
 		sx := b.X + iround(pt.X)
 		sy := b.Y + iround(pt.Y)
 		tile := iround(d.proj.TileW)
-		pr := &isoProxy{info: A11yInfo{Role: RoleImg, Name: name, Value: stateValue(d.IsSelected(IsoEntityRef{Kind: IsoEntityNode, ID: n.ID}), "selected")}}
+		pr := &isoProxy{info: A11yInfo{Role: RoleImg, Name: name, Value: stateValue(d.IsSelected(IsoEntityRef{Kind: IsoEntityNode, ID: n.ID}), "selected")}, id: "node:" + n.ID}
 		pr.SetBounds(Rect{X: sx - tile/2, Y: sy - tile/2, W: tile, H: tile})
 		out = append(out, pr)
 	}
@@ -1984,14 +1984,14 @@ func (d *IsoDiagram) Children() []Widget {
 		if name == "" {
 			name = c.From + " to " + c.To
 		}
-		out = append(out, &isoProxy{info: A11yInfo{Role: RoleImg, Name: name}})
+		out = append(out, &isoProxy{info: A11yInfo{Role: RoleImg, Name: name}, id: "link:" + c.From + ">" + c.To})
 	}
 	for _, z := range d.doc.Zones() {
 		name := z.Label
 		if name == "" {
 			name = z.ID
 		}
-		pr := &isoProxy{info: A11yInfo{Role: RoleGroup, Name: name, Value: stateValue(d.IsSelected(IsoEntityRef{Kind: IsoEntityZone, ID: z.ID}), "selected")}}
+		pr := &isoProxy{info: A11yInfo{Role: RoleGroup, Name: name, Value: stateValue(d.IsSelected(IsoEntityRef{Kind: IsoEntityZone, ID: z.ID}), "selected")}, id: "zone:" + z.ID}
 		corners := d.zoneCorners(z)
 		pr.SetBounds(zoneBoundsRect(b, corners))
 		out = append(out, pr)
@@ -2002,7 +2002,7 @@ func (d *IsoDiagram) Children() []Widget {
 			name = t.ID
 		}
 		box := d.textBox(t)
-		pr := &isoProxy{info: A11yInfo{Role: RoleImg, Name: name, Value: stateValue(d.IsSelected(IsoEntityRef{Kind: IsoEntityText, ID: t.ID}), "selected")}}
+		pr := &isoProxy{info: A11yInfo{Role: RoleImg, Name: name, Value: stateValue(d.IsSelected(IsoEntityRef{Kind: IsoEntityText, ID: t.ID}), "selected")}, id: "text:" + t.ID}
 		pr.SetBounds(Rect{X: b.X + box.X, Y: b.Y + box.Y, W: box.W, H: box.H})
 		out = append(out, pr)
 	}
@@ -2027,7 +2027,13 @@ func zoneBoundsRect(b Rect, corners []geometry.Point) Rect {
 type isoProxy struct {
 	Base
 	info A11yInfo
+	// id is the proxy's model identity (an entity ID, a row's text), so its
+	// [A11yNode.Key] does not depend on its slot among the proxies.
+	id string
 }
+
+// A11yID returns the proxy's model identity; empty when it has none.
+func (p *isoProxy) A11yID() string { return p.id }
 
 // A11y returns the proxy's fixed description.
 func (p *isoProxy) A11y() A11yInfo { return p.info }

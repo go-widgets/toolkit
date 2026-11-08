@@ -39,6 +39,10 @@ type TextSpan struct {
 type TextView struct {
 	Base
 
+	// AccessibleName is the editor's accessible name ("Go cell 3"), reported as
+	// A11yInfo.Name. A CodeEditor falls back to its Language when it is empty.
+	AccessibleName string
+
 	// Decorations are remote co-editors' carets + selections in a shared
 	// buffer, each painted in its own colour with a name tag (see the
 	// Decoration type). Empty for a solo editor; the host keeps it in sync

@@ -91,7 +91,7 @@ func TestCodeEditorA11y(t *testing.T) {
 	c := NewCodeEditor("package main")
 	c.Language = "go"
 	got := c.A11y()
-	want := A11yInfo{Role: RoleTextbox, Name: "go", Value: "package main"}
+	want := A11yInfo{Role: RoleTextbox, Name: "go", Value: "package main", Multiline: true}
 	if got != want {
 		t.Errorf("A11y() = %+v, want %+v", got, want)
 	}

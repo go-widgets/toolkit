@@ -90,7 +90,16 @@ func (b *SplitButton) A11y() A11yInfo { return A11yInfo{Role: RoleButton, Name: 
 func (s *SearchEntry) A11y() A11yInfo { return A11yInfo{Role: RoleSearchbox, Value: s.Text().Get()} }
 
 // A11y reports the TextView as a textbox carrying its full buffer text.
-func (t *TextView) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: t.Text().Get()} }
+func (t *TextView) A11y() A11yInfo {
+	return A11yInfo{
+		Role:      RoleTextbox,
+		Name:      t.AccessibleName,
+		Value:     t.Text().Get(),
+		Focused:   t.Focused(),
+		Disabled:  t.Disabled().Get(),
+		Multiline: true,
+	}
+}
 
 // A11y reports the SpinButton as a spinbutton carrying its numeric value, both
 // as a Value string and as the numeric Min/Max/Now range triple.
