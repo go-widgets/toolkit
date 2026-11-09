@@ -46,11 +46,10 @@ type Terminal struct {
 	// the host can tell the program (a pty's TIOCSWINSZ, or nothing).
 	OnResize func(cols, rows int)
 
-	// CellW / CellH, when positive, pin an explicit per-cell pixel size that
+	// pinW / pinH, when positive, pin an explicit per-cell pixel size that
 	// overrides the font-derived metrics (zero on an axis: derive that axis
-	// from the font). Set them with SetCellSize, which refits the grid at
-	// once, or assign them before the first SetBounds.
-	CellW, CellH int
+	// from the font). Set by SetCellSize.
+	pinW, pinH int
 
 	screen  *vt.Screen
 	offset  *mvvm.Observable[int]
@@ -175,7 +174,7 @@ func (t *Terminal) SetBounds(r Rect) {
 // active font. Once bounds are established the grid is refitted at once and
 // OnResize told if its size changed, as a resize would.
 func (t *Terminal) SetCellSize(w, h int) {
-	t.CellW, t.CellH = w, h
+	t.pinW, t.pinH = w, h
 	if t.bounded {
 		t.refit()
 	}
@@ -199,12 +198,12 @@ func (t *Terminal) CellWidth() int { return t.cellW }
 // CellHeight is the pixel height of one cell (0 before SetBounds).
 func (t *Terminal) CellHeight() int { return t.cellH }
 
-// refit resolves the cell size (the CellW / CellH override on each axis where
+// refit resolves the cell size (the SetCellSize override on each axis where
 // positive, else the font's advance and height) and refits the grid to the
 // bounds, telling OnResize when that changes the grid.
 func (t *Terminal) refit() {
 	r := t.Bounds()
-	t.cellW, t.cellH = t.CellW, t.CellH
+	t.cellW, t.cellH = t.pinW, t.pinH
 	if t.cellW <= 0 {
 		t.cellW = t.glyphAdvance()
 	}
