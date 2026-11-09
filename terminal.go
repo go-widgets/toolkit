@@ -291,6 +291,24 @@ func (t *Terminal) selected(p vt.Pos) bool {
 	return !p.Before(a) && !b.Before(p)
 }
 
+// asciiCells holds the one-rune string of every ASCII rune. string(r)
+// allocates once it escapes into a Painter, and a full redraw draws every
+// cell: 1920 allocations per 80 × 24 frame before this table.
+var asciiCells = func() (t [utf8.RuneSelf]string) {
+	for i := range t {
+		t[i] = string(rune(i))
+	}
+	return t
+}()
+
+// runeText is the text of a cell holding r, without an allocation for ASCII.
+func runeText(r rune) string {
+	if r >= 0 && r < utf8.RuneSelf {
+		return asciiCells[r]
+	}
+	return string(r)
+}
+
 // Draw paints the visible lines (scrolled back by ScrollOffset), the
 // selection, the cursor (when shown and following the output) and the
 // focus ring.
@@ -322,7 +340,7 @@ func (t *Terminal) Draw(p painter.Painter, theme *Theme) {
 				fillRect(p, x, y, t.cellW, t.cellH, bg)
 			}
 			if c.Rune != 0 && c.Rune != ' ' && c.Attr&vt.Conceal == 0 {
-				t.drawText(p, x, y, string(c.Rune), fg)
+				t.drawText(p, x, y, runeText(c.Rune), fg)
 			}
 			if c.Attr&vt.Underline != 0 {
 				fillRect(p, x, y+t.cellH-1, t.cellW, 1, fg)
