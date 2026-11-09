@@ -46,8 +46,15 @@ type Terminal struct {
 	// the host can tell the program (a pty's TIOCSWINSZ, or nothing).
 	OnResize func(cols, rows int)
 
-	screen *vt.Screen
-	offset *mvvm.Observable[int]
+	// CellW / CellH, when positive, pin an explicit per-cell pixel size that
+	// overrides the font-derived metrics (zero on an axis: derive that axis
+	// from the font). Set them with SetCellSize, which refits the grid at
+	// once, or assign them before the first SetBounds.
+	CellW, CellH int
+
+	screen  *vt.Screen
+	offset  *mvvm.Observable[int]
+	bounded bool
 
 	selecting  bool
 	hasSel     bool
@@ -158,7 +165,52 @@ func (t *Terminal) send(s string) {
 // the bounds hold (at least 1 x 1), telling OnResize when that changes it.
 func (t *Terminal) SetBounds(r Rect) {
 	t.Base.SetBounds(r)
-	t.cellW, t.cellH = t.glyphAdvance(), t.glyphHeight()
+	t.bounded = true
+	t.refit()
+}
+
+// SetCellSize pins an explicit per-cell pixel size, overriding the
+// font-derived metrics, like [TerminalView.SetCellSize]: a non-positive value
+// on an axis clears that axis's override, restoring derivation from the
+// active font. Once bounds are established the grid is refitted at once and
+// OnResize told if its size changed, as a resize would.
+func (t *Terminal) SetCellSize(w, h int) {
+	t.CellW, t.CellH = w, h
+	if t.bounded {
+		t.refit()
+	}
+}
+
+// SetFont sets this terminal's own font (any [Font], e.g. an OpenType face
+// from [NewTrueTypeFont]); nil restores the active global font. It returns
+// the Base like [Base.SetFont]. The cell size follows the font unless pinned
+// by SetCellSize, so the grid is refitted and OnResize told when it changes.
+func (t *Terminal) SetFont(f Font) *Base {
+	t.Base.SetFont(f)
+	if t.bounded {
+		t.refit()
+	}
+	return &t.Base
+}
+
+// CellWidth is the pixel width of one cell (0 before SetBounds).
+func (t *Terminal) CellWidth() int { return t.cellW }
+
+// CellHeight is the pixel height of one cell (0 before SetBounds).
+func (t *Terminal) CellHeight() int { return t.cellH }
+
+// refit resolves the cell size (the CellW / CellH override on each axis where
+// positive, else the font's advance and height) and refits the grid to the
+// bounds, telling OnResize when that changes the grid.
+func (t *Terminal) refit() {
+	r := t.Bounds()
+	t.cellW, t.cellH = t.CellW, t.CellH
+	if t.cellW <= 0 {
+		t.cellW = t.glyphAdvance()
+	}
+	if t.cellH <= 0 {
+		t.cellH = t.glyphHeight()
+	}
 	if t.cellW <= 0 || t.cellH <= 0 {
 		return
 	}
