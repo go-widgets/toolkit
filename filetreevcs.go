@@ -20,8 +20,25 @@ import (
 // The tree imports only github.com/go-widgets/vcs, never a driver: the host picks
 // one (vcs.Detect with `import _ "github.com/go-widgets/vcs/git"`, or a fake from
 // vcstest in a test) and hands over the [vcs.Repository]. Attaching refreshes at
-// once, with context.Background; a host that needs a deadline calls
-// [FileTree.RefreshStatus] itself.
+// once, with context.Background.
+//
+// # Threading
+//
+// ⛔ A repository's Status can take seconds (go-git builds the whole status in
+// memory), so a host with a large repository MUST set [FileTree.PostUI]. The tree
+// then never calls Status on the UI goroutine: it runs it on a goroutine of its
+// own and hands the result to PostUI as a closure that the host runs on its UI
+// goroutine — the contract of collabui.CollabText.Updates and [Browser], where
+// widget state is only ever touched from the one UI goroutine. A newer refresh
+// (another SetRepository, a change of Entries, [FileTree.RefreshStatus],
+// [FileTree.RefreshStatusAsync]) cancels the one in flight through its context and
+// makes its late closure a no-op, so a stale answer never overwrites a newer one.
+// Without PostUI every refresh is synchronous, which is correct for a fake, a
+// small tree or a host with no UI thread, and freezes the UI otherwise.
+//
+// [FileTree.RefreshStatus] stays the explicit, waitable call: it returns when the
+// marks are applied, so call it on the UI goroutine, or give it a context with a
+// deadline.
 //
 // ⛔ Attaching a repository is the opt-in to a policy the tree otherwise refuses
 // to guess: a FOLDER is marked [FileModified] when any entry under it has a mark,
@@ -39,13 +56,65 @@ import (
 // entries it is given and does not invent rows. List the repository's deleted
 // paths beside the working tree's files (that is what [FileDeleted] documents).
 func (f *FileTree) SetRepository(r vcs.Repository) {
+	f.supersede()
 	f.repo = r
 	f.statusErr.Set(nil)
 	if r == nil {
 		f.marks.Set(nil)
 		return
 	}
-	_ = f.RefreshStatus(context.Background()) // the failure is in StatusError
+	f.refresh() // the failure is in StatusError
+}
+
+// supersede cancels the asynchronous refresh in flight and makes its result,
+// should it arrive anyway, stale: it carries the generation it started under.
+func (f *FileTree) supersede() {
+	if f.cancelStatus != nil {
+		f.cancelStatus()
+		f.cancelStatus = nil
+	}
+	f.statusGen++
+}
+
+// refresh is the refresh the tree starts itself (SetRepository, a change of
+// Entries, [FileTree.RefreshStatusAsync]): off the UI goroutine when the host gave
+// a PostUI, otherwise inline.
+func (f *FileTree) refresh() {
+	if f.PostUI == nil {
+		_ = f.RefreshStatus(context.Background())
+		return
+	}
+	f.supersede()
+	ctx, cancel := context.WithCancel(context.Background())
+	f.cancelStatus = cancel
+	repo, gen, post := f.repo, f.statusGen, f.PostUI
+	go func() {
+		states, err := repo.Status(ctx)
+		post(func() { f.finishRefresh(gen, states, err) })
+	}()
+}
+
+// finishRefresh applies an asynchronous result on the UI goroutine, unless a
+// newer refresh or a detach has superseded it.
+func (f *FileTree) finishRefresh(gen uint64, states map[string]vcs.State, err error) {
+	if gen != f.statusGen {
+		return
+	}
+	f.cancelStatus() // releases the context; it is only ever set for the current generation
+	f.cancelStatus = nil
+	_ = f.applyStatus(states, err)
+}
+
+// RefreshStatusAsync starts a refresh and returns at once: with a PostUI the
+// repository is asked on another goroutine and the marks change when the host
+// runs the closure it was handed; without one it is [FileTree.RefreshStatus]
+// with context.Background. A refresh already in flight is cancelled and its result
+// discarded, so a slow answer never overwrites a newer one. It does nothing
+// without a repository. Call it for a change the tree is not told of.
+func (f *FileTree) RefreshStatusAsync() {
+	if f.repo != nil {
+		f.refresh()
+	}
 }
 
 // Repository is the attached repository, nil when none.
@@ -66,7 +135,14 @@ func (f *FileTree) RefreshStatus(ctx context.Context) error {
 	if f.repo == nil {
 		return nil
 	}
+	f.supersede() // an answer still in flight would be older than this one
 	states, err := f.repo.Status(ctx)
+	return f.applyStatus(states, err)
+}
+
+// applyStatus publishes a Status answer: the marks, or the error with the old
+// marks kept.
+func (f *FileTree) applyStatus(states map[string]vcs.State, err error) error {
 	if err != nil {
 		f.statusErr.Set(err)
 		return err
@@ -88,9 +164,7 @@ func (f *FileTree) StatusError() *mvvm.Observable[error] { return f.statusErr }
 
 // refreshAfterEntries is the Entries subscriber's refresh.
 func (f *FileTree) refreshAfterEntries() {
-	if f.repo != nil {
-		_ = f.RefreshStatus(context.Background())
-	}
+	f.RefreshStatusAsync()
 }
 
 // applyMarks gives every node without a status of its own the repository's mark.

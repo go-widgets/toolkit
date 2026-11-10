@@ -5,6 +5,7 @@
 package toolkit
 
 import (
+	"context"
 	"maps"
 	"path"
 	"slices"
@@ -174,6 +175,11 @@ type FileTree struct {
 	Icon func(name string, dir, open bool) func(painter.Painter, Rect, RGBA)
 	// OnRequest receives every change the person asks for.
 	OnRequest func(FileRequest)
+	// PostUI, when set, makes the repository refreshes asynchronous: Status runs
+	// on a goroutine of the tree's own and its result comes back as a closure the
+	// host must run on its UI goroutine (see [FileTree.SetRepository]). Nil keeps
+	// every refresh synchronous.
+	PostUI func(apply func())
 	// MenuExtra adds the host's items to the context menu of an entry ("" and
 	// dir for the root).
 	MenuExtra func(p string, dir bool) []MenuItem
@@ -182,9 +188,11 @@ type FileTree struct {
 	selected *mvvm.Observable[string]
 
 	// The version-control integration (filetreevcs.go).
-	repo      vcs.Repository
-	marks     *mvvm.Observable[map[string]FileStatus]
-	statusErr *mvvm.Observable[error]
+	repo         vcs.Repository
+	statusGen    uint64             // bumped by every refresh and detach; a result carries the one it started under
+	cancelStatus context.CancelFunc // cancels the asynchronous refresh in flight
+	marks        *mvvm.Observable[map[string]FileStatus]
+	statusErr    *mvvm.Observable[error]
 
 	tree      *TreeView
 	root      *TreeNode
