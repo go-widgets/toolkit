@@ -230,25 +230,54 @@ func (c *ComboBox) Draw(p painter.Painter, theme *Theme) {
 	for t := 0; t < 4; t++ {
 		fillRect(p, cvx-t, cvy+2-t, 1+2*t, 1, ink)
 	}
-	if open {
-		pb := c.PopoverBounds()
-		fillRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Surface)
-		hi := c.highlightRow()
-		start := c.clampedPopScroll()
-		rowH := c.rowH()
-		for i, opt := range c.visible() {
-			rowY := pb.Y + i*rowH
-			if start+i == hi {
-				// Highlighted row gets a SurfaceAlt band; the border is stroked
-				// afterwards so the popover outline stays crisp over it.
-				fillRect(p, pb.X, rowY, pb.W, rowH, theme.SurfaceAlt)
-			}
-			oy := rowY + (rowH-c.glyphHeight())/2
-			c.drawText(p, pb.X+scaled(comboPadX), oy, opt, theme.OnSurface)
-		}
-		strokePopupBorder(p, pb, theme)
-	}
+	// Drawn here too, so a tree with no PopoverHost still shows its list; under a
+	// host it is painted again, on top, by DrawPopover.
+	c.DrawPopover(p, theme)
 	c.drawFocusRing(p, theme, r)
+}
+
+// DrawPopover paints the open list at PopoverBounds; a no-op when closed. It is
+// the [PopoverOwner] half the host calls after the whole tree, so the list sits on
+// top of what lies under it.
+func (c *ComboBox) DrawPopover(p painter.Painter, theme *Theme) {
+	if !c.Open().Get() {
+		return
+	}
+	pb := c.PopoverBounds()
+	fillRect(p, pb.X, pb.Y, pb.W, pb.H, theme.Surface)
+	hi := c.highlightRow()
+	start := c.clampedPopScroll()
+	rowH := c.rowH()
+	for i, opt := range c.visible() {
+		rowY := pb.Y + i*rowH
+		if start+i == hi {
+			// Highlighted row gets a SurfaceAlt band; the border is stroked
+			// afterwards so the popover outline stays crisp over it.
+			fillRect(p, pb.X, rowY, pb.W, rowH, theme.SurfaceAlt)
+		}
+		oy := rowY + (rowH-c.glyphHeight())/2
+		c.drawText(p, pb.X+scaled(comboPadX), oy, opt, theme.OnSurface)
+	}
+	strokePopupBorder(p, pb, theme)
+}
+
+// PopoverOpen reports whether the list is showing.
+func (c *ComboBox) PopoverOpen() bool { return c.Open().Get() }
+
+// PopoverClick routes a click at (x, y), in the frame PopoverBounds uses, while the
+// list is open: inside it selects that option, anywhere else closes it. It reports
+// whether the open list took the click, so a click on the list is never delivered
+// to what lies under it.
+func (c *ComboBox) PopoverClick(x, y int) bool {
+	if !c.Open().Get() {
+		return false
+	}
+	if pb := c.PopoverBounds(); x >= pb.X && x < pb.X+pb.W && y >= pb.Y && y < pb.Y+pb.H {
+		c.selectOption(c.visible()[(y-pb.Y)/c.rowH()])
+	} else {
+		c.Open().Set(false)
+	}
+	return true
 }
 
 // OnEvent drives the type-to-filter behaviour: printable characters and

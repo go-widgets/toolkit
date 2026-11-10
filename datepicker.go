@@ -109,10 +109,36 @@ func (dp *DatePicker) Draw(p painter.Painter, theme *Theme) {
 	textY := r.Y + (r.H-dp.glyphHeight())/2
 	dp.drawText(p, r.X+scaled(datePickerPadX), textY, dp.Text(), theme.OnSurface)
 	dp.drawIcon(p, r, theme)
+	// Drawn here too, so a tree with no PopoverHost still shows its calendar;
+	// under a host it is painted again, on top, by DrawPopover.
+	dp.DrawPopover(p, theme)
+}
+
+// DrawPopover paints the open calendar at PopoverBounds; a no-op when closed.
+func (dp *DatePicker) DrawPopover(p painter.Painter, theme *Theme) {
 	if dp.Open().Get() {
 		dp.Cal.SetBounds(dp.PopoverBounds())
 		dp.Cal.Draw(p, theme)
 	}
+}
+
+// PopoverOpen reports whether the calendar is showing.
+func (dp *DatePicker) PopoverOpen() bool { return dp.Open().Get() }
+
+// PopoverClick routes a click at (x, y), in the frame PopoverBounds uses, while the
+// calendar is open: inside it goes to the Calendar (a day closes the popup),
+// anywhere else closes it. It reports whether the open calendar took the click.
+func (dp *DatePicker) PopoverClick(x, y int) bool {
+	if !dp.Open().Get() {
+		return false
+	}
+	if pb := dp.PopoverBounds(); x >= pb.X && x < pb.X+pb.W && y >= pb.Y && y < pb.Y+pb.H {
+		dp.Cal.SetBounds(pb)
+		dp.Cal.OnEvent(Event{Kind: EventClick, X: x - pb.X, Y: y - pb.Y})
+	} else {
+		dp.Open().Set(false)
+	}
+	return true
 }
 
 // drawIcon paints a tiny 2x2 calendar-grid glyph at the field's right edge.

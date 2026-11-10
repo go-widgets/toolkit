@@ -183,12 +183,9 @@ func TestARibbonMenuInAShiftedContainerIsWhereTheRibbonIs(t *testing.T) {
 	}
 }
 
-// ComboBox and DatePicker are not PopoverOwners: they draw their lists from their
-// own Draw, in the painter the ScrollView translated, so the list is PLACED right
-// in a scrolled column. What they share with no scroll at all is that the list
-// hangs out of the control's bounds, so a container routes a click on it to
-// whatever lies there (go-widgets/toolkit#560); here a scrolled column opens each
-// from a click on the control, painted where it is.
+// ComboBox and DatePicker are PopoverOwners too (#560, popoverflow_test.go); in a
+// scrolled column each opens from a click on the control, painted where it is,
+// and then its list is where PopoverOwners says it is.
 func TestAComboBoxAndADatePickerOpenFromAClickInAScrolledColumn(t *testing.T) {
 	c := NewComboBox([]string{"alpha", "beta"})
 	host, _, _ := scrolledTarget(c, 24)
@@ -214,4 +211,22 @@ func TestAShiftedPopupOnAPainterThatCannotTranslate(t *testing.T) {
 	dd.Open().Set(true)
 	buf := make([]byte, 200*300*4)
 	host.Draw(plainPaint{painterOver(buf, 200, 300)}, DefaultDark())
+}
+
+func TestAComboBoxListInAScrolledColumnIsClickedWhereItIsPainted(t *testing.T) {
+	c := NewComboBox([]string{"alpha", "beta", "gamma"})
+	host, _, _ := scrolledTarget(c, 24)
+	c.Open().Set(true)
+	owners := PopoverOwners(host)
+	if len(owners) != 1 {
+		t.Fatalf("owners %d", len(owners))
+	}
+	pb := owners[0].PopoverBounds()
+	if pb.Y != c.PopoverBounds().Y-scrollOff {
+		t.Fatalf("list at %d", pb.Y)
+	}
+	host.OnEvent(Event{Kind: EventClick, X: pb.X + 6, Y: pb.Y + pb.H/3 + 2})
+	if c.Text().Get() != "beta" {
+		t.Errorf("text %q", c.Text().Get())
+	}
 }
