@@ -178,6 +178,9 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// Foreground/Background/Large Observables; FailText is the set-once word for
 	// a failing pair (the interface's language).
 	"ContrastBadge": {"FailText": true},
+	// FontPicker: the choice is the Spec() Observable and the parts are
+	// unexported; the lists and the show flags are set-once config.
+	"FontPicker": {"Families": true, "Weights": true, "ShowWeight": true, "ShowSize": true, "SizeMin": true, "SizeMax": true},
 	// Label: the string is unexported behind the Text() Observable; Align/VAlign/
 	// Ellipsis/Ink/FontSize are set-once appearance config.
 	"Label": {"Align": true, "VAlign": true, "Ellipsis": true, "Ink": true, "FontSize": true},
