@@ -6,6 +6,7 @@ package toolkit
 
 import (
 	"image"
+	"math"
 	"strconv"
 
 	"github.com/go-widgets/mvvm"
@@ -876,12 +877,38 @@ func (pv *PagedView) fitZoom(f PagedFit) (int, bool) {
 	gutter := scrollGutter()
 	margins := 2 * scaled(pagedMargin)
 	usableW := max(pv.scroll.Bounds().W-gutter-margins, 1)
-	byWidth := usableW * 100 / nat.X
+	byWidth := fitPercent(usableW, nat.X)
 	if f == PagedFitWidth || nat.Y <= 0 {
 		return byWidth, true
 	}
 	usableH := max(pv.scroll.Bounds().H-gutter-margins, 1)
-	return min(byWidth, usableH*100/nat.Y), true
+	return min(byWidth, fitPercent(usableH, nat.Y)), true
+}
+
+// fitPercent is the largest zoom at which natural fits in usable, quantised to
+// a whole LOGICAL percent.
+//
+// ⛔ THE QUANTUM BELONGS TO THE WINDOW, NOT TO THE PANEL. usable is device
+// pixels and natural is the page's own size, which does not move with the
+// panel's ratio — so usable*100/natural is a DEVICE percent, and one step of it
+// is 1/[MetricScale] of a logical percent. Truncating that lands on a different
+// logical zoom per ratio: measured in one headless Chrome at the same CSS
+// viewport, go-tex/go-tex.github.io#191 got 30 at ratio 1 and 61 at ratio 2 —
+// logical 30% against 30.5% — so a reader on a Retina panel saw the page 1.7%
+// larger than a reader on a 1× panel at the same window size. Small, and
+// systematic.
+//
+// Rounding the LOGICAL value and scaling it back makes the chosen zoom a
+// property of the window. At MetricScale 1 this is byte-identical to the plain
+// integer division it replaces, which is the property that makes it a fix
+// rather than a change: nothing moves on the ratio that was already right.
+func fitPercent(usable, natural int) int {
+	s := MetricScale()
+	if s <= 0 || natural <= 0 {
+		return 1
+	}
+	logical := math.Floor(float64(usable) * 100 / (float64(natural) * s))
+	return max(int(logical*s), 1)
 }
 
 // fitWidth and fitPage are the two fit buttons' actions.
