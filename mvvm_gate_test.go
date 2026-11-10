@@ -174,6 +174,10 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"ColumnBrowser": {"ColumnWidth": true},
 	"IsoDiagram":    {"DefaultShape": true, "Icons": true, "Mode": true, "AnimationPeriod": true, "Cols": true, "Rows": true},
 	"PropertyGrid":  {},
+	// ContrastBadge: the ink, the ground and the large-text flag are the
+	// Foreground/Background/Large Observables; FailText is the set-once word for
+	// a failing pair (the interface's language).
+	"ContrastBadge": {"FailText": true},
 	// Label: the string is unexported behind the Text() Observable; Align/VAlign/
 	// Ellipsis/Ink/FontSize are set-once appearance config.
 	"Label": {"Align": true, "VAlign": true, "Ellipsis": true, "Ink": true, "FontSize": true},
