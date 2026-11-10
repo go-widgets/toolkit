@@ -146,22 +146,64 @@ func (h *PopoverHost) OnEvent(ev Event) {
 // A host that composes its own surface (a compositor drawing popovers onto a
 // separate layer, say) uses this directly instead of [PopoverHost]; everything
 // else wraps its root and forgets about it.
+//
+// An owner inside a scrolled container is returned SHIFTED: a ScrollView does not
+// move its child, it paints it translated (see [childOffsetter]), so the owner's
+// own bounds say where its control would be unscrolled. Its PopoverBounds,
+// DrawPopover and PopoverClick are those of where the control is on the surface,
+// every ancestor's offset included; an owner not in a scrolled container is
+// returned as it is.
 func PopoverOwners(w Widget) []PopoverOwner {
 	var out []PopoverOwner
-	collectPopoverOwners(w, &out)
+	collectPopoverOwners(w, &out, 0, 0)
 	return out
 }
 
-func collectPopoverOwners(w Widget, out *[]PopoverOwner) {
+func collectPopoverOwners(w Widget, out *[]PopoverOwner, dx, dy int) {
 	if w == nil {
 		return
 	}
 	if p, ok := w.(PopoverOwner); ok && p.PopoverOpen() {
-		*out = append(*out, p)
+		if dx == 0 && dy == 0 {
+			*out = append(*out, p)
+		} else {
+			*out = append(*out, shiftedPopover{p, dx, dy})
+		}
+	}
+	if o, ok := w.(childOffsetter); ok {
+		ox, oy := o.ChildOffset()
+		dx, dy = dx+ox, dy+oy
 	}
 	if c, ok := w.(childContainer); ok {
 		for _, kid := range c.Children() {
-			collectPopoverOwners(kid, out)
+			collectPopoverOwners(kid, out, dx, dy)
 		}
 	}
+}
+
+// shiftedPopover is a [PopoverOwner] whose control is painted (dx, dy) from where
+// its bounds say, because an ancestor scrolls it.
+type shiftedPopover struct {
+	PopoverOwner
+	dx, dy int
+}
+
+func (s shiftedPopover) PopoverBounds() Rect {
+	r := s.PopoverOwner.PopoverBounds()
+	r.X, r.Y = r.X+s.dx, r.Y+s.dy
+	return r
+}
+
+func (s shiftedPopover) DrawPopover(p painter.Painter, theme *Theme) {
+	if tr, ok := p.(painter.Translator); ok {
+		tr.PushTranslate(s.dx, s.dy)
+		s.PopoverOwner.DrawPopover(p, theme)
+		tr.PopTranslate()
+		return
+	}
+	s.PopoverOwner.DrawPopover(p, theme) // a back-end that cannot translate: unshifted, as before
+}
+
+func (s shiftedPopover) PopoverClick(x, y int) bool {
+	return s.PopoverOwner.PopoverClick(x-s.dx, y-s.dy)
 }
