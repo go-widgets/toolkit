@@ -23,6 +23,7 @@ require (
 	github.com/go-widgets/mvvm v0.15.0 // indirect
 	github.com/go-widgets/painter v0.17.0 // indirect
 	github.com/go-widgets/textinput v0.1.0 // indirect
+	github.com/go-widgets/vcs v0.1.0 // indirect
 )
 
 // rougelex is developed in-tree against the parent toolkit working copy. An
