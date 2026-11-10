@@ -5,6 +5,7 @@
 package toolkit
 
 import (
+	"maps"
 	"path"
 	"slices"
 	"strconv"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/painter"
+	"github.com/go-widgets/vcs"
 )
 
 // FileEntry is one item a [FileTree] shows: a slash-separated path relative to
@@ -179,6 +181,11 @@ type FileTree struct {
 	entries  *mvvm.Observable[[]FileEntry]
 	selected *mvvm.Observable[string]
 
+	// The version-control integration (filetreevcs.go).
+	repo      vcs.Repository
+	marks     *mvvm.Observable[map[string]FileStatus]
+	statusErr *mvvm.Observable[error]
+
 	tree      *TreeView
 	root      *TreeNode
 	nodes     map[string]*TreeNode
@@ -233,12 +240,20 @@ func NewFileTree(entries []FileEntry) *FileTree {
 	f := &FileTree{collapsed: map[string]bool{}}
 	f.entries = mvvm.NewObservableEq(slices.Clone(entries), slices.Equal[[]FileEntry])
 	f.selected = mvvm.NewObservable("")
+	f.marks = mvvm.NewObservableEq[map[string]FileStatus](nil, maps.Equal[map[string]FileStatus])
+	f.statusErr = mvvm.NewObservableEq[error](nil, sameError)
+	f.marks.Subscribe(func(map[string]FileStatus) { f.stale = true })
 	f.tree = NewTreeView(nil)
 	f.tree.HideRoot = true
 	f.tree.RowRenderer = f.drawRow
 	f.tree.OnActivate = f.activate
 	f.menu = NewContextMenu(NewMenu(nil))
-	f.entries.Subscribe(func([]FileEntry) { f.stale = true })
+	f.entries.Subscribe(func([]FileEntry) {
+		f.stale = true
+		// The host applies a request (create, rename, delete, move, import) to its
+		// store and sets the new list: that is the moment the marks would go stale.
+		f.refreshAfterEntries()
+	})
 	f.tree.Selected().Subscribe(func(n *TreeNode) {
 		if !f.syncing && n != nil {
 			f.selected.Set(n.Data.(*fileNode).path)
@@ -314,15 +329,18 @@ func (f *FileTree) rebuild() {
 		if f.nodes[p] != nil {
 			continue
 		}
-		// ⛔ A folder's status is NOT derived from its children. "A folder holding
-		// a modified file" is a policy, not a fact — git says nothing about
-		// folders at all — so guessing one here would be wrong for some VCS and
-		// unaskable for the rest. A host that wants one sets it on a Dir entry,
-		// which the branch above carries.
+		// ⛔ A folder's status is NOT derived from its children HERE. "A folder
+		// holding a modified file" is a policy, not a fact — git says nothing about
+		// folders at all — so guessing one for every host would be wrong for some
+		// VCS and unaskable for the rest. A host that wants one sets it on a Dir
+		// entry, which the branch above carries; a host that attaches a repository
+		// with [FileTree.SetRepository] has opted in to the policy documented there,
+		// applied below by applyMarks.
 		leaf := &TreeNode{Label: path.Base(p), Data: &fileNode{path: p, size: e.Size, status: e.Status}}
 		f.nodes[p] = leaf
 		n.Children = append(n.Children, leaf)
 	}
+	f.applyMarks()
 	sortFileNodes(f.root)
 	f.tree.Root = f.root
 	if f.edit != nil {
