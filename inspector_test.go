@@ -306,3 +306,28 @@ func TestInspectorDrawsAnOpenPicker(t *testing.T) {
 		t.Fatal("open")
 	}
 }
+
+func TestInspectorEditorRectsAreWhereTheEditorsAre(t *testing.T) {
+	in, _ := testInspector()
+	for _, id := range []string{"bg", "font", "size", "lh", "pos", "name"} {
+		r, ok := in.EditorRect(id)
+		if !ok || r.W <= 0 || r.H <= 0 || !in.Bounds().Contains(r.X, r.Y) {
+			t.Errorf("%s: %v %v", id, r, ok)
+		}
+	}
+	if _, ok := in.EditorRect("nosuch"); ok {
+		t.Error("an unknown id has no rect")
+	}
+	// a click in the middle of a number row's rect lands on its spinner
+	r, _ := in.EditorRect("size")
+	in.OnEvent(Event{Kind: EventClick, X: r.X + 2, Y: r.Y + 2})
+	if !in.byID["size"].num.Focused() {
+		t.Error("the rect of a number row is its spinner's")
+	}
+	// the swatch of a colour row is inside the rect, and toggles the picker
+	c, _ := in.EditorRect("bg")
+	in.OnEvent(Event{Kind: EventClick, X: c.X + 2, Y: c.Y + 2})
+	if !in.byID["bg"].open {
+		t.Error("the swatch is the left of the colour rect")
+	}
+}
