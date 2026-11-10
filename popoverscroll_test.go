@@ -187,7 +187,7 @@ func TestARibbonMenuInAShiftedContainerIsWhereTheRibbonIs(t *testing.T) {
 // own Draw, in the painter the ScrollView translated, so the list is PLACED right
 // in a scrolled column. What they share with no scroll at all is that the list
 // hangs out of the control's bounds, so a container routes a click on it to
-// whatever lies there (go-widgets/toolkit#559); here a scrolled column opens each
+// whatever lies there (go-widgets/toolkit#560); here a scrolled column opens each
 // from a click on the control, painted where it is.
 func TestAComboBoxAndADatePickerOpenFromAClickInAScrolledColumn(t *testing.T) {
 	c := NewComboBox([]string{"alpha", "beta"})
