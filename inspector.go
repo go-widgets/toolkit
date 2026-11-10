@@ -339,6 +339,29 @@ func (in *Inspector) Custom(id string) bool {
 // Rows is the number of rows, headings included.
 func (in *Inspector) Rows() int { return len(in.rows) }
 
+// EditorRect is where row id's editor is, in surface coordinates (a colour row's
+// swatch included), for a test harness that clicks it; ok is false for an
+// unknown id. It is as laid out the last time the inspector was placed or drawn.
+func (in *Inspector) EditorRect(id string) (Rect, bool) {
+	r := in.byID[id]
+	if r == nil {
+		return Rect{}, false
+	}
+	switch r.spec.Kind {
+	case InspectorColor:
+		sw, e := r.swatch, r.entry.Bounds()
+		return Rect{X: sw.X, Y: sw.Y, W: e.X + e.W - sw.X, H: sw.H}, true
+	case InspectorFont:
+		return r.font.Bounds(), true
+	case InspectorNumber:
+		n, u := r.num.Bounds(), r.unit.Bounds()
+		return Rect{X: n.X, Y: n.Y, W: u.X + u.W - n.X, H: n.H}, true
+	case InspectorEnum:
+		return r.enum.Bounds(), true
+	}
+	return r.entry.Bounds(), true
+}
+
 // ToggleColor opens or closes the picker of colour row id.
 func (in *Inspector) ToggleColor(id string) {
 	if r := in.byID[id]; r != nil && r.picker != nil {
