@@ -71,6 +71,27 @@ func TestFontPickerFamilyOnlyReportsNoWeightOrSize(t *testing.T) {
 	}
 }
 
+func TestFontPickerFullRoutesEventsAndAddsAnInitialFamily(t *testing.T) {
+	f := NewFontPickerFull([]string{"A"}, FontSpec{Family: "Zed", Weight: 500, Size: 12})
+	if !contains(f.Families, "Zed") || f.Spec().Get().Family != "Zed" {
+		t.Fatalf("an initial family the list lacks is added: %v %+v", f.Families, f.Spec().Get())
+	}
+	f.SetBounds(Rect{X: 0, Y: 0, W: 300, H: 24})
+	if n := len(f.Children()); n != 3 {
+		t.Fatalf("a full picker has three controls, got %d", n)
+	}
+	f.Draw(newP(makeSurface(300, 24), 300), DefaultLight())
+	// a click on the size spinner's plus button, then a key to the focused control
+	sz := f.size.Bounds()
+	f.OnEvent(Event{Kind: EventClick, X: sz.X + sz.W - 4, Y: 4})
+	f.family.SetFocused(true)
+	f.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowDown"})
+	if !f.family.Open().Get() {
+		t.Error("a key reaches the focused control")
+	}
+	f.OnEvent(Event{Kind: EventClick, X: -50, Y: -50}) // outside every control: nothing happens
+}
+
 func TestFontPickerLayoutOfAllThreeControls(t *testing.T) {
 	f := NewFontPickerFull([]string{"A"}, FontSpec{Weight: 700})
 	f.SetBounds(Rect{X: 10, Y: 5, W: 300, H: 24})

@@ -116,7 +116,11 @@ func (f *FontPicker) fromParts() {
 	if f.quiet {
 		return
 	}
+	// the parts already show what they show: the spec's own echo must not move
+	// them again
+	f.quiet = true
 	f.spec.Set(f.read())
+	f.quiet = false
 }
 
 // toParts moves the parts to show s, adding an unknown family or weight rather
