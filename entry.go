@@ -152,9 +152,13 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	}
 	innerW := r.W - 2*pad
 	caretW := e.textWidth(string(runes[:e.cursor]))
+	comp := e.composition
+	if e.Mask != 0 {
+		comp = "" // a preview already showing when Mask was set is never drawn
+	}
 	compW := 0
-	if e.composition != "" {
-		compW = e.textWidth(e.composition)
+	if comp != "" {
+		compW = e.textWidth(comp)
 	}
 	totalW := e.textWidth(shown)
 	if caretW+compW > totalW {
@@ -170,7 +174,7 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 	if canClip {
 		clr.PushClip(Rect{X: r.X + pad, Y: r.Y, W: innerW, H: r.H})
 	}
-	if shown == "" && e.composition == "" && e.Placeholder != "" {
+	if shown == "" && comp == "" && e.Placeholder != "" {
 		e.drawText(p, r.X+pad, textY, e.Placeholder, theme.SurfaceAlt)
 	} else {
 		e.drawText(p, tx, textY, shown, theme.OnSurface)
@@ -180,7 +184,7 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 		// correctly under a proportional / CJK font (not a fixed advance),
 		// then shifted by the same scroll offset as the text.
 		cx := tx + caretW
-		if e.composition != "" {
+		if comp != "" {
 			// IME composition preview: render the pending string in
 			// the muted SurfaceAlt tone right at the cursor, ghosted +
 			// underlined so the user sees dead-key / CJK candidates
@@ -189,7 +193,7 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 			// CursorCol), Entry pushes its single caret past the
 			// preview's pixel width so it visually tracks where the
 			// next committed rune will land.
-			e.drawText(p, cx, textY, e.composition, theme.SurfaceAlt)
+			e.drawText(p, cx, textY, comp, theme.SurfaceAlt)
 			fillRect(p, cx, textY+e.glyphHeight(), compW, 1, theme.SurfaceAlt)
 			cx += compW
 		}

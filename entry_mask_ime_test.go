@@ -15,6 +15,7 @@ import (
 func TestMaskedEntryShowsNoCompositionPreview(t *testing.T) {
 	const w, h = 200, 30
 	draw := func(e *Entry) []byte {
+		e.focused = true // the preview is only ever painted by a focused entry
 		e.SetBounds(Rect{W: w, H: h})
 		buf := makeSurface(w, h)
 		e.Draw(newP(buf, w), DefaultLight())
@@ -29,7 +30,7 @@ func TestMaskedEntryShowsNoCompositionPreview(t *testing.T) {
 	m.OnEvent(Event{Kind: EventCompositionStart, Code: "s"})
 	m.OnEvent(Event{Kind: EventCompositionUpdate, Code: "secret"})
 	if m.composition != "" {
-		t.Fatalf("a masked entry kept the preview %q", m.composition)
+		t.Errorf("a masked entry kept the preview %q", m.composition)
 	}
 	if !bytes.Equal(draw(m), before) {
 		t.Error("a composition changed what a masked entry draws")
@@ -41,6 +42,17 @@ func TestMaskedEntryShowsNoCompositionPreview(t *testing.T) {
 	m.OnEvent(Event{Kind: EventChar, Code: "é"})
 	if m.Text().Get() != "abé" || m.A11y().Value != "•••" {
 		t.Errorf("commit: %q %q", m.Text().Get(), m.A11y().Value)
+	}
+
+	// a preview that was showing when Mask was set afterwards is not drawn
+	late := NewEntry("ab")
+	late.OnEvent(Event{Kind: EventCompositionUpdate, Code: "secret"})
+	if bytes.Equal(draw(late), draw(NewEntry("ab"))) {
+		t.Fatal("the unmasked preview should show (control)")
+	}
+	late.Mask = '•'
+	if !bytes.Equal(draw(late), before) {
+		t.Error("a preview already showing is drawn once the entry becomes masked")
 	}
 
 	// an unmasked entry still previews
