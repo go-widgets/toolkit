@@ -99,4 +99,9 @@ var MessageKeys = map[string]string{
 	"forge.server_user":   "Signed in as %s",
 	"forge.server_repos":  "Repositories granted to you",
 	"forge.server_signin": "Sign in",
+	"forge.message":       "Commit message",
+	"forge.author_name":   "Author name",
+	"forge.author_email":  "Author email",
+	"forge.commit":        "Commit",
+	"forge.push":          "Push",
 }

@@ -57,11 +57,13 @@ type ForgePane struct {
 	// scripts or list-shaped notes sets its own.
 	NoteWrap func(text string, cols int) string
 
-	model  ForgeModel
-	client *forgeClientPage
-	frame  *forgeClientPage
-	server *forgeServerPage
-	unbind []func()
+	model     ForgeModel
+	committer ForgeCommitter      // nil: the model has no git transport
+	hidden    map[Widget]struct{} // controls of a nil command: not laid out, not in Parts
+	client    *forgeClientPage
+	frame     *forgeClientPage
+	server    *forgeServerPage
+	unbind    []func()
 
 	wrapText  string // what the notes were last wrapped from
 	wrapWidth int
@@ -91,7 +93,9 @@ type ForgeModel interface {
 	// Forge is the chosen forge, an index into Forges.
 	Forge() *mvvm.Observable[int]
 	// Repo, Ref and Dir are the repository ("owner/name"), the branch (empty: the
-	// default) and the folder (empty: the root).
+	// default) and the folder (empty: the root). The pane shows Repo's string as
+	// given, so a transport model (one that clones over git's HTTP protocol rather
+	// than a forge's REST API) may put a full remote URL in it.
 	Repo() *mvvm.Observable[string]
 	Ref() *mvvm.Observable[string]
 	Dir() *mvvm.Observable[string]
@@ -110,7 +114,11 @@ type ForgeModel interface {
 	Repos() *mvvm.Observable[[]string]
 	RepoPick() *mvvm.Observable[int]
 
-	// The actions. A command that cannot run is shown greyed.
+	// The actions. A capability the model never has is a nil *mvvm.Command: the
+	// pane does not show that control at all and the layout closes up. A state the
+	// model is only in at the moment (not connected yet, nothing to load) is a
+	// command whose CanExecute is false: the control stays, greyed. Absent
+	// capability removes; absent state greys.
 	Connect() *mvvm.Command
 	Disconnect() *mvvm.Command
 	// SignIn is the client layout's OAuth sign-in; ServerSignIn the server
@@ -125,6 +133,27 @@ type ForgeModel interface {
 	TakeTheirs() *mvvm.Command
 	// OpenLink opens the pull request Propose made.
 	OpenLink() *mvvm.Command
+}
+
+// ForgeCommitter is the optional git-transport capability of a [ForgeModel]: a
+// model that also commits and pushes (over git's own HTTP protocol, say, with no
+// forge REST API behind it) implements it, and [NewForgePane] discovers it by
+// type assertion. The pane then shows a commit message, the author's name and
+// email, and Commit and Push buttons, in all three layouts, between Load and
+// Propose. A model that does not implement it gets none of this.
+//
+// The same rule as [ForgeModel]: a nil Commit or Push is a capability the model
+// lacks and its button is not shown; a command that cannot run now is greyed.
+// A transport-only model returns nil from Propose and OpenLink and shows Commit
+// and Push without a dead Propose button.
+type ForgeCommitter interface {
+	// Message is the commit message; AuthorName and AuthorEmail the author.
+	Message() *mvvm.Observable[string]
+	AuthorName() *mvvm.Observable[string]
+	AuthorEmail() *mvvm.Observable[string]
+	// Commit records the working copy under Message; Push sends the commits.
+	Commit() *mvvm.Command
+	Push() *mvvm.Command
 }
 
 // Pane metrics, LOGICAL units (routed through scaled at use).
@@ -150,6 +179,13 @@ type forgeClientPage struct {
 	refresh, theirs, open, signin      *Button
 	forge                              *DropDown
 	slot                               *Label // the frame's place; nil in the client layout
+	commit                             *forgeCommitRows
+}
+
+// forgeCommitRows is the git-transport controls of one layout.
+type forgeCommitRows struct {
+	message, name, email *Entry
+	commit, push         *Button
 }
 
 // forgeServerPage is the server layout's widgets.
@@ -161,11 +197,14 @@ type forgeServerPage struct {
 	ref, dir                *Entry
 	signin, load, propose   *Button
 	refresh, theirs, open   *Button
+	commit                  *forgeCommitRows
 }
 
-// NewForgePane builds the pane over m.
+// NewForgePane builds the pane over m. When m also implements [ForgeCommitter]
+// the pane has the git-transport controls.
 func NewForgePane(m ForgeModel) *ForgePane {
-	f := &ForgePane{Stack: Stack{Pages: map[string]Widget{}}, model: m}
+	f := &ForgePane{Stack: Stack{Pages: map[string]Widget{}}, model: m, hidden: map[Widget]struct{}{}}
+	f.committer, _ = m.(ForgeCommitter)
 	f.client = f.newClientPage(false)
 	f.frame = f.newClientPage(true)
 	f.server = f.newServerPage()
@@ -245,23 +284,31 @@ func (f *ForgePane) FrameRect() (Rect, bool) {
 // "remember", "signin", "connect", "disconnect", "load", "propose", "refresh",
 // "theirs", "open", and, in the server layout, "pick" and "ssignin". The frame
 // layout has no credential controls, so it lacks "forge", "token", "remember",
-// "signin", "connect" and "disconnect", and has "frame" once laid out.
+// "signin", "connect" and "disconnect", and has "frame" once laid out. A control
+// whose command is nil is not shown and is not in the map. When the model is a
+// [ForgeCommitter] every layout also has "message", "author_name",
+// "author_email", "commit" and "push".
 func (f *ForgePane) Parts() map[string]Rect {
 	out := map[string]Rect{}
 	put := func(m map[string]Widget) {
 		for k, w := range m {
-			out[k] = w.Bounds()
+			if _, gone := f.hidden[w]; !gone {
+				out[k] = w.Bounds()
+			}
 		}
 	}
+	var rows *forgeCommitRows
 	switch f.model.Mode().Get() {
 	case ForgeServer:
 		s := f.server
+		rows = s.commit
 		put(map[string]Widget{
 			"ref": s.ref, "dir": s.dir, "load": s.load, "propose": s.propose, "refresh": s.refresh,
 			"theirs": s.theirs, "open": s.open, "pick": s.pick, "ssignin": s.signin,
 		})
 	case ForgeFrame:
 		c := f.frame
+		rows = c.commit
 		put(map[string]Widget{
 			"repo": c.repo, "ref": c.ref, "dir": c.dir, "load": c.load, "propose": c.propose,
 			"refresh": c.refresh, "theirs": c.theirs, "open": c.open,
@@ -271,10 +318,17 @@ func (f *ForgePane) Parts() map[string]Rect {
 		}
 	default:
 		c := f.client
+		rows = c.commit
 		put(map[string]Widget{
 			"repo": c.repo, "ref": c.ref, "dir": c.dir, "token": c.token, "remember": c.remember,
 			"connect": c.connect, "disconnect": c.disconnect, "load": c.load, "propose": c.propose,
 			"refresh": c.refresh, "theirs": c.theirs, "open": c.open, "forge": c.forge, "signin": c.signin,
+		})
+	}
+	if rows != nil {
+		put(map[string]Widget{
+			"message": rows.message, "author_name": rows.name, "author_email": rows.email,
+			"commit": rows.commit, "push": rows.push,
 		})
 	}
 	return out
@@ -360,20 +414,76 @@ func (f *ForgePane) bindText(src *mvvm.Observable[string], e *Entry) {
 }
 
 // bindCommand wires a button to a model command: pressing runs it, and its
-// CanExecute greys the button.
+// CanExecute greys the button. A nil command is a capability the model lacks:
+// the button is marked hidden and is neither laid out nor in Parts.
 func (f *ForgePane) bindCommand(c *mvvm.Command, b *Button) {
+	if c == nil {
+		f.hidden[b] = struct{}{}
+		return
+	}
 	f.unbind = append(f.unbind, mvvm.BindCommand(c, &b.OnClick, func(on bool) {
 		b.Disabled().Set(!on)
 		f.invalidate()
 	}))
 }
 
-func forgePair(a, b Widget) *HBox {
-	h := NewHBox()
-	h.Spacing = scaled(forgeGap)
-	h.AddFlex(a, 1)
-	h.AddFlex(b, 1)
-	return h
+// addRow lays out the controls that are not hidden in one fixed-height row: two
+// side by side, one alone, none no row at all.
+func (f *ForgePane) addRow(box *VBox, ws ...Widget) {
+	var shown []Widget
+	for _, w := range ws {
+		if _, gone := f.hidden[w]; !gone {
+			shown = append(shown, w)
+		}
+	}
+	switch len(shown) {
+	case 0:
+	case 1:
+		box.AddFixed(shown[0], scaled(forgeRowH))
+	default:
+		h := NewHBox()
+		h.Spacing = scaled(forgeGap)
+		for _, w := range shown {
+			h.AddFlex(w, 1)
+		}
+		box.AddFixed(h, scaled(forgeRowH))
+	}
+}
+
+// newCommitRows builds the git-transport controls of one layout, bound to the
+// model's ForgeCommitter side; nil when the model has none.
+func (f *ForgePane) newCommitRows() *forgeCommitRows {
+	m := f.committer
+	if m == nil {
+		return nil
+	}
+	r := &forgeCommitRows{
+		message: NewEntry(""),
+		name:    NewEntry(""),
+		email:   NewEntry(""),
+		commit:  NewButton(Tr("forge.commit", "Commit"), nil),
+		push:    NewButton(Tr("forge.push", "Push"), nil),
+	}
+	r.message.Placeholder = Tr("forge.message", "Commit message")
+	r.name.Placeholder = Tr("forge.author_name", "Author name")
+	r.email.Placeholder = Tr("forge.author_email", "Author email")
+	f.bindText(m.Message(), r.message)
+	f.bindText(m.AuthorName(), r.name)
+	f.bindText(m.AuthorEmail(), r.email)
+	f.bindCommand(m.Commit(), r.commit)
+	f.bindCommand(m.Push(), r.push)
+	return r
+}
+
+// addCommitRows lays the git-transport controls out; nothing without them.
+func (f *ForgePane) addCommitRows(box *VBox, r *forgeCommitRows) {
+	if r == nil {
+		return
+	}
+	box.AddFixed(r.message, scaled(forgeRowH))
+	box.AddFixed(r.name, scaled(forgeRowH))
+	box.AddFixed(r.email, scaled(forgeRowH))
+	f.addRow(box, r.commit, r.push)
 }
 
 func newForgeTitle(key, english string) *Label {
@@ -424,6 +534,7 @@ func (f *ForgePane) newClientPage(frame bool) *forgeClientPage {
 	f.bindCommand(m.Refresh(), p.refresh)
 	f.bindCommand(m.TakeTheirs(), p.theirs)
 	f.bindCommand(m.OpenLink(), p.open)
+	p.commit = f.newCommitRows()
 
 	row := scaled(forgeRowH)
 	cl := NewVBox()
@@ -442,12 +553,13 @@ func (f *ForgePane) newClientPage(frame bool) *forgeClientPage {
 	if !frame {
 		cl.AddFixed(p.token, row)
 		cl.AddFixed(p.remember, scaled(forgeCheckH))
-		cl.AddFixed(p.signin, row)
-		cl.AddFixed(forgePair(p.connect, p.disconnect), row)
+		f.addRow(cl, p.signin)
+		f.addRow(cl, p.connect, p.disconnect)
 	}
-	cl.AddFixed(forgePair(p.load, p.refresh), row)
-	cl.AddFixed(forgePair(p.propose, p.theirs), row)
-	cl.AddFixed(p.open, row)
+	f.addRow(cl, p.load, p.refresh)
+	f.addCommitRows(cl, p.commit)
+	f.addRow(cl, p.propose, p.theirs)
+	f.addRow(cl, p.open)
 	cl.AddFlex(p.note, 1)
 	p.box = cl
 	return p
@@ -503,20 +615,22 @@ func (f *ForgePane) newServerPage() *forgeServerPage {
 	f.bindCommand(m.Refresh(), p.refresh)
 	f.bindCommand(m.TakeTheirs(), p.theirs)
 	f.bindCommand(m.OpenLink(), p.open)
+	p.commit = f.newCommitRows()
 
 	row := scaled(forgeRowH)
 	b := NewVBox()
 	b.Spacing = scaled(forgeGap)
 	b.AddFixed(p.title, scaled(forgeTitleH))
 	b.AddFixed(p.user, scaled(forgeCheckH))
-	b.AddFixed(p.signin, row)
+	f.addRow(b, p.signin)
 	b.AddFixed(p.reposLabel, scaled(forgeCheckH))
 	b.AddFixed(p.pick, row)
 	b.AddFixed(p.ref, row)
 	b.AddFixed(p.dir, row)
-	b.AddFixed(forgePair(p.load, p.refresh), row)
-	b.AddFixed(forgePair(p.propose, p.theirs), row)
-	b.AddFixed(p.open, row)
+	f.addRow(b, p.load, p.refresh)
+	f.addCommitRows(b, p.commit)
+	f.addRow(b, p.propose, p.theirs)
+	f.addRow(b, p.open)
 	b.AddFlex(p.note, 1)
 	p.box = b
 	return p
