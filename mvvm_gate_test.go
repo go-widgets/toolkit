@@ -348,6 +348,12 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Wallpaper":        {"Bottom": true, "IH": true, "IW": true, "Interactive": true, "Mode": true, "Pixels": true, "Top": true},
 	"Window":           {"Body": true, "Closable": true, "Maximizable": true, "Minimizable": true, "Resizable": true, "Title": true},
 	"WindowDecoration": {"Border": true, "BorderColor": true, "Buttons": true, "Grip": true, "GripColor": true, "Hairline": true, "Shadow": true, "ShowGrip": true, "Title": true, "TitleCenter": true, "TitleColor": true, "TitleInk": true, "Titlebar": true},
+	// ForgePane: everything it shows is an Observable of its ForgeModel, bound two-way
+	// (text, choices) or one-way (note, who); the widgets, the model and the
+	// subscriptions are unexported, and its only exported fields are the Invalidate
+	// and NoteWrap func hooks (auto-allowed), so the empty set locks out any
+	// imperative state field.
+	"ForgePane": {},
 	// GraphView: everything reactive is on the GraphViewModel's Observables and
 	// ObservableLists (nodes, edges, selection, filter); Model is the set-once
 	// composition of that view model, Palette/MaxEdgeWidth/ShowLegend are
