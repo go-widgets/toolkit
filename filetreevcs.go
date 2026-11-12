@@ -24,14 +24,13 @@ var syncStatusBlocks = runtime.GOOS == "js"
 // ErrSyncStatusBlocks is what [FileTree.RefreshStatus] always returns in a
 // js/wasm build, and what [FileTree.StatusError] publishes there for
 // [FileTree.SetRepository], a change of Entries and [FileTree.RefreshStatusAsync]
-// without PostUI. The name says "blocks", but the refusal is wider: in js/wasm
-// the tree reads status only off the UI goroutine, so a Repository.Status must
-// either be a round trip that would deadlock the single thread (the answer
-// could never arrive), or be safe to call from another goroutine (a snapshot
-// guarded by a mutex, or swapped in as an immutable copy). A Status that never
-// blocks is still refused on the UI goroutine, because it may not touch host
-// state there. Set PostUI (the tree then runs Status on its own goroutine) and
-// use RefreshStatusAsync.
+// without PostUI. In js/wasm the tree never calls Status on the UI goroutine,
+// only from a background goroutine (set PostUI and use RefreshStatusAsync). A
+// Status that waits for a worker's reply would deadlock the single thread if
+// called on the UI goroutine, and the tree cannot tell such a Status from one
+// that only reads a snapshot, so it refuses both. A Status used in the browser
+// must therefore be safe to call from another goroutine: a round trip, or a
+// mutex-guarded or immutable snapshot.
 var ErrSyncStatusBlocks = errors.New("toolkit: FileTree cannot call Repository.Status synchronously in js/wasm (it would block the only thread and hang): set FileTree.PostUI and use RefreshStatusAsync")
 
 // SetRepository attaches a version-control repository: the tree marks each entry
@@ -59,12 +58,13 @@ var ErrSyncStatusBlocks = errors.New("toolkit: FileTree cannot call Repository.S
 // small tree or a host with no UI thread, and freezes the UI otherwise.
 //
 // ⛔ In js/wasm [FileTree.RefreshStatus] always refuses, and without PostUI so
-// does every refresh (the synchronous one is REFUSED, not run). The tree reads
-// status there only off the UI goroutine, so a Repository.Status must be a round
-// trip that would otherwise deadlock the single thread (a worker answers through
-// the event loop, which a blocked call starves), or be safe to call from another
-// goroutine (a mutex-guarded snapshot, or an immutable copy swapped in). Without
-// PostUI, SetRepository attaches the repository, calls no Status, and publishes
+// does every refresh (the synchronous one is REFUSED, not run). The tree never
+// calls Status on the UI goroutine there, only from a background goroutine. A
+// Status that waits for a worker's reply would deadlock the single thread if
+// called on the UI goroutine, and the tree cannot tell such a Status from one
+// that only reads a snapshot, so it refuses both: a Status used in the browser
+// must be safe to call from another goroutine (a round trip, or a
+// mutex-guarded or immutable snapshot). Without PostUI, SetRepository attaches the repository, calls no Status, and publishes
 // [ErrSyncStatusBlocks] on [FileTree.StatusError]; set PostUI first.
 //
 // [FileTree.RefreshStatus] stays the explicit, waitable call: it returns when the
@@ -165,9 +165,11 @@ func (f *FileTree) Repository() vcs.Repository { return f.repo }
 //
 // ⛔ In a js/wasm build it ALWAYS refuses, PostUI or not (it is synchronous): it
 // returns (and publishes) [ErrSyncStatusBlocks] without calling Status on the UI
-// goroutine. Not only because Status may block: there the tree reads status only
-// off the UI goroutine, so Status must also be safe to call from another
-// goroutine (a mutex-guarded or immutable snapshot). Set PostUI and use
+// goroutine: there the tree calls Status only from a background goroutine. A
+// Status that waits for a worker's reply would deadlock the single thread, and
+// the tree cannot tell it from one that only reads a snapshot, so it refuses
+// both; Status must be safe to call from another goroutine (a round trip, or a
+// mutex-guarded or immutable snapshot). Set PostUI and use
 // [FileTree.RefreshStatusAsync]. A refusal skips supersede, so a
 // PostUI refresh already in flight can land later and clear the error; harmless,
 // its marks are fresh.
