@@ -352,7 +352,13 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// ObservableLists (nodes, edges, selection, filter); Model is the set-once
 	// composition of that view model, Palette/MaxEdgeWidth/ShowLegend are
 	// appearance config, OnActivate is a func hook.
-	"GraphView": {"Model": true, "Palette": true, "MaxEdgeWidth": true, "ShowLegend": true},
+	// ClosablePane: Title/CloseLabel/LastLabel are set-once words (Refresh applies a
+	// change of language), Body and Button are the parts it is built from. Its
+	// state is the splitter's: open or closed is the pane's Visible Observable
+	// (Splitter.Open), enabled is the button's Disabled Observable; the hover
+	// timer is unexported.
+	"ClosablePane": {"Title": true, "Body": true, "CloseLabel": true, "LastLabel": true, "Button": true},
+	"GraphView":    {"Model": true, "Palette": true, "MaxEdgeWidth": true, "ShowLegend": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
