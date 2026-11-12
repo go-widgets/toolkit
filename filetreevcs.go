@@ -31,7 +31,7 @@ var syncStatusBlocks = runtime.GOOS == "js"
 // that only reads a snapshot, so it refuses both. A Status used in the browser
 // must therefore be safe to call from another goroutine: a round trip, or a
 // mutex-guarded or immutable snapshot.
-var ErrSyncStatusBlocks = errors.New("toolkit: FileTree cannot call Repository.Status synchronously in js/wasm (it would block the only thread and hang): set FileTree.PostUI and use RefreshStatusAsync")
+var ErrSyncStatusBlocks = errors.New("toolkit: in js/wasm FileTree never calls Repository.Status on the UI goroutine; set FileTree.PostUI and use RefreshStatusAsync (Status must be safe to call from another goroutine)")
 
 // SetRepository attaches a version-control repository: the tree marks each entry
 // with the state the repository reports for it (see [FileTree.RefreshStatus] for
