@@ -66,6 +66,8 @@ type Splitter struct {
 	lastAt   time.Time
 	lastDiv  int
 	dragging *mvvm.Observable[bool]
+
+	anyEssential bool // some pane is Essential
 }
 
 // SplitPane is one pane of a [Splitter].
@@ -83,6 +85,11 @@ type SplitPane struct {
 	Collapsible bool
 	// Visible, when set, switches the pane (and a divider beside it) off.
 	Visible *mvvm.Observable[bool]
+	// Essential marks a pane the splitter never lets go: when any pane is
+	// Essential, at least one Essential pane stays on (the editor and the preview
+	// of an IDE: either may be closed, not both); when none is, at least one pane
+	// of any kind stays on. See [Splitter.CanClose].
+	Essential bool
 
 	restore int // the logical size before the pane was collapsed
 }
@@ -113,16 +120,27 @@ func NewSplitter(vertical bool, panes ...*SplitPane) *Splitter {
 			s.layout()
 		}
 	}
-	for _, p := range panes {
+	for i, p := range panes {
 		if p.Size != nil {
 			p.Size.Subscribe(func(int) { relayout() })
 		}
 		if p.Weight != nil {
 			p.Weight.Subscribe(func(int) { relayout() })
 		}
-		if p.Visible != nil {
-			p.Visible.Subscribe(func(bool) { relayout() })
+		if p.Visible == nil {
+			p.Visible = mvvm.NewObservable(true)
 		}
+		s.anyEssential = s.anyEssential || p.Essential
+		p.Visible.Subscribe(func(on bool) {
+			if !on {
+				if !s.mayClose(i) { // the last one stays: put it back
+					p.Visible.Set(true)
+					return
+				}
+				s.release(i)
+			}
+			relayout()
+		})
 	}
 	return s
 }
