@@ -101,6 +101,10 @@ func (c *ClosablePane) headerH() int { return scaled(ClosablePaneHeaderH) }
 func (c *ClosablePane) SetBounds(r Rect) {
 	c.Base.SetBounds(r)
 	if r.W <= 0 || r.H <= 0 {
+		// a pane that goes off with the press still held on its button (the release
+		// goes to whatever is under the pointer then) or the pointer on it would
+		// come back drawn pressed
+		c.resetButton()
 		c.Button.SetBounds(Rect{})
 		if c.Body != nil {
 			c.Body.SetBounds(Rect{})
@@ -114,6 +118,14 @@ func (c *ClosablePane) SetBounds(r Rect) {
 	if c.Body != nil {
 		c.Body.SetBounds(Rect{X: r.X, Y: r.Y + hh, W: r.W, H: r.H - hh})
 	}
+}
+
+// resetButton releases the button and takes the pointer off it, as a release and
+// a move away would: a pane that goes off with the pointer on it gets neither.
+func (c *ClosablePane) resetButton() {
+	c.Button.OnEvent(Event{Kind: EventMouseUp})
+	c.Button.OnEvent(Event{Kind: EventMouseMove, X: -1 << 20, Y: -1 << 20})
+	c.hover, c.hoverMs = false, 0
 }
 
 // Children are the button and the body, for the walks over the tree.

@@ -183,6 +183,13 @@ func TestClosablePaneButtonClosesAndTabReachesIt(t *testing.T) {
 	if d.s.IsOpen(3) {
 		t.Fatal("a click on the button did not close the pane")
 	}
+	if d.panes[3].Button.pressed || d.panes[3].Button.hovered {
+		t.Fatal("the closed pane's button stays pressed: it comes back drawn so")
+	}
+	d.s.Reopen(3)
+	if d.panes[3].Button.pressed || d.panes[3].Button.hovered || d.panes[3].hover {
+		t.Fatal("the reopened pane's button is still pressed")
+	}
 	// a click in a body goes to the body
 	d.s.Reopen(0)
 	bb := d.panes[0].Body.Bounds()
