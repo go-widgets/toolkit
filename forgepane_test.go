@@ -381,7 +381,7 @@ func TestForgeMessageKeysAreEnglish(t *testing.T) {
 			n++
 		}
 	}
-	if n != 18 {
+	if n != 23 {
 		t.Errorf("%d forge keys", n)
 	}
 }
