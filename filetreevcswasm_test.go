@@ -89,6 +89,23 @@ func TestWasmAllowsStatusWithPostUI(t *testing.T) {
 	}
 }
 
+// A direct RefreshStatus is synchronous even with a PostUI: refused in js/wasm.
+func TestWasmRefusesRefreshStatusWithPostUI(t *testing.T) {
+	flipSyncStatusBlocks(t, true)
+	cr := &countRepo{Repo: vcstest.NewRepo("/work")}
+	f, posted := asyncTree(cr)
+	// the async refresh runs Status on its own goroutine; let it land
+	(<-posted)()
+	before := cr.n
+	err := f.RefreshStatus(context.Background())
+	if !errors.Is(err, ErrSyncStatusBlocks) {
+		t.Fatalf("RefreshStatus = %v", err)
+	}
+	if cr.n != before {
+		t.Error("RefreshStatus called Status")
+	}
+}
+
 // Native builds are unchanged: the synchronous refresh runs.
 func TestNativeStatusStaysSynchronous(t *testing.T) {
 	flipSyncStatusBlocks(t, false)

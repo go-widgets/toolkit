@@ -23,8 +23,8 @@ var syncStatusBlocks = runtime.GOOS == "js"
 
 // ErrSyncStatusBlocks is what [FileTree.RefreshStatus] returns, and what
 // [FileTree.StatusError] publishes for [FileTree.SetRepository], a change of
-// Entries and [FileTree.RefreshStatusAsync], in a js/wasm build when no
-// [FileTree.PostUI] is set. Status would block the only thread and the answer
+// Entries and [FileTree.RefreshStatusAsync] without PostUI, and what
+// [FileTree.RefreshStatus] always returns, in a js/wasm build. Status would block the only thread and the answer
 // could never arrive: a silent hang, refused instead. Set PostUI (the tree then
 // runs Status on its own goroutine) and use RefreshStatusAsync.
 var ErrSyncStatusBlocks = errors.New("toolkit: FileTree cannot call Repository.Status synchronously in js/wasm (it would block the only thread and hang): set FileTree.PostUI and use RefreshStatusAsync")
@@ -53,7 +53,8 @@ var ErrSyncStatusBlocks = errors.New("toolkit: FileTree cannot call Repository.S
 // Without PostUI every refresh is synchronous, which is correct for a fake, a
 // small tree or a host with no UI thread, and freezes the UI otherwise.
 //
-// ⛔ In js/wasm without PostUI the synchronous refresh is REFUSED, not run: a
+// ⛔ In js/wasm [FileTree.RefreshStatus] always refuses, and without PostUI so
+// does every refresh (the synchronous one is REFUSED, not run): a
 // repository backed by a worker answers through the event loop, which a blocked
 // Status call starves, so it would hang silently. SetRepository then attaches the
 // repository, calls no Status, and publishes [ErrSyncStatusBlocks] on
@@ -155,13 +156,16 @@ func (f *FileTree) Repository() vcs.Repository { return f.repo }
 // tree), the error is returned and published on [FileTree.StatusError], and a
 // later success clears it.
 //
-// ⛔ In a js/wasm build with no [FileTree.PostUI] it refuses: it returns (and
-// publishes) [ErrSyncStatusBlocks] without calling Status, see there.
+// ⛔ In a js/wasm build it ALWAYS refuses, PostUI or not (it is synchronous): it
+// returns (and publishes) [ErrSyncStatusBlocks] without calling Status. Set
+// PostUI and use [FileTree.RefreshStatusAsync]. A refusal skips supersede, so a
+// PostUI refresh already in flight can land later and clear the error; harmless,
+// its marks are fresh.
 func (f *FileTree) RefreshStatus(ctx context.Context) error {
 	if f.repo == nil {
 		return nil
 	}
-	if syncStatusBlocks && f.PostUI == nil {
+	if syncStatusBlocks {
 		f.statusErr.Set(ErrSyncStatusBlocks)
 		return ErrSyncStatusBlocks
 	}
