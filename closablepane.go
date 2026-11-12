@@ -87,7 +87,7 @@ func (c *ClosablePane) Refresh() {
 	if c.s == nil {
 		return
 	}
-	last := !c.s.CanClose(c.i)
+	last := c.s.IsOpen(c.i) && !c.s.CanClose(c.i) // a closed pane is not "the last"
 	c.Button.Disabled().Set(last)
 	if last {
 		c.Button.SetFocused(false)
@@ -123,8 +123,12 @@ func (c *ClosablePane) SetBounds(r Rect) {
 // resetButton releases the button and takes the pointer off it, as a release and
 // a move away would: a pane that goes off with the pointer on it gets neither.
 func (c *ClosablePane) resetButton() {
+	// a disabled button ignores events: let it hear these two
+	off := c.Button.Disabled().Get()
+	c.Button.Disabled().Set(false)
 	c.Button.OnEvent(Event{Kind: EventMouseUp})
 	c.Button.OnEvent(Event{Kind: EventMouseMove, X: -1 << 20, Y: -1 << 20})
+	c.Button.Disabled().Set(off)
 	c.hover, c.hoverMs = false, 0
 }
 
