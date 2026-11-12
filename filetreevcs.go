@@ -6,11 +6,28 @@ package toolkit
 
 import (
 	"context"
+	"errors"
 	"path"
+	"runtime"
 
 	"github.com/go-widgets/mvvm"
 	"github.com/go-widgets/vcs"
 )
+
+// syncStatusBlocks is true where a synchronous Repository.Status cannot work: in
+// js/wasm there is one thread, and a repository backed by a worker answers
+// through the event loop that the blocked call is holding. A variable, not a
+// constant, so a test can flip it on a native build (toolkit tests do not
+// compile for js/wasm, issue #408).
+var syncStatusBlocks = runtime.GOOS == "js"
+
+// ErrSyncStatusBlocks is what [FileTree.RefreshStatus] returns, and what
+// [FileTree.StatusError] publishes for [FileTree.SetRepository], a change of
+// Entries and [FileTree.RefreshStatusAsync] without PostUI, and what
+// [FileTree.RefreshStatus] always returns, in a js/wasm build. Status would block the only thread and the answer
+// could never arrive: a silent hang, refused instead. Set PostUI (the tree then
+// runs Status on its own goroutine) and use RefreshStatusAsync.
+var ErrSyncStatusBlocks = errors.New("toolkit: FileTree cannot call Repository.Status synchronously in js/wasm (it would block the only thread and hang): set FileTree.PostUI and use RefreshStatusAsync")
 
 // SetRepository attaches a version-control repository: the tree marks each entry
 // with the state the repository reports for it (see [FileTree.RefreshStatus] for
@@ -35,6 +52,13 @@ import (
 // makes its late closure a no-op, so a stale answer never overwrites a newer one.
 // Without PostUI every refresh is synchronous, which is correct for a fake, a
 // small tree or a host with no UI thread, and freezes the UI otherwise.
+//
+// ⛔ In js/wasm [FileTree.RefreshStatus] always refuses, and without PostUI so
+// does every refresh (the synchronous one is REFUSED, not run): a
+// repository backed by a worker answers through the event loop, which a blocked
+// Status call starves, so it would hang silently. SetRepository then attaches the
+// repository, calls no Status, and publishes [ErrSyncStatusBlocks] on
+// [FileTree.StatusError]; set PostUI first.
 //
 // [FileTree.RefreshStatus] stays the explicit, waitable call: it returns when the
 // marks are applied, so call it on the UI goroutine, or give it a context with a
@@ -131,9 +155,19 @@ func (f *FileTree) Repository() vcs.Repository { return f.repo }
 // On failure the previous marks are kept (a transient error must not blank the
 // tree), the error is returned and published on [FileTree.StatusError], and a
 // later success clears it.
+//
+// ⛔ In a js/wasm build it ALWAYS refuses, PostUI or not (it is synchronous): it
+// returns (and publishes) [ErrSyncStatusBlocks] without calling Status. Set
+// PostUI and use [FileTree.RefreshStatusAsync]. A refusal skips supersede, so a
+// PostUI refresh already in flight can land later and clear the error; harmless,
+// its marks are fresh.
 func (f *FileTree) RefreshStatus(ctx context.Context) error {
 	if f.repo == nil {
 		return nil
+	}
+	if syncStatusBlocks {
+		f.statusErr.Set(ErrSyncStatusBlocks)
+		return ErrSyncStatusBlocks
 	}
 	f.supersede() // an answer still in flight would be older than this one
 	states, err := f.repo.Status(ctx)
