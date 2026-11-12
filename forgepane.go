@@ -59,6 +59,8 @@ type ForgePane struct {
 
 	model     ForgeModel
 	committer ForgeCommitter      // nil: the model has no git transport
+	chooser   ForgeChooser        // nil: no forge drop-down
+	locatable ForgeLocatable      // nil: no folder field
 	hidden    map[Widget]struct{} // controls of a nil command: not laid out, not in Parts
 	client    *forgeClientPage
 	frame     *forgeClientPage
@@ -87,18 +89,19 @@ const (
 // ForgeModel is what a [ForgePane] shows and does. A satisfying type is a
 // view-model: it holds the observables and the commands, and the pane subscribes.
 // All of it runs on the UI goroutine.
+//
+// One rule decides every optional control: a capability the model lacks is a
+// control that is not there; a state that is not yet right greys it. Commands
+// that are nil, and the optional interfaces [ForgeChooser], [ForgeLocatable] and
+// [ForgeCommitter] a model does not implement, leave no control: no hit target,
+// no focus, no announcement, absent from [ForgePane.Parts], the layout closed up.
 type ForgeModel interface {
-	// Forges are the forge names the drop-down offers, fixed for the model's life.
-	Forges() []string
-	// Forge is the chosen forge, an index into Forges.
-	Forge() *mvvm.Observable[int]
-	// Repo, Ref and Dir are the repository ("owner/name"), the branch (empty: the
-	// default) and the folder (empty: the root). The pane shows Repo's string as
-	// given, so a transport model (one that clones over git's HTTP protocol rather
-	// than a forge's REST API) may put a full remote URL in it.
+	// Repo and Ref are the repository ("owner/name") and the branch (empty: the
+	// default). The pane shows Repo's string as given, so a transport model (one
+	// that clones over git's HTTP protocol rather than a forge's REST API) may put
+	// a full remote URL in it.
 	Repo() *mvvm.Observable[string]
 	Ref() *mvvm.Observable[string]
-	Dir() *mvvm.Observable[string]
 	// Token is the masked field's text. A model empties it as soon as Connect
 	// takes it.
 	Token() *mvvm.Observable[string]
@@ -135,6 +138,26 @@ type ForgeModel interface {
 	TakeTheirs() *mvvm.Command
 	// OpenLink opens the pull request Propose made.
 	OpenLink() *mvvm.Command
+}
+
+// ForgeChooser is the optional forge choice of a [ForgeModel]: a model that
+// speaks to several forges implements it and the pane shows the drop-down (in the
+// client layout). A model for one generic git remote does not, and gets no
+// drop-down. Found by type assertion, read once at construction.
+type ForgeChooser interface {
+	// Forges are the forge names the drop-down offers, fixed for the model's life.
+	Forges() []string
+	// Forge is the chosen forge, an index into Forges.
+	Forge() *mvvm.Observable[int]
+}
+
+// ForgeLocatable is the optional folder of a [ForgeModel]: a model that works in
+// a folder of the repository implements it and every layout shows the Folder
+// field. A model with no such notion does not, and gets no field. Found by type
+// assertion, read once at construction.
+type ForgeLocatable interface {
+	// Dir is the folder (empty: the root).
+	Dir() *mvvm.Observable[string]
 }
 
 // ForgeCommitter is the optional git-transport capability of a [ForgeModel]: a
@@ -207,6 +230,8 @@ type forgeServerPage struct {
 func NewForgePane(m ForgeModel) *ForgePane {
 	f := &ForgePane{Stack: Stack{Pages: map[string]Widget{}}, model: m, hidden: map[Widget]struct{}{}}
 	f.committer, _ = m.(ForgeCommitter)
+	f.chooser, _ = m.(ForgeChooser)
+	f.locatable, _ = m.(ForgeLocatable)
 	f.client = f.newClientPage(false)
 	f.frame = f.newClientPage(true)
 	f.server = f.newServerPage()
@@ -415,6 +440,16 @@ func (f *ForgePane) bindText(src *mvvm.Observable[string], e *Entry) {
 	f.unbind = append(f.unbind, mvvm.BindTwoWay(src, e.Text(), f.invalidate))
 }
 
+// bindDir binds the Folder entry to the model's Dir, or hides it when the model
+// is not a [ForgeLocatable].
+func (f *ForgePane) bindDir(e *Entry) {
+	if f.locatable == nil {
+		f.hidden[e] = struct{}{}
+		return
+	}
+	f.bindText(f.locatable.Dir(), e)
+}
+
 // bindCommand wires a button to a model command: pressing runs it, and its
 // CanExecute greys the button. A nil command is a capability the model lacks:
 // the button is marked hidden and is neither laid out nor in Parts.
@@ -511,7 +546,7 @@ func (f *ForgePane) newClientPage(frame bool) *forgeClientPage {
 		refresh:    NewButton(Tr("forge.refresh", "Check for changes"), nil),
 		theirs:     NewButton(Tr("forge.take_theirs", "Take theirs"), nil),
 		open:       NewButton(Tr("forge.open_link", "Open the pull request"), nil),
-		forge:      NewDropDown(m.Forges(), 0),
+		forge:      NewDropDown(nil, 0),
 		signin:     NewButton(Tr("forge.signin", "Sign in with GitLab"), nil),
 	}
 	p.token.Mask = '•'
@@ -522,12 +557,17 @@ func (f *ForgePane) newClientPage(frame bool) *forgeClientPage {
 
 	f.bindText(m.Repo(), p.repo)
 	f.bindText(m.Ref(), p.ref)
-	f.bindText(m.Dir(), p.dir)
+	f.bindDir(p.dir)
 	f.bindText(m.Token(), p.token)
 	f.unbind = append(f.unbind,
 		mvvm.BindTwoWay(m.Remember(), p.remember.Checked(), f.invalidate),
-		mvvm.BindTwoWay(m.Forge(), p.forge.Selected(), f.invalidate),
 	)
+	if f.chooser != nil {
+		p.forge.Options = f.chooser.Forges()
+		f.unbind = append(f.unbind, mvvm.BindTwoWay(f.chooser.Forge(), p.forge.Selected(), f.invalidate))
+	} else {
+		f.hidden[p.forge] = struct{}{}
+	}
 	f.bindCommand(m.Connect(), p.connect)
 	f.bindCommand(m.Disconnect(), p.disconnect)
 	f.bindCommand(m.SignIn(), p.signin)
@@ -547,11 +587,11 @@ func (f *ForgePane) newClientPage(frame bool) *forgeClientPage {
 		p.slot = NewLabel("")
 		cl.AddFixed(p.slot, scaled(forgeSlotH))
 	} else {
-		cl.AddFixed(p.forge, row)
+		f.addRow(cl, p.forge)
 	}
 	cl.AddFixed(p.repo, row)
 	cl.AddFixed(p.ref, row)
-	cl.AddFixed(p.dir, row)
+	f.addRow(cl, p.dir)
 	if !frame {
 		cl.AddFixed(p.token, row)
 		cl.AddFixed(p.remember, scaled(forgeCheckH))
@@ -605,7 +645,7 @@ func (f *ForgePane) newServerPage() *forgeServerPage {
 	who(m.User().Get())
 	repos(m.Repos().Get())
 	f.bindText(m.Ref(), p.ref)
-	f.bindText(m.Dir(), p.dir)
+	f.bindDir(p.dir)
 	f.unbind = append(f.unbind,
 		mvvm.BindTwoWay(m.RepoPick(), p.pick.Selected(), f.invalidate),
 		m.User().Subscribe(who),
@@ -628,7 +668,7 @@ func (f *ForgePane) newServerPage() *forgeServerPage {
 	b.AddFixed(p.reposLabel, scaled(forgeCheckH))
 	b.AddFixed(p.pick, row)
 	b.AddFixed(p.ref, row)
-	b.AddFixed(p.dir, row)
+	f.addRow(b, p.dir)
 	f.addRow(b, p.load, p.refresh)
 	f.addCommitRows(b, p.commit)
 	f.addRow(b, p.propose, p.theirs)
