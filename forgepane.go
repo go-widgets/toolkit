@@ -118,7 +118,9 @@ type ForgeModel interface {
 	// pane does not show that control at all and the layout closes up. A state the
 	// model is only in at the moment (not connected yet, nothing to load) is a
 	// command whose CanExecute is false: the control stays, greyed. Absent
-	// capability removes; absent state greys.
+	// capability removes; absent state greys. The pane reads these commands once,
+	// at construction: nil means "never offered", and a command that becomes
+	// non-nil later is not picked up.
 	Connect() *mvvm.Command
 	Disconnect() *mvvm.Command
 	// SignIn is the client layout's OAuth sign-in; ServerSignIn the server
@@ -513,7 +515,7 @@ func (f *ForgePane) newClientPage(frame bool) *forgeClientPage {
 		signin:     NewButton(Tr("forge.signin", "Sign in with GitLab"), nil),
 	}
 	p.token.Mask = '•'
-	p.repo.Placeholder = Tr("forge.repo", "Repository (owner/name)")
+	p.repo.Placeholder = Tr("forge.repo", "Repository (owner/name or URL)")
 	p.ref.Placeholder = Tr("forge.branch", "Branch (empty: the default)")
 	p.dir.Placeholder = Tr("forge.folder", "Folder (empty: the root)")
 	p.token.Placeholder = Tr("forge.token", "Token")

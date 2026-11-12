@@ -82,7 +82,7 @@ var MessageKeys = map[string]string{
 	"dialog.ok":            "OK",
 
 	"forge.title":         "Git",
-	"forge.repo":          "Repository (owner/name)",
+	"forge.repo":          "Repository (owner/name or URL)",
 	"forge.branch":        "Branch (empty: the default)",
 	"forge.folder":        "Folder (empty: the root)",
 	"forge.token":         "Token",

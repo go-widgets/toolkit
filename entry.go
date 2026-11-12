@@ -332,7 +332,15 @@ func (e *Entry) OnEvent(ev Event) {
 		// Preview only — do NOT touch the text. Repaint responsibility
 		// lies with the host, who typically calls Draw after each
 		// composition event.
-		e.composition = ev.Code
+		//
+		// A masked entry keeps no preview at all: the preview is the secret in
+		// clear (drawn at the caret) and there is nothing to mask it into that
+		// helps the person. Password fields turn IME composition off for the
+		// same reason; the toolkit cannot tell the platform to, so it drops the
+		// preview. The committed EventChar still inserts, and is masked.
+		if e.Mask == 0 {
+			e.composition = ev.Code
+		}
 	case EventCompositionEnd:
 		// Cancel / commit-without-follow-up: drop the preview. When
 		// the host follows up with EventChar (commit path), the
