@@ -210,8 +210,9 @@ func TestDisabledSplitterReleasesAGrabInFlight(t *testing.T) {
 	}
 }
 
-// Border.ResizeSplit is what an application calls for a drag it tracks itself.
-func TestDisabledBorderRefusesResize(t *testing.T) {
+// Border.ResizeSplit is application code and works while disabled; the same
+// resize through a pointer drag does not.
+func TestDisabledBorderResizesOnlyProgrammatically(t *testing.T) {
 	n := 0
 	b := NewBorder()
 	b.West, b.Center = NewLabel("w"), NewLabel("c")
@@ -219,10 +220,12 @@ func TestDisabledBorderRefusesResize(t *testing.T) {
 	b.OnResize = func(DockSide, int) { n++ }
 	b.SetBounds(Rect{W: 200, H: 100})
 	b.Disabled().Set(true)
-	b.ResizeSplit(DockLeft, 80)
-	if b.WestSize != 40 || n != 0 {
-		t.Fatalf("disabled: WestSize %d, %d OnResize calls", b.WestSize, n)
+	b.ResizeSplit(DockLeft, 50)
+	if b.WestSize != 50 || n != 1 {
+		t.Fatalf("disabled: programmatic ResizeSplit gave WestSize %d, %d OnResize calls, want 50 and 1", b.WestSize, n)
 	}
+	b.ResizeSplit(DockLeft, 40)
+	n = 0
 	// a handle grabbed before it was disabled is let go
 	b.Disabled().Set(false)
 	h, _ := b.SplitHandleAt(40+BorderSplitW/2, 5)
@@ -242,17 +245,18 @@ func TestDisabledBorderRefusesResize(t *testing.T) {
 	}
 }
 
-// Kanban.MoveCard is what a host calls from a menu action; a card in flight when
-// the board is disabled is dropped, not kept for a later release.
-func TestDisabledKanbanRefusesMovesAndDropsAGrab(t *testing.T) {
+// Kanban.MoveCard is application code and works while disabled; a card in flight
+// when the board is disabled is dropped, not kept for a later release.
+func TestDisabledKanbanMovesOnlyProgrammaticallyAndDropsAGrab(t *testing.T) {
 	k := sampleBoard()
 	k.SetBounds(Rect{W: 600, H: 300})
 	colW := (600 - 2*KanbanColGap) / 3
 	k.Disabled().Set(true)
 	k.MoveCard(0, 0, 2, 0)
-	if len(k.Columns[0].Cards) != 2 || len(k.Columns[2].Cards) != 1 {
-		t.Fatalf("disabled: MoveCard moved a card: %d / %d", len(k.Columns[0].Cards), len(k.Columns[2].Cards))
+	if len(k.Columns[0].Cards) != 1 || len(k.Columns[2].Cards) != 2 {
+		t.Fatalf("disabled: programmatic MoveCard gave %d / %d cards", len(k.Columns[0].Cards), len(k.Columns[2].Cards))
 	}
+	k.MoveCard(2, 0, 0, 0)
 	k.Disabled().Set(false)
 	from, to := k.cardLocalRect(0, 0, colW), k.cardLocalRect(2, 0, colW)
 	k.OnEvent(Event{Kind: EventClick, X: from.X + 4, Y: from.Y + 4})
@@ -270,91 +274,91 @@ func TestDisabledKanbanRefusesMovesAndDropsAGrab(t *testing.T) {
 	}
 }
 
-// TimePicker's three steppers are public and a host binds keys to them.
-func TestDisabledTimePickerRefusesSteps(t *testing.T) {
+// The public methods of this batch are application code: they work while the
+// widget is disabled (programmatic), though the same action through OnEvent
+// does not (the table rows and the tests above prove that half).
+func TestDisabledProgrammaticAPIsStillWork(t *testing.T) {
 	tp := NewTimePicker(9, 30)
 	tp.Disabled().Set(true)
 	tp.StepHour(1)
 	tp.StepMinute(1)
 	tp.ToggleAmPm()
-	if got := tp.String(); got != NewTimePicker(9, 30).String() {
-		t.Fatalf("disabled: time became %s", got)
-	}
-	tp.Disabled().Set(false)
-	tp.StepHour(1)
-	tp.StepMinute(1)
-	tp.ToggleAmPm()
 	if tp.Hour().Get() != 22 || tp.Minute().Get() != 31 {
-		t.Fatalf("re-enabled: %02d:%02d, want 22:31", tp.Hour().Get(), tp.Minute().Get())
+		t.Fatalf("TimePicker: %02d:%02d, want 22:31", tp.Hour().Get(), tp.Minute().Get())
 	}
-}
 
-// Wizard.Next and Back are public (a host binds keys to them); Next on the last
-// step is Finish. A button held when the wizard is disabled is let go.
-func TestDisabledWizardRefusesNavigation(t *testing.T) {
 	finished := 0
 	w := NewWizard([]WizardStep{{Title: "a"}, {Title: "b"}})
 	w.OnFinish = func() { finished++ }
 	w.SetBounds(Rect{W: 300, H: 200})
 	w.Disabled().Set(true)
 	w.Next()
-	if w.Current().Get() != 0 {
-		t.Fatalf("disabled: Next moved to step %d", w.Current().Get())
+	w.Back()
+	w.Next()
+	w.Next() // the last step: Finish
+	if w.Current().Get() != 1 || finished != 1 {
+		t.Fatalf("Wizard: step %d, %d finishes, want 1 and 1", w.Current().Get(), finished)
 	}
+	// a button held when the wizard is disabled is let go
 	w.Disabled().Set(false)
-	nx, ny := centre(w.nextRect())
+	nx, ny := centre(w.backRect())
 	w.OnEvent(Event{Kind: EventClick, X: nx, Y: ny})
-	if w.Current().Get() != 1 || w.pressedBtn != wizBtnNext {
-		t.Fatalf("setup: step %d, pressed %d", w.Current().Get(), w.pressedBtn)
+	if w.pressedBtn != wizBtnBack {
+		t.Fatalf("setup: pressed %d", w.pressedBtn)
 	}
 	w.Disabled().Set(true)
-	w.Back()
-	w.Next() // the last step: Finish
-	if w.Current().Get() != 1 || finished != 0 {
-		t.Fatalf("disabled: step %d, %d finishes", w.Current().Get(), finished)
-	}
 	w.OnEvent(Event{Kind: EventMouseUp})
 	if w.pressedBtn != wizBtnNone {
 		t.Fatal("disabled: a held button stayed pressed")
 	}
-	w.Disabled().Set(false)
-	w.Back()
-	if w.Current().Get() != 0 {
-		t.Fatalf("re-enabled: Back left step %d", w.Current().Get())
-	}
-	w.Next()
-	w.Next()
-	if finished != 1 {
-		t.Fatalf("re-enabled: %d finishes, want 1", finished)
-	}
-}
 
-// Inspector.ToggleColor opens a colour row's picker; PropertyGrid.RemoveAt
-// deletes a property: both are host-callable actions.
-func TestDisabledInspectorAndPropertyGridRefuseHostActions(t *testing.T) {
 	in, _ := testInspector()
 	in.Disabled().Set(true)
 	in.ToggleColor("bg")
-	if in.byID["bg"].open {
-		t.Fatal("disabled Inspector: ToggleColor opened a picker")
-	}
-	in.Disabled().Set(false)
-	in.ToggleColor("bg")
 	if !in.byID["bg"].open {
-		t.Fatal("re-enabled Inspector: ToggleColor opened nothing")
+		t.Fatal("Inspector: ToggleColor opened nothing")
 	}
 
 	pg := NewPropertyGrid()
 	pg.Add("a", "1")
 	pg.Disabled().Set(true)
 	pg.RemoveAt(0)
-	if pg.Value("a") != "1" {
-		t.Fatal("disabled PropertyGrid: RemoveAt removed a property")
-	}
-	pg.Disabled().Set(false)
-	pg.RemoveAt(0)
 	if pg.Value("a") != "" {
-		t.Fatal("re-enabled PropertyGrid: RemoveAt removed nothing")
+		t.Fatal("PropertyGrid: RemoveAt removed nothing")
+	}
+}
+
+// A drag in progress when the splitter is disabled leaves the panes where the
+// drag put them and announces it, as the release would have.
+func TestDisabledSplitterAnnouncesTheResizeOfAGrabInFlight(t *testing.T) {
+	s := honourSplitter()
+	var changed [][]int
+	s.OnResized = func(ix []int) { changed = append(changed, ix) }
+	hr, _ := s.HandleRect(0)
+	x, y := centre(hr)
+	s.OnEvent(Event{Kind: EventClick, X: x, Y: y})
+	s.OnEvent(Event{Kind: EventMouseDrag, X: x + 30, Y: y})
+	if len(changed) != 0 {
+		t.Fatalf("setup: OnResized fired mid-drag: %v", changed)
+	}
+	s.Disabled().Set(true)
+	s.OnEvent(Event{Kind: EventMouseUp, X: x + 30, Y: y})
+	if len(changed) != 1 || s.Dragging().Get() {
+		t.Fatalf("disabled mid-drag: %d OnResized calls, dragging %v, want 1 and false", len(changed), s.Dragging().Get())
+	}
+}
+
+// A popup open when its widget is disabled is closed, not just hidden: it must
+// not come back on re-enable.
+func TestDisabledClosesOpenPopups(t *testing.T) {
+	f := NewFontPicker([]string{"a", "b", "c"})
+	v := keyed(f, 400)
+	f.family.Open().Set(true)
+	f.Disabled().Set(true)
+	PopoverOwners(v)
+	f.Disabled().Set(false)
+	if f.family.Open().Get() || len(PopoverOwners(v)) != 0 {
+		t.Fatal("re-enabled: the list that was open when the picker was disabled came back")
 	}
 }
 
@@ -385,8 +389,12 @@ func TestDisabledCompositeShowsNoChildPopup(t *testing.T) {
 				t.Errorf("disabled: %d popovers showing, want 0", n)
 			}
 			off.Set(false)
+			if n := len(PopoverOwners(v)); n != 0 {
+				t.Errorf("re-enabled: %d popovers showing, want 0 (the list was closed)", n)
+			}
+			open()
 			if n := len(PopoverOwners(v)); n != 1 {
-				t.Errorf("re-enabled: %d popovers showing, want 1", n)
+				t.Errorf("re-enabled and reopened: %d popovers showing, want 1", n)
 			}
 		})
 	}

@@ -119,9 +119,6 @@ func (tp *TimePicker) meridiem() string {
 // StepHour adjusts the hour by delta (typically +1 / -1), wrapping 0..23 in
 // both directions, then Sets the Hour Observable.
 func (tp *TimePicker) StepHour(delta int) {
-	if tp.Disabled().Get() {
-		return
-	}
 	tp.Hour().Set(((tp.Hour().Get()+delta)%24 + 24) % 24)
 }
 
@@ -130,9 +127,6 @@ func (tp *TimePicker) StepHour(delta int) {
 // Minute Observable. A non-positive MinuteStep is treated as 1 so a click is
 // never a silent no-op.
 func (tp *TimePicker) StepMinute(delta int) {
-	if tp.Disabled().Get() {
-		return
-	}
 	step := tp.MinuteStep
 	if step <= 0 {
 		step = 1
@@ -143,9 +137,6 @@ func (tp *TimePicker) StepMinute(delta int) {
 // ToggleAmPm flips between AM and PM by shifting the hour ±12, keeping the
 // stored value in 0..23, then Sets the Hour Observable.
 func (tp *TimePicker) ToggleAmPm() {
-	if tp.Disabled().Get() {
-		return
-	}
 	h := tp.Hour().Get()
 	if h < 12 {
 		h += 12

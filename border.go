@@ -99,9 +99,6 @@ func (b *Border) SplitHandleAt(px, py int) (side DockSide, ok bool) {
 // extent on that axis]), re-lays out, and fires OnResize. The app computes size
 // from the drag — e.g. NorthSize + dy for the north handle.
 func (b *Border) ResizeSplit(side DockSide, size int) {
-	if b.Disabled().Get() {
-		return
-	}
 	if size < 0 {
 		size = 0
 	}

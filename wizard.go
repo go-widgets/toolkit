@@ -123,9 +123,6 @@ func (w *Wizard) nextButtonLabel() string {
 // (if set) and leaves Current unchanged — Next() is the "Finish"
 // action once there is nowhere further to advance to.
 func (w *Wizard) Next() {
-	if w.Disabled().Get() {
-		return
-	}
 	if w.onLastStep() {
 		if w.OnFinish != nil {
 			w.OnFinish()
@@ -141,7 +138,7 @@ func (w *Wizard) Next() {
 // Back moves to the previous step, clamped at 0 (a no-op on the
 // first step).
 func (w *Wizard) Back() {
-	if cur := w.Current().Get(); cur > 0 && !w.Disabled().Get() {
+	if cur := w.Current().Get(); cur > 0 {
 		w.Current().Set(cur - 1)
 	}
 }

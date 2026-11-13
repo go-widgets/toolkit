@@ -68,7 +68,7 @@ func (pg *PropertyGrid) Clear() {
 // is a no-op. Exposed so a host can implement a "delete property" menu action
 // (hit-test the row with PropertyGrid.Table().RowAt).
 func (pg *PropertyGrid) RemoveAt(i int) {
-	if i < 0 || i >= len(pg.names) || pg.Disabled().Get() {
+	if i < 0 || i >= len(pg.names) {
 		return
 	}
 	pg.names = append(pg.names[:i], pg.names[i+1:]...)

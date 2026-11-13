@@ -364,7 +364,7 @@ func (in *Inspector) EditorRect(id string) (Rect, bool) {
 
 // ToggleColor opens or closes the picker of colour row id.
 func (in *Inspector) ToggleColor(id string) {
-	if r := in.byID[id]; r != nil && r.picker != nil && !in.Disabled().Get() {
+	if r := in.byID[id]; r != nil && r.picker != nil {
 		r.open = !r.open
 	}
 }

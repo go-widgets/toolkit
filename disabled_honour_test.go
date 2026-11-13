@@ -773,10 +773,11 @@ func TestDisabledPopoverOwnersTakeNoPopupClicks(t *testing.T) {
 				y = pb.Y + scaled(CalendarHeaderH) + 2*scaled(CalendarCellH) + scaled(CalendarCellH)/2
 			}
 			c.off.Set(true)
-			before := c.state()
 			if n := len(PopoverOwners(c.host)); n != 0 {
 				t.Errorf("disabled: %d popovers showing, want 0", n)
 			}
+			// the walk closes a list that was open (see closePopups)
+			before := c.state()
 			if c.owner.PopoverClick(x, y) {
 				t.Errorf("disabled: PopoverClick consumed a click")
 			}
@@ -785,6 +786,10 @@ func TestDisabledPopoverOwnersTakeNoPopupClicks(t *testing.T) {
 				t.Errorf("disabled: state %q, want unchanged %q", got, before)
 			}
 			c.off.Set(false)
+			if o, ok := c.owner.(interface{ Open() *mvvm.Observable[bool] }); ok {
+				o.Open().Set(true) // closed by the walk: the person opens it again
+			}
+			before = c.state()
 			if n := len(PopoverOwners(c.host)); n != 1 {
 				t.Fatalf("re-enabled: %d popovers showing, want 1", n)
 			}

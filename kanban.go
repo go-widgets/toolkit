@@ -506,9 +506,6 @@ func (k *Kanban) CardAt(x, y int) (col, card int) { return k.cardAt(x, y) }
 // ignored; toIdx is clamped). Exposed so a host can drive the same move a drag
 // performs from a menu action.
 func (k *Kanban) MoveCard(fromCol, fromCard, toCol, toIdx int) {
-	if k.Disabled().Get() {
-		return
-	}
 	k.moveCard(fromCol, fromCard, toCol, toIdx)
 }
 

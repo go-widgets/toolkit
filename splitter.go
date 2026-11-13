@@ -652,9 +652,13 @@ func (s *Splitter) Draw(p painter.Painter, theme *Theme) {
 // divider that holds the focus, and the rest to the pane under the pointer.
 func (s *Splitter) OnEvent(ev Event) {
 	if s.Disabled().Get() {
-		// a divider in hand is let go, not kept for the next release
-		s.grab = -1
-		s.dragging.Set(false)
+		// a divider in hand is let go, and the resize it made is announced
+		if s.grab >= 0 {
+			before := s.grabBase
+			s.grab = -1
+			s.dragging.Set(false)
+			s.fire(before)
+		}
 		return
 	}
 	if routeFocusKey(s, ev) {
