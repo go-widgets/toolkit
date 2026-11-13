@@ -493,7 +493,7 @@ func (w *PullToRefresh) forwardToChild(ev Event) {
 // A11y reports the container as a group, marked busy while it is refreshing so a
 // screen reader announces the in-progress reload.
 func (w *PullToRefresh) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: stateValue(w.Refreshing(), "busy")}
+	return A11yInfo{Role: RoleGroup, Value: stateValue(w.Refreshing(), "busy"), Disabled: w.Disabled().Get()}
 }
 
 // Compile-time checks that PullToRefresh satisfies the container/animation/

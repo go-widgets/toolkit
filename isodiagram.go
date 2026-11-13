@@ -1955,7 +1955,7 @@ func (d *IsoDiagram) onKey(ev Event) {
 
 // A11y describes the widget itself as a group holding the diagram's elements.
 func (d *IsoDiagram) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: "isometric diagram"}
+	return A11yInfo{Role: RoleGroup, Name: "isometric diagram", Disabled: d.Disabled().Get()}
 }
 
 // Children exposes each node and connector as an accessibility proxy so a screen

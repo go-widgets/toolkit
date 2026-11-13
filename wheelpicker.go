@@ -666,7 +666,7 @@ func (w *WheelPicker) A11y() A11yInfo {
 	for j := range w.columns {
 		parts = append(parts, w.SelectedValue(j))
 	}
-	return A11yInfo{Role: RoleGroup, Value: strings.Join(parts, " ")}
+	return A11yInfo{Role: RoleGroup, Value: strings.Join(parts, " "), Disabled: w.Disabled().Get()}
 }
 
 // Compile-time check that WheelPicker is Accessible (kept with the widget so the

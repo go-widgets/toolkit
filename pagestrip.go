@@ -706,5 +706,5 @@ func (s *PageStrip) A11y() A11yInfo {
 	if c := s.Current().Get(); c >= 0 && c < s.count {
 		v = "page " + strconv.Itoa(c+1) + " of " + strconv.Itoa(s.count)
 	}
-	return A11yInfo{Role: RoleListbox, Value: v}
+	return A11yInfo{Role: RoleListbox, Value: v, Disabled: s.Disabled().Get()}
 }

@@ -345,5 +345,5 @@ func (m *CodeMinimap) OnEvent(ev Event) {
 // scaled-down picture of the source, like the charts, with nothing a reader can
 // read off it beyond how much code it overviews.
 func (m *CodeMinimap) A11y() A11yInfo {
-	return A11yInfo{Role: RoleImg, Value: strconv.Itoa(len(m.lines)) + " lines"}
+	return A11yInfo{Role: RoleImg, Value: strconv.Itoa(len(m.lines)) + " lines", Disabled: m.Disabled().Get()}
 }

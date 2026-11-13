@@ -563,7 +563,7 @@ func (pv *PagedView) HitTest(px, py int) bool { return pv.Bounds().Contains(px, 
 // value ("n / N") and — when there is at least one page — a machine-readable
 // aria-valuemin/max/now triple over [1, PageCount].
 func (pv *PagedView) A11y() A11yInfo {
-	info := A11yInfo{Role: RoleDocument, Value: pv.pageIndicator()}
+	info := A11yInfo{Role: RoleDocument, Value: pv.pageIndicator(), Disabled: pv.Disabled().Get()}
 	if n := pv.PageCount(); n > 0 {
 		info.HasRange = true
 		info.Min, info.Max, info.Now = 1, float64(n), float64(pv.cur())

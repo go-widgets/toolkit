@@ -165,5 +165,5 @@ func (l *Link) activate() {
 
 // A11y reports the link as a hyperlink named by its caption.
 func (l *Link) A11y() A11yInfo {
-	return A11yInfo{Role: RoleLink, Name: l.Text().Get()}
+	return A11yInfo{Role: RoleLink, Name: l.Text().Get(), Disabled: l.Disabled().Get()}
 }

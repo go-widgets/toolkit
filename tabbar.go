@@ -386,7 +386,7 @@ func (t *TabBar) A11y() A11yInfo {
 			name = it.Icon
 		}
 	}
-	return A11yInfo{Role: RoleTablist, Name: name}
+	return A11yInfo{Role: RoleTablist, Name: name, Disabled: t.Disabled().Get()}
 }
 
 // Children exposes each item as a synthetic, non-drawing tab node so the
@@ -401,6 +401,7 @@ func (t *TabBar) Children() []Widget {
 	for i := range t.Items {
 		node := &tabItemNode{item: t.Items[i], selected: i == t.Selected().Get()}
 		node.SetBounds(t.ItemRect(i))
+		node.Disabled().Set(t.Disabled().Get())
 		out = append(out, node)
 	}
 	return out
@@ -424,7 +425,7 @@ func (n *tabItemNode) A11y() A11yInfo {
 	if name == "" {
 		name = n.item.Icon
 	}
-	return A11yInfo{Role: RoleTab, Name: name, Value: stateValue(n.selected, "selected")}
+	return A11yInfo{Role: RoleTab, Name: name, Value: stateValue(n.selected, "selected"), Disabled: n.Disabled().Get()}
 }
 
 // Compile-time checks: the TabBar and its synthetic item node both satisfy

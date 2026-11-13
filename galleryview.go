@@ -102,7 +102,7 @@ func (g *GalleryView) A11y() A11yInfo {
 	if g.Selected().Get() >= 0 && g.Selected().Get() < len(g.Items) {
 		label = g.Items[g.Selected().Get()].Label
 	}
-	return A11yInfo{Role: RoleGrid, Value: label}
+	return A11yInfo{Role: RoleGrid, Value: label, Disabled: g.Disabled().Get()}
 }
 
 // SetItems replaces the gallery content and re-normalizes the selection (a

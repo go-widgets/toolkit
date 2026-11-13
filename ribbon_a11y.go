@@ -12,7 +12,7 @@ func (r *Ribbon) A11y() A11yInfo {
 	if t := r.activeTab(); t != nil {
 		v = t.Label
 	}
-	return A11yInfo{Role: RoleToolbar, Name: Tr("ribbon.a11y", "Ribbon"), Value: v}
+	return A11yInfo{Role: RoleToolbar, Name: Tr("ribbon.a11y", "Ribbon"), Value: v, Disabled: r.Disabled().Get()}
 }
 
 // ribbonNode is a synthetic, non-drawing stand-in for one part of the ribbon

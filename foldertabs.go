@@ -363,7 +363,7 @@ func (t *FolderTabs) A11y() A11yInfo {
 	if a := t.Selected().Get(); a >= 0 && a < len(t.Labels) {
 		name = t.Labels[a]
 	}
-	return A11yInfo{Role: RoleTablist, Name: name}
+	return A11yInfo{Role: RoleTablist, Name: name, Disabled: t.Disabled().Get()}
 }
 
 // Children exposes each label as a synthetic, non-drawing RoleTab node so the
@@ -379,6 +379,7 @@ func (t *FolderTabs) Children() []Widget {
 	for i := range t.Labels {
 		node := &folderTabNode{label: t.Labels[i], selected: i == active}
 		node.SetBounds(t.TabRect(i))
+		node.Disabled().Set(t.Disabled().Get())
 		out = append(out, node)
 	}
 	return out
@@ -398,7 +399,7 @@ type folderTabNode struct {
 // the active tab and "" otherwise — the standard tab selected-state string a
 // host maps to aria-selected.
 func (n *folderTabNode) A11y() A11yInfo {
-	return A11yInfo{Role: RoleTab, Name: n.label, Value: stateValue(n.selected, "selected")}
+	return A11yInfo{Role: RoleTab, Name: n.label, Value: stateValue(n.selected, "selected"), Disabled: n.Disabled().Get()}
 }
 
 // Compile-time checks: FolderTabs and its synthetic tab node both satisfy
