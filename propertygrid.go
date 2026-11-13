@@ -68,7 +68,7 @@ func (pg *PropertyGrid) Clear() {
 // is a no-op. Exposed so a host can implement a "delete property" menu action
 // (hit-test the row with PropertyGrid.Table().RowAt).
 func (pg *PropertyGrid) RemoveAt(i int) {
-	if i < 0 || i >= len(pg.names) {
+	if i < 0 || i >= len(pg.names) || pg.Disabled().Get() {
 		return
 	}
 	pg.names = append(pg.names[:i], pg.names[i+1:]...)
@@ -118,5 +118,8 @@ func (pg *PropertyGrid) Draw(p painter.Painter, theme *Theme) {
 
 // OnEvent forwards to the backing Table (selection, and Value-cell editing).
 func (pg *PropertyGrid) OnEvent(ev Event) {
+	if pg.Disabled().Get() {
+		return
+	}
 	pg.table.OnEvent(ev)
 }

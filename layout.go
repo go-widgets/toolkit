@@ -831,6 +831,9 @@ func (f *Frame) focusableChildren() []Widget {
 // focused descendant); a click inside the child also moves focus to the
 // focusable it hits.
 func (f *Frame) OnEvent(ev Event) {
+	if f.Disabled().Get() {
+		return
+	}
 	if routeFocusKey(f, ev) {
 		return
 	}

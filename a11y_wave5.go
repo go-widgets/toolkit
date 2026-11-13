@@ -38,7 +38,7 @@ func (t *TreeTable) A11y() A11yInfo {
 // string -- the tokens are plain strings, not independent widgets, so the field
 // as a whole is the accessible unit.
 func (t *TagField) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: strings.Join(t.Tags().Get(), ", ")}
+	return A11yInfo{Role: RoleGroup, Value: strings.Join(t.Tags().Get(), ", "), Disabled: t.Disabled().Get()}
 }
 
 // A11y reports the CycleButton as a button named by its currently-shown option
@@ -61,13 +61,13 @@ func (k *Kanban) A11y() A11yInfo {
 		scd >= 0 && scd < len(k.Columns[sc].Cards) {
 		v = k.Columns[sc].Cards[scd].Title
 	}
-	return A11yInfo{Role: RoleGroup, Value: v}
+	return A11yInfo{Role: RoleGroup, Value: v, Disabled: k.Disabled().Get()}
 }
 
 // A11y reports the TimePicker as a group carrying its selected time as a
 // 24-hour "HH:MM" string (the picker always stores 24-hour internally).
 func (t *TimePicker) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: fmt.Sprintf("%02d:%02d", t.Hour().Get(), t.Minute().Get())}
+	return A11yInfo{Role: RoleGroup, Value: fmt.Sprintf("%02d:%02d", t.Hour().Get(), t.Minute().Get()), Disabled: t.Disabled().Get()}
 }
 
 // A11y reports the PropertyGrid as a grid carrying the selected property's name,
@@ -79,19 +79,19 @@ func (pg *PropertyGrid) A11y() A11yInfo {
 			v = pg.names[s]
 		}
 	}
-	return A11yInfo{Role: RoleGrid, Value: v}
+	return A11yInfo{Role: RoleGrid, Value: v, Disabled: pg.Disabled().Get()}
 }
 
 // A11y reports the MarkdownEditor as a textbox carrying its editable source
 // text (Text() yields "" when the source pane is nil).
 func (m *MarkdownEditor) A11y() A11yInfo {
-	return A11yInfo{Role: RoleTextbox, Value: m.Text()}
+	return A11yInfo{Role: RoleTextbox, Value: m.Text(), Disabled: m.Disabled().Get()}
 }
 
 // A11y reports the TerminalView as a textbox carrying its visible cell text,
 // rows joined with newlines and trailing blank cells/rows trimmed.
 func (t *TerminalView) A11y() A11yInfo {
-	return A11yInfo{Role: RoleTextbox, Value: terminalText(t)}
+	return A11yInfo{Role: RoleTextbox, Value: terminalText(t), Disabled: t.Disabled().Get()}
 }
 
 // terminalText flattens a TerminalView's cell grid into plain text: unset cells

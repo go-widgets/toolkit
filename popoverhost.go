@@ -163,6 +163,11 @@ func collectPopoverOwners(w Widget, out *[]PopoverOwner, dx, dy int) {
 	if w == nil {
 		return
 	}
+	// A disabled widget's whole subtree shows no popup: a container cannot reach
+	// into the open list of a drop-down it holds, so the walk refuses it here.
+	if d, ok := w.(disabledReporter); ok && d.isDisabled() {
+		return
+	}
 	if p, ok := w.(PopoverOwner); ok && p.PopoverOpen() {
 		if dx == 0 && dy == 0 {
 			*out = append(*out, p)

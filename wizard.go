@@ -123,6 +123,9 @@ func (w *Wizard) nextButtonLabel() string {
 // (if set) and leaves Current unchanged — Next() is the "Finish"
 // action once there is nowhere further to advance to.
 func (w *Wizard) Next() {
+	if w.Disabled().Get() {
+		return
+	}
 	if w.onLastStep() {
 		if w.OnFinish != nil {
 			w.OnFinish()
@@ -138,7 +141,7 @@ func (w *Wizard) Next() {
 // Back moves to the previous step, clamped at 0 (a no-op on the
 // first step).
 func (w *Wizard) Back() {
-	if cur := w.Current().Get(); cur > 0 {
+	if cur := w.Current().Get(); cur > 0 && !w.Disabled().Get() {
 		w.Current().Set(cur - 1)
 	}
 }
@@ -242,6 +245,11 @@ func (w *Wizard) Draw(p painter.Painter, theme *Theme) {
 // that lands in neither the buttons nor the body (e.g. the empty
 // strip band) is ignored.
 func (w *Wizard) OnEvent(ev Event) {
+	if w.Disabled().Get() {
+		// a button held when the wizard was disabled is let go, not left pressed
+		w.pressedBtn = wizBtnNone
+		return
+	}
 	if len(w.Steps) == 0 {
 		return
 	}

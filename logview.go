@@ -279,6 +279,9 @@ func (lv *LogView) drawRows(p painter.Painter, theme *Theme, r Rect) {
 // OnEvent forwards input to the embedded viewport, giving the panel native
 // wheel, drag/touch and keyboard (arrows / page / home / end) scrolling.
 func (lv *LogView) OnEvent(ev Event) {
+	if lv.Disabled().Get() {
+		return
+	}
 	lv.ensure()
 	lv.sv.OnEvent(ev)
 }
@@ -308,7 +311,7 @@ const RoleLog Role = "log"
 // A11y reports the panel as an ARIA log region, its Value the current entry
 // count — mirroring the "N events" reading Timeline gives its list.
 func (lv *LogView) A11y() A11yInfo {
-	return A11yInfo{Role: RoleLog, Value: strconv.Itoa(lv.Len()) + " entries"}
+	return A11yInfo{Role: RoleLog, Value: strconv.Itoa(lv.Len()) + " entries", Disabled: lv.Disabled().Get()}
 }
 
 // logContent is the viewport's child: a thin adapter that paints its parent

@@ -99,6 +99,9 @@ func (b *Border) SplitHandleAt(px, py int) (side DockSide, ok bool) {
 // extent on that axis]), re-lays out, and fires OnResize. The app computes size
 // from the drag — e.g. NorthSize + dy for the north handle.
 func (b *Border) ResizeSplit(side DockSide, size int) {
+	if b.Disabled().Get() {
+		return
+	}
 	if size < 0 {
 		size = 0
 	}
@@ -154,6 +157,11 @@ func (b *Border) Draw(p painter.Painter, theme *Theme) {
 // OnEvent forwards to the first region whose Bounds contains the point,
 // translated into that region's local space.
 func (b *Border) OnEvent(ev Event) {
+	if b.Disabled().Get() {
+		// a handle in hand is let go, not kept for the next release
+		b.resizing = false
+		return
+	}
 	pr := b.Bounds()
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	switch ev.Kind {

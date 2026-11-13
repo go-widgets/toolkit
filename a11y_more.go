@@ -178,7 +178,7 @@ func (f *FontChooser) A11y() A11yInfo {
 	if f.Selected().Get() >= 0 && f.Selected().Get() < len(f.Options) {
 		name = f.Options[f.Selected().Get()].Name
 	}
-	return A11yInfo{Role: RoleCombobox, Name: name}
+	return A11yInfo{Role: RoleCombobox, Name: name, Disabled: f.Disabled().Get()}
 }
 
 // A11y reports the FileChooser as a group named by its root directory,
@@ -501,7 +501,7 @@ func (w *Wizard) A11y() A11yInfo {
 	if cur := w.Current().Get(); cur >= 0 && cur < len(w.Steps) {
 		v = w.Steps[cur].Title
 	}
-	return A11yInfo{Role: RoleGroup, Value: v}
+	return A11yInfo{Role: RoleGroup, Value: v, Disabled: w.Disabled().Get()}
 }
 
 // A11y reports the FormField as a group named by its label, carrying its
@@ -513,7 +513,7 @@ func (f *FormField) A11y() A11yInfo {
 // A11y reports the Frame as a plain grouping container. Frame carries no
 // title text of its own (see the type doc), so Name is always empty --
 // unlike the other "group" widgets above that surface a label.
-func (f *Frame) A11y() A11yInfo { return A11yInfo{Role: RoleGroup} }
+func (f *Frame) A11y() A11yInfo { return A11yInfo{Role: RoleGroup, Disabled: f.Disabled().Get()} }
 
 // A11y reports the Paned as a plain grouping container for its two panes.
 func (p *Paned) A11y() A11yInfo { return A11yInfo{Role: RoleGroup} }

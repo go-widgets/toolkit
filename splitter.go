@@ -478,7 +478,7 @@ type dividerHandle struct {
 
 // OnEvent takes the keys of a focused divider.
 func (h *dividerHandle) OnEvent(ev Event) {
-	if ev.Kind == EventKeyDown && h.a >= 0 {
+	if ev.Kind == EventKeyDown && h.a >= 0 && !h.s.Disabled().Get() {
 		h.s.key(h, ev)
 	}
 }
@@ -519,7 +519,7 @@ func (h *dividerHandle) Draw(p painter.Painter, theme *Theme) {
 // pane, all in logical pixels.
 func (h *dividerHandle) A11y() A11yInfo {
 	if h.a < 0 {
-		return A11yInfo{Role: RoleSeparator}
+		return A11yInfo{Role: RoleSeparator, Disabled: h.s.Disabled().Get()}
 	}
 	p := h.s.panes[h.a]
 	lo, hi := p.Min, p.Max
@@ -531,7 +531,8 @@ func (h *dividerHandle) A11y() A11yInfo {
 		hi = int(float64(total) / MetricScale())
 	}
 	return A11yInfo{Role: RoleSeparator, Name: "Resize " + p.Name, HasRange: true,
-		Min: float64(lo), Max: float64(hi), Now: float64(h.s.px[h.a]) / MetricScale()}
+		Min: float64(lo), Max: float64(hi), Now: float64(h.s.px[h.a]) / MetricScale(),
+		Disabled: h.s.Disabled().Get()}
 }
 
 // handleAt is the divider at surface point (x, y), or -1.
@@ -571,6 +572,9 @@ func (s *Splitter) PaneSize(i int) int { return s.px[i] }
 // show: "col-resize" or "row-resize" over a divider or while one is held, else
 // "" (the host's default).
 func (s *Splitter) Cursor(x, y int) string {
+	if s.Disabled().Get() {
+		return ""
+	}
 	b := s.Bounds()
 	if s.grab < 0 && s.handleAt(x+b.X, y+b.Y) < 0 {
 		return ""
@@ -583,7 +587,7 @@ func (s *Splitter) Cursor(x, y int) string {
 
 // FocusHandle gives divider j the keyboard (false while it is off).
 func (s *Splitter) FocusHandle(j int) bool {
-	if j < 0 || j >= len(s.handles) || s.handles[j].a < 0 {
+	if j < 0 || j >= len(s.handles) || s.handles[j].a < 0 || s.Disabled().Get() {
 		return false
 	}
 	for k, h := range s.handles {
@@ -647,6 +651,12 @@ func (s *Splitter) Draw(p painter.Painter, theme *Theme) {
 // OnEvent routes a press on a divider to the splitter's own drag, a key to the
 // divider that holds the focus, and the rest to the pane under the pointer.
 func (s *Splitter) OnEvent(ev Event) {
+	if s.Disabled().Get() {
+		// a divider in hand is let go, not kept for the next release
+		s.grab = -1
+		s.dragging.Set(false)
+		return
+	}
 	if routeFocusKey(s, ev) {
 		return
 	}
@@ -829,4 +839,6 @@ func SplitterColors(theme *Theme) (ink, active RGBA) {
 
 // A11y describes the splitter itself as a plain container; its dividers are
 // reached through Handle.
-func (s *Splitter) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
+func (s *Splitter) A11y() A11yInfo {
+	return A11yInfo{Role: RolePresentation, Disabled: s.Disabled().Get()}
+}

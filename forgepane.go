@@ -262,7 +262,16 @@ func (f *ForgePane) Children() []Widget { return f.Stack.Children() }
 
 // A11y names the pane for a screen reader.
 func (f *ForgePane) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: f.client.title.Text().Get()}
+	return A11yInfo{Role: RoleGroup, Name: f.client.title.Text().Get(), Disabled: f.Disabled().Get()}
+}
+
+// OnEvent drops every event while the pane is disabled, keys included: Stack
+// would hand them straight to a focused control.
+func (f *ForgePane) OnEvent(ev Event) {
+	if f.Disabled().Get() {
+		return
+	}
+	f.Stack.OnEvent(ev)
 }
 
 // SetTitle is the heading of the client and frame layouts, which the host may
