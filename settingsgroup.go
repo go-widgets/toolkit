@@ -105,7 +105,7 @@ func (g *SettingsGroup) Draw(p painter.Painter, theme *Theme) {
 // events and clicks that miss every row are dropped — a settings card is
 // navigated through its rows' own controls.
 func (g *SettingsGroup) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || g.Disabled().Get() {
 		return
 	}
 	r := g.Bounds()
@@ -121,5 +121,5 @@ func (g *SettingsGroup) OnEvent(ev Event) {
 // A11y reports the card as a group named by its Title. The rows are reached
 // through Children, so WalkA11y descends group -> row -> control.
 func (g *SettingsGroup) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: g.Title}
+	return A11yInfo{Role: RoleGroup, Name: g.Title, Disabled: g.Disabled().Get()}
 }

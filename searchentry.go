@@ -202,6 +202,9 @@ func (s *SearchEntry) ClearHitRect() Rect { return touchHitRect(s.clearSlot()) }
 // subscribers. Event X is field-local (0 at the widget's left edge), matching the
 // clear-slot hit test.
 func (s *SearchEntry) OnEvent(ev Event) {
+	if s.Disabled().Get() {
+		return
+	}
 	s.editing = true // suppress the caret-parking subscription for our own edits
 	defer func() { s.editing = false }()
 	runes := []rune(s.Text().Get())

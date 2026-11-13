@@ -125,7 +125,7 @@ func (b *Banner) Draw(p painter.Painter, theme *Theme) {
 // button (empty ButtonLabel) is dropped; a click with a nil OnAction
 // is dropped silently -- the button is drawable but inert.
 func (b *Banner) OnEvent(ev Event) {
-	if ev.Kind != EventClick || !b.Revealed().Get() {
+	if ev.Kind != EventClick || !b.Revealed().Get() || b.Disabled().Get() {
 		return
 	}
 	br, ok := b.buttonRect()

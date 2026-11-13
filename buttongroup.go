@@ -86,6 +86,9 @@ func (g *ButtonGroup) Draw(p painter.Painter, theme *Theme) {
 // Button.OnEvent handles the press/release itself, so a routed EventClick fires
 // that member's OnClick.
 func (g *ButtonGroup) OnEvent(ev Event) {
+	if g.Disabled().Get() {
+		return
+	}
 	gr := g.Bounds()
 	ax, ay := gr.X+ev.X, gr.Y+ev.Y // group-local → absolute
 	for _, b := range g.Buttons {

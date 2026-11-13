@@ -102,7 +102,7 @@ func (a *ActionRow) Draw(p painter.Painter, theme *Theme) {
 // not misrouted; a caller that needs richer keyboard routing wraps
 // the ActionRow in its own dispatcher.
 func (a *ActionRow) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || a.Disabled().Get() {
 		return
 	}
 	r := a.Bounds()

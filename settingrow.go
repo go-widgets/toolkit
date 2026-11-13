@@ -181,7 +181,7 @@ func (s *SettingRow) Draw(p painter.Painter, theme *Theme) {
 // A nil Control is a no-op. Click coordinates are translated into the
 // Control's own widget-local space so the Switch/Scale sees a correct hit.
 func (s *SettingRow) OnEvent(ev Event) {
-	if s.Control == nil {
+	if s.Control == nil || s.Disabled().Get() {
 		return
 	}
 	if ev.Kind != EventClick {
@@ -201,5 +201,5 @@ func (s *SettingRow) OnEvent(ev Event) {
 // label and then the control (the switch/slider) beneath it — the standard
 // "group labels its control" pattern.
 func (s *SettingRow) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: s.Title}
+	return A11yInfo{Role: RoleGroup, Name: s.Title, Disabled: s.Disabled().Get()}
 }

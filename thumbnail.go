@@ -214,7 +214,7 @@ func (t *Thumbnail) buildArea(dst Rect) {
 // OnEvent fires OnClick on EventClick; other event kinds are ignored. OnClick
 // is nil-safe.
 func (t *Thumbnail) OnEvent(ev Event) {
-	if ev.Kind == EventClick && t.OnClick != nil {
+	if ev.Kind == EventClick && t.OnClick != nil && !t.Disabled().Get() {
 		t.OnClick()
 	}
 }

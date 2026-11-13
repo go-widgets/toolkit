@@ -139,7 +139,7 @@ func (t *Toolbar) Draw(p painter.Painter, theme *Theme) {
 
 // OnEvent dispatches click events to the matching item.
 func (t *Toolbar) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || t.Disabled().Get() {
 		return
 	}
 	idx := t.hitTest(ev.X, ev.Y)
