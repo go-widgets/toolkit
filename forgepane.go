@@ -61,7 +61,7 @@ type ForgePane struct {
 	committer ForgeCommitter      // nil: the model has no git transport
 	chooser   ForgeChooser        // nil: no forge drop-down
 	locatable ForgeLocatable      // nil: no folder field
-	hidden    map[Widget]struct{} // controls of a nil command: not laid out, not in Parts
+	hidden    map[Widget]struct{} // controls of a lacking capability (a nil command, no ForgeChooser or ForgeLocatable): not laid out, not in Parts
 	client    *forgeClientPage
 	frame     *forgeClientPage
 	server    *forgeServerPage
@@ -312,7 +312,9 @@ func (f *ForgePane) FrameRect() (Rect, bool) {
 // "theirs", "open", and, in the server layout, "pick" and "ssignin". The frame
 // layout has no credential controls, so it lacks "forge", "token", "remember",
 // "signin", "connect" and "disconnect", and has "frame" once laid out. A control
-// whose command is nil is not shown and is not in the map. When the model is a
+// whose capability the model lacks (a nil command, or no [ForgeChooser] for
+// "forge", or no [ForgeLocatable] for "dir") is not shown and is not in the map.
+// When the model is a
 // [ForgeCommitter] every layout also has "message", "author_name",
 // "author_email", "commit" and "push".
 func (f *ForgePane) Parts() map[string]Rect {
@@ -564,6 +566,10 @@ func (f *ForgePane) newClientPage(frame bool) *forgeClientPage {
 	)
 	if f.chooser != nil {
 		p.forge.Options = f.chooser.Forges()
+		// A chooser with no forge at all (Forges is read once, here) is a capability
+		// present in a state not right: the drop-down stays and is greyed, so it
+		// cannot open an empty list.
+		p.forge.Disabled().Set(len(p.forge.Options) == 0)
 		f.unbind = append(f.unbind, mvvm.BindTwoWay(f.chooser.Forge(), p.forge.Selected(), f.invalidate))
 	} else {
 		f.hidden[p.forge] = struct{}{}
