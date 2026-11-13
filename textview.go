@@ -610,8 +610,30 @@ func tagInk(c RGBA) RGBA {
 	return RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 }
 
-// OnEvent dispatches the editing operations.
+// editsText reports whether ev would change a text field's contents or submit
+// it: typed and committed characters, IME composition, and the editing keys
+// (delete, newline/submit, cut, paste, undo, redo). A disabled text widget drops
+// these; navigation, copy and selection are not in the set.
+func editsText(ev Event) bool {
+	switch ev.Kind {
+	case EventChar, EventCompositionStart, EventCompositionUpdate, EventCompositionEnd:
+		return true
+	case EventKeyDown:
+		switch ev.Code {
+		case "Backspace", "Enter", "Ctrl+X", "Ctrl+V", "Ctrl+Z", "Ctrl+Y", "Ctrl+Shift+Z":
+			return true
+		}
+	}
+	return false
+}
+
+// OnEvent dispatches the editing operations. A Disabled view ignores every
+// editing event and the click that would focus it; scrolling, caret movement,
+// selection and copy still work, as in a native disabled text area.
 func (t *TextView) OnEvent(ev Event) {
+	if t.Disabled().Get() && (ev.Kind == EventClick || editsText(ev)) {
+		return
+	}
 	switch ev.Kind {
 	case EventClick:
 		t.HasFocus().Set(true)

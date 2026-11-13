@@ -256,6 +256,12 @@ func (b *Base) caretIndexAt(shown string, localX int) int {
 // OnEvent handles focus, keyboard navigation, character insertion +
 // delete.
 func (e *Entry) OnEvent(ev Event) {
+	// A Disabled entry ignores typing, IME, paste, cut, delete and submit, and the
+	// click that would focus it. Caret keys and copy stay, as in a native
+	// disabled field.
+	if e.Disabled().Get() && (ev.Kind == EventClick || editsText(ev)) {
+		return
+	}
 	runes := []rune(e.Text().Get())
 	// A host that Sets Text() directly (a two-way binding pushing a
 	// ViewModel value) leaves the caret where the old text had it. Clamp it
