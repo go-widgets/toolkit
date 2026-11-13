@@ -1090,14 +1090,15 @@ func TestDisabledPanedHandleInFlight(t *testing.T) {
 	}
 }
 
-// A cell being edited when the sheet is disabled is committed (what was typed is
-// kept and announced), and a scrollbar in hand is let go. SetCell, BeginEdit and
+// A cell being edited when the sheet is disabled is cancelled (nothing typed is
+// written or announced), and a scrollbar in hand is let go. SetCell, BeginEdit and
 // ScrollBy are application calls and stay open.
 func TestDisabledSpreadsheetInFlight(t *testing.T) {
 	var got []string
 	s := NewSpreadsheet(3, 50)
 	s.OnCellChange = func(_ formula.Ref, raw string) { got = append(got, raw) }
 	s.SetBounds(Rect{W: 400, H: 100})
+	s.SetCell(0, 0, "old")
 
 	s.OnEvent(Event{Kind: EventChar, Code: "9"})
 	if !s.Editing() {
@@ -1105,8 +1106,14 @@ func TestDisabledSpreadsheetInFlight(t *testing.T) {
 	}
 	s.Disabled().Set(true)
 	s.OnEvent(Event{Kind: EventChar, Code: "8"})
-	if s.Editing() || len(got) != 1 || got[0] != "9" || s.CellRaw(0, 0) != "9" {
-		t.Fatalf("disabled mid-edit: editing %v, committed %v, cell %q, want closed, [9], 9", s.Editing(), got, s.CellRaw(0, 0))
+	if s.Editing() || len(got) != 0 || s.CellRaw(0, 0) != "old" {
+		t.Fatalf("disabled mid-edit: editing %v, announced %v, cell %q, want cancelled, none, old", s.Editing(), got, s.CellRaw(0, 0))
+	}
+	// a stray event after enabling does not resurrect or commit the edit
+	s.Disabled().Set(false)
+	s.OnEvent(Event{Kind: EventMouseMove, X: 1, Y: 1})
+	if s.Editing() || len(got) != 0 {
+		t.Fatalf("cancelled edit came back: editing %v, announced %v", s.Editing(), got)
 	}
 
 	s.Disabled().Set(false)
@@ -1223,5 +1230,53 @@ func TestDisabledDialogsTakeNoKeysForTheirContent(t *testing.T) {
 		if _, ok := w.(focusEnumerator); ok {
 			t.Errorf("%s is a focusEnumerator: keys can reach its children past its gate", name)
 		}
+	}
+}
+
+// Under a modal Overlay a disabled ModalWindow still blocks the application
+// beneath it, and nothing a person does dismisses it: Escape and the scrim click
+// do nothing, and only the application pops it.
+func TestDisabledModalWindowStillBlocksTheAppBeneath(t *testing.T) {
+	under := &honourProbe{}
+	closes := 0
+	m := NewModalWindow("t", nil)
+	m.OnClose = func() { closes++ }
+	o := NewOverlay(under)
+	o.Modal = true
+	o.SetBounds(Rect{W: 800, H: 600})
+	m.SetBounds(Rect{W: 800, H: 600})
+	o.Push(m)
+	m.Disabled().Set(true)
+	for _, ev := range []Event{{Kind: EventClick, X: 1, Y: 1}, {Kind: EventKeyDown, Code: "Escape"}, {Kind: EventChar, Code: "a"}} {
+		o.OnEvent(ev)
+	}
+	if under.hits != 0 || closes != 0 || len(o.Layers) != 1 {
+		t.Fatalf("beneath got %d events, OnClose %d, layers %d, want 0, 0, 1", under.hits, closes, len(o.Layers))
+	}
+	if o.Pop() != Widget(m) || len(o.Layers) != 0 {
+		t.Fatal("the application could not pop the disabled modal")
+	}
+}
+
+// A host starts a title-bar drag or a resize from HitRegion and then calls MoveBy
+// / ResizeTo, so a disabled window must answer WindowNone to every point.
+func TestDisabledWindowHitRegionIsNone(t *testing.T) {
+	w := NewWindow("t", nil)
+	w.Closable, w.Resizable = true, true
+	w.SetBounds(Rect{X: 10, Y: 20, W: 200, H: 150})
+	tb := w.titleBarRect()
+	x, y := tb.X+5, tb.Y+5
+	if w.HitRegion(x, y) != WindowTitleBar {
+		t.Fatal("enabled: the title bar point is not the title bar, so the test proves nothing")
+	}
+	w.Disabled().Set(true)
+	for _, p := range [][2]int{{x, y}, {10 + 195, 20 + 145}, {100, 100}} {
+		if r := w.HitRegion(p[0], p[1]); r != WindowNone {
+			t.Errorf("disabled: HitRegion%v = %v, want WindowNone", p, r)
+		}
+	}
+	w.Disabled().Set(false)
+	if w.HitRegion(x, y) != WindowTitleBar {
+		t.Fatal("re-enabled: the title bar is not hit again")
 	}
 }

@@ -167,7 +167,15 @@ func (w *Window) ResizeTo(width, height int) {
 // HitRegion reports which part of the window the surface point (px, py) lands
 // on. Tools win over the bare title bar; the grip (when Resizable) wins over
 // the body it overlaps.
+//
+// A disabled window answers WindowNone everywhere: a host drives a title-bar
+// drag or a resize through HitRegion and then MoveBy / ResizeTo, so an ungated
+// answer would let a person move a window the application has disabled. The
+// application's own MoveBy and ResizeTo calls still work.
 func (w *Window) HitRegion(px, py int) WindowRegion {
+	if w.Disabled().Get() {
+		return WindowNone
+	}
 	for reg, rc := range w.toolRects() {
 		if rc.Contains(px, py) {
 			return reg

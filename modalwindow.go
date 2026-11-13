@@ -20,6 +20,15 @@ import "github.com/go-widgets/painter"
 // reached directly as Panel, so a host configures the title/content/buttons and
 // enables the optional search field on it (or uses [NewSearchModal]).
 //
+// # Disabled
+//
+// A disabled ModalWindow is inert: Escape, the scrim click, the title-bar
+// controls and the content all do nothing. It still blocks what lies beneath it.
+// Under an [Overlay] with Modal set, a disabled modal swallows every click and key
+// meant for the application below, which is right for a busy modal. Nothing a
+// person does releases it: only the application does, by calling OnClose's
+// behaviour itself or by popping the layer (Overlay.Pop).
+//
 // A ModalWindow reports itself as presentational to the accessibility walk and
 // exposes the scrim + panel as its children, so the panel's own RoleDialog node
 // (and the content within it) is what a screen reader announces — the wrapper
