@@ -235,8 +235,12 @@ func (w *Window) drawTool(p painter.Painter, reg WindowRegion, rc Rect, ink RGBA
 // a click in the body forwards to Body in body-local coordinates. Title-bar and
 // resize-grip DRAGS are not handled here — the app drives those via MoveBy /
 // ResizeTo — so a press on either falls through silently.
+//
+// A disabled window is wholly inert: the close, minimise and maximise tools and
+// the body alike. The application closes it itself; MoveBy and ResizeTo are its
+// calls and stay open.
 func (w *Window) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || w.Disabled().Get() {
 		return
 	}
 	r := w.Bounds()

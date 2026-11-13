@@ -132,6 +132,16 @@ func (m *ModalWindow) Draw(p painter.Painter, theme *Theme) {
 // (the surface-frame convention Overlay uses); a click is "inside the panel" when
 // its absolute point falls in the panel's bounds.
 func (m *ModalWindow) OnEvent(ev Event) {
+	if m.Disabled().Get() {
+		// Everything is inert, Escape and the scrim click included: a disabled
+		// modal is dismissed by the application, not by a person who cannot act.
+		// The panel is not handed the event, so a title-bar drag in flight is
+		// ended here rather than resumed when the modal is enabled again.
+		if m.Panel != nil {
+			m.Panel.dragging = false
+		}
+		return
+	}
 	if ev.Kind == EventKeyDown && ev.Code == "Escape" {
 		m.dismiss()
 		return
@@ -162,7 +172,9 @@ func (m *ModalWindow) dismiss() {
 // A11y reports the modal as presentational: the wrapper is scrim + z-order, and
 // the panel it contains carries the RoleDialog node a reader announces. See the
 // type doc.
-func (m *ModalWindow) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
+func (m *ModalWindow) A11y() A11yInfo {
+	return A11yInfo{Role: RolePresentation, Disabled: m.Disabled().Get()}
+}
 
 // Children yields the scrim then the panel, the order they are painted in, so a
 // generic walk (accessibility) descends into the panel and its content.

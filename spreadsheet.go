@@ -109,7 +109,7 @@ func (s *Spreadsheet) Editing() bool { return s.editor != nil }
 // A11y reports the Spreadsheet as a grid named by its active cell's A1 address,
 // with the cell's displayed value.
 func (s *Spreadsheet) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGrid, Name: s.cur.A1(), Value: s.model.Display(s.cur)}
+	return A11yInfo{Role: RoleGrid, Name: s.cur.A1(), Value: s.model.Display(s.cur), Disabled: s.Disabled().Get()}
 }
 
 // --- Geometry ----------------------------------------------------------------

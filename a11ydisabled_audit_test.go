@@ -103,6 +103,16 @@ var disabledA11yCatalogue = map[string]func() Accessible{
 	"WheelPicker":    func() Accessible { return NewWheelPicker([]string{"a", "b"}) },
 	"WorkspacePager": func() Accessible { return NewWorkspacePager(2, 0) },
 
+	// Honoured in #578 part 4; behaviour is tested by TestDisabledWidgetsHonourTheFlag.
+	"Dialog":      func() Accessible { return NewDialog("t", nil) },
+	"Gantt":       func() Accessible { return NewGantt(nil) },
+	"ModalWindow": func() Accessible { return NewModalWindow("t", nil) },
+	"Paned":       func() Accessible { return NewHPaned(nil, nil) },
+	"RichEditor":  func() Accessible { return NewRichEditor(nil) },
+	"Spreadsheet": func() Accessible { return NewSpreadsheet(3, 3) },
+	"Surface":     func() Accessible { return NewSurface(nil) },
+	"Window":      func() Accessible { return NewWindow("t", nil) },
+
 	// Honoured in #578 part 3; behaviour is tested by TestDisabledWidgetsHonourTheFlag.
 	"Border":            func() Accessible { return NewBorder() },
 	"FontChooser":       func() Accessible { return NewFontChooser(nil) },
@@ -489,7 +499,10 @@ func (noObservable) A11y() A11yInfo               { return A11yInfo{} }
 const (
 	exemptStatic = "display only: no activation, selection or editing (at most hover or scroll), so it has no inert state to announce"
 	exemptLayout = "layout, routing or decoration: forwards events to children whose own state governs, or paints chrome; it has no control of its own"
-	exemptGap    = "interactive but never honours Base.Disabled (no inert OnEvent, no muted Draw): announcing a state it does not have would mislead. Honour the flag, then move it to the catalogue"
+	// exemptNotWidget is what is left of the former "interactive but never honours
+	// Disabled" class (#578): AppDock answers A11y() but is not a Widget, because
+	// HitTest returns the item index, so it cannot be built as an Accessible here.
+	exemptNotWidget = "answers A11y() but is not a Widget (HitTest returns the item index, not a bool), so the catalogue cannot hold it; changing that public signature is a breaking API change, tracked separately"
 )
 
 // disabledA11yExempt lists the accessible Base types that are deliberately not
@@ -510,12 +523,7 @@ var disabledA11yExempt = exemptions(map[string][]string{
 		"Material", "Native", "Overlay", "Padding", "Popover", "PopoverHost", "ScrollView", "Skeleton",
 		"SkeletonGroup", "Stack", "StatusArea", "VBox", "Viewport", "Wallpaper", "WindowDecoration",
 	},
-	exemptGap: {
-		"AppDock", "RichEditor", "Spreadsheet",
-		// Acting on a click, selection or drag of their own, found by re-checking
-		// each widget's OnEvent rather than its name:
-		"Dialog", "Gantt", "ModalWindow", "Paned", "Surface", "Window",
-	},
+	exemptNotWidget: {"AppDock"},
 })
 
 // exemptions flattens reason -> names into name -> reason.

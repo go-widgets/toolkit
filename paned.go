@@ -167,6 +167,12 @@ func (pd *Paned) Draw(p painter.Painter, theme *Theme) {
 
 // OnEvent forwards to the appropriate child based on click position.
 func (p *Paned) OnEvent(ev Event) {
+	if p.Disabled().Get() {
+		// a handle in hand is let go where it is; MoveHandle stays the
+		// application's call
+		p.resizing = false
+		return
+	}
 	// ev is Paned-local; p.Position().Get() is a local offset, so the split test is
 	// local-vs-local. The child, however, sits at a non-zero offset within the
 	// Paned (First at the origin, Second past Position+handle), so the forwarded

@@ -8,7 +8,9 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/go-richdoc/richdoc"
 	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/toolkit/internal/formula"
 )
 
 // honourProbe is a child that counts the events it receives, so a container's
@@ -35,6 +37,122 @@ func centre(r Rect) (int, int) { return r.X + r.W/2, r.Y + r.H/2 }
 func honourCases() map[string]func() honourCase {
 	click := func(x, y int) Event { return Event{Kind: EventClick, X: x, Y: y} }
 	return map[string]func() honourCase{
+		// Part 4.
+		"Dialog": func() honourCase {
+			closes, oks := 0, 0
+			p := &honourProbe{}
+			ok := NewButton("ok", func() { oks++ })
+			d := NewDialog("t", p, ok)
+			d.Closable = true
+			d.OnClose = func() { closes++ }
+			d.SetBounds(Rect{W: 300, H: 200})
+			bx, by := centre(ok.Bounds())
+			cx, cy := centre(d.closeButton().Bounds())
+			px, py := centre(p.Bounds())
+			return honourCase{w: d, off: d.Disabled(),
+				state: func() string { return fmt.Sprint(d.dragOffX, d.dragOffY, d.dragging) },
+				// the drag goes last: it moves the panel and every point above with it
+				events: []Event{click(px, py), click(bx, by), click(cx, cy),
+					click(5, 5), {Kind: EventMouseDrag, X: 25, Y: 15}, {Kind: EventMouseUp, X: 25, Y: 15}},
+				fired: func() int { return closes + oks + p.hits }}
+		},
+		"Gantt": func() honourCase {
+			n := 0
+			g := NewGantt([]GanttTask{{Label: "A", Start: 0, End: 6}})
+			g.Units = 12
+			g.OnTaskChange = func(int, int, int) { n++ }
+			g.SetBounds(Rect{W: 600, H: GanttHeaderH + 2*GanttRowH})
+			y := scaled(GanttHeaderH) + scaled(GanttRowH)/2
+			x := (g.barXLocal(0) + g.barXLocal(6)) / 2
+			return honourCase{w: g, off: g.Disabled(),
+				state: func() string { return fmt.Sprint(g.Selected().Get(), g.Tasks[0], g.editing) },
+				events: []Event{click(x, y), {Kind: EventMouseDrag, X: x + 60, Y: y},
+					{Kind: EventMouseUp, X: x + 60, Y: y}},
+				fired: func() int { return n }}
+		},
+		"ModalWindow": func() honourCase {
+			closes, oks := 0, 0
+			p := &honourProbe{}
+			ok := NewButton("ok", func() { oks++ })
+			m := NewModalWindow("t", p, ok)
+			m.OnClose = func() { closes++ }
+			m.SetBounds(Rect{W: 800, H: 600})
+			bx, by := centre(ok.Bounds())
+			px, py := centre(p.Bounds())
+			return honourCase{w: m, off: m.Disabled(),
+				state: func() string { return fmt.Sprint(m.Panel.dragOffX, m.Panel.dragOffY) },
+				events: []Event{{Kind: EventKeyDown, Code: "Escape"}, click(1, 1),
+					click(px, py), click(bx, by)},
+				fired: func() int { return closes + oks + p.hits }}
+		},
+		"Paned": func() honourCase {
+			moves := 0
+			a, b := &honourProbe{}, &honourProbe{}
+			p := NewHPaned(a, b)
+			p.OnPositionChanged = func(int) { moves++ }
+			p.SetBounds(Rect{W: 200, H: 100})
+			h := p.Position().Get() + 1
+			return honourCase{w: p, off: p.Disabled(),
+				state: func() string { return fmt.Sprint(p.Position().Get(), p.resizing) },
+				events: []Event{click(h, 5), {Kind: EventMouseDrag, X: 60, Y: 5},
+					{Kind: EventMouseUp, X: 60, Y: 5}, click(5, 5)},
+				fired: func() int { return moves + a.hits + b.hits }}
+		},
+		"RichEditor": func() honourCase {
+			e := NewRichEditor(richdoc.New().P(richdoc.Txt("hi")).Doc())
+			e.SetBounds(Rect{W: 300, H: 200})
+			return honourCase{w: e, off: e.Disabled(),
+				state: func() string {
+					return fmt.Sprint(richdoc.PlainText(e.docValue()), e.Caret().Get(), e.Focused())
+				},
+				events: []Event{click(1, 1), {Kind: EventChar, Code: "z"}, {Kind: EventKeyDown, Code: "Backspace"}},
+				fired:  func() int { return 0 }}
+		},
+		"Spreadsheet": func() honourCase {
+			n := 0
+			s := NewSpreadsheet(3, 3)
+			s.OnCellChange = func(formula.Ref, string) { n++ }
+			s.SetBounds(Rect{W: 400, H: 200})
+			x, y := centre(s.cellRect(1, 1))
+			return honourCase{w: s, off: s.Disabled(),
+				state: func() string {
+					c, r := s.Active()
+					return fmt.Sprint(c, r, s.Editing(), s.CellRaw(1, 1))
+				},
+				events: []Event{click(x, y), {Kind: EventChar, Code: "7"}, {Kind: EventKeyDown, Code: "Enter"}},
+				fired:  func() int { return n }}
+		},
+		"Surface": func() honourCase {
+			n := 0
+			s := NewSurface(nil)
+			s.OnInput = func(Event) { n++ }
+			s.SetBounds(Rect{W: 50, H: 50})
+			return honourCase{w: s, off: s.Disabled(),
+				state:  func() string { return "" },
+				events: []Event{click(5, 5), {Kind: EventChar, Code: "a"}},
+				fired:  func() int { return n }}
+		},
+		"Window": func() honourCase {
+			closes, mins, maxes := 0, 0, 0
+			p := &honourProbe{}
+			w := NewWindow("t", p)
+			w.Closable, w.Minimizable, w.Maximizable = true, true, true
+			w.OnClose = func() { closes++ }
+			w.OnMinimize = func() { mins++ }
+			w.OnMaximize = func() { maxes++ }
+			w.SetBounds(Rect{X: 10, Y: 20, W: 200, H: 150})
+			tools := w.toolRects()
+			ev := func(r Rect) Event {
+				x, y := centre(r)
+				return click(x-10, y-20)
+			}
+			bx, by := centre(w.bodyAreaRect())
+			return honourCase{w: w, off: w.Disabled(),
+				state: func() string { return "" },
+				events: []Event{ev(tools[WindowClose]), ev(tools[WindowMinimize]), ev(tools[WindowMaximize]),
+					click(bx-10, by-20)},
+				fired: func() int { return closes + mins + maxes + p.hits }}
+		},
 		// Part 3.
 		"Border": func() honourCase {
 			p := &honourProbe{}
@@ -818,5 +936,292 @@ func TestDisabledDropZoneRefusesDrops(t *testing.T) {
 	d.Disabled().Set(false)
 	if !d.AcceptsDrop("a") || d.AcceptsDrop("") {
 		t.Fatal("enabled DropZone: want accept non-empty, refuse empty")
+	}
+}
+
+// Part 4 --------------------------------------------------------------------
+
+// A disabled Dialog is inert as a whole: the title-bar close, minimise,
+// maximise and move go with the content, because the application dismisses and
+// places a dialog it has disabled. A drag in flight is dropped where it was and
+// does not resume on enabling. The application's own calls stay open.
+func TestDisabledDialogFrameIsInert(t *testing.T) {
+	closes := 0
+	d := NewDialog("t", &honourProbe{})
+	d.Closable, d.Minimisable, d.Maximisable = true, true, true
+	d.OnClose = func() { closes++ }
+	d.DragBounds = Rect{W: 1000, H: 1000}
+	d.SetBounds(Rect{X: 100, Y: 100, W: 300, H: 200})
+	at := func(b *IconButton) Event {
+		x, y := centre(b.Bounds())
+		return Event{Kind: EventClick, X: x - d.Bounds().X, Y: y - d.Bounds().Y}
+	}
+	cl, mx, mn := at(d.closeButton()), at(d.maxButton()), at(d.minButton())
+
+	d.Disabled().Set(true)
+	for _, ev := range []Event{cl, mx, mn} {
+		d.OnEvent(ev)
+	}
+	if closes != 0 || d.Maximised().Get() || d.Minimised().Get() {
+		t.Fatalf("disabled: close %d, maximised %v, minimised %v, want all untouched", closes, d.Maximised().Get(), d.Minimised().Get())
+	}
+	// the application's calls are not input and stay open
+	d.Minimised().Set(true)
+	d.SetBounds(Rect{X: 100, Y: 100, W: 320, H: 220})
+	if !d.Minimised().Get() || d.Bounds().W != 320 {
+		t.Fatalf("disabled: programmatic Minimised/SetBounds refused (minimised %v, w %d)", d.Minimised().Get(), d.Bounds().W)
+	}
+	d.Minimised().Set(false)
+
+	// a drag in flight when it is disabled
+	d.Disabled().Set(false)
+	d.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
+	d.OnEvent(Event{Kind: EventMouseDrag, X: 15, Y: 5})
+	if d.dragOffX != 10 {
+		t.Fatalf("enabled drag moved the panel by %d, want 10", d.dragOffX)
+	}
+	d.Disabled().Set(true)
+	d.OnEvent(Event{Kind: EventMouseDrag, X: 45, Y: 5})
+	if d.dragOffX != 10 || d.dragging {
+		t.Fatalf("disabled: offset %d, dragging %v, want 10 and false", d.dragOffX, d.dragging)
+	}
+	d.Disabled().Set(false)
+	d.OnEvent(Event{Kind: EventMouseDrag, X: 45, Y: 5})
+	if d.dragOffX != 10 {
+		t.Fatalf("the dropped drag resumed after enabling: offset %d, want 10", d.dragOffX)
+	}
+	d.OnEvent(at(d.closeButton())) // the panel moved with the enabled drag
+	if closes != 1 {
+		t.Fatalf("re-enabled close fired %d times, want 1", closes)
+	}
+}
+
+// A ModalWindow that is disabled ignores Escape and the scrim click as well, and
+// drops a title-bar drag its panel had in flight.
+func TestDisabledModalWindowDropsPanelDrag(t *testing.T) {
+	m := NewModalWindow("t", nil)
+	m.SetBounds(Rect{W: 800, H: 600})
+	pb := m.Panel.Bounds()
+	m.OnEvent(Event{Kind: EventClick, X: pb.X + 5, Y: pb.Y + 5})
+	m.OnEvent(Event{Kind: EventMouseDrag, X: pb.X + 15, Y: pb.Y + 5})
+	if m.Panel.dragOffX != 10 {
+		t.Fatalf("enabled drag moved the panel by %d, want 10", m.Panel.dragOffX)
+	}
+	m.Disabled().Set(true)
+	m.OnEvent(Event{Kind: EventMouseDrag, X: pb.X + 45, Y: pb.Y + 5})
+	m.Disabled().Set(false)
+	m.OnEvent(Event{Kind: EventMouseDrag, X: pb.X + 45, Y: pb.Y + 5})
+	if m.Panel.dragOffX != 10 || m.Panel.dragging {
+		t.Fatalf("panel offset %d, dragging %v, want 10 and false", m.Panel.dragOffX, m.Panel.dragging)
+	}
+}
+
+// Window.MoveBy and ResizeTo are the application's calls (the window never moves
+// itself), so a disabled window still obeys them.
+func TestDisabledWindowStillMovesAndResizesByCall(t *testing.T) {
+	w := NewWindow("t", nil)
+	w.Resizable = true
+	w.SetBounds(Rect{X: 10, Y: 20, W: 200, H: 150})
+	w.Disabled().Set(true)
+	w.MoveBy(5, 6)
+	w.ResizeTo(220, 160)
+	if b := w.Bounds(); b.X != 15 || b.Y != 26 || b.W != 220 || b.H != 160 {
+		t.Fatalf("disabled window after MoveBy/ResizeTo: %+v", b)
+	}
+}
+
+// A bar dragged when the chart is disabled is let go where the drag left it and
+// announced once, as a release would; the release that follows adds nothing.
+func TestDisabledGanttDragInFlightCompletes(t *testing.T) {
+	var got [][3]int
+	g := NewGantt([]GanttTask{{Label: "A", Start: 0, End: 6}})
+	g.Units = 12
+	g.OnTaskChange = func(i, s, e int) { got = append(got, [3]int{i, s, e}) }
+	g.SetBounds(Rect{W: 600, H: GanttHeaderH + 2*GanttRowH})
+	y := scaled(GanttHeaderH) + scaled(GanttRowH)/2
+	x := (g.barXLocal(0) + g.barXLocal(6)) / 2
+	g.OnEvent(Event{Kind: EventClick, X: x, Y: y})
+	g.OnEvent(Event{Kind: EventMouseDrag, X: x + 60, Y: y})
+	moved := g.Tasks[0]
+	if moved.Start == 0 {
+		t.Fatal("the enabled drag moved nothing, so the test proves nothing")
+	}
+	g.Disabled().Set(true)
+	g.OnEvent(Event{Kind: EventMouseDrag, X: x + 120, Y: y})
+	if len(got) != 1 || got[0] != [3]int{0, moved.Start, moved.End} || g.Tasks[0] != moved {
+		t.Fatalf("disabled mid-drag: callbacks %v, task %+v, want one call with %+v", got, g.Tasks[0], moved)
+	}
+	g.Disabled().Set(false)
+	g.OnEvent(Event{Kind: EventMouseDrag, X: x + 120, Y: y})
+	g.OnEvent(Event{Kind: EventMouseUp, X: x + 120, Y: y})
+	if len(got) != 1 || g.Tasks[0] != moved {
+		t.Fatalf("the dropped drag resumed: callbacks %v, task %+v", got, g.Tasks[0])
+	}
+	// the application's own scroll still works
+	g.Disabled().Set(true)
+	g.ScrollBy(1)
+}
+
+// A handle in hand when the pane is disabled is let go; MoveHandle, the
+// application's call, still moves it and still announces.
+func TestDisabledPanedHandleInFlight(t *testing.T) {
+	moves := 0
+	p := NewHPaned(&honourProbe{}, &honourProbe{})
+	p.OnPositionChanged = func(int) { moves++ }
+	p.SetBounds(Rect{W: 200, H: 100})
+	h := p.Position().Get() + 1
+	p.OnEvent(Event{Kind: EventClick, X: h, Y: 5})
+	p.OnEvent(Event{Kind: EventMouseDrag, X: 60, Y: 5})
+	if p.Position().Get() != 60 {
+		t.Fatalf("enabled drag left the handle at %d, want 60", p.Position().Get())
+	}
+	p.Disabled().Set(true)
+	p.OnEvent(Event{Kind: EventMouseDrag, X: 80, Y: 5})
+	p.Disabled().Set(false)
+	p.OnEvent(Event{Kind: EventMouseDrag, X: 80, Y: 5})
+	if p.Position().Get() != 60 || p.resizing {
+		t.Fatalf("handle at %d, resizing %v, want 60 and false", p.Position().Get(), p.resizing)
+	}
+	p.Disabled().Set(true)
+	before := moves
+	p.MoveHandle(30)
+	if p.Position().Get() != 30 || moves != before+1 {
+		t.Fatalf("disabled MoveHandle: position %d, %d announcements, want 30 and %d", p.Position().Get(), moves, before+1)
+	}
+}
+
+// A cell being edited when the sheet is disabled is committed (what was typed is
+// kept and announced), and a scrollbar in hand is let go. SetCell, BeginEdit and
+// ScrollBy are application calls and stay open.
+func TestDisabledSpreadsheetInFlight(t *testing.T) {
+	var got []string
+	s := NewSpreadsheet(3, 50)
+	s.OnCellChange = func(_ formula.Ref, raw string) { got = append(got, raw) }
+	s.SetBounds(Rect{W: 400, H: 100})
+
+	s.OnEvent(Event{Kind: EventChar, Code: "9"})
+	if !s.Editing() {
+		t.Fatal("typing did not open an editor")
+	}
+	s.Disabled().Set(true)
+	s.OnEvent(Event{Kind: EventChar, Code: "8"})
+	if s.Editing() || len(got) != 1 || got[0] != "9" || s.CellRaw(0, 0) != "9" {
+		t.Fatalf("disabled mid-edit: editing %v, committed %v, cell %q, want closed, [9], 9", s.Editing(), got, s.CellRaw(0, 0))
+	}
+
+	s.Disabled().Set(false)
+	g, ok := s.vscrollGeom()
+	if !ok {
+		t.Fatal("no vertical scrollbar: the test needs an overflowing sheet")
+	}
+	x, y := g.cross0+1, g.thumbStart+1
+	s.OnEvent(Event{Kind: EventClick, X: x, Y: y})
+	s.OnEvent(Event{Kind: EventMouseDrag, X: x, Y: y + 10})
+	_, row := s.ScrollOffset()
+	if row == 0 {
+		t.Fatal("the enabled thumb drag scrolled nothing, so the test proves nothing")
+	}
+	s.Disabled().Set(true)
+	s.OnEvent(Event{Kind: EventMouseDrag, X: x, Y: y + 30})
+	s.Disabled().Set(false)
+	s.OnEvent(Event{Kind: EventMouseDrag, X: x, Y: y + 30})
+	if _, r := s.ScrollOffset(); r != row {
+		t.Fatalf("the dropped scrollbar drag resumed: row %d, want %d", r, row)
+	}
+
+	s.Disabled().Set(true)
+	s.SetCell(1, 1, "5")
+	s.BeginEdit()
+	s.ScrollBy(0, 1)
+	if s.CellRaw(1, 1) != "5" || !s.Editing() {
+		t.Fatalf("disabled: programmatic SetCell/BeginEdit refused (cell %q, editing %v)", s.CellRaw(1, 1), s.Editing())
+	}
+	if _, r := s.ScrollOffset(); r != row+1 {
+		t.Fatalf("disabled: ScrollBy left row %d, want %d", r, row+1)
+	}
+}
+
+// RichEditor.InsertText is the application's call (a paste, a macro, a bound
+// view model), not input, so it still edits a disabled editor.
+func TestDisabledRichEditorStillEditsByCall(t *testing.T) {
+	e := NewRichEditor(richdoc.New().P(richdoc.Txt("hi")).Doc())
+	e.Disabled().Set(true)
+	e.InsertText("!")
+	if got := richdoc.PlainText(e.docValue()); got != "!hi" && got != "hi!" {
+		t.Fatalf("disabled editor after InsertText: %q", got)
+	}
+}
+
+// Keyboard: the two focusable leaves are walked past while disabled, and a key
+// handed to them directly changes nothing.
+func TestDisabledEditorsTakeNoTypedKeys(t *testing.T) {
+	re := NewRichEditor(richdoc.New().P(richdoc.Txt("hi")).Doc())
+	sp := NewSpreadsheet(3, 3)
+	for name, w := range map[string]Widget{"RichEditor": re, "Spreadsheet": sp} {
+		v := NewVBox()
+		v.Append(w)
+		v.SetBounds(Rect{W: 400, H: 200})
+		state := func() string {
+			if name == "RichEditor" {
+				return richdoc.PlainText(re.docValue())
+			}
+			return fmt.Sprint(sp.Editing())
+		}
+		before := state()
+		w.(interface{ Disabled() *mvvm.Observable[bool] }).Disabled().Set(true)
+		v.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
+		v.OnEvent(Event{Kind: EventChar, Code: "z"})
+		w.OnEvent(Event{Kind: EventChar, Code: "z"})
+		if got := state(); got != before {
+			t.Errorf("%s disabled: state %q after typing, want %q", name, got, before)
+		}
+		w.(interface{ Disabled() *mvvm.Observable[bool] }).Disabled().Set(false)
+		v.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
+		v.OnEvent(Event{Kind: EventChar, Code: "z"})
+		if got := state(); got == before {
+			t.Errorf("%s enabled: typing changed nothing, so the gate proves nothing", name)
+		}
+	}
+}
+
+// A Dialog and a ModalWindow forward keys to their content on their own: a
+// focused Entry inside takes none while they are disabled. The other composites
+// of this batch are dead ends for the focus walk, so a key reaches their
+// children only through their own gated OnEvent; if one becomes a focus
+// enumerator this fails and the gate must be re-checked.
+func TestDisabledDialogsTakeNoKeysForTheirContent(t *testing.T) {
+	for name, build := range map[string]func(*Entry) (Widget, *mvvm.Observable[bool]){
+		"Dialog": func(e *Entry) (Widget, *mvvm.Observable[bool]) {
+			d := NewDialog("t", e)
+			d.SetBounds(Rect{W: 300, H: 200})
+			return d, d.Disabled()
+		},
+		"ModalWindow": func(e *Entry) (Widget, *mvvm.Observable[bool]) {
+			m := NewModalWindow("t", e)
+			m.SetBounds(Rect{W: 800, H: 600})
+			return m, m.Disabled()
+		},
+	} {
+		e := NewEntry("ab")
+		e.SetFocused(true)
+		w, off := build(e)
+		off.Set(true)
+		w.OnEvent(Event{Kind: EventChar, Code: "z"})
+		if got := e.Text().Get(); got != "ab" {
+			t.Errorf("%s disabled: Entry became %q, want \"ab\"", name, got)
+		}
+		off.Set(false)
+		w.OnEvent(Event{Kind: EventChar, Code: "z"})
+		if got := e.Text().Get(); got != "abz" {
+			t.Errorf("%s enabled: Entry is %q, want \"abz\"", name, got)
+		}
+	}
+	for name, w := range map[string]Widget{
+		"Dialog": NewDialog("t", nil), "ModalWindow": NewModalWindow("t", nil), "Window": NewWindow("t", nil),
+		"Paned": NewHPaned(nil, nil), "Surface": NewSurface(nil), "Gantt": NewGantt(nil),
+	} {
+		if _, ok := w.(focusEnumerator); ok {
+			t.Errorf("%s is a focusEnumerator: keys can reach its children past its gate", name)
+		}
 	}
 }
