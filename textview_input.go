@@ -181,7 +181,7 @@ func (t *TextView) InputRect(start, end int) (x, y, w, h int) {
 		ec = len([]rune(t.lines[sl]))
 	}
 	x, y = t.CaretPixel(sl, sc)
-	return x, y, (ec - sc) * t.glyphAdvance(), t.glyphHeight() + 4
+	return x, y, (ec - sc) * t.glyphAdvance(), t.glyphHeight() + lineGap()
 }
 
 // InputIndexAt returns the offset nearest to the point (x, y), given in the
