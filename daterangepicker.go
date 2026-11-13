@@ -253,7 +253,7 @@ func (rp *DateRangePicker) NextArrowHitRect() Rect { return touchHitRect(rp.next
 // month; a day-cell click is forwarded to the embedded Calendar, whose OnSelect
 // drives selectDay.
 func (rp *DateRangePicker) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || rp.Disabled().Get() {
 		return
 	}
 	r := rp.Bounds()

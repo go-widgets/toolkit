@@ -774,7 +774,7 @@ func (a *ActionSheet) HitTest(px, py int) bool {
 // surface coordinates for hit-testing, and translated into each child's frame
 // for forwarding.
 func (a *ActionSheet) OnEvent(ev Event) {
-	if a.state == ActionSheetClosed {
+	if a.Disabled().Get() || a.state == ActionSheetClosed {
 		return
 	}
 	a.layout()
@@ -867,7 +867,7 @@ func isDismissKey(code string) bool {
 // one as nothing of note. The action buttons / content are exposed separately
 // through [ActionSheet.Children] so the a11y tree walk descends into them.
 func (a *ActionSheet) A11y() A11yInfo {
-	return A11yInfo{Role: RoleDialog, Name: a.Title, Value: stateValue(a.Visible(), "modal")}
+	return A11yInfo{Role: RoleDialog, Name: a.Title, Value: stateValue(a.Visible(), "modal"), Disabled: a.Disabled().Get()}
 }
 
 // Children yields the sheet's interactive contents in visual order — the hosted

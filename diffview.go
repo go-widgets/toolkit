@@ -448,6 +448,9 @@ func (v *DiffView) NextChange(dir int) bool {
 
 // OnEvent scrolls and moves between changes.
 func (v *DiffView) OnEvent(ev Event) {
+	if v.Disabled().Get() {
+		return
+	}
 	switch ev.Kind {
 	case EventScroll:
 		v.ScrollBy(ev.Delta)
@@ -701,5 +704,5 @@ func (v *DiffView) drawRuler(p painter.Painter, theme *Theme, c dvColors, r Rect
 func (v *DiffView) A11y() A11yInfo {
 	add, del := v.Stats()
 	return A11yInfo{Role: RoleDocument, Name: v.OldTitle + " → " + v.NewTitle,
-		Value: "+" + strconv.Itoa(add) + " −" + strconv.Itoa(del) + ", " + strconv.Itoa(len(v.changes)) + " changes"}
+		Value: "+" + strconv.Itoa(add) + " −" + strconv.Itoa(del) + ", " + strconv.Itoa(len(v.changes)) + " changes", Disabled: v.Disabled().Get()}
 }

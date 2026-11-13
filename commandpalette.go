@@ -295,7 +295,7 @@ func (c *CommandPalette) Draw(p painter.Painter, theme *Theme) {
 // the selected command then dismisses, and Escape / outside-click dismisses and
 // fires OnDismiss. Events while hidden are ignored.
 func (c *CommandPalette) OnEvent(ev Event) {
-	if !c.Visible().Get() {
+	if !c.Visible().Get() || c.Disabled().Get() {
 		return
 	}
 	switch ev.Kind {
@@ -319,6 +319,9 @@ func (c *CommandPalette) OnEvent(ev Event) {
 // OnEvent it does not gate on Visible, so a host managing its own visibility can
 // still feed keys; it is the exact keyboard path OnEvent routes through.
 func (c *CommandPalette) HandleKey(ev Event) {
+	if c.Disabled().Get() {
+		return
+	}
 	switch ev.Kind {
 	case EventChar:
 		if ev.Code == "" {

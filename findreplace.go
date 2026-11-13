@@ -288,7 +288,7 @@ func (f *FindReplace) Children() []Widget { return f.controls() }
 // A11y reports the bar as a group named for its purpose; the query, buttons and
 // readout inside describe themselves through the child walk.
 func (f *FindReplace) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: Tr("find.a11y", "Find and replace")}
+	return A11yInfo{Role: RoleGroup, Name: Tr("find.a11y", "Find and replace"), Disabled: f.Disabled().Get()}
 }
 
 // panelRect is the top-right anchored panel rectangle within the bar's bounds.
@@ -388,7 +388,7 @@ func (f *FindReplace) Draw(p painter.Painter, theme *Theme) {
 // Shift+Enter step to the next / previous match, and every other key or
 // character goes to the focused text field. Events while hidden are ignored.
 func (f *FindReplace) OnEvent(ev Event) {
-	if !f.visible.Get() {
+	if !f.visible.Get() || f.Disabled().Get() {
 		return
 	}
 	f.relayout()

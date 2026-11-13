@@ -417,7 +417,7 @@ func (a *Agenda) drawWeek(p painter.Painter, theme *Theme) {
 // markers — and any non-click event are no-ops. Overlapping candidates resolve
 // to the visually-topmost (last-drawn) one.
 func (a *Agenda) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || a.Disabled().Get() {
 		return
 	}
 	var i int

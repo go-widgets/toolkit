@@ -43,7 +43,9 @@ var _ DropTarget = (*DropZone)(nil)
 
 // AcceptsDrop reports whether a payload is droppable here. A DropZone is a
 // generic file target, so it accepts any non-empty payload.
-func (d *DropZone) AcceptsDrop(payload string) bool { return payload != "" }
+func (d *DropZone) AcceptsDrop(payload string) bool {
+	return payload != "" && !d.Disabled().Get()
+}
 
 // DropZone sizing constants. PadX / PadY are the outer insets from
 // the bounds to where inner content (the prompt text) sits; DashLen
@@ -115,6 +117,9 @@ func (d *DropZone) Draw(p painter.Painter, theme *Theme) {
 // as a demo/test hook. All other event kinds are ignored so a keyboard event
 // bound for a sibling widget does not accidentally trigger a drop.
 func (d *DropZone) OnEvent(ev Event) {
+	if d.Disabled().Get() {
+		return
+	}
 	switch ev.Kind {
 	case EventDragStart, EventDragMove:
 		d.Hover().Set(true)

@@ -77,7 +77,7 @@ func (b *Browser) A11y() A11yInfo {
 
 // A11y reports the Dock as a toolbar carrying its docked entries.
 func (d *Dock) A11y() A11yInfo {
-	return A11yInfo{Role: RoleToolbar, Value: strconv.Itoa(len(d.docked)) + " items"}
+	return A11yInfo{Role: RoleToolbar, Value: strconv.Itoa(len(d.docked)) + " items", Disabled: d.Disabled().Get()}
 }
 
 // A11y reports the Gantt chart as an img carrying its task count, matching the
@@ -114,7 +114,7 @@ func (a *StatusArea) A11y() A11yInfo {
 // A11y reports the AgendaSidebar as navigation named by its title.
 func (s *AgendaSidebar) A11y() A11yInfo {
 	return A11yInfo{Role: RoleNavigation, Name: s.Title,
-		Value: strconv.Itoa(len(s.Calendars)) + " calendars"}
+		Value: strconv.Itoa(len(s.Calendars)) + " calendars", Disabled: s.Disabled().Get()}
 }
 
 // A11y reports the Window as a dialog named by its title.

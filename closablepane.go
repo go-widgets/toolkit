@@ -138,7 +138,9 @@ func (c *ClosablePane) Children() []Widget { return append([]Widget{c.Button}, n
 func (c *ClosablePane) focusableChildren() []Widget { return c.Children() }
 
 // A11y describes the pane as a group named by its title.
-func (c *ClosablePane) A11y() A11yInfo { return A11yInfo{Role: RoleGroup, Name: c.Title} }
+func (c *ClosablePane) A11y() A11yInfo {
+	return A11yInfo{Role: RoleGroup, Name: c.Title, Disabled: c.Disabled().Get()}
+}
 
 // Draw paints the header (title, hairline, button), then the body, and nothing
 // for a pane with no room.
@@ -161,6 +163,9 @@ func (c *ClosablePane) Draw(p painter.Painter, theme *Theme) {
 // OnEvent routes keys to the focused part, a press on the button to the button,
 // the rest to the body; a move also tracks the hover that times the tooltip.
 func (c *ClosablePane) OnEvent(ev Event) {
+	if c.Disabled().Get() {
+		return
+	}
 	if routeFocusKey(c, ev) {
 		return
 	}
@@ -225,7 +230,7 @@ func (c *ClosablePane) tipBox() Rect {
 
 // PopoverOpen is whether the tooltip is showing: it is drawn over the panes that
 // follow, which a pane cannot do from its own Draw.
-func (c *ClosablePane) PopoverOpen() bool { return c.tipShown() }
+func (c *ClosablePane) PopoverOpen() bool { return !c.Disabled().Get() && c.tipShown() }
 
 // PopoverBounds is where the tooltip is.
 func (c *ClosablePane) PopoverBounds() Rect { return c.tipBox() }

@@ -327,6 +327,9 @@ func (s *AgendaSidebar) drawRows(p painter.Painter, theme *Theme, sw int) {
 // same rule the Agenda event editor uses). No visibility toggle happens while
 // editing.
 func (s *AgendaSidebar) OnEvent(ev Event) {
+	if s.Disabled().Get() {
+		return
+	}
 	if s.editEntry != nil {
 		s.onEventEditing(ev)
 		return

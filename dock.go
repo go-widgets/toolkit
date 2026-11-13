@@ -114,6 +114,9 @@ func (d *Dock) Draw(p painter.Painter, theme *Theme) {
 // OnEvent forwards to the first bar whose Bounds contains the point, else the
 // body, translating into that child's local space.
 func (d *Dock) OnEvent(ev Event) {
+	if d.Disabled().Get() {
+		return
+	}
 	pr := d.Bounds()
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	for _, it := range d.docked {

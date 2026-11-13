@@ -97,7 +97,7 @@ func (c *ContextMenu) Draw(p painter.Painter, theme *Theme) {
 // frame, so the hit row's Action fires and closes the overlay via OnClose); a
 // click anywhere outside dismisses the menu.
 func (c *ContextMenu) OnEvent(ev Event) {
-	if !c.Open().Get() {
+	if !c.Open().Get() || c.Disabled().Get() {
 		return
 	}
 	mb := c.MenuBounds()

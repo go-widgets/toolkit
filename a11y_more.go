@@ -162,13 +162,13 @@ func (r *Rating) A11y() A11yInfo {
 // A11y reports the ColorChooser as a group carrying its current colour as
 // a "#RRGGBB" hex string.
 func (c *ColorChooser) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: hexColor(c.Color().Get())}
+	return A11yInfo{Role: RoleGroup, Value: hexColor(c.Color().Get()), Disabled: c.Disabled().Get()}
 }
 
 // A11y reports the ColorPicker as a group carrying its current colour
 // (derived from the HSV+alpha state) as a "#RRGGBB" hex string.
 func (c *ColorPicker) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: hexColor(c.rgba())}
+	return A11yInfo{Role: RoleGroup, Value: hexColor(c.rgba()), Disabled: c.Disabled().Get()}
 }
 
 // A11y reports the FontChooser as a combobox named by its currently-selected
@@ -188,11 +188,13 @@ func (f *FileChooser) A11y() A11yInfo {
 	if f.Root != nil {
 		name = f.Root.Label
 	}
-	return A11yInfo{Role: RoleGroup, Name: name, Value: f.selectedFile}
+	return A11yInfo{Role: RoleGroup, Name: name, Value: f.selectedFile, Disabled: f.Disabled().Get()}
 }
 
 // A11y reports the DropZone as a group named by its drop prompt.
-func (d *DropZone) A11y() A11yInfo { return A11yInfo{Role: RoleGroup, Name: d.Prompt} }
+func (d *DropZone) A11y() A11yInfo {
+	return A11yInfo{Role: RoleGroup, Name: d.Prompt, Disabled: d.Disabled().Get()}
+}
 
 // --- Selection / data ---------------------------------------------------
 
@@ -300,11 +302,13 @@ func (m *MenuBar) A11y() A11yInfo {
 
 // A11y reports the ContextMenu as a menu carrying its open/closed state.
 func (c *ContextMenu) A11y() A11yInfo {
-	return A11yInfo{Role: RoleMenu, Value: stateValue(c.Open().Get(), "open")}
+	return A11yInfo{Role: RoleMenu, Value: stateValue(c.Open().Get(), "open"), Disabled: c.Disabled().Get()}
 }
 
 // A11y reports the CommandPalette as a dialog carrying its typed query.
-func (c *CommandPalette) A11y() A11yInfo { return A11yInfo{Role: RoleDialog, Value: c.query} }
+func (c *CommandPalette) A11y() A11yInfo {
+	return A11yInfo{Role: RoleDialog, Value: c.query, Disabled: c.Disabled().Get()}
+}
 
 // --- Feedback / status ---------------------------------------------------
 
@@ -533,7 +537,7 @@ func (d *DatePicker) A11y() A11yInfo {
 	if d.Cal != nil {
 		v = isoDate(d.Cal.Year().Get(), d.Cal.Month().Get(), d.Cal.Day().Get())
 	}
-	return A11yInfo{Role: RoleGroup, Value: v}
+	return A11yInfo{Role: RoleGroup, Value: v, Disabled: d.Disabled().Get()}
 }
 
 // A11y reports the DateRangePicker as a group carrying its "start..end"
@@ -541,8 +545,9 @@ func (d *DatePicker) A11y() A11yInfo {
 func (d *DateRangePicker) A11y() A11yInfo {
 	start, end := d.Start().Get(), d.End().Get()
 	return A11yInfo{
-		Role:  RoleGroup,
-		Value: isoDate(start.Y, start.M, start.D) + ".." + isoDate(end.Y, end.M, end.D),
+		Role:     RoleGroup,
+		Value:    isoDate(start.Y, start.M, start.D) + ".." + isoDate(end.Y, end.M, end.D),
+		Disabled: d.Disabled().Get(),
 	}
 }
 
