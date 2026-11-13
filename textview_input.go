@@ -49,8 +49,9 @@ func (t *TextView) InputMarked() (start, end int) {
 // InputMultiline is true: Enter splits the line.
 func (t *TextView) InputMultiline() bool { return true }
 
-// InputReadOnly is false: a TextView has no read-only mode.
-func (t *TextView) InputReadOnly() bool { return false }
+// InputReadOnly is true while the view is Disabled (an input method then offers
+// no composition) and false otherwise: a TextView has no read-only mode.
+func (t *TextView) InputReadOnly() bool { return t.Disabled().Get() }
 
 // SetInputSelection selects from anchor to focus and puts the caret at focus.
 // A negative offset means "none" and changes nothing.
@@ -126,6 +127,9 @@ func (t *TextView) splice(b0, b1 int, ins string, caret int) {
 // the selection. Committing over marked text ends the composition and does not
 // add an undo step of its own: the composition already owns one.
 func (t *TextView) ReplaceInput(start, end int, text string) {
+	if t.Disabled().Get() {
+		return
+	}
 	b0, b1, s0 := resolve(t.InputText(), start, end, t.selectionOrMark)
 	if b0 == b1 && text == "" {
 		return
@@ -143,6 +147,9 @@ func (t *TextView) ReplaceInput(start, end int, text string) {
 // start (clamped to it). The whole composition, however many updates, is one
 // undo step.
 func (t *TextView) SetMarkedInput(text string, selStart, selEnd, replStart, replEnd int) {
+	if t.Disabled().Get() {
+		return
+	}
 	b0, b1, s0 := resolve(t.InputText(), replStart, replEnd, t.selectionOrMark)
 	if !t.marked {
 		if b0 == b1 && text == "" {

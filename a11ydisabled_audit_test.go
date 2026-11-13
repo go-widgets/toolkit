@@ -1,4 +1,4 @@
-// Copyright (c) 2026 the wasmdesk/toolkit authors. All rights reserved.
+// Copyright (c) 2026 the go-widgets/toolkit authors. All rights reserved.
 // Use of this source code is governed by a BSD-3-Clause license that can be
 // found in the LICENSE file at the root of this repository.
 
@@ -32,21 +32,28 @@ import (
 // list:
 //
 //   - TestA11yDisabledCatalogueIsComplete parses the package source and finds
-//     every type whose own methods read Disabled (or the focus walker's
-//     isDisabled) on their receiver and which answers A11y(). Such a type must
-//     be in the catalogue, so a NEW widget with a Disabled-aware Draw/OnEvent
-//     fails here until it is audited.
+//     every exported type that embeds Base (directly or through another type)
+//     and answers A11y() (its own or a promoted one). Each must be in the
+//     catalogue or in disabledA11yExempt with a reason. The first version
+//     asked "does this type READ Disabled?" and a source scan cannot answer
+//     that: it misses a read through a field chain, a reader promoted by
+//     embedding, and a helper or closure. Embedding Base is decidable, so a NEW
+//     widget fails here until someone decides.
 //   - TestA11yDisabledAudit builds each catalogue widget, disables it and
 //     requires A11y().Disabled, then enables it and requires the flag to clear.
 //
-// Base is the one reader outside the audit: it owns the observable and has no
-// A11y() of its own.
+// Unexported types (synthetic tab/ribbon/iso nodes, mini buttons) are reachable
+// only through a parent's Children() and are not widgets a host builds, so they
+// are outside the rule; the parents are audited.
 
 // disabledA11yCatalogue maps a type name to a constructor for a fresh instance.
 var disabledA11yCatalogue = map[string]func() Accessible{
 	"Accordion":      func() Accessible { return NewAccordion([]AccordionSection{{Title: "a"}}) },
 	"Browser":        func() Accessible { return NewBrowser() },
 	"Button":         func() Accessible { return &Button{} },
+	"CodeEditor":     func() Accessible { return NewCodeEditor("") },
+	"Entry":          func() Accessible { return NewEntry("") },
+	"TextView":       func() Accessible { return NewTextView("") },
 	"Calendar":       func() Accessible { return NewCalendar(2026, 8, 16) },
 	"Carousel":       func() Accessible { return NewCarousel(nil) },
 	"CheckButton":    func() Accessible { return &CheckButton{} },
@@ -163,24 +170,135 @@ func disabledReaders(t *testing.T) []string {
 	return out
 }
 
-// TestA11yDisabledCatalogueIsComplete fails when a widget reads Disabled and
-// answers A11y() but is not in the catalogue, or when the catalogue names a type
-// that no longer reads Disabled.
+// accessibleBaseTypes returns every exported type of the package that embeds
+// Base -- directly, or through another type of the package that does -- and
+// answers A11y(), its own or one promoted from an embedded type.
+func accessibleBaseTypes(t *testing.T) []string {
+	t.Helper()
+	fset := token.NewFileSet()
+	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
+		return !strings.HasSuffix(fi.Name(), "_test.go")
+	}, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	embeds := map[string][]string{}
+	ownA11y := map[string]bool{}
+	for _, p := range pkgs {
+		for _, f := range p.Files {
+			for _, d := range f.Decls {
+				switch d := d.(type) {
+				case *ast.GenDecl:
+					for _, s := range d.Specs {
+						ts, ok := s.(*ast.TypeSpec)
+						if !ok {
+							continue
+						}
+						st, ok := ts.Type.(*ast.StructType)
+						if !ok {
+							continue
+						}
+						for _, fld := range st.Fields.List {
+							if len(fld.Names) != 0 {
+								continue
+							}
+							typ := fld.Type
+							if s, ok := typ.(*ast.StarExpr); ok {
+								typ = s.X
+							}
+							if id, ok := typ.(*ast.Ident); ok {
+								embeds[ts.Name.Name] = append(embeds[ts.Name.Name], id.Name)
+							}
+						}
+					}
+				case *ast.FuncDecl:
+					if d.Recv == nil || d.Name.Name != "A11y" {
+						continue
+					}
+					typ := d.Recv.List[0].Type
+					if s, ok := typ.(*ast.StarExpr); ok {
+						typ = s.X
+					}
+					if id, ok := typ.(*ast.Ident); ok {
+						ownA11y[id.Name] = true
+					}
+				}
+			}
+		}
+	}
+	// reach reports whether name is, or embeds (transitively), a type satisfying
+	// pred; seen guards a cycle.
+	var reach func(name string, pred func(string) bool, seen map[string]bool) bool
+	reach = func(name string, pred func(string) bool, seen map[string]bool) bool {
+		if pred(name) {
+			return true
+		}
+		if seen[name] {
+			return false
+		}
+		seen[name] = true
+		for _, e := range embeds[name] {
+			if reach(e, pred, seen) {
+				return true
+			}
+		}
+		return false
+	}
+	var out []string
+	for name := range embeds {
+		if !ast.IsExported(name) || name == "Base" {
+			continue
+		}
+		isBase := func(n string) bool { return n == "Base" }
+		hasA11y := func(n string) bool { return ownA11y[n] }
+		if reach(name, isBase, map[string]bool{}) && reach(name, hasA11y, map[string]bool{}) {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// TestA11yDisabledCatalogueIsComplete fails when an exported widget that embeds
+// Base and answers A11y() is neither in the catalogue nor exempted with a reason,
+// when a list names a type that no longer exists as such, when a type is in both
+// lists, when an exemption has no reason, or when an exempt type nonetheless
+// reads Disabled in its own methods (it belongs in the catalogue).
 func TestA11yDisabledCatalogueIsComplete(t *testing.T) {
-	readers := disabledReaders(t)
-	if len(readers) == 0 {
-		t.Fatal("the source scan found no widget reading Disabled: the scan is blind")
+	found := accessibleBaseTypes(t)
+	if len(found) < 100 {
+		t.Fatalf("the source scan found %d accessible Base types: the scan is blind", len(found))
 	}
 	seen := map[string]bool{}
-	for _, name := range readers {
+	for _, name := range found {
 		seen[name] = true
-		if _, ok := disabledA11yCatalogue[name]; !ok {
-			t.Errorf("%s reads Disabled and has A11y() but is not in disabledA11yCatalogue", name)
+		_, cat := disabledA11yCatalogue[name]
+		_, exempt := disabledA11yExempt[name]
+		if !cat && !exempt {
+			t.Errorf("%s embeds Base and answers A11y() but is in neither disabledA11yCatalogue nor disabledA11yExempt", name)
+		}
+		if cat && exempt {
+			t.Errorf("%s is both in the catalogue and exempt", name)
 		}
 	}
 	for name := range disabledA11yCatalogue {
 		if !seen[name] {
-			t.Errorf("disabledA11yCatalogue lists %s, which no longer reads Disabled", name)
+			t.Errorf("disabledA11yCatalogue lists %s, which is not an accessible Base type", name)
+		}
+	}
+	for name, reason := range disabledA11yExempt {
+		if !seen[name] {
+			t.Errorf("disabledA11yExempt lists %s, which is not an accessible Base type", name)
+		}
+		if strings.TrimSpace(reason) == "" {
+			t.Errorf("disabledA11yExempt[%s] has no reason", name)
+		}
+	}
+	// The cheap direct-read scan still catches the plain case; the exemption list
+	// must not hide it.
+	for _, name := range disabledReaders(t) {
+		if _, ok := disabledA11yExempt[name]; ok {
+			t.Errorf("%s is exempt but its own methods read Disabled: audit it", name)
 		}
 	}
 }
@@ -309,3 +427,53 @@ func (noObservable) Draw(painter.Painter, *Theme) {}
 func (noObservable) HitTest(int, int) bool        { return false }
 func (noObservable) OnEvent(Event)                {}
 func (noObservable) A11y() A11yInfo               { return A11yInfo{} }
+
+// The three reasons a widget that embeds Base is not in the catalogue.
+const (
+	exemptStatic = "display only: no activation, selection or editing (at most hover or scroll), so it has no inert state to announce"
+	exemptLayout = "layout, routing or decoration: forwards events to children whose own state governs, or paints chrome; it has no control of its own"
+	exemptGap    = "interactive but never honours Base.Disabled (no inert OnEvent, no muted Draw): announcing a state it does not have would mislead. Honour the flag, then move it to the catalogue"
+)
+
+// disabledA11yExempt lists the accessible Base types that are deliberately not
+// audited, each with the reason. A type in it must not read Disabled in its own
+// methods (TestA11yDisabledCatalogueIsComplete): the moment it does, it belongs
+// in the catalogue.
+var disabledA11yExempt = exemptions(map[string][]string{
+	exemptStatic: {
+		"Alert", "AreaChart", "Avatar", "Badge", "BarChart", "Card", "CardMeta", "ChatBubble", "Clock",
+		"ContrastBadge", "Diff", "Gauge", "Image", "Kbd", "Label", "LevelBar", "LineChart", "LoadMask",
+		"MarkdownView", "Notification", "PieChart", "ProgressBar", "ProgressCircle", "RadarChart",
+		"ScatterChart", "SegmentedBar", "Sparkline", "Spinner", "Stat", "TimeSeriesChart", "Timeline",
+		"Tooltip", "XYPlot",
+	},
+	exemptLayout: {
+		"AlignBox", "Backdrop", "Container", "DockPanel", "EmptyState", "Grid", "HBox", "HeaderBar",
+		"Material", "Native", "Overlay", "Padding", "Popover", "PopoverHost", "ScrollView", "Skeleton",
+		"SkeletonGroup", "Stack", "StatusArea", "VBox", "Viewport", "Wallpaper", "WindowDecoration",
+	},
+	exemptGap: {
+		"ActionSheet", "AddressBar", "Agenda", "AgendaSidebar", "AppDock", "ArticleCard", "Breadcrumbs",
+		"ButtonGroup", "ClosablePane", "ColorChooser", "ColorPicker", "CommandPalette", "ContextMenu",
+		"DatabaseEditor", "DatePicker", "DateRangePicker", "DiffView", "Dock", "DropZone", "FileChooser",
+		"FindReplace", "FontChooser", "FontPicker", "ForgePane", "FormField", "GroupCard", "Inspector",
+		"Kanban", "LinkCard", "LogView", "MarkdownEditor", "MediaCard", "PagingToolbar", "PostCard",
+		"PropertyGrid", "RichEditor", "RichEditorToolbar", "SearchEntry", "SelectionBox", "SettingRow",
+		"Splitter", "Spreadsheet", "TagField", "TerminalView", "TimePicker", "Toolbar", "Wizard",
+		// Acting on a click, selection or drag of their own, found by re-checking
+		// each widget's OnEvent rather than its name:
+		"ActionRow", "Banner", "Border", "Chip", "Dialog", "Frame", "Gantt", "ModalWindow", "Paned",
+		"SettingsGroup", "StatusIcon", "Steps", "Surface", "Thumbnail", "Toast", "Window",
+	},
+})
+
+// exemptions flattens reason -> names into name -> reason.
+func exemptions(byReason map[string][]string) map[string]string {
+	out := map[string]string{}
+	for reason, names := range byReason {
+		for _, n := range names {
+			out[n] = reason
+		}
+	}
+	return out
+}

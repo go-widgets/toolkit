@@ -365,7 +365,7 @@ func (t *TextView) pushUndo() {
 // the most recent mutation, pushing the current state onto the redo
 // stack. No-op when there is nothing to undo.
 func (t *TextView) Undo() {
-	if len(t.undo) == 0 {
+	if !t.CanUndo() {
 		return
 	}
 	t.redo = append(t.redo, t.snapshot())
@@ -380,7 +380,7 @@ func (t *TextView) Undo() {
 // current state back onto the undo stack. No-op when there is
 // nothing to redo.
 func (t *TextView) Redo() {
-	if len(t.redo) == 0 {
+	if !t.CanRedo() {
 		return
 	}
 	t.undo = append(t.undo, t.snapshot())
@@ -610,10 +610,38 @@ func tagInk(c RGBA) RGBA {
 	return RGBA{R: 0xFF, G: 0xFF, B: 0xFF, A: 0xFF}
 }
 
-// OnEvent dispatches the editing operations.
+// editsText reports whether ev would change a text field's contents or submit
+// it: typed and committed characters, IME composition, and the editing keys
+// (delete, newline/submit, cut, paste, undo, redo). A disabled text widget drops
+// these; navigation, copy and selection are not in the set.
+func editsText(ev Event) bool {
+	switch ev.Kind {
+	case EventChar, EventCompositionStart, EventCompositionUpdate, EventCompositionEnd:
+		return true
+	case EventKeyDown:
+		switch ev.Code {
+		case "Backspace", "Enter", "Ctrl+X", "Ctrl+V", "Ctrl+Z", "Ctrl+Y", "Ctrl+Shift+Z":
+			return true
+		}
+	}
+	return false
+}
+
+// OnEvent dispatches the editing operations. A Disabled view ignores every
+// editing event and the click that would focus it; scrolling, caret movement,
+// selection and copy still work, as in a native disabled text area.
 func (t *TextView) OnEvent(ev Event) {
+	if t.Disabled().Get() && editsText(ev) {
+		return
+	}
 	switch ev.Kind {
 	case EventClick:
+		if t.Disabled().Get() {
+			// No focus and no caret, but the scrollbars and the minimap stay live:
+			// scrolling a disabled view is reading it, not operating it.
+			_ = t.barPress(ev) || t.minimapPress(ev)
+			return
+		}
 		t.HasFocus().Set(true)
 		if t.barPress(ev) || t.minimapPress(ev) {
 			return // the click landed on a scrollbar or the minimap, not on the text

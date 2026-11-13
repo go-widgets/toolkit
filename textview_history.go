@@ -42,11 +42,12 @@ func (t *TextView) SetHistory(h TextHistory) {
 // ClearHistory empties the undo and redo stacks.
 func (t *TextView) ClearHistory() { t.SetHistory(TextHistory{}) }
 
-// CanUndo reports whether Undo would change anything.
-func (t *TextView) CanUndo() bool { return len(t.undo) > 0 }
+// CanUndo reports whether Undo would change anything. A Disabled view cannot
+// undo: the history is kept, but a menu or ribbon greys its command.
+func (t *TextView) CanUndo() bool { return len(t.undo) > 0 && !t.Disabled().Get() }
 
-// CanRedo reports whether Redo would change anything.
-func (t *TextView) CanRedo() bool { return len(t.redo) > 0 }
+// CanRedo reports whether Redo would change anything (never while Disabled).
+func (t *TextView) CanRedo() bool { return len(t.redo) > 0 && !t.Disabled().Get() }
 
 // ReplaceText replaces the whole buffer as one undoable edit (SetText is
 // not undoable: it loads a document). The caret goes to the start.

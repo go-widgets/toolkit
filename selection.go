@@ -138,7 +138,7 @@ func (t *TextView) SelectAll() {
 // the deletion point. No-op when the selection is empty.
 func (t *TextView) DeleteSelection() {
 	sel := t.Selection().Get()
-	if sel.IsEmpty() {
+	if sel.IsEmpty() || t.Disabled().Get() {
 		return
 	}
 	t.pushUndo()
@@ -166,6 +166,9 @@ func (t *TextView) CopySelection() string {
 // CutSelection returns the selected text, writes it to the global
 // Clipboard (when non-empty) + removes it from the buffer.
 func (t *TextView) CutSelection() string {
+	if t.Disabled().Get() {
+		return "" // a cut edits: a Disabled view neither copies nor deletes
+	}
 	s := t.SelectionText()
 	if s != "" {
 		SetClipboardText(s)
@@ -182,6 +185,9 @@ func (t *TextView) CutSelection() string {
 // itself stays a plain "insert this text" primitive so callers can
 // also use it to insert arbitrary programmatic text.
 func (t *TextView) Paste(text string) {
+	if t.Disabled().Get() {
+		return
+	}
 	if t.HasSelection() {
 		// DeleteSelection pushes undo; insertText below joins it into
 		// the same step (no separate push).

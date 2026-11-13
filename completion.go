@@ -449,6 +449,12 @@ func isCompletionTrigger(ev Event) bool {
 // unchanged to TextView, so an editor with no CompletionSource behaves exactly
 // as before.
 func (c *CodeEditor) OnEvent(ev Event) {
+	if c.Disabled().Get() {
+		// Inert: no popup opens or accepts, and TextView drops the editing events.
+		c.closeCompletion()
+		c.TextView.OnEvent(ev)
+		return
+	}
 	if ev.Kind == EventKeyDown && isCompletionTrigger(ev) {
 		c.openOrRefreshCompletion()
 		return
