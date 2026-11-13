@@ -1,4 +1,4 @@
-// Copyright (c) 2026 the wasmdesk/toolkit authors. All rights reserved.
+// Copyright (c) 2026 the go-widgets/toolkit authors. All rights reserved.
 // Use of this source code is governed by a BSD-3-Clause license that can be
 // found in the LICENSE file at the root of this repository.
 
@@ -150,5 +150,67 @@ func TestDisabledCodeEditorIgnoresTypingAndCompletion(t *testing.T) {
 	c.OnEvent(Event{Kind: EventChar, Code: "z"})
 	if got := c.Text().Get(); got == "ab" {
 		t.Error("re-enabled CodeEditor ignored typing")
+	}
+}
+
+// Undo and redo are edits: with history on the stacks, a disabled view must
+// neither take the keys nor the API, and must tell a menu not to offer them.
+func TestDisabledTextViewCannotUndoOrRedo(t *testing.T) {
+	v := NewTextView("ab")
+	v.OnEvent(Event{Kind: EventChar, Code: "x"})
+	if got := v.Text().Get(); got != "xab" || !v.CanUndo() {
+		t.Fatalf("setup: text %q, CanUndo %v", got, v.CanUndo())
+	}
+	v.Disabled().Set(true)
+	v.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+Z"})
+	v.Undo()
+	if got := v.Text().Get(); got != "xab" {
+		t.Errorf("disabled view undid to %q", got)
+	}
+	if v.CanUndo() {
+		t.Error("CanUndo is true on a disabled view")
+	}
+	v.Disabled().Set(false)
+	if !v.CanUndo() {
+		t.Fatal("the history was lost while disabled")
+	}
+	v.Undo()
+	if got := v.Text().Get(); got != "ab" || !v.CanRedo() {
+		t.Fatalf("enabled undo: text %q, CanRedo %v", got, v.CanRedo())
+	}
+	v.Disabled().Set(true)
+	v.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+Y"})
+	v.Redo()
+	if got := v.Text().Get(); got != "ab" {
+		t.Errorf("disabled view redid to %q", got)
+	}
+	if v.CanRedo() {
+		t.Error("CanRedo is true on a disabled view")
+	}
+	v.Disabled().Set(false)
+	v.Redo()
+	if got := v.Text().Get(); got != "xab" {
+		t.Errorf("enabled redo: %q", got)
+	}
+}
+
+// A disabled view is still scrollable by its scrollbar: reading is not
+// operating. Only focus and the caret are refused.
+func TestDisabledTextViewStillScrollsByItsScrollbar(t *testing.T) {
+	c := newScrollEditor(1000, 0, 0)
+	c.Disabled().Set(true)
+	g, _ := c.vbarGeom()
+	vis := c.visibleLines()
+	c.OnEvent(Event{Kind: EventClick, X: g.cross0 + 1, Y: g.trackStart + g.trackLen - 2})
+	if got := c.ScrollLine().Get(); got != vis {
+		t.Fatalf("scrollbar click on a disabled view: ScrollLine = %d, want %d", got, vis)
+	}
+	if c.Focused() {
+		t.Error("a scrollbar click focused a disabled view")
+	}
+	c.CursorLine().Set(3)
+	c.OnEvent(Event{Kind: EventClick, X: c.gutterWidth() + 40, Y: 30})
+	if c.CursorLine().Get() != 3 || c.Focused() {
+		t.Error("a text click moved the caret or focused a disabled view")
 	}
 }

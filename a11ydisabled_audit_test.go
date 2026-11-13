@@ -1,4 +1,4 @@
-// Copyright (c) 2026 the wasmdesk/toolkit authors. All rights reserved.
+// Copyright (c) 2026 the go-widgets/toolkit authors. All rights reserved.
 // Use of this source code is governed by a BSD-3-Clause license that can be
 // found in the LICENSE file at the root of this repository.
 
@@ -430,8 +430,8 @@ func (noObservable) A11y() A11yInfo               { return A11yInfo{} }
 
 // The three reasons a widget that embeds Base is not in the catalogue.
 const (
-	exemptStatic = "display only: takes no input, so it has no inert state to announce"
-	exemptLayout = "layout or window chrome: presentation or a plain group; its children carry their own state"
+	exemptStatic = "display only: no activation, selection or editing (at most hover or scroll), so it has no inert state to announce"
+	exemptLayout = "layout, routing or decoration: forwards events to children whose own state governs, or paints chrome; it has no control of its own"
 	exemptGap    = "interactive but never honours Base.Disabled (no inert OnEvent, no muted Draw): announcing a state it does not have would mislead. Honour the flag, then move it to the catalogue"
 )
 
@@ -441,18 +441,16 @@ const (
 // in the catalogue.
 var disabledA11yExempt = exemptions(map[string][]string{
 	exemptStatic: {
-		"ActionRow", "Alert", "AreaChart", "Avatar", "Badge", "Banner", "BarChart", "Card", "CardMeta",
-		"ChatBubble", "Chip", "Clock", "ContrastBadge", "Diff", "Gantt", "Gauge", "Image", "Kbd", "Label",
-		"LevelBar", "LineChart", "LoadMask", "MarkdownView", "Notification", "PieChart", "ProgressBar",
-		"ProgressCircle", "RadarChart", "ScatterChart", "SegmentedBar", "SettingsGroup", "Sparkline",
-		"Spinner", "Stat", "StatusArea", "StatusIcon", "Steps", "Thumbnail", "TimeSeriesChart", "Timeline",
-		"Toast", "Tooltip", "XYPlot",
+		"Alert", "AreaChart", "Avatar", "Badge", "BarChart", "Card", "CardMeta", "ChatBubble", "Clock",
+		"ContrastBadge", "Diff", "Gauge", "Image", "Kbd", "Label", "LevelBar", "LineChart", "LoadMask",
+		"MarkdownView", "Notification", "PieChart", "ProgressBar", "ProgressCircle", "RadarChart",
+		"ScatterChart", "SegmentedBar", "Sparkline", "Spinner", "Stat", "TimeSeriesChart", "Timeline",
+		"Tooltip", "XYPlot",
 	},
 	exemptLayout: {
-		"AlignBox", "Backdrop", "Border", "Container", "Dialog", "DockPanel", "EmptyState", "Frame", "Grid",
-		"HBox", "HeaderBar", "Material", "ModalWindow", "Native", "Overlay", "Padding", "Paned", "Popover",
-		"PopoverHost", "ScrollView", "Skeleton", "SkeletonGroup", "Stack", "Surface", "VBox", "Viewport",
-		"Wallpaper", "Window", "WindowDecoration",
+		"AlignBox", "Backdrop", "Container", "DockPanel", "EmptyState", "Grid", "HBox", "HeaderBar",
+		"Material", "Native", "Overlay", "Padding", "Popover", "PopoverHost", "ScrollView", "Skeleton",
+		"SkeletonGroup", "Stack", "StatusArea", "VBox", "Viewport", "Wallpaper", "WindowDecoration",
 	},
 	exemptGap: {
 		"ActionSheet", "AddressBar", "Agenda", "AgendaSidebar", "AppDock", "ArticleCard", "Breadcrumbs",
@@ -462,6 +460,10 @@ var disabledA11yExempt = exemptions(map[string][]string{
 		"Kanban", "LinkCard", "LogView", "MarkdownEditor", "MediaCard", "PagingToolbar", "PostCard",
 		"PropertyGrid", "RichEditor", "RichEditorToolbar", "SearchEntry", "SelectionBox", "SettingRow",
 		"Splitter", "Spreadsheet", "TagField", "TerminalView", "TimePicker", "Toolbar", "Wizard",
+		// Acting on a click, selection or drag of their own, found by re-checking
+		// each widget's OnEvent rather than its name:
+		"ActionRow", "Banner", "Border", "Chip", "Dialog", "Frame", "Gantt", "ModalWindow", "Paned",
+		"SettingsGroup", "StatusIcon", "Steps", "Surface", "Thumbnail", "Toast", "Window",
 	},
 })
 
