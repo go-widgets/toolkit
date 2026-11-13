@@ -127,7 +127,7 @@ func (a *Agenda) A11y() A11yInfo {
 	if y, m, ok := a.focusYM(); ok {
 		v = fmt.Sprintf("%04d-%02d", y, m)
 	}
-	return A11yInfo{Role: RoleGrid, Value: v}
+	return A11yInfo{Role: RoleGrid, Value: v, Disabled: a.Disabled().Get()}
 }
 
 // --- Charts ---------------------------------------------------

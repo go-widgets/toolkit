@@ -103,6 +103,24 @@ var disabledA11yCatalogue = map[string]func() Accessible{
 	"WheelPicker":    func() Accessible { return NewWheelPicker([]string{"a", "b"}) },
 	"WorkspacePager": func() Accessible { return NewWorkspacePager(2, 0) },
 
+	// Honoured in #578 part 2; behaviour is tested by TestDisabledWidgetsHonourTheFlag.
+	"ActionSheet":     func() Accessible { return NewActionSheet("t") },
+	"Agenda":          func() Accessible { return NewAgenda(nil) },
+	"AgendaSidebar":   func() Accessible { return NewAgendaSidebar(nil) },
+	"ClosablePane":    func() Accessible { return NewClosablePane("t", nil) },
+	"ColorChooser":    func() Accessible { return NewColorChooser(RGBA{}) },
+	"ColorPicker":     func() Accessible { return NewColorPicker(RGBA{}) },
+	"CommandPalette":  func() Accessible { return NewCommandPalette(nil) },
+	"ContextMenu":     func() Accessible { return NewContextMenu(NewMenu(nil)) },
+	"DatabaseEditor":  func() Accessible { return NewDatabaseEditor(newCannedSource()) },
+	"DatePicker":      func() Accessible { return NewDatePicker(2026, 8, 16) },
+	"DateRangePicker": func() Accessible { return NewDateRangePicker(2026, 8) },
+	"DiffView":        func() Accessible { return NewDiffView("a", "b") },
+	"Dock":            func() Accessible { return NewDock(nil) },
+	"DropZone":        func() Accessible { return NewDropZone("p") },
+	"FileChooser":     func() Accessible { return NewFileChooser(&TreeNode{Label: "r"}, nil) },
+	"FindReplace":     func() Accessible { return NewFindReplace() },
+
 	// Honoured in #578 part 1; behaviour is tested by TestDisabledWidgetsHonourTheFlag.
 	"ActionRow":     func() Accessible { return NewActionRow("t") },
 	"AddressBar":    func() Accessible { return &AddressBar{} },
@@ -459,7 +477,7 @@ const (
 // in the catalogue.
 var disabledA11yExempt = exemptions(map[string][]string{
 	exemptStatic: {
-		"Alert", "AreaChart", "Avatar", "Badge", "BarChart", "Card", "CardMeta", "ChatBubble", "Clock",
+		"Alert", "AreaChart", "ArticleCard", "Avatar", "Badge", "BarChart", "Card", "CardMeta", "ChatBubble", "Clock",
 		"ContrastBadge", "Diff", "Gauge", "Image", "Kbd", "Label", "LevelBar", "LineChart", "LoadMask",
 		"MarkdownView", "Notification", "PieChart", "ProgressBar", "ProgressCircle", "RadarChart",
 		"ScatterChart", "SegmentedBar", "Sparkline", "Spinner", "Stat", "TimeSeriesChart", "Timeline",
@@ -471,10 +489,7 @@ var disabledA11yExempt = exemptions(map[string][]string{
 		"SkeletonGroup", "Stack", "StatusArea", "VBox", "Viewport", "Wallpaper", "WindowDecoration",
 	},
 	exemptGap: {
-		"ActionSheet", "Agenda", "AgendaSidebar", "AppDock", "ArticleCard",
-		"ClosablePane", "ColorChooser", "ColorPicker", "CommandPalette", "ContextMenu",
-		"DatabaseEditor", "DatePicker", "DateRangePicker", "DiffView", "Dock", "DropZone", "FileChooser",
-		"FindReplace", "FontChooser", "FontPicker", "ForgePane", "GroupCard", "Inspector",
+		"AppDock", "FontChooser", "FontPicker", "ForgePane", "GroupCard", "Inspector",
 		"Kanban", "LinkCard", "LogView", "MarkdownEditor", "MediaCard", "PostCard",
 		"PropertyGrid", "RichEditor", "RichEditorToolbar", "SelectionBox",
 		"Splitter", "Spreadsheet", "TagField", "TerminalView", "TimePicker", "Wizard",

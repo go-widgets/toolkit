@@ -35,6 +35,171 @@ func centre(r Rect) (int, int) { return r.X + r.W/2, r.Y + r.H/2 }
 func honourCases() map[string]func() honourCase {
 	click := func(x, y int) Event { return Event{Kind: EventClick, X: x, Y: y} }
 	return map[string]func() honourCase{
+		// Part 2.
+		"ActionSheet": func() honourCase {
+			a := NewActionSheet("t")
+			a.AddAction("go", nil)
+			a.SetBounds(Rect{W: 300, H: 400})
+			a.Open()
+			return honourCase{w: a, off: a.Disabled(),
+				state:  func() string { return fmt.Sprint(a.State()) },
+				events: []Event{click(1, 1), {Kind: EventKeyDown, Code: "Escape"}},
+				fired:  func() int { return 0 }}
+		},
+		"Agenda": func() honourCase {
+			n := 0
+			a := agendaMonthFixture()
+			a.OnDayActivate = func(int, int, int) { n++ }
+			x, y := dayCellCenter(a, 10)
+			return honourCase{w: a, off: a.Disabled(),
+				state:  func() string { return fmt.Sprint(a.Selected().Get()) },
+				events: []Event{click(x, y)},
+				fired:  func() int { return n }}
+		},
+		"AgendaSidebar": func() honourCase {
+			n := 0
+			s := NewAgendaSidebar([]AgendaCalendar{{Name: "Work"}, {Name: "Home"}})
+			s.OnToggle = func(int) { n++ }
+			s.SetBounds(Rect{W: 160, H: 120})
+			r := s.rowRect(1)
+			return honourCase{w: s, off: s.Disabled(),
+				state:  func() string { return fmt.Sprint(s.Calendars[1].Hidden) },
+				events: []Event{click(10, r.Y+r.H/2)},
+				fired:  func() int { return n }}
+		},
+		"ClosablePane": func() honourCase {
+			n := 0
+			p := NewClosablePane("t", &honourProbe{})
+			p.Button.OnClick = func() { n++ }
+			p.SetBounds(Rect{W: 200, H: 100})
+			x, y := centre(p.Button.Bounds())
+			return honourCase{w: p, off: p.Disabled(),
+				state:  func() string { return "" },
+				events: []Event{click(x, y)},
+				fired:  func() int { return n }}
+		},
+		"ColorChooser": func() honourCase {
+			c := NewColorChooser(RGB(10, 20, 30))
+			c.SetBounds(Rect{W: 200, H: 100})
+			return honourCase{w: c, off: c.Disabled(),
+				state:  func() string { return fmt.Sprint(c.Color().Get()) },
+				events: []Event{click(150, scaled(ColorChooserChannelPadY)+3), {Kind: EventMouseDrag, X: 60, Y: 5}},
+				fired:  func() int { return 0 }}
+		},
+		"ColorPicker": func() honourCase {
+			n := 0
+			c := NewColorPicker(RGB(10, 20, 30))
+			c.OnEyedrop = func() { n++ }
+			sx, sy := centre(c.svRectLocal())
+			ex, ey := centre(c.eyedropRectLocal())
+			return honourCase{w: c, off: c.Disabled(),
+				state:  func() string { return fmt.Sprint(c.Color().Get()) },
+				events: []Event{click(sx, sy), click(ex, ey)},
+				fired:  func() int { return n }}
+		},
+		"CommandPalette": func() honourCase {
+			n := 0
+			c := NewCommandPalette([]PaletteCommand{{Label: "a", Action: func() { n++ }}})
+			c.Visible().Set(true)
+			return honourCase{w: c, off: c.Disabled(),
+				state:  func() string { return c.A11y().Value },
+				events: []Event{{Kind: EventChar, Code: "a"}, {Kind: EventKeyDown, Code: "Enter"}},
+				fired:  func() int { return n }}
+		},
+		"ContextMenu": func() honourCase {
+			c := NewContextMenu(NewMenu([]MenuItem{{Label: "a"}}))
+			c.SetBounds(Rect{W: 300, H: 300})
+			c.Popup(10, 10)
+			return honourCase{w: c, off: c.Disabled(),
+				state:  func() string { return fmt.Sprint(c.Open().Get()) },
+				events: []Event{click(290, 290)},
+				fired:  func() int { return 0 }}
+		},
+		"DatabaseEditor": func() honourCase {
+			src := newCannedSource()
+			d := NewDatabaseEditor(src)
+			d.SetBounds(Rect{W: 600, H: 400})
+			d.SetSQL("select 1")
+			tb := d.Toolbar().Bounds()
+			return honourCase{w: d, off: d.Disabled(),
+				state:  func() string { return src.lastQuery },
+				events: []Event{click(tb.X+5, tb.Y+tb.H/2)},
+				fired:  func() int { return 0 }}
+		},
+		"DatePicker": func() honourCase {
+			d := NewDatePicker(2026, 8, 16)
+			d.SetBounds(Rect{W: 120, H: 24})
+			return honourCase{w: d, off: d.Disabled(),
+				state:  func() string { return fmt.Sprint(d.Open().Get()) },
+				events: []Event{click(5, 5)},
+				fired:  func() int { return 0 }}
+		},
+		"DateRangePicker": func() honourCase {
+			d := NewDateRangePicker(2026, 8)
+			d.SetBounds(Rect{W: 300, H: 200})
+			return honourCase{w: d, off: d.Disabled(),
+				state:  func() string { return fmt.Sprint(d.Cal.Year().Get(), d.Cal.Month().Get()) },
+				events: []Event{click(1, 1)},
+				fired:  func() int { return 0 }}
+		},
+		"DiffView": func() honourCase {
+			old, nw := "", ""
+			for i := range 100 {
+				old += fmt.Sprintf("line %d\n", i)
+				if i%30 == 15 {
+					nw += fmt.Sprintf("changed %d\n", i)
+				} else {
+					nw += fmt.Sprintf("line %d\n", i)
+				}
+			}
+			v := NewDiffView(old, nw)
+			v.SetBounds(Rect{W: 400, H: 120})
+			return honourCase{w: v, off: v.Disabled(),
+				state:  func() string { return fmt.Sprint(v.top, v.current, v.Focused()) },
+				events: []Event{{Kind: EventScroll, Delta: 3}, {Kind: EventKeyDown, Code: "n"}, click(5, 5)},
+				fired:  func() int { return 0 }}
+		},
+		"Dock": func() honourCase {
+			p := &honourProbe{}
+			d := NewDock(p)
+			d.SetBounds(Rect{W: 100, H: 100})
+			return honourCase{w: d, off: d.Disabled(),
+				state:  func() string { return "" },
+				events: []Event{click(5, 5)},
+				fired:  func() int { return p.hits }}
+		},
+		"DropZone": func() honourCase {
+			n := 0
+			d := NewDropZone("p")
+			d.OnDrop = func([]string) { n++ }
+			return honourCase{w: d, off: d.Disabled(),
+				state:  func() string { return fmt.Sprint(d.Hover().Get()) },
+				events: []Event{{Kind: EventDragStart}, {Kind: EventDrop, Code: "a"}, {Kind: EventDragStart}},
+				fired:  func() int { return n }}
+		},
+		"FileChooser": func() honourCase {
+			n := 0
+			f := NewFileChooser(&TreeNode{Label: "r"}, nil)
+			f.OnAccept = func(string) { n++ }
+			f.SetBounds(Rect{W: 400, H: 300})
+			x, y := centre(f.openButton.Bounds())
+			return honourCase{w: f, off: f.Disabled(),
+				state:  func() string { return "" },
+				events: []Event{click(x, y)},
+				fired:  func() int { return n }}
+		},
+		"FindReplace": func() honourCase {
+			n := 0
+			f := NewFindReplace()
+			f.OnNext = func() { n++ }
+			f.SetBounds(Rect{W: 600, H: 100})
+			f.Open()
+			return honourCase{w: f, off: f.Disabled(),
+				state:  func() string { return f.Query().Get() },
+				events: []Event{{Kind: EventChar, Code: "x"}, {Kind: EventKeyDown, Code: "Enter"}},
+				fired:  func() int { return n }}
+		},
+		// Part 1.
 		"AddressBar": func() honourCase {
 			a := &AddressBar{}
 			a.SetBounds(Rect{W: 200, H: 24})
@@ -254,5 +419,123 @@ func TestDisabledContainerSubtreeTakesNoFocus(t *testing.T) {
 	v.OnEvent(Event{Kind: EventChar, Code: "z"})
 	if got := e.Text().Get(); got != "abz" {
 		t.Fatalf("re-enabled FormField: Entry is %q, want \"abz\"", got)
+	}
+}
+
+// Keyboard path, part 2: routeFocusKey sends keys straight to a focused
+// descendant, so a disabled ClosablePane must neither be walked into nor take a
+// key directly. The body Entry is the witness.
+func TestDisabledClosablePaneTakesNoKeys(t *testing.T) {
+	e := NewEntry("ab")
+	cp := NewClosablePane("t", e)
+	v := NewVBox()
+	v.Append(cp)
+	v.SetBounds(Rect{W: 300, H: 120})
+	type pane = ClosablePane
+	press := func(w Widget) {
+		w.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
+		w.OnEvent(Event{Kind: EventChar, Code: "z"})
+	}
+
+	cp.Disabled().Set(true)
+	press(v)
+	if got := e.Text().Get(); got != "ab" {
+		t.Fatalf("disabled pane, keys through the walk: Entry became %q, want \"ab\"", got)
+	}
+	cp.Disabled().Set(false)
+	// Tab twice: the first stop is the close button, the second the Entry.
+	v.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
+	v.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
+	cp.Disabled().Set(true)
+	// Focus is already inside; the pane must refuse keys handed to it directly.
+	cp.OnEvent(Event{Kind: EventChar, Code: "z"})
+	cp.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
+	if got := e.Text().Get(); got != "ab" {
+		t.Fatalf("disabled pane, keys sent directly: Entry became %q, want \"ab\"", got)
+	}
+	cp.Disabled().Set(false)
+	cp.OnEvent(Event{Kind: EventChar, Code: "z"})
+	if got := e.Text().Get(); got != "abz" {
+		t.Fatalf("re-enabled pane: Entry is %q, want \"abz\"", got)
+	}
+}
+
+// A disabled DiffView is skipped by the focus walk, and refuses keys sent to it
+// after it already held focus.
+func TestDisabledDiffViewTakesNoKeys(t *testing.T) {
+	old, nw := "", ""
+	for i := range 100 {
+		old += fmt.Sprintf("line %d\n", i)
+		if i%30 == 15 {
+			nw += "changed\n"
+		} else {
+			nw += fmt.Sprintf("line %d\n", i)
+		}
+	}
+	d := NewDiffView(old, nw)
+	v := NewVBox()
+	v.Append(d)
+	v.SetBounds(Rect{W: 400, H: 120})
+	key := func(code string) { v.OnEvent(Event{Kind: EventKeyDown, Code: code}) }
+
+	d.Disabled().Set(true)
+	key("Tab")
+	key("n")
+	if d.Focused() || d.current != -1 {
+		t.Fatalf("disabled DiffView took focus %v / moved to change %d", d.Focused(), d.current)
+	}
+	d.Disabled().Set(false)
+	key("Tab")
+	key("n")
+	if !d.Focused() || d.current != 0 {
+		t.Fatalf("enabled DiffView: focus %v, change %d, want true / 0", d.Focused(), d.current)
+	}
+	d.Disabled().Set(true)
+	d.OnEvent(Event{Kind: EventKeyDown, Code: "n"})
+	if d.current != 0 {
+		t.Fatalf("disabled DiffView, key sent directly: change %d, want 0", d.current)
+	}
+}
+
+// CommandPalette.HandleKey is a public keyboard entry that does not go through
+// OnEvent: the flag must hold there too.
+func TestDisabledCommandPaletteHandleKey(t *testing.T) {
+	n := 0
+	c := NewCommandPalette([]PaletteCommand{{Label: "a", Action: func() { n++ }}})
+	c.Visible().Set(true)
+	c.Disabled().Set(true)
+	c.HandleKey(Event{Kind: EventChar, Code: "a"})
+	c.HandleKey(Event{Kind: EventKeyDown, Code: "Enter"})
+	if c.A11y().Value != "" || n != 0 {
+		t.Fatalf("disabled palette: query %q, %d commands run, want \"\" and 0", c.A11y().Value, n)
+	}
+	c.Disabled().Set(false)
+	c.HandleKey(Event{Kind: EventChar, Code: "a"})
+	if c.A11y().Value != "a" {
+		t.Fatalf("enabled palette: query %q, want \"a\"", c.A11y().Value)
+	}
+	c.HandleKey(Event{Kind: EventKeyDown, Code: "Enter"})
+	if n != 1 {
+		t.Fatalf("enabled palette: %d commands run, want 1", n)
+	}
+}
+
+// The composites of this batch other than ClosablePane hold widgets but are
+// dead ends for the focus walk (no focusableChildren), so a key can reach their
+// children only through their own OnEvent, which the flag gates. If one of them
+// ever becomes a focus enumerator, this fails and the gate must be re-checked.
+func TestBatch2CompositesAreFocusDeadEnds(t *testing.T) {
+	for name, w := range map[string]Widget{
+		"ActionSheet":     NewActionSheet("t"),
+		"DatabaseEditor":  NewDatabaseEditor(newCannedSource()),
+		"Dock":            NewDock(nil),
+		"FileChooser":     NewFileChooser(&TreeNode{Label: "r"}, nil),
+		"FindReplace":     NewFindReplace(),
+		"DatePicker":      NewDatePicker(2026, 8, 16),
+		"DateRangePicker": NewDateRangePicker(2026, 8),
+	} {
+		if _, ok := w.(focusEnumerator); ok {
+			t.Errorf("%s is a focusEnumerator: keys can reach its children past its gate", name)
+		}
 	}
 }

@@ -385,13 +385,16 @@ func (d *DatabaseEditor) Children() []Widget {
 // A11y reports the DatabaseEditor as a labelled group; WalkA11y then descends
 // through Children to announce the toolbar, tree, editor and grid.
 func (d *DatabaseEditor) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: "Database editor"}
+	return A11yInfo{Role: RoleGroup, Name: "Database editor", Disabled: d.Disabled().Get()}
 }
 
 // OnEvent routes a widget-local event to the child whose absolute bounds contain
 // it, translated into that child's local space. A click that lands on the
 // self-painted error strip (no child) is a no-op.
 func (d *DatabaseEditor) OnEvent(ev Event) {
+	if d.Disabled().Get() {
+		return
+	}
 	pr := d.Bounds()
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	for _, child := range d.Children() {

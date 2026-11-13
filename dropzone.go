@@ -115,6 +115,9 @@ func (d *DropZone) Draw(p painter.Painter, theme *Theme) {
 // as a demo/test hook. All other event kinds are ignored so a keyboard event
 // bound for a sibling widget does not accidentally trigger a drop.
 func (d *DropZone) OnEvent(ev Event) {
+	if d.Disabled().Get() {
+		return
+	}
 	switch ev.Kind {
 	case EventDragStart, EventDragMove:
 		d.Hover().Set(true)

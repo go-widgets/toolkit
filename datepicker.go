@@ -161,7 +161,7 @@ func (dp *DatePicker) drawIcon(p painter.Painter, r Rect, theme *Theme) {
 // the popup is forwarded (translated to Calendar-local coordinates) to the
 // Calendar, whose Day Observable change closes the popup (see NewDatePicker).
 func (dp *DatePicker) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || dp.Disabled().Get() {
 		return
 	}
 	r := dp.Bounds()

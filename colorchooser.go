@@ -133,6 +133,9 @@ func (c *ColorChooser) Draw(p painter.Painter, theme *Theme) {
 // track (e.g. on the preview/hex area) grabs nothing. Coordinates are
 // widget-local.
 func (c *ColorChooser) OnEvent(ev Event) {
+	if c.Disabled().Get() {
+		return
+	}
 	r := c.Bounds()
 	switch ev.Kind {
 	case EventClick:

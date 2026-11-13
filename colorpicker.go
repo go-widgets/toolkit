@@ -386,6 +386,9 @@ func drawPickerMarker(p painter.Painter, cx, cy int) {
 // keeps moving the same control even after the cursor leaves its rect), and
 // a plain click on the eyedropper button.
 func (c *ColorPicker) OnEvent(ev Event) {
+	if c.Disabled().Get() {
+		return
+	}
 	switch ev.Kind {
 	case EventClick:
 		switch {

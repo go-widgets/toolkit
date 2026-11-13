@@ -114,6 +114,9 @@ func (f *FileChooser) Draw(p painter.Painter, theme *Theme) {
 // OnEvent dispatches to the child widgets based on which one the event
 // falls inside.
 func (f *FileChooser) OnEvent(ev Event) {
+	if f.Disabled().Get() {
+		return
+	}
 	// ev is FileChooser-local; the sub-widgets carry absolute Bounds. Reconstruct
 	// the absolute click to hit-test them, then hand each its own local frame via
 	// translateEvent. The old code compared local ev directly to absolute child
