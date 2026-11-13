@@ -539,3 +539,107 @@ func TestBatch2CompositesAreFocusDeadEnds(t *testing.T) {
 		}
 	}
 }
+
+// popoverCase is a PopoverOwner under a PopoverHost with its popup open.
+type popoverCase struct {
+	host  *PopoverHost
+	owner PopoverOwner
+	off   *mvvm.Observable[bool]
+	state func() string
+	moves bool // a click on the popup changes state when enabled
+}
+
+func popoverCases() map[string]func() popoverCase {
+	hosted := func(w Widget, h int) *PopoverHost {
+		v := NewVBox()
+		v.AddFixed(w, h)
+		v.AddFlex(NewLabel("content"), 1)
+		host := NewPopoverHost(v)
+		host.SetBounds(Rect{W: 1100, H: 400})
+		v.SetBounds(Rect{W: 1100, H: 400})
+		return host
+	}
+	return map[string]func() popoverCase{
+		"DatePicker": func() popoverCase {
+			d := NewDatePicker(2026, 8, 16)
+			host := hosted(d, 24)
+			d.Open().Set(true)
+			return popoverCase{host, d, d.Disabled(),
+				func() string { return fmt.Sprint(d.Cal.Day().Get(), d.Open().Get()) }, true}
+		},
+		"ComboBox": func() popoverCase {
+			c := NewComboBox([]string{"one", "two", "three"})
+			host := hosted(c, 24)
+			c.Open().Set(true)
+			return popoverCase{host, c, c.Disabled(),
+				func() string { return c.Text().Get() + fmt.Sprint(c.Open().Get()) }, true}
+		},
+		"DropDown": func() popoverCase {
+			d := NewDropDown([]string{"one", "two", "three"}, 0)
+			host := hosted(d, 24)
+			d.Open().Set(true)
+			return popoverCase{host, d, d.Disabled(),
+				func() string { return fmt.Sprint(d.Selected().Get(), d.Open().Get()) }, true}
+		},
+		"Ribbon": func() popoverCase {
+			run := &sampleRun{}
+			r := run.ribbon()
+			host := hosted(r, r.Height())
+			r.SetBounds(Rect{W: 1100, H: r.Height()})
+			r.activate(rtCell(r, "Style"), partMain)
+			return popoverCase{host, r, r.Disabled(),
+				func() string { return fmt.Sprint(run.ids, r.pop != nil) }, false}
+		},
+	}
+}
+
+// PopoverHost offers a click to an open popup before the tree: a second click
+// route that skips OnEvent. A disabled owner must show no popup and consume no
+// click on it, even when it was open before it was disabled.
+func TestDisabledPopoverOwnersTakeNoPopupClicks(t *testing.T) {
+	for name, build := range popoverCases() {
+		t.Run(name, func(t *testing.T) {
+			c := build()
+			pb := c.owner.PopoverBounds()
+			x, y := pb.X+pb.W/2, pb.Y+pb.H/2
+			if name == "DatePicker" {
+				// first column, second week row: a day other than the 16th
+				x = pb.X + scaled(CalendarCellW)/2
+				y = pb.Y + scaled(CalendarHeaderH) + 2*scaled(CalendarCellH) + scaled(CalendarCellH)/2
+			}
+			c.off.Set(true)
+			before := c.state()
+			if n := len(PopoverOwners(c.host)); n != 0 {
+				t.Errorf("disabled: %d popovers showing, want 0", n)
+			}
+			if c.owner.PopoverClick(x, y) {
+				t.Errorf("disabled: PopoverClick consumed a click")
+			}
+			c.host.OnEvent(Event{Kind: EventClick, X: x, Y: y})
+			if got := c.state(); got != before {
+				t.Errorf("disabled: state %q, want unchanged %q", got, before)
+			}
+			c.off.Set(false)
+			if n := len(PopoverOwners(c.host)); n != 1 {
+				t.Fatalf("re-enabled: %d popovers showing, want 1", n)
+			}
+			c.host.OnEvent(Event{Kind: EventClick, X: x, Y: y})
+			if c.moves && c.state() == before {
+				t.Errorf("re-enabled: the click changed nothing, so the gate proves nothing")
+			}
+		})
+	}
+}
+
+// DropZone.AcceptsDrop is what a host asks before showing a drop as accepted.
+func TestDisabledDropZoneRefusesDrops(t *testing.T) {
+	d := NewDropZone("p")
+	d.Disabled().Set(true)
+	if d.AcceptsDrop("a") {
+		t.Fatal("disabled DropZone accepts a drop")
+	}
+	d.Disabled().Set(false)
+	if !d.AcceptsDrop("a") || d.AcceptsDrop("") {
+		t.Fatal("enabled DropZone: want accept non-empty, refuse empty")
+	}
+}

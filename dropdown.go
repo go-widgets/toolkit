@@ -332,7 +332,7 @@ func (d *DropDown) DrawPopover(p painter.Painter, theme *Theme) {
 // click, false when the DropDown is closed (so the host falls through to its
 // normal hit-testing, where a click on the control reopens it).
 func (d *DropDown) PopoverClick(x, y int) bool {
-	if !d.Open().Get() {
+	if !d.PopoverOpen() {
 		return false
 	}
 	if pb := d.PopoverBounds(); x >= pb.X && x < pb.X+pb.W && y >= pb.Y && y < pb.Y+pb.H {
@@ -350,4 +350,4 @@ func (d *DropDown) PopoverClick(x, y int) bool {
 // half of the [PopoverOwner] capability, alongside PopoverBounds, DrawPopover and
 // PopoverClick, so a [PopoverHost] can find an open list without knowing what
 // kind of widget it belongs to.
-func (d *DropDown) PopoverOpen() bool { return d.Open().Get() }
+func (d *DropDown) PopoverOpen() bool { return d.Open().Get() && !d.Disabled().Get() }

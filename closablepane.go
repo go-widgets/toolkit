@@ -230,7 +230,7 @@ func (c *ClosablePane) tipBox() Rect {
 
 // PopoverOpen is whether the tooltip is showing: it is drawn over the panes that
 // follow, which a pane cannot do from its own Draw.
-func (c *ClosablePane) PopoverOpen() bool { return c.tipShown() }
+func (c *ClosablePane) PopoverOpen() bool { return !c.Disabled().Get() && c.tipShown() }
 
 // PopoverBounds is where the tooltip is.
 func (c *ClosablePane) PopoverBounds() Rect { return c.tipBox() }

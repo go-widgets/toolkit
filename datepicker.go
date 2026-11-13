@@ -123,13 +123,13 @@ func (dp *DatePicker) DrawPopover(p painter.Painter, theme *Theme) {
 }
 
 // PopoverOpen reports whether the calendar is showing.
-func (dp *DatePicker) PopoverOpen() bool { return dp.Open().Get() }
+func (dp *DatePicker) PopoverOpen() bool { return dp.Open().Get() && !dp.Disabled().Get() }
 
 // PopoverClick routes a click at (x, y), in the frame PopoverBounds uses, while the
 // calendar is open: inside it goes to the Calendar (a day closes the popup),
 // anywhere else closes it. It reports whether the open calendar took the click.
 func (dp *DatePicker) PopoverClick(x, y int) bool {
-	if !dp.Open().Get() {
+	if !dp.PopoverOpen() {
 		return false
 	}
 	if pb := dp.PopoverBounds(); x >= pb.X && x < pb.X+pb.W && y >= pb.Y && y < pb.Y+pb.H {

@@ -262,14 +262,14 @@ func (c *ComboBox) DrawPopover(p painter.Painter, theme *Theme) {
 }
 
 // PopoverOpen reports whether the list is showing.
-func (c *ComboBox) PopoverOpen() bool { return c.Open().Get() }
+func (c *ComboBox) PopoverOpen() bool { return c.Open().Get() && !c.Disabled().Get() }
 
 // PopoverClick routes a click at (x, y), in the frame PopoverBounds uses, while the
 // list is open: inside it selects that option, anywhere else closes it. It reports
 // whether the open list took the click, so a click on the list is never delivered
 // to what lies under it.
 func (c *ComboBox) PopoverClick(x, y int) bool {
-	if !c.Open().Get() {
+	if !c.PopoverOpen() {
 		return false
 	}
 	if pb := c.PopoverBounds(); x >= pb.X && x < pb.X+pb.W && y >= pb.Y && y < pb.Y+pb.H {

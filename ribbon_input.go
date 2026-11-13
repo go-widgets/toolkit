@@ -74,7 +74,7 @@ func (r *Ribbon) Animating() bool {
 // With [PopoverOwner] the ribbon works under a [PopoverHost] like a [DropDown]:
 // the host draws the floating part after the tree and offers it the clicks.
 func (r *Ribbon) PopoverOpen() bool {
-	return r.pop != nil || r.peek || r.keytips > 0 || r.tooltipVisible()
+	return !r.Disabled().Get() && (r.pop != nil || r.peek || r.keytips > 0 || r.tooltipVisible())
 }
 
 // PopoverBounds is where the floating part is: the open panel, the peeking body,
@@ -95,6 +95,9 @@ func (r *Ribbon) PopoverBounds() Rect {
 // open panel or the peeking body is handled here and consumed; a click anywhere
 // else outside the ribbon closes what is open and goes on to what it landed on.
 func (r *Ribbon) PopoverClick(x, y int) bool {
+	if r.Disabled().Get() {
+		return false
+	}
 	switch {
 	case r.pop != nil:
 		if panel, _ := r.popupGeometry(r.pop, r.metrics()); panel.Contains(x, y) {
