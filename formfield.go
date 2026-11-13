@@ -165,7 +165,7 @@ func (f *FormField) Draw(p painter.Painter, theme *Theme) {
 // are forwarded unconditionally so a focused Child sees them. Nil
 // Child is a no-op.
 func (f *FormField) OnEvent(ev Event) {
-	if f.Child == nil {
+	if f.Child == nil || f.Disabled().Get() {
 		return
 	}
 	if ev.Kind == EventClick {

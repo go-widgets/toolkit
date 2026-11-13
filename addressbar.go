@@ -110,7 +110,9 @@ func (a *AddressBar) Copied() *mvvm.Observable[bool] {
 
 // A11y reports the field as a textbox carrying its current value (the edit
 // buffer while focused, else the URL).
-func (a *AddressBar) A11y() A11yInfo { return A11yInfo{Role: RoleTextbox, Value: a.Value()} }
+func (a *AddressBar) A11y() A11yInfo {
+	return A11yInfo{Role: RoleTextbox, Value: a.Value(), Disabled: a.Disabled().Get()}
+}
 
 // Value returns the text the field shows: the edit buffer while focused, else URL.
 func (a *AddressBar) Value() string {
@@ -218,6 +220,9 @@ func (a *AddressBar) Draw(p painter.Painter, theme *Theme) {
 // focused, a rune appends, Backspace deletes, Enter commits and Escape cancels
 // (reverts the edit buffer to URL and defocuses without committing).
 func (a *AddressBar) OnEvent(ev Event) {
+	if a.Disabled().Get() {
+		return
+	}
 	switch ev.Kind {
 	case EventClick:
 		r := a.Bounds()

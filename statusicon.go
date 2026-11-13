@@ -118,7 +118,7 @@ func (s *StatusIcon) Draw(p painter.Painter, theme *Theme) {
 // StatusIconSecondary) and OnClick on any other EventClick; other event kinds
 // are ignored. Both callbacks are nil-safe.
 func (s *StatusIcon) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || s.Disabled().Get() {
 		return
 	}
 	if ev.Code == StatusIconSecondary {

@@ -91,7 +91,9 @@ func (b *SplitButton) A11y() A11yInfo {
 }
 
 // A11y reports the SearchEntry as a searchbox carrying its current text.
-func (s *SearchEntry) A11y() A11yInfo { return A11yInfo{Role: RoleSearchbox, Value: s.Text().Get()} }
+func (s *SearchEntry) A11y() A11yInfo {
+	return A11yInfo{Role: RoleSearchbox, Value: s.Text().Get(), Disabled: s.Disabled().Get()}
+}
 
 // A11y reports the TextView as a textbox carrying its full buffer text.
 func (t *TextView) A11y() A11yInfo {
@@ -258,7 +260,7 @@ func (n *Notebook) A11y() A11yInfo {
 
 // A11y reports the Breadcrumbs as navigation named by its full path.
 func (b *Breadcrumbs) A11y() A11yInfo {
-	return A11yInfo{Role: RoleNavigation, Name: strings.Join(b.Segments, " / ")}
+	return A11yInfo{Role: RoleNavigation, Name: strings.Join(b.Segments, " / "), Disabled: b.Disabled().Get()}
 }
 
 // A11y reports the Pagination as navigation carrying its "current/total"
@@ -274,7 +276,7 @@ func (s *Steps) A11y() A11yInfo {
 	if c >= 0 && c < len(s.Labels) {
 		v = s.Labels[c]
 	}
-	return A11yInfo{Role: RoleGroup, Value: v}
+	return A11yInfo{Role: RoleGroup, Value: v, Disabled: s.Disabled().Get()}
 }
 
 // A11y reports the Menu as a menu carrying the hovered row's label, if any.
@@ -310,10 +312,14 @@ func (c *CommandPalette) A11y() A11yInfo { return A11yInfo{Role: RoleDialog, Val
 func (a *Alert) A11y() A11yInfo { return A11yInfo{Role: RoleAlert, Name: a.Text} }
 
 // A11y reports the Banner as a status region named by its message.
-func (b *Banner) A11y() A11yInfo { return A11yInfo{Role: RoleStatus, Name: b.Text} }
+func (b *Banner) A11y() A11yInfo {
+	return A11yInfo{Role: RoleStatus, Name: b.Text, Disabled: b.Disabled().Get()}
+}
 
 // A11y reports the Toast as a status region named by its message.
-func (t *Toast) A11y() A11yInfo { return A11yInfo{Role: RoleStatus, Name: t.Text} }
+func (t *Toast) A11y() A11yInfo {
+	return A11yInfo{Role: RoleStatus, Name: t.Text, Disabled: t.Disabled().Get()}
+}
 
 // A11y reports the Notification as a status region named by its message.
 func (n *Notification) A11y() A11yInfo { return A11yInfo{Role: RoleStatus, Name: n.Text} }
@@ -385,7 +391,7 @@ func (c *Chip) A11y() A11yInfo {
 	if c.Closable {
 		role = RoleButton
 	}
-	return A11yInfo{Role: role, Name: c.Text}
+	return A11yInfo{Role: role, Name: c.Text, Disabled: c.Disabled().Get()}
 }
 
 // A11y reports the Kbd as text naming the key combination it renders.
@@ -497,7 +503,7 @@ func (w *Wizard) A11y() A11yInfo {
 // A11y reports the FormField as a group named by its label, carrying its
 // error text (if any) as Value.
 func (f *FormField) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: f.Label, Value: f.Error().Get()}
+	return A11yInfo{Role: RoleGroup, Name: f.Label, Value: f.Error().Get(), Disabled: f.Disabled().Get()}
 }
 
 // A11y reports the Frame as a plain grouping container. Frame carries no
@@ -579,11 +585,13 @@ func (s *Skeleton) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
 func (g *SkeletonGroup) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
 
 // A11y reports the ActionRow as a group named by its title.
-func (a *ActionRow) A11y() A11yInfo { return A11yInfo{Role: RoleGroup, Name: a.Title} }
+func (a *ActionRow) A11y() A11yInfo {
+	return A11yInfo{Role: RoleGroup, Name: a.Title, Disabled: a.Disabled().Get()}
+}
 
 // A11y reports the Toolbar as a toolbar carrying its item count.
 func (t *Toolbar) A11y() A11yInfo {
-	return A11yInfo{Role: RoleToolbar, Value: strconv.Itoa(len(t.Items)) + " items"}
+	return A11yInfo{Role: RoleToolbar, Value: strconv.Itoa(len(t.Items)) + " items", Disabled: t.Disabled().Get()}
 }
 
 // Compile-time checks that each widget added in this file satisfies

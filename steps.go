@@ -166,7 +166,7 @@ func (s *Steps) Draw(p painter.Painter, theme *Theme) {
 // sensitive -- a click on a caption or a connector is ignored. Coordinates are
 // widget-local, so the first badge's top-left is (0, cross-offset).
 func (s *Steps) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || s.Disabled().Get() {
 		return
 	}
 	vertical := s.Orientation == Vertical

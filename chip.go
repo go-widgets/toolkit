@@ -123,7 +123,7 @@ func (c *Chip) Draw(p painter.Painter, theme *Theme) {
 // slot's horizontal extent is measured against r.W rather than r.X;
 // no localisation is required at the callsite.
 func (c *Chip) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || c.Disabled().Get() {
 		return
 	}
 	if !c.Closable {

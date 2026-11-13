@@ -90,8 +90,9 @@ func (g *Gantt) A11y() A11yInfo {
 // controls — the one thing a reader needs from it.
 func (t *PagingToolbar) A11y() A11yInfo {
 	return A11yInfo{
-		Role:  RoleToolbar,
-		Value: "page " + strconv.Itoa(t.Page().Get()) + " of " + strconv.Itoa(t.PageCount),
+		Role:     RoleToolbar,
+		Value:    "page " + strconv.Itoa(t.Page().Get()) + " of " + strconv.Itoa(t.PageCount),
+		Disabled: t.Disabled().Get(),
 	}
 }
 
@@ -102,7 +103,7 @@ func (i *StatusIcon) A11y() A11yInfo {
 	if i.Badge != nil {
 		v = i.Badge.Text
 	}
-	return A11yInfo{Role: RoleStatus, Value: v}
+	return A11yInfo{Role: RoleStatus, Value: v, Disabled: i.Disabled().Get()}
 }
 
 // A11y reports the StatusArea as a toolbar of status icons.
@@ -125,7 +126,7 @@ func (d *WindowDecoration) A11y() A11yInfo { return A11yInfo{Role: RoleBanner, N
 
 // A11y reports the ButtonGroup as a group carrying how many buttons it holds.
 func (g *ButtonGroup) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: strconv.Itoa(len(g.Buttons)) + " buttons"}
+	return A11yInfo{Role: RoleGroup, Value: strconv.Itoa(len(g.Buttons)) + " buttons", Disabled: g.Disabled().Get()}
 }
 
 // A11y reports the Thumbnail as an img named by its Alt text, falling back to
@@ -135,5 +136,5 @@ func (t *Thumbnail) A11y() A11yInfo {
 	if name == "" {
 		name = t.Label
 	}
-	return A11yInfo{Role: RoleImg, Name: name}
+	return A11yInfo{Role: RoleImg, Name: name, Disabled: t.Disabled().Get()}
 }

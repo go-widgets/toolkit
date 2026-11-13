@@ -70,7 +70,7 @@ func (b *Breadcrumbs) Draw(p painter.Painter, theme *Theme) {
 // in the inter-crumb separator gap, or when OnSelect is nil, are ignored. Event
 // coordinates are widget-local, so the first crumb starts at local x == 0.
 func (b *Breadcrumbs) OnEvent(ev Event) {
-	if ev.Kind != EventClick || b.OnSelect == nil {
+	if ev.Kind != EventClick || b.OnSelect == nil || b.Disabled().Get() {
 		return
 	}
 	n := len(b.Segments)

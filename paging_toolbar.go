@@ -186,7 +186,7 @@ func (pt *PagingToolbar) drawButton(p painter.Painter, theme *Theme, rc Rect, la
 // Observable only on an actual change), Refresh fires OnRefresh. The indicator + gaps are
 // inert.
 func (pt *PagingToolbar) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || pt.Disabled().Get() {
 		return
 	}
 	r := pt.Bounds()

@@ -102,6 +102,24 @@ var disabledA11yCatalogue = map[string]func() Accessible{
 	"ViewSwitcher":   func() Accessible { return NewViewSwitcher([]string{"a", "b"}, 0) },
 	"WheelPicker":    func() Accessible { return NewWheelPicker([]string{"a", "b"}) },
 	"WorkspacePager": func() Accessible { return NewWorkspacePager(2, 0) },
+
+	// Honoured in #578 part 1; behaviour is tested by TestDisabledWidgetsHonourTheFlag.
+	"ActionRow":     func() Accessible { return NewActionRow("t") },
+	"AddressBar":    func() Accessible { return &AddressBar{} },
+	"Banner":        func() Accessible { return NewBanner("t") },
+	"Breadcrumbs":   func() Accessible { return NewBreadcrumbs([]string{"a"}) },
+	"ButtonGroup":   func() Accessible { return NewButtonGroup() },
+	"Chip":          func() Accessible { return NewChip("c") },
+	"FormField":     func() Accessible { return NewFormField("f", nil) },
+	"PagingToolbar": func() Accessible { return NewPagingToolbar(1, 2) },
+	"SearchEntry":   func() Accessible { return NewSearchEntry("") },
+	"SettingRow":    func() Accessible { return NewSettingRow("r", nil) },
+	"SettingsGroup": func() Accessible { return NewSettingsGroup("g") },
+	"StatusIcon":    func() Accessible { return NewStatusIcon(nil) },
+	"Steps":         func() Accessible { return NewSteps([]string{"a"}, 0) },
+	"Thumbnail":     func() Accessible { return NewThumbnail(make([]byte, 4), 1, 1) },
+	"Toast":         func() Accessible { return NewToast("t", ToastInfo) },
+	"Toolbar":       func() Accessible { return NewToolbar(nil) },
 }
 
 // disabledReaders returns the types, among those that answer A11y(), whose own
@@ -453,17 +471,17 @@ var disabledA11yExempt = exemptions(map[string][]string{
 		"SkeletonGroup", "Stack", "StatusArea", "VBox", "Viewport", "Wallpaper", "WindowDecoration",
 	},
 	exemptGap: {
-		"ActionSheet", "AddressBar", "Agenda", "AgendaSidebar", "AppDock", "ArticleCard", "Breadcrumbs",
-		"ButtonGroup", "ClosablePane", "ColorChooser", "ColorPicker", "CommandPalette", "ContextMenu",
+		"ActionSheet", "Agenda", "AgendaSidebar", "AppDock", "ArticleCard",
+		"ClosablePane", "ColorChooser", "ColorPicker", "CommandPalette", "ContextMenu",
 		"DatabaseEditor", "DatePicker", "DateRangePicker", "DiffView", "Dock", "DropZone", "FileChooser",
-		"FindReplace", "FontChooser", "FontPicker", "ForgePane", "FormField", "GroupCard", "Inspector",
-		"Kanban", "LinkCard", "LogView", "MarkdownEditor", "MediaCard", "PagingToolbar", "PostCard",
-		"PropertyGrid", "RichEditor", "RichEditorToolbar", "SearchEntry", "SelectionBox", "SettingRow",
-		"Splitter", "Spreadsheet", "TagField", "TerminalView", "TimePicker", "Toolbar", "Wizard",
+		"FindReplace", "FontChooser", "FontPicker", "ForgePane", "GroupCard", "Inspector",
+		"Kanban", "LinkCard", "LogView", "MarkdownEditor", "MediaCard", "PostCard",
+		"PropertyGrid", "RichEditor", "RichEditorToolbar", "SelectionBox",
+		"Splitter", "Spreadsheet", "TagField", "TerminalView", "TimePicker", "Wizard",
 		// Acting on a click, selection or drag of their own, found by re-checking
 		// each widget's OnEvent rather than its name:
-		"ActionRow", "Banner", "Border", "Chip", "Dialog", "Frame", "Gantt", "ModalWindow", "Paned",
-		"SettingsGroup", "StatusIcon", "Steps", "Surface", "Thumbnail", "Toast", "Window",
+		"Border", "Dialog", "Frame", "Gantt", "ModalWindow", "Paned",
+		"Surface", "Window",
 	},
 })
 

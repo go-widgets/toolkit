@@ -425,7 +425,7 @@ func (t *Toast) ButtonRects() []Rect {
 // hit-test runs against [Toast.ButtonRects], the same geometry a host reads to
 // route a click itself.
 func (t *Toast) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || t.Disabled().Get() {
 		return
 	}
 	a := t.acts()
