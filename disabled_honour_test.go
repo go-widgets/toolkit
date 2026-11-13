@@ -773,6 +773,13 @@ func TestDisabledPopoverOwnersTakeNoPopupClicks(t *testing.T) {
 				y = pb.Y + scaled(CalendarHeaderH) + 2*scaled(CalendarCellH) + scaled(CalendarCellH)/2
 			}
 			c.off.Set(true)
+			// before any walk (which would close the list): the owner's own gate
+			if c.owner.PopoverOpen() {
+				t.Errorf("disabled: PopoverOpen is true before any walk")
+			}
+			if c.owner.PopoverClick(x, y) {
+				t.Errorf("disabled: PopoverClick consumed a click before any walk")
+			}
 			if n := len(PopoverOwners(c.host)); n != 0 {
 				t.Errorf("disabled: %d popovers showing, want 0", n)
 			}
