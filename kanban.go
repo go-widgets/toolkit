@@ -516,6 +516,12 @@ func (k *Kanban) MoveCard(fromCol, fromCard, toCol, toIdx int) {
 // Columns and firing OnCardMove. A press-release with no intervening drag
 // leaves the board a plain click. Both callbacks are nil-safe.
 func (k *Kanban) OnEvent(ev Event) {
+	if k.Disabled().Get() {
+		// a card in flight is dropped where it was, not carried over to a later
+		// release after the board is enabled again
+		k.dragging, k.moved = false, false
+		return
+	}
 	switch ev.Kind {
 	case EventScroll:
 		// Native wheel scroll: shift the card stack of the column under the

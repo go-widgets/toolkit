@@ -559,6 +559,9 @@ func (in *Inspector) fit(s string, w int) string {
 // OnEvent gives keys to the focused editor, a click on a swatch to the picker
 // toggle, and any other click to the editor under it.
 func (in *Inspector) OnEvent(ev Event) {
+	if in.Disabled().Get() {
+		return
+	}
 	if routeFocusKey(in, ev) {
 		return
 	}
@@ -585,4 +588,6 @@ func (in *Inspector) OnEvent(ev Event) {
 }
 
 // A11y reports the inspector as a group.
-func (in *Inspector) A11y() A11yInfo { return A11yInfo{Role: RoleGroup} }
+func (in *Inspector) A11y() A11yInfo {
+	return A11yInfo{Role: RoleGroup, Disabled: in.Disabled().Get()}
+}

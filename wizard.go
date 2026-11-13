@@ -242,6 +242,11 @@ func (w *Wizard) Draw(p painter.Painter, theme *Theme) {
 // that lands in neither the buttons nor the body (e.g. the empty
 // strip band) is ignored.
 func (w *Wizard) OnEvent(ev Event) {
+	if w.Disabled().Get() {
+		// a button held when the wizard was disabled is let go, not left pressed
+		w.pressedBtn = wizBtnNone
+		return
+	}
 	if len(w.Steps) == 0 {
 		return
 	}

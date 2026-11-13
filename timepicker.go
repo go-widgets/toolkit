@@ -246,7 +246,7 @@ func drawDownTriangle(p painter.Painter, cx, cy int, ink RGBA) {
 // hit regions are computed from the same layout() Draw uses, so clicks always
 // line up with what is painted.
 func (tp *TimePicker) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || tp.Disabled().Get() {
 		return
 	}
 	r := tp.Bounds()

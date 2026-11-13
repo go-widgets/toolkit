@@ -4,7 +4,10 @@
 
 package toolkit
 
-import "github.com/go-widgets/painter"
+import (
+	"github.com/go-widgets/mvvm"
+	"github.com/go-widgets/painter"
+)
 
 // PopoverOwner is the capability of a widget part of which is drawn OUTSIDE its own
 // bounds and on top of everything else: [DropDown]'s option list is the one in
@@ -163,6 +166,15 @@ func collectPopoverOwners(w Widget, out *[]PopoverOwner, dx, dy int) {
 	if w == nil {
 		return
 	}
+	// A disabled widget's whole subtree shows no popup: a container cannot reach
+	// into the open list of a drop-down it holds, so the walk refuses it here.
+	// Base has no hook on the Disabled observable (it is created lazily, with no
+	// constructor to subscribe from), so the open lists are closed here, on the
+	// first walk after the flag turns true: they do not come back on re-enable.
+	if d, ok := w.(disabledReporter); ok && d.isDisabled() {
+		closePopups(w)
+		return
+	}
 	if p, ok := w.(PopoverOwner); ok && p.PopoverOpen() {
 		if dx == 0 && dy == 0 {
 			*out = append(*out, p)
@@ -177,6 +189,21 @@ func collectPopoverOwners(w Widget, out *[]PopoverOwner, dx, dy int) {
 	if c, ok := w.(childContainer); ok {
 		for _, kid := range c.Children() {
 			collectPopoverOwners(kid, out, dx, dy)
+		}
+	}
+}
+
+// closePopups closes every open list (a widget with an Open observable) in the
+// subtree rooted at w.
+func closePopups(w Widget) {
+	if o, ok := w.(interface{ Open() *mvvm.Observable[bool] }); ok {
+		o.Open().Set(false)
+	}
+	if c, ok := w.(childContainer); ok {
+		for _, kid := range c.Children() {
+			if kid != nil {
+				closePopups(kid)
+			}
 		}
 	}
 }

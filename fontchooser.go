@@ -108,7 +108,7 @@ func (fc *FontChooser) rowAt(y int) int {
 // OnEvent: a click on a row selects it, applies it as the active font (SetFont),
 // and fires OnChoose.
 func (fc *FontChooser) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || fc.Disabled().Get() {
 		return
 	}
 	idx := fc.rowAt(ev.Y)

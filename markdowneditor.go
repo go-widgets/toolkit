@@ -164,7 +164,7 @@ func (m *MarkdownEditor) Draw(p painter.Painter, theme *Theme) {
 // Source, matching the "only Source is interactive" model -- there is no
 // competing widget that could plausibly want them instead.
 func (m *MarkdownEditor) OnEvent(ev Event) {
-	if m.Source == nil {
+	if m.Source == nil || m.Disabled().Get() {
 		return
 	}
 	r := m.Bounds()

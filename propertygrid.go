@@ -118,5 +118,8 @@ func (pg *PropertyGrid) Draw(p painter.Painter, theme *Theme) {
 
 // OnEvent forwards to the backing Table (selection, and Value-cell editing).
 func (pg *PropertyGrid) OnEvent(ev Event) {
+	if pg.Disabled().Get() {
+		return
+	}
 	pg.table.OnEvent(ev)
 }

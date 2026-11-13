@@ -154,6 +154,11 @@ func (b *Border) Draw(p painter.Painter, theme *Theme) {
 // OnEvent forwards to the first region whose Bounds contains the point,
 // translated into that region's local space.
 func (b *Border) OnEvent(ev Event) {
+	if b.Disabled().Get() {
+		// a handle in hand is let go, not kept for the next release
+		b.resizing = false
+		return
+	}
 	pr := b.Bounds()
 	sx, sy := ev.X+pr.X, ev.Y+pr.Y
 	switch ev.Kind {

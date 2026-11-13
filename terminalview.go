@@ -349,7 +349,7 @@ func (t *TerminalView) Draw(p painter.Painter, theme *Theme) {
 // OnEvent forwards the event to OnKey when one is set, letting the host
 // drive a shell from the grid's key and character input.
 func (t *TerminalView) OnEvent(ev Event) {
-	if t.OnKey != nil {
+	if t.OnKey != nil && !t.Disabled().Get() {
 		t.OnKey(ev)
 	}
 }

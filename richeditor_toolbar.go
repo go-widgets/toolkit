@@ -259,7 +259,7 @@ func (t *RichEditorToolbar) Editor() *RichEditor { return t.ed }
 // technology announces it as a formatting toolbar; its buttons are exposed as
 // children (see [RichEditorToolbar.Children]).
 func (t *RichEditorToolbar) A11y() A11yInfo {
-	return A11yInfo{Role: RoleToolbar, Value: strconv.Itoa(len(t.buttons)) + " buttons"}
+	return A11yInfo{Role: RoleToolbar, Value: strconv.Itoa(len(t.buttons)) + " buttons", Disabled: t.Disabled().Get()}
 }
 
 // Children yields the button strip's children (buttons + dividers) so a11y and
@@ -304,7 +304,12 @@ func (t *RichEditorToolbar) Draw(p painter.Painter, theme *Theme) {
 
 // OnEvent forwards the event to the button strip (which routes clicks to the
 // button under the pointer).
-func (t *RichEditorToolbar) OnEvent(ev Event) { t.box.OnEvent(ev) }
+func (t *RichEditorToolbar) OnEvent(ev Event) {
+	if t.Disabled().Get() {
+		return
+	}
+	t.box.OnEvent(ev)
+}
 
 // reToolbarSeparator is a 1-pixel vertical divider drawn between button groups.
 type reToolbarSeparator struct{ Base }

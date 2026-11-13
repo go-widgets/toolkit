@@ -35,6 +35,170 @@ func centre(r Rect) (int, int) { return r.X + r.W/2, r.Y + r.H/2 }
 func honourCases() map[string]func() honourCase {
 	click := func(x, y int) Event { return Event{Kind: EventClick, X: x, Y: y} }
 	return map[string]func() honourCase{
+		// Part 3.
+		"Border": func() honourCase {
+			p := &honourProbe{}
+			b := NewBorder()
+			b.Center = p
+			b.SetBounds(Rect{W: 100, H: 100})
+			return honourCase{w: b, off: b.Disabled(),
+				state:  func() string { return "" },
+				events: []Event{click(5, 5)},
+				fired:  func() int { return p.hits }}
+		},
+		"Frame": func() honourCase {
+			p := &honourProbe{}
+			f := NewFrame(p)
+			f.SetBounds(Rect{W: 100, H: 100})
+			return honourCase{w: f, off: f.Disabled(),
+				state:  func() string { return "" },
+				events: []Event{click(50, 50)},
+				fired:  func() int { return p.hits }}
+		},
+		"FontChooser": func() honourCase {
+			n := 0
+			fc := NewFontChooser([]FontOption{{Name: "a", Font: NewBitmapFont(1)}, {Name: "b", Font: NewBitmapFont(2)}})
+			fc.OnChoose = func(int, Font) { n++ }
+			fc.SetBounds(Rect{W: 120, H: 200})
+			y := FontChooserPad + fc.rowHeight(0) + FontChooserRowPad
+			return honourCase{w: fc, off: fc.Disabled(),
+				state:  func() string { return fmt.Sprint(fc.Selected().Get()) },
+				events: []Event{click(10, y)},
+				fired:  func() int { return n }}
+		},
+		"FontPicker": func() honourCase {
+			f := NewFontPicker([]string{"a", "b", "c"})
+			f.SetBounds(Rect{W: 300, H: 24})
+			x, y := centre(f.family.Bounds())
+			return honourCase{w: f, off: f.Disabled(),
+				state:  func() string { return fmt.Sprint(f.family.Open().Get()) },
+				events: []Event{click(x, y)},
+				fired:  func() int { return 0 }}
+		},
+		"ForgePane": func() honourCase {
+			m := newFakeForge()
+			f := laidOutForge(m, 600, 600)
+			x, y := centre(f.client.connect.Bounds())
+			return honourCase{w: f, off: f.Disabled(),
+				state:  func() string { return "" },
+				events: []Event{click(x, y)},
+				fired:  func() int { return m.ran["connect"] }}
+		},
+		"Inspector": func() honourCase {
+			in, got := testInspector()
+			r, _ := in.EditorRect("name")
+			x, y := centre(r)
+			return honourCase{w: in, off: in.Disabled(),
+				state:  func() string { return in.Get("name") },
+				events: []Event{click(x, y), {Kind: EventChar, Code: "z"}},
+				fired:  func() int { return len(*got) }}
+		},
+		"Kanban": func() honourCase {
+			var n int
+			k := sampleBoard()
+			k.SetBounds(Rect{W: 600, H: 300})
+			k.OnCardClick = func(int, int) { n++ }
+			colW := (600 - 2*KanbanColGap) / 3
+			from, to := k.cardLocalRect(0, 0, colW), k.cardLocalRect(2, 0, colW)
+			return honourCase{w: k, off: k.Disabled(),
+				state: func() string {
+					return fmt.Sprint(k.SelectedCol().Get(), k.SelectedCard().Get(), len(k.Columns[2].Cards))
+				},
+				events: []Event{click(from.X+4, from.Y+4),
+					{Kind: EventMouseDrag, X: to.X + 4, Y: to.Y + 4},
+					{Kind: EventMouseUp, X: to.X + 4, Y: to.Y + 4}},
+				fired: func() int { return n }}
+		},
+		"LogView": func() honourCase {
+			lv := NewLogView()
+			lv.SetBounds(Rect{W: 200, H: 40})
+			for i := range 30 {
+				lv.Append("t", LogInfo, fmt.Sprint("line ", i))
+			}
+			return honourCase{w: lv, off: lv.Disabled(),
+				state:  func() string { return fmt.Sprint(lv.sv.OffsetY().Get()) },
+				events: []Event{{Kind: EventScroll, Delta: -3}},
+				fired:  func() int { return 0 }}
+		},
+		"MarkdownEditor": func() honourCase {
+			m := NewMarkdownEditor("hello")
+			m.SetBounds(Rect{W: 100, H: 60})
+			return honourCase{w: m, off: m.Disabled(),
+				state:  func() string { return fmt.Sprint(m.Text(), m.Source.HasFocus().Get()) },
+				events: []Event{click(10, 10), {Kind: EventChar, Code: "x"}},
+				fired:  func() int { return 0 }}
+		},
+		"PropertyGrid": func() honourCase {
+			n := 0
+			pg := NewPropertyGrid()
+			pg.OnChange = func(string, string) { n++ }
+			pg.Add("a", "1")
+			pg.SetBounds(Rect{W: 200, H: 100})
+			return honourCase{w: pg, off: pg.Disabled(),
+				state: func() string { return pg.Value("a") },
+				events: []Event{click(150, TableHeaderHeight+2),
+					{Kind: EventChar, Code: "!"}, {Kind: EventKeyDown, Code: "Enter"}},
+				fired: func() int { return n }}
+		},
+		"RichEditorToolbar": func() honourCase {
+			n := 0
+			t := NewRichEditorToolbar(nil)
+			orig := t.buttons[0].OnClick
+			t.buttons[0].OnClick = func() { n++; orig() }
+			t.SetBounds(Rect{W: 400, H: 28})
+			x, y := centre(t.buttons[0].Bounds())
+			return honourCase{w: t, off: t.Disabled(),
+				state:  func() string { return "" },
+				events: []Event{click(x, y)},
+				fired:  func() int { return n }}
+		},
+		"Splitter": func() honourCase {
+			s := honourSplitter()
+			hr, _ := s.HandleRect(0)
+			x, y := centre(hr)
+			return honourCase{w: s, off: s.Disabled(),
+				state: func() string { return fmt.Sprint(s.PaneSize(0), s.Dragging().Get()) },
+				events: []Event{click(x, y), {Kind: EventMouseDrag, X: x + 20, Y: y},
+					{Kind: EventMouseUp, X: x + 20, Y: y}},
+				fired: func() int { return 0 }}
+		},
+		"TagField": func() honourCase {
+			t := NewTagField()
+			t.SetBounds(Rect{W: 200, H: 24})
+			return honourCase{w: t, off: t.Disabled(),
+				state:  func() string { return fmt.Sprint(t.Tags().Get(), t.Text().Get()) },
+				events: []Event{{Kind: EventChar, Code: "a"}, {Kind: EventKeyDown, Code: "Enter"}},
+				fired:  func() int { return 0 }}
+		},
+		"TerminalView": func() honourCase {
+			n := 0
+			v := NewTerminalView(4, 2)
+			v.OnKey = func(Event) { n++ }
+			return honourCase{w: v, off: v.Disabled(),
+				state:  func() string { return "" },
+				events: []Event{{Kind: EventKeyDown, Code: "k"}},
+				fired:  func() int { return n }}
+		},
+		"TimePicker": func() honourCase {
+			tp := NewTimePicker(9, 30)
+			tp.SetBounds(Rect{W: 200, H: 30})
+			hourCell, _, _, _ := tp.layout()
+			up, _ := spinButtons(hourCell)
+			x, y := centre(up)
+			return honourCase{w: tp, off: tp.Disabled(),
+				state:  func() string { return tp.String() },
+				events: []Event{click(x, y)},
+				fired:  func() int { return 0 }}
+		},
+		"Wizard": func() honourCase {
+			w := NewWizard([]WizardStep{{Title: "a"}, {Title: "b"}})
+			w.SetBounds(Rect{W: 300, H: 200})
+			x, y := centre(w.nextRect())
+			return honourCase{w: w, off: w.Disabled(),
+				state:  func() string { return fmt.Sprint(w.Current().Get(), w.pressedBtn) },
+				events: []Event{click(x, y)},
+				fired:  func() int { return 0 }}
+		},
 		// Part 2.
 		"ActionSheet": func() honourCase {
 			a := NewActionSheet("t")
@@ -375,6 +539,7 @@ func honourCases() map[string]func() honourCase {
 // unchanged and fire no callback; re-enabling restores it; A11y follows (the
 // A11y half is audited by TestA11yDisabledAudit through the catalogue).
 func TestDisabledWidgetsHonourTheFlag(t *testing.T) {
+	defer SetFont(nil) // the FontChooser row installs the active font
 	for name, build := range honourCases() {
 		t.Run(name, func(t *testing.T) {
 			c := build()
@@ -608,10 +773,18 @@ func TestDisabledPopoverOwnersTakeNoPopupClicks(t *testing.T) {
 				y = pb.Y + scaled(CalendarHeaderH) + 2*scaled(CalendarCellH) + scaled(CalendarCellH)/2
 			}
 			c.off.Set(true)
-			before := c.state()
+			// before any walk (which would close the list): the owner's own gate
+			if c.owner.PopoverOpen() {
+				t.Errorf("disabled: PopoverOpen is true before any walk")
+			}
+			if c.owner.PopoverClick(x, y) {
+				t.Errorf("disabled: PopoverClick consumed a click before any walk")
+			}
 			if n := len(PopoverOwners(c.host)); n != 0 {
 				t.Errorf("disabled: %d popovers showing, want 0", n)
 			}
+			// the walk closes a list that was open (see closePopups)
+			before := c.state()
 			if c.owner.PopoverClick(x, y) {
 				t.Errorf("disabled: PopoverClick consumed a click")
 			}
@@ -620,6 +793,10 @@ func TestDisabledPopoverOwnersTakeNoPopupClicks(t *testing.T) {
 				t.Errorf("disabled: state %q, want unchanged %q", got, before)
 			}
 			c.off.Set(false)
+			if o, ok := c.owner.(interface{ Open() *mvvm.Observable[bool] }); ok {
+				o.Open().Set(true) // closed by the walk: the person opens it again
+			}
+			before = c.state()
 			if n := len(PopoverOwners(c.host)); n != 1 {
 				t.Fatalf("re-enabled: %d popovers showing, want 1", n)
 			}

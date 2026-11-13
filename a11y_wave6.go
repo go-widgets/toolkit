@@ -41,7 +41,9 @@ func (c *Container) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
 func (s *Stack) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
 
 // A11y reports the Border layout as presentational.
-func (b *Border) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
+func (b *Border) A11y() A11yInfo {
+	return A11yInfo{Role: RolePresentation, Disabled: b.Disabled().Get()}
+}
 
 // A11y reports the Backdrop as presentational: it dims what is behind a modal
 // and holds nothing to read.

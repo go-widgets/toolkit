@@ -221,6 +221,9 @@ func (f *FontPicker) Draw(p painter.Painter, theme *Theme) {
 
 // OnEvent gives keys to the focused control and a click to the control under it.
 func (f *FontPicker) OnEvent(ev Event) {
+	if f.Disabled().Get() {
+		return
+	}
 	if routeFocusKey(f, ev) {
 		return
 	}
@@ -238,4 +241,6 @@ func (f *FontPicker) OnEvent(ev Event) {
 }
 
 // A11y reports the picker as a group; its controls name themselves.
-func (f *FontPicker) A11y() A11yInfo { return A11yInfo{Role: RoleGroup, Name: f.family.Current()} }
+func (f *FontPicker) A11y() A11yInfo {
+	return A11yInfo{Role: RoleGroup, Name: f.family.Current(), Disabled: f.Disabled().Get()}
+}

@@ -182,6 +182,9 @@ func (t *TagField) commit() {
 // "x" close slot removes that tag. Event coordinates are widget-local per
 // the toolkit convention, so hit-testing lays the tokens out from (0, 0).
 func (t *TagField) OnEvent(ev Event) {
+	if t.Disabled().Get() {
+		return
+	}
 	switch ev.Kind {
 	case EventChar:
 		if ev.Code == "," {

@@ -103,6 +103,27 @@ var disabledA11yCatalogue = map[string]func() Accessible{
 	"WheelPicker":    func() Accessible { return NewWheelPicker([]string{"a", "b"}) },
 	"WorkspacePager": func() Accessible { return NewWorkspacePager(2, 0) },
 
+	// Honoured in #578 part 3; behaviour is tested by TestDisabledWidgetsHonourTheFlag.
+	"Border":            func() Accessible { return NewBorder() },
+	"FontChooser":       func() Accessible { return NewFontChooser(nil) },
+	"FontPicker":        func() Accessible { return NewFontPicker([]string{"a", "b"}) },
+	"ForgePane":         func() Accessible { return NewForgePane(newFakeForge()) },
+	"Frame":             func() Accessible { return NewFrame(nil) },
+	"Inspector":         func() Accessible { return NewInspector([]InspectorRow{{ID: "t", Kind: InspectorText}}) },
+	"Kanban":            func() Accessible { return NewKanban(nil) },
+	"LogView":           func() Accessible { return NewLogView() },
+	"MarkdownEditor":    func() Accessible { return NewMarkdownEditor("a") },
+	"PropertyGrid":      func() Accessible { return NewPropertyGrid() },
+	"RichEditorToolbar": func() Accessible { return NewRichEditorToolbar(nil) },
+	"Splitter": func() Accessible {
+		return NewSplitter(false, &SplitPane{Widget: NewLabel("a"), Weight: mvvm.NewObservable(1)},
+			&SplitPane{Widget: NewLabel("b"), Weight: mvvm.NewObservable(1)})
+	},
+	"TagField":     func() Accessible { return NewTagField("a") },
+	"TerminalView": func() Accessible { return NewTerminalView(4, 2) },
+	"TimePicker":   func() Accessible { return NewTimePicker(9, 30) },
+	"Wizard":       func() Accessible { return NewWizard([]WizardStep{{Title: "a"}, {Title: "b"}}) },
+
 	// Honoured in #578 part 2; behaviour is tested by TestDisabledWidgetsHonourTheFlag.
 	"ActionSheet":     func() Accessible { return NewActionSheet("t") },
 	"Agenda":          func() Accessible { return NewAgenda(nil) },
@@ -478,8 +499,9 @@ const (
 var disabledA11yExempt = exemptions(map[string][]string{
 	exemptStatic: {
 		"Alert", "AreaChart", "ArticleCard", "Avatar", "Badge", "BarChart", "Card", "CardMeta", "ChatBubble", "Clock",
-		"ContrastBadge", "Diff", "Gauge", "Image", "Kbd", "Label", "LevelBar", "LineChart", "LoadMask",
-		"MarkdownView", "Notification", "PieChart", "ProgressBar", "ProgressCircle", "RadarChart",
+		"ContrastBadge", "Diff", "Gauge", "GroupCard", "Image", "Kbd", "Label", "LevelBar", "LineChart",
+		"LinkCard", "LoadMask", "MarkdownView", "MediaCard", "Notification", "PieChart", "PostCard",
+		"ProgressBar", "ProgressCircle", "RadarChart", "SelectionBox",
 		"ScatterChart", "SegmentedBar", "Sparkline", "Spinner", "Stat", "TimeSeriesChart", "Timeline",
 		"Tooltip", "XYPlot",
 	},
@@ -489,14 +511,10 @@ var disabledA11yExempt = exemptions(map[string][]string{
 		"SkeletonGroup", "Stack", "StatusArea", "VBox", "Viewport", "Wallpaper", "WindowDecoration",
 	},
 	exemptGap: {
-		"AppDock", "FontChooser", "FontPicker", "ForgePane", "GroupCard", "Inspector",
-		"Kanban", "LinkCard", "LogView", "MarkdownEditor", "MediaCard", "PostCard",
-		"PropertyGrid", "RichEditor", "RichEditorToolbar", "SelectionBox",
-		"Splitter", "Spreadsheet", "TagField", "TerminalView", "TimePicker", "Wizard",
+		"AppDock", "RichEditor", "Spreadsheet",
 		// Acting on a click, selection or drag of their own, found by re-checking
 		// each widget's OnEvent rather than its name:
-		"Border", "Dialog", "Frame", "Gantt", "ModalWindow", "Paned",
-		"Surface", "Window",
+		"Dialog", "Gantt", "ModalWindow", "Paned", "Surface", "Window",
 	},
 })
 
