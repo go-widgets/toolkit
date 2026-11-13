@@ -16,6 +16,18 @@ import "github.com/go-widgets/toolkit/internal/formula"
 // seeded with that character, the wheel scrolls, and a scrollbar press/drag
 // scrolls; a grid click selects the cell under the pointer.
 func (s *Spreadsheet) OnEvent(ev Event) {
+	if s.Disabled().Get() {
+		// Gestures in flight end here: a scrollbar in hand is let go, and a cell
+		// being edited is cancelled, not carried over to the next key after the
+		// sheet is enabled again. An edit has not touched the model, so cancelling
+		// loses nothing the application knows about, and no half-typed text or
+		// broken formula is written (or announced through OnCellChange) on
+		// whatever event happens to arrive next.
+		s.sbV.release()
+		s.sbH.release()
+		s.cancelEdit()
+		return
+	}
 	if s.editor != nil {
 		switch ev.Kind {
 		case EventChar:

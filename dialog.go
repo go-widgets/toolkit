@@ -423,6 +423,15 @@ func (d *Dialog) Draw(p painter.Painter, theme *Theme) {
 // typed into). A click that doesn't land on any of them falls through silently
 // (the app keeps the dialog open).
 func (d *Dialog) OnEvent(ev Event) {
+	if d.Disabled().Get() {
+		// The whole dialog is inert: the title-bar close, minimise, maximise and
+		// move too, because a control the person cannot use on the content cannot
+		// be the one thing they may use on the frame. The application closes or
+		// moves it (OnClose, Minimised(), Maximised(), SetBounds are its calls). A
+		// title-bar drag in flight is dropped where it was.
+		d.dragging = false
+		return
+	}
 	// The title-bar controls.
 	if ev.Kind == EventClick {
 		for _, b := range d.titleButtons() {

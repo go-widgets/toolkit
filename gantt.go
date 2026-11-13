@@ -323,6 +323,14 @@ func (g *Gantt) TaskAt(x, y int) int {
 // EventMouseDrag applies the edit live; EventMouseUp commits it and fires
 // OnTaskChange (nil-safe).
 func (g *Gantt) OnEvent(ev Event) {
+	if g.Disabled().Get() {
+		// A bar in hand is let go where the drag left it and the edit is
+		// announced, as a release would; ScrollBy stays the application's call.
+		if g.editing {
+			g.finishEdit()
+		}
+		return
+	}
 	switch ev.Kind {
 	case EventScroll:
 		// Native wheel scroll: shift the task-row window by Delta rows (clamped
@@ -355,17 +363,20 @@ func (g *Gantt) OnEvent(ev Event) {
 			g.edited = true
 		}
 	case EventMouseUp:
-		if !g.editing {
-			return
+		if g.editing {
+			g.finishEdit()
 		}
-		i, edited := g.editIdx, g.edited
-		g.editing, g.edited = false, false
-		// Only a press that actually dragged edited the span; a plain click on
-		// a bar arms editing but changes nothing, so it must not fire the
-		// change callback.
-		if edited && g.OnTaskChange != nil {
-			g.OnTaskChange(i, g.Tasks[i].Start, g.Tasks[i].End)
-		}
+	}
+}
+
+// finishEdit ends the bar edit in progress. Only a press that actually dragged
+// edited the span; a plain click on a bar arms editing but changes nothing, so it
+// must not fire the change callback.
+func (g *Gantt) finishEdit() {
+	i, edited := g.editIdx, g.edited
+	g.editing, g.edited = false, false
+	if edited && g.OnTaskChange != nil {
+		g.OnTaskChange(i, g.Tasks[i].Start, g.Tasks[i].End)
 	}
 }
 

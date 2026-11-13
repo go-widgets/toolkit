@@ -85,7 +85,7 @@ func (d *Dock) A11y() A11yInfo {
 // A11y reports the Gantt chart as an img carrying its task count, matching the
 // other charts.
 func (g *Gantt) A11y() A11yInfo {
-	return A11yInfo{Role: RoleImg, Value: strconv.Itoa(len(g.Tasks)) + " tasks"}
+	return A11yInfo{Role: RoleImg, Value: strconv.Itoa(len(g.Tasks)) + " tasks", Disabled: g.Disabled().Get()}
 }
 
 // A11y reports the PagingToolbar as a toolbar whose value is the position it
@@ -120,7 +120,9 @@ func (s *AgendaSidebar) A11y() A11yInfo {
 }
 
 // A11y reports the Window as a dialog named by its title.
-func (w *Window) A11y() A11yInfo { return A11yInfo{Role: RoleDialog, Name: w.Title} }
+func (w *Window) A11y() A11yInfo {
+	return A11yInfo{Role: RoleDialog, Name: w.Title, Disabled: w.Disabled().Get()}
+}
 
 // A11y reports the WindowDecoration as a banner named by its title: it is the
 // titlebar region, not the window itself.

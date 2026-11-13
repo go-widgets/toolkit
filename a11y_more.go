@@ -462,7 +462,9 @@ func statusSegLabel(seg StatusSegment) string {
 // A11y reports the Dialog as a dialog named by its title. This also covers
 // NewMessageDialog, which returns a plain *Dialog rather than a distinct
 // type.
-func (d *Dialog) A11y() A11yInfo { return A11yInfo{Role: RoleDialog, Name: d.Title} }
+func (d *Dialog) A11y() A11yInfo {
+	return A11yInfo{Role: RoleDialog, Name: d.Title, Disabled: d.Disabled().Get()}
+}
 
 // A11y reports the Popover as a dialog named by its title.
 func (p *Popover) A11y() A11yInfo { return A11yInfo{Role: RoleDialog, Name: p.Title} }
@@ -516,7 +518,7 @@ func (f *FormField) A11y() A11yInfo {
 func (f *Frame) A11y() A11yInfo { return A11yInfo{Role: RoleGroup, Disabled: f.Disabled().Get()} }
 
 // A11y reports the Paned as a plain grouping container for its two panes.
-func (p *Paned) A11y() A11yInfo { return A11yInfo{Role: RoleGroup} }
+func (p *Paned) A11y() A11yInfo { return A11yInfo{Role: RoleGroup, Disabled: p.Disabled().Get()} }
 
 // A11y reports the ScrollView as a plain grouping container for its child.
 func (s *ScrollView) A11y() A11yInfo { return A11yInfo{Role: RoleGroup} }

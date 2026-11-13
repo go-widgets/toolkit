@@ -160,7 +160,7 @@ func (e *RichEditor) ScrollOffset() *mvvm.Observable[int] {
 // A11y exposes the editor as a textbox whose value is the document's plain text,
 // so an assistive technology reads the edited content.
 func (e *RichEditor) A11y() A11yInfo {
-	return A11yInfo{Role: RoleTextbox, Value: richdoc.PlainText(e.docValue())}
+	return A11yInfo{Role: RoleTextbox, Value: richdoc.PlainText(e.docValue()), Disabled: e.Disabled().Get()}
 }
 
 // SetDocument replaces the whole document and parks the caret at the start. It
@@ -590,8 +590,12 @@ func (e *RichEditor) drawScrollbar(p painter.Painter, theme *Theme, lay reLayout
 // --- events ---------------------------------------------------------------
 
 // OnEvent dispatches clicks (caret placement + drag selection), the wheel and
-// keyboard navigation/editing.
+// keyboard navigation/editing. A disabled editor takes none of them; InsertText
+// and the other public editing methods are application calls and stay open.
 func (e *RichEditor) OnEvent(ev Event) {
+	if e.Disabled().Get() {
+		return
+	}
 	switch ev.Kind {
 	case EventClick:
 		e.HasFocus().Set(true)

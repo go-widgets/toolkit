@@ -167,7 +167,15 @@ func (w *Window) ResizeTo(width, height int) {
 // HitRegion reports which part of the window the surface point (px, py) lands
 // on. Tools win over the bare title bar; the grip (when Resizable) wins over
 // the body it overlaps.
+//
+// A disabled window answers WindowNone everywhere: a host drives a title-bar
+// drag or a resize through HitRegion and then MoveBy / ResizeTo, so an ungated
+// answer would let a person move a window the application has disabled. The
+// application's own MoveBy and ResizeTo calls still work.
 func (w *Window) HitRegion(px, py int) WindowRegion {
+	if w.Disabled().Get() {
+		return WindowNone
+	}
 	for reg, rc := range w.toolRects() {
 		if rc.Contains(px, py) {
 			return reg
@@ -235,8 +243,12 @@ func (w *Window) drawTool(p painter.Painter, reg WindowRegion, rc Rect, ink RGBA
 // a click in the body forwards to Body in body-local coordinates. Title-bar and
 // resize-grip DRAGS are not handled here — the app drives those via MoveBy /
 // ResizeTo — so a press on either falls through silently.
+//
+// A disabled window is wholly inert: the close, minimise and maximise tools and
+// the body alike. The application closes it itself; MoveBy and ResizeTo are its
+// calls and stay open.
 func (w *Window) OnEvent(ev Event) {
-	if ev.Kind != EventClick {
+	if ev.Kind != EventClick || w.Disabled().Get() {
 		return
 	}
 	r := w.Bounds()

@@ -193,9 +193,10 @@ func intersectRect(a, b Rect) Rect {
 }
 
 // OnEvent hands the event to the application with its coordinates moved into
-// the buffer's space.
+// the buffer's space. A disabled surface hands the application nothing: the
+// events are the person's input to a program that is not accepting any.
 func (s *Surface) OnEvent(ev Event) {
-	if s.OnInput == nil {
+	if s.OnInput == nil || s.Disabled().Get() {
 		return
 	}
 	r := s.Bounds()
@@ -207,7 +208,9 @@ func (s *Surface) OnEvent(ev Event) {
 // A11y reports the surface itself as presentation: it is a container of what
 // the application describes, not a thing in its own right, and announcing it
 // would put an unnamed group between the reader and the content.
-func (s *Surface) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
+func (s *Surface) A11y() A11yInfo {
+	return A11yInfo{Role: RolePresentation, Disabled: s.Disabled().Get()}
+}
 
 // Children returns one proxy widget per element the application reports, with
 // the element's rectangle moved onto the surface.

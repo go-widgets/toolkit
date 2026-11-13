@@ -20,6 +20,15 @@ import "github.com/go-widgets/painter"
 // reached directly as Panel, so a host configures the title/content/buttons and
 // enables the optional search field on it (or uses [NewSearchModal]).
 //
+// # Disabled
+//
+// A disabled ModalWindow is inert: Escape, the scrim click, the title-bar
+// controls and the content all do nothing. It still blocks what lies beneath it.
+// Under an [Overlay] with Modal set, a disabled modal swallows every click and key
+// meant for the application below, which is right for a busy modal. Nothing a
+// person does releases it: only the application does, by calling OnClose's
+// behaviour itself or by popping the layer (Overlay.Pop).
+//
 // A ModalWindow reports itself as presentational to the accessibility walk and
 // exposes the scrim + panel as its children, so the panel's own RoleDialog node
 // (and the content within it) is what a screen reader announces — the wrapper
@@ -132,6 +141,16 @@ func (m *ModalWindow) Draw(p painter.Painter, theme *Theme) {
 // (the surface-frame convention Overlay uses); a click is "inside the panel" when
 // its absolute point falls in the panel's bounds.
 func (m *ModalWindow) OnEvent(ev Event) {
+	if m.Disabled().Get() {
+		// Everything is inert, Escape and the scrim click included: a disabled
+		// modal is dismissed by the application, not by a person who cannot act.
+		// The panel is not handed the event, so a title-bar drag in flight is
+		// ended here rather than resumed when the modal is enabled again.
+		if m.Panel != nil {
+			m.Panel.dragging = false
+		}
+		return
+	}
 	if ev.Kind == EventKeyDown && ev.Code == "Escape" {
 		m.dismiss()
 		return
@@ -162,7 +181,9 @@ func (m *ModalWindow) dismiss() {
 // A11y reports the modal as presentational: the wrapper is scrim + z-order, and
 // the panel it contains carries the RoleDialog node a reader announces. See the
 // type doc.
-func (m *ModalWindow) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
+func (m *ModalWindow) A11y() A11yInfo {
+	return A11yInfo{Role: RolePresentation, Disabled: m.Disabled().Get()}
+}
 
 // Children yields the scrim then the panel, the order they are painted in, so a
 // generic walk (accessibility) descends into the panel and its content.
