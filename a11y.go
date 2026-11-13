@@ -133,7 +133,7 @@ func (b *Button) A11y() A11yInfo {
 	case b.pressed:
 		v = "pressed"
 	}
-	return A11yInfo{Role: RoleButton, Name: b.Label().Get(), Value: v}
+	return A11yInfo{Role: RoleButton, Name: b.Label().Get(), Value: v, Disabled: b.Disabled().Get()}
 }
 
 // A11y reports the Label as static text.

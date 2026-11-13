@@ -133,7 +133,9 @@ func (s *RangeSlider) A11y() A11yInfo {
 
 // A11y reports the DropDown as a combobox named by its currently-selected
 // option.
-func (d *DropDown) A11y() A11yInfo { return A11yInfo{Role: RoleCombobox, Name: d.Current()} }
+func (d *DropDown) A11y() A11yInfo {
+	return A11yInfo{Role: RoleCombobox, Name: d.Current(), Disabled: d.Disabled().Get()}
+}
 
 // A11y reports the Rating as a slider carrying its "value/max" score, plus the
 // numeric Min/Max/Now range triple (Min is 0, the empty rating).

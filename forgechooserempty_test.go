@@ -10,6 +10,17 @@ import (
 	"github.com/go-widgets/mvvm"
 )
 
+func TestButtonA11yReportsDisabled(t *testing.T) {
+	b := NewButton("x", nil)
+	if b.A11y().Disabled {
+		t.Error("an enabled button is announced disabled")
+	}
+	b.Disabled().Set(true)
+	if !b.A11y().Disabled {
+		t.Error("a disabled button is not announced disabled")
+	}
+}
+
 // emptyChooser is a ForgeChooser with no forge to offer yet.
 type emptyChooser struct{ ForgeModel }
 
@@ -27,6 +38,9 @@ func TestForgeChooserWithNoForgesShowsAGreyedDropDown(t *testing.T) {
 	d := f.client.forge
 	if !d.Disabled().Get() {
 		t.Fatal("the empty drop-down is not greyed")
+	}
+	if !d.A11y().Disabled {
+		t.Error("a screen reader is not told the drop-down is greyed")
 	}
 	// no gesture can open it or select an index that does not exist
 	d.OnEvent(Event{Kind: EventClick})

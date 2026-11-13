@@ -566,8 +566,9 @@ func (f *ForgePane) newClientPage(frame bool) *forgeClientPage {
 	)
 	if f.chooser != nil {
 		p.forge.Options = f.chooser.Forges()
-		// A chooser with no forge yet is a capability present in a state not yet
-		// right: the drop-down stays and is greyed, so it cannot open an empty list.
+		// A chooser with no forge at all (Forges is read once, here) is a capability
+		// present in a state not right: the drop-down stays and is greyed, so it
+		// cannot open an empty list.
 		p.forge.Disabled().Set(len(p.forge.Options) == 0)
 		f.unbind = append(f.unbind, mvvm.BindTwoWay(f.chooser.Forge(), p.forge.Selected(), f.invalidate))
 	} else {
