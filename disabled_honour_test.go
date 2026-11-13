@@ -234,3 +234,25 @@ func TestDisabledWidgetsHonourTheFlag(t *testing.T) {
 		})
 	}
 }
+
+// A disabled container's subtree must not take focus: routeFocusKey would send
+// keys straight to the focused child, past the container's own gate.
+func TestDisabledContainerSubtreeTakesNoFocus(t *testing.T) {
+	e := NewEntry("ab")
+	ff := NewFormField("f", e)
+	v := NewVBox()
+	v.Append(ff)
+	v.SetBounds(Rect{W: 300, H: 90})
+	ff.Disabled().Set(true)
+	v.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
+	v.OnEvent(Event{Kind: EventChar, Code: "z"})
+	if got := e.Text().Get(); got != "ab" {
+		t.Fatalf("disabled FormField: Entry became %q, want \"ab\"", got)
+	}
+	ff.Disabled().Set(false)
+	v.OnEvent(Event{Kind: EventKeyDown, Code: "Tab"})
+	v.OnEvent(Event{Kind: EventChar, Code: "z"})
+	if got := e.Text().Get(); got != "abz" {
+		t.Fatalf("re-enabled FormField: Entry is %q, want \"abz\"", got)
+	}
+}

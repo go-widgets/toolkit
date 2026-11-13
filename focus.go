@@ -106,10 +106,13 @@ func gatherFocusables(ce focusEnumerator, out *[]Widget) {
 		if b.W <= 0 || b.H <= 0 {
 			continue
 		}
+		// A disabled widget is skipped whether it is a leaf or a container: a
+		// disabled container's subtree must not take focus, or keys would reach
+		// its children past the container's own gate.
+		if d, ok := child.(disabledReporter); ok && d.isDisabled() {
+			continue
+		}
 		if _, ok := child.(Focusable); ok {
-			if d, ok := child.(disabledReporter); ok && d.isDisabled() {
-				continue
-			}
 			*out = append(*out, child)
 			continue
 		}
