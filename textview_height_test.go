@@ -11,7 +11,7 @@ import (
 
 // heightFor is the expected height of n lines without a horizontal bar.
 func heightFor(c *CodeEditor, n int) int {
-	return 4 + n*(c.glyphHeight()+4) + textBottomPad
+	return 4 + n*(c.glyphHeight()+4) + 4 // at MetricScale 1, the historical 4 + rows + 4
 }
 
 func newFlowEditor(src string, w int) *CodeEditor {
@@ -31,7 +31,7 @@ func TestPreferredHeightEmptyAndOneLine(t *testing.T) {
 		t.Fatalf("one line: %d, want %d", got, want)
 	}
 	var tv TextView // zero value, lines nil: still one line
-	if got, want := tv.PreferredHeight().Get(), 4+(tv.glyphHeight()+4)+textBottomPad; got != want {
+	if got, want := tv.PreferredHeight().Get(), 4+(tv.glyphHeight()+4)+4; got != want {
 		t.Fatalf("zero TextView: %d, want %d", got, want)
 	}
 }

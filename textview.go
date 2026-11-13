@@ -432,7 +432,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	}
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
 	strokeRect(p, r.X, r.Y, r.W, r.H, border)
-	lineH := t.glyphHeight() + 4 // 1-pixel-line font + 4 px line spacing
+	lineH := t.glyphHeight() + lineGap() // the font + the line spacing (4 logical px)
 	// With scrollbars the rows are clipped to the window minus the bars, and the
 	// text (not the gutter) to the text area, scrolled left by ScrollX. Without
 	// them clipR is r, txtR is unused and textX is the historical origin.
@@ -473,7 +473,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	rowA := func(i, y int) {
 		if t.RowBackground != nil {
 			if bg, ok := t.RowBackground(i); ok {
-				fillRect(p, r.X+1, y-2, r.W-2, lineH, bg)
+				fillRect(p, r.X+1, y-lineGap()/2, r.W-2, lineH, bg)
 			}
 		}
 	}
@@ -501,7 +501,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	}
 	eachRow := func(fn func(i, y int)) {
 		for i := start; i < len(t.lines); i++ {
-			y := r.Y + 4 + (i-start)*lineH
+			y := r.Y + textInset() + (i-start)*lineH
 			if y >= clipR.Y+clipR.H {
 				break // fully below the viewport
 			}
@@ -526,9 +526,9 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	}
 	if t.HasFocus().Get() {
 		cx := textX + t.CursorCol().Get()*t.glyphAdvance()
-		cy := r.Y + 4 + (t.CursorLine().Get()-start)*lineH
+		cy := r.Y + textInset() + (t.CursorLine().Get()-start)*lineH
 		if !t.caretHidden && inView(cx, cy) {
-			fillRect(p, cx, cy-1, 1, t.glyphHeight()+2, theme.OnSurface)
+			fillRect(p, cx, cy-scaled(1), 1, t.glyphHeight()+scaled(2), theme.OnSurface)
 		}
 		// IME composition preview: render the pending string in the
 		// muted SurfaceAlt tone starting at the cursor, so the user
@@ -547,7 +547,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 			continue
 		}
 		cx := textX + d.CursorCol*t.glyphAdvance()
-		cy := r.Y + 4 + (d.CursorLine-start)*lineH
+		cy := r.Y + textInset() + (d.CursorLine-start)*lineH
 		if cx < r.X || cx > r.X+r.W || !inView(cx, cy) {
 			continue
 		}
@@ -573,7 +573,7 @@ func (t *TextView) paintSelectionBand(p painter.Painter, i, textX, y, lineH int,
 		return
 	}
 	x0, x1 := t.bandXRange(i, textX, r, sel)
-	fillRect(p, x0, y-2, x1-x0, lineH, c)
+	fillRect(p, x0, y-lineGap()/2, x1-x0, lineH, c)
 }
 
 // bandXRange is the horizontal extent of the band for range sel on buffer line
@@ -824,8 +824,8 @@ func (t *TextView) visibleLines() int {
 
 // linesFitIn is visibleLines for a window avail pixels tall.
 func (t *TextView) linesFitIn(avail int) int {
-	lineH := t.glyphHeight() + 4 // > 0: glyphHeight is always positive
-	h := avail - 4
+	lineH := t.glyphHeight() + lineGap() // > 0: glyphHeight is always positive
+	h := avail - textInset()
 	if h <= 0 {
 		return 0
 	}
@@ -966,9 +966,9 @@ func (t *TextView) drawSpans(p painter.Painter, x, y int, line string, spans []T
 // nearest gap so a click on a glyph's right half lands after it. Callers
 // guarantee len(lines) > 0 before calling.
 func (t *TextView) caretAt(x, y int) (line, col int) {
-	lineH := t.glyphHeight() + 4 // > 0: glyphHeight is always positive
-	if y >= 4 {
-		line = (y - 4) / lineH
+	lineH := t.glyphHeight() + lineGap() // > 0: glyphHeight is always positive
+	if inset := textInset(); y >= inset {
+		line = (y - inset) / lineH
 	}
 	// Map the viewport row back to an absolute buffer line through the scroll
 	// offset, so a click after scrolling lands on the line the user sees.
@@ -996,7 +996,7 @@ func (t *TextView) caretAt(x, y int) (line, col int) {
 func (t *TextView) CaretPixel(line, col int) (x, y int) {
 	r := t.Bounds()
 	x = r.X + t.textLeftInset() + col*t.glyphAdvance() - t.clampedScrollX()
-	y = r.Y + 4 + (line-t.clampedScrollLine())*(t.glyphHeight()+4)
+	y = r.Y + textInset() + (line-t.clampedScrollLine())*(t.glyphHeight()+lineGap())
 	return x, y
 }
 

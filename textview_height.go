@@ -24,8 +24,20 @@ import "github.com/go-widgets/mvvm"
 // the global font is published on the next frame. The Observable only fires when
 // the value actually changes.
 
-// textBottomPad is the space under the last row, mirroring the 4 px top inset.
-const textBottomPad = 4
+// The text area's fixed spaces, in logical pixels: the inset above the first
+// row, the spacing under each row and the padding under the last. They are
+// device pixels at [MetricScale] 1 and grow with it, like the glyphs they
+// separate: the row pitch is the font plus lineGap, so a cell at device ratio 2
+// is the cell at ratio 1, twice as dense in pixels, not one with tighter rows.
+const (
+	textInsetLogical     = 4
+	lineGapLogical       = 4
+	textBottomPadLogical = 4
+)
+
+func textInset() int     { return scaled(textInsetLogical) }
+func lineGap() int       { return scaled(lineGapLogical) }
+func textBottomPad() int { return scaled(textBottomPadLogical) }
 
 // PreferredHeight is the widget height, in device pixels, that shows every line
 // without a vertical scroll: top inset + lines x line pitch + bottom padding,
@@ -45,7 +57,7 @@ func (t *TextView) computePreferredHeight() int {
 	if n < 1 {
 		n = 1
 	}
-	h := 4 + n*(t.glyphHeight()+4) + textBottomPad
+	h := textInset() + n*(t.glyphHeight()+lineGap()) + textBottomPad()
 	if t.ShowScrollbars && t.Bounds().W > 0 {
 		tw := t.Bounds().W - t.textLeftInset() - 1 - t.minimapW()
 		if t.contentWidth() > tw {
