@@ -1200,7 +1200,7 @@ func (f *FileTree) A11y() A11yInfo {
 			value += ", " + s
 		}
 	}
-	return A11yInfo{Role: RoleTree, Name: f.Label, Value: value}
+	return A11yInfo{Role: RoleTree, Name: f.Label, Value: value, Disabled: f.Disabled().Get()}
 }
 
 // fileStatusName is the status in words, for assistive technology. Empty for

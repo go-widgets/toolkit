@@ -128,7 +128,7 @@ func (v *IconGrid) A11y() A11yInfo {
 	if v.Selected().Get() >= 0 && v.Selected().Get() < len(v.Cells) {
 		label = v.Cells[v.Selected().Get()].Label
 	}
-	return A11yInfo{Role: RoleGrid, Value: label}
+	return A11yInfo{Role: RoleGrid, Value: label, Disabled: v.Disabled().Get()}
 }
 
 // SetIconSize sets the icon square side, clamped to a readable minimum, and

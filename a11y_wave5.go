@@ -20,7 +20,9 @@ import (
 
 // A11y reports the ComboBox as a combobox named by its current field text
 // (either free text typed or a picked option).
-func (c *ComboBox) A11y() A11yInfo { return A11yInfo{Role: RoleCombobox, Name: c.Text().Get()} }
+func (c *ComboBox) A11y() A11yInfo {
+	return A11yInfo{Role: RoleCombobox, Name: c.Text().Get(), Disabled: c.Disabled().Get()}
+}
 
 // A11y reports the TreeTable as a tree carrying the selected node's first-column
 // label (the column that carries the tree structure), or "" with no selection.
@@ -29,7 +31,7 @@ func (t *TreeTable) A11y() A11yInfo {
 	if sel := t.Selected().Get(); sel != nil && len(sel.Cells) > 0 {
 		v = sel.Cells[0]
 	}
-	return A11yInfo{Role: RoleTree, Value: v}
+	return A11yInfo{Role: RoleTree, Value: v, Disabled: t.Disabled().Get()}
 }
 
 // A11y reports the TagField as a group carrying its tag labels joined into one
@@ -46,7 +48,7 @@ func (c *CycleButton) A11y() A11yInfo {
 	if i := c.Index().Get(); i >= 0 && i < len(c.Options) {
 		name = c.Options[i]
 	}
-	return A11yInfo{Role: RoleButton, Name: name}
+	return A11yInfo{Role: RoleButton, Name: name, Disabled: c.Disabled().Get()}
 }
 
 // A11y reports the Kanban board as a group carrying the selected card's title,

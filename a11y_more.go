@@ -76,15 +76,19 @@ func isoDate(y, m, d int) string { return fmt.Sprintf("%04d-%02d-%02d", y, m, d)
 
 // A11y reports the ToggleButton as a button carrying its pressed state.
 func (t *ToggleButton) A11y() A11yInfo {
-	return A11yInfo{Role: RoleButton, Name: t.Label, Value: stateValue(t.Pressed().Get(), "pressed")}
+	return A11yInfo{Role: RoleButton, Name: t.Label, Value: stateValue(t.Pressed().Get(), "pressed"), Disabled: t.Disabled().Get()}
 }
 
 // A11y reports the IconButton as a button named by its icon identifier (it
 // has no separate text label).
-func (b *IconButton) A11y() A11yInfo { return A11yInfo{Role: RoleButton, Name: b.Icon} }
+func (b *IconButton) A11y() A11yInfo {
+	return A11yInfo{Role: RoleButton, Name: b.Icon, Disabled: b.Disabled().Get()}
+}
 
 // A11y reports the SplitButton as a button named by its label.
-func (b *SplitButton) A11y() A11yInfo { return A11yInfo{Role: RoleButton, Name: b.Label} }
+func (b *SplitButton) A11y() A11yInfo {
+	return A11yInfo{Role: RoleButton, Name: b.Label, Disabled: b.Disabled().Get()}
+}
 
 // A11y reports the SearchEntry as a searchbox carrying its current text.
 func (s *SearchEntry) A11y() A11yInfo { return A11yInfo{Role: RoleSearchbox, Value: s.Text().Get()} }
@@ -107,6 +111,7 @@ func (s *SpinButton) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleSpinbutton,
 		Value:    strconv.Itoa(s.Value().Get()),
+		Disabled: s.Disabled().Get(),
 		HasRange: true,
 		Min:      float64(s.Min),
 		Max:      float64(s.Max),
@@ -124,6 +129,7 @@ func (s *RangeSlider) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleGroup,
 		Value:    formatFloat(s.Low().Get()) + ".." + formatFloat(s.High().Get()),
+		Disabled: s.Disabled().Get(),
 		HasRange: true,
 		Min:      s.Min,
 		Max:      s.Max,
@@ -143,6 +149,7 @@ func (r *Rating) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleSlider,
 		Value:    strconv.Itoa(r.Value().Get()) + "/" + strconv.Itoa(r.Max),
+		Disabled: r.Disabled().Get(),
 		HasRange: true,
 		Min:      0,
 		Max:      float64(r.Max),
@@ -198,7 +205,7 @@ func (l *ListBox) A11y() A11yInfo {
 	} else if sel := l.Selected().Get(); sel >= 0 && sel < l.itemCount() {
 		v = l.flatItems()[sel]
 	}
-	return A11yInfo{Role: RoleListbox, Value: v}
+	return A11yInfo{Role: RoleListbox, Value: v, Disabled: l.Disabled().Get()}
 }
 
 // A11y reports the Table as a grid. Value names the selected row in
@@ -212,7 +219,7 @@ func (t *Table) A11y() A11yInfo {
 	} else if sel := t.Selected().Get(); sel >= 0 && sel < len(t.Rows) {
 		v = "row " + strconv.Itoa(sel+1) + " selected"
 	}
-	return A11yInfo{Role: RoleGrid, Value: v}
+	return A11yInfo{Role: RoleGrid, Value: v, Disabled: t.Disabled().Get()}
 }
 
 // A11y reports the TreeView as a tree. Value is the selected node's label in
@@ -226,7 +233,7 @@ func (t *TreeView) A11y() A11yInfo {
 	} else if sel := t.Selected().Get(); sel != nil {
 		v = sel.Label
 	}
-	return A11yInfo{Role: RoleTree, Value: v}
+	return A11yInfo{Role: RoleTree, Value: v, Disabled: t.Disabled().Get()}
 }
 
 // A11y reports the ViewSwitcher as a tablist named by its current view.
@@ -235,7 +242,7 @@ func (v *ViewSwitcher) A11y() A11yInfo {
 	if cur := v.Current().Get(); cur >= 0 && cur < len(v.Views) {
 		name = v.Views[cur]
 	}
-	return A11yInfo{Role: RoleTablist, Name: name}
+	return A11yInfo{Role: RoleTablist, Name: name, Disabled: v.Disabled().Get()}
 }
 
 // A11y reports the Notebook as a tablist named by its active tab.
@@ -244,7 +251,7 @@ func (n *Notebook) A11y() A11yInfo {
 	if active := n.Active().Get(); active >= 0 && active < len(n.Tabs) {
 		name = n.Tabs[active].Label
 	}
-	return A11yInfo{Role: RoleTablist, Name: name}
+	return A11yInfo{Role: RoleTablist, Name: name, Disabled: n.Disabled().Get()}
 }
 
 // --- Navigation / menu ---------------------------------------------------
@@ -257,7 +264,7 @@ func (b *Breadcrumbs) A11y() A11yInfo {
 // A11y reports the Pagination as navigation carrying its "current/total"
 // page position.
 func (p *Pagination) A11y() A11yInfo {
-	return A11yInfo{Role: RoleNavigation, Value: strconv.Itoa(p.Current().Get()) + "/" + strconv.Itoa(p.Total)}
+	return A11yInfo{Role: RoleNavigation, Value: strconv.Itoa(p.Current().Get()) + "/" + strconv.Itoa(p.Total), Disabled: p.Disabled().Get()}
 }
 
 // A11y reports the Steps strip as a group carrying its current step's label.
@@ -276,7 +283,7 @@ func (m *Menu) A11y() A11yInfo {
 	if hv := m.Hover().Get(); hv >= 0 && hv < len(m.Items) {
 		v = m.Items[hv].Label
 	}
-	return A11yInfo{Role: RoleMenu, Value: v}
+	return A11yInfo{Role: RoleMenu, Value: v, Disabled: m.Disabled().Get()}
 }
 
 // A11y reports the MenuBar as a menubar carrying the currently-open top-level
@@ -286,7 +293,7 @@ func (m *MenuBar) A11y() A11yInfo {
 	if m.Active().Get() >= 0 && m.Active().Get() < len(m.Names) {
 		v = m.Names[m.Active().Get()]
 	}
-	return A11yInfo{Role: RoleMenuBar, Value: v}
+	return A11yInfo{Role: RoleMenuBar, Value: v, Disabled: m.Disabled().Get()}
 }
 
 // A11y reports the ContextMenu as a menu carrying its open/closed state.
@@ -421,7 +428,7 @@ func (s *Statusbar) A11y() A11yInfo {
 			parts = append(parts, statusSegLabel(seg))
 		}
 	}
-	return A11yInfo{Role: RoleStatus, Value: strings.Join(parts, " | ")}
+	return A11yInfo{Role: RoleStatus, Value: strings.Join(parts, " | "), Disabled: s.Disabled().Get()}
 }
 
 // statusSegLabel is the accessible label of one interactive segment: its Text
@@ -456,7 +463,7 @@ func (t *Tooltip) A11y() A11yInfo { return A11yInfo{Role: RoleTooltip, Name: t.T
 // A11y reports the Expander as a group named by its label, carrying its
 // expanded/collapsed state.
 func (e *Expander) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Name: e.Label, Value: stateValue(e.Expanded().Get(), "expanded")}
+	return A11yInfo{Role: RoleGroup, Name: e.Label, Value: stateValue(e.Expanded().Get(), "expanded"), Disabled: e.Disabled().Get()}
 }
 
 // A11y reports the Accordion as a group carrying the titles of every
@@ -469,13 +476,13 @@ func (a *Accordion) A11y() A11yInfo {
 			open = append(open, s.Title)
 		}
 	}
-	return A11yInfo{Role: RoleGroup, Value: strings.Join(open, ", ")}
+	return A11yInfo{Role: RoleGroup, Value: strings.Join(open, ", "), Disabled: a.Disabled().Get()}
 }
 
 // A11y reports the Carousel as a group carrying its "current/total" slide
 // position.
 func (c *Carousel) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGroup, Value: strconv.Itoa(c.Current().Get()+1) + "/" + strconv.Itoa(len(c.Slides))}
+	return A11yInfo{Role: RoleGroup, Value: strconv.Itoa(c.Current().Get()+1) + "/" + strconv.Itoa(len(c.Slides)), Disabled: c.Disabled().Get()}
 }
 
 // A11y reports the Wizard as a group carrying its current step's title.
@@ -511,7 +518,7 @@ func (o *Overlay) A11y() A11yInfo {
 
 // A11y reports the Calendar as a grid carrying its selected date.
 func (c *Calendar) A11y() A11yInfo {
-	return A11yInfo{Role: RoleGrid, Value: isoDate(c.Year().Get(), c.Month().Get(), c.Day().Get())}
+	return A11yInfo{Role: RoleGrid, Value: isoDate(c.Year().Get(), c.Month().Get(), c.Day().Get()), Disabled: c.Disabled().Get()}
 }
 
 // A11y reports the DatePicker as a group carrying its selected date.

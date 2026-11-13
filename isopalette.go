@@ -484,7 +484,7 @@ func (p *IsoIconPalette) onRelease(Event) {
 // A11y reports the palette as a list, with the armed icon id as its value so a
 // screen reader announces the current pick.
 func (p *IsoIconPalette) A11y() A11yInfo {
-	return A11yInfo{Role: RoleList, Name: p.title(), Value: p.selected.Get()}
+	return A11yInfo{Role: RoleList, Name: p.title(), Value: p.selected.Get(), Disabled: p.Disabled().Get()}
 }
 
 // --- rendering -----------------------------------------------------------

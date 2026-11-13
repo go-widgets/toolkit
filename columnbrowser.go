@@ -101,7 +101,7 @@ func (cv *ColumnBrowser) A11y() A11yInfo {
 			v = col.nodes[col.selected].Name
 		}
 	}
-	return A11yInfo{Role: RoleTree, Value: v}
+	return A11yInfo{Role: RoleTree, Value: v, Disabled: cv.Disabled().Get()}
 }
 
 // NewColumnBrowser builds a ColumnBrowser over provider with a default column

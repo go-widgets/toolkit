@@ -154,12 +154,12 @@ func (e *Entry) A11y() A11yInfo {
 
 // A11y reports the CheckButton as a checkbox with its checked state.
 func (c *CheckButton) A11y() A11yInfo {
-	return A11yInfo{Role: RoleCheckbox, Name: c.Label, Value: checkedValue(c.Checked().Get())}
+	return A11yInfo{Role: RoleCheckbox, Name: c.Label, Value: checkedValue(c.Checked().Get()), Disabled: c.Disabled().Get()}
 }
 
 // A11y reports the RadioButton as a radio with its checked state.
 func (r *RadioButton) A11y() A11yInfo {
-	return A11yInfo{Role: RoleRadio, Name: r.Label, Value: checkedValue(r.Checked().Get())}
+	return A11yInfo{Role: RoleRadio, Name: r.Label, Value: checkedValue(r.Checked().Get()), Disabled: r.Disabled().Get()}
 }
 
 // A11y reports the Switch as a switch with an on/off value.
@@ -168,7 +168,7 @@ func (s *Switch) A11y() A11yInfo {
 	if s.On().Get() {
 		v = "on"
 	}
-	return A11yInfo{Role: RoleSwitch, Value: v}
+	return A11yInfo{Role: RoleSwitch, Value: v, Disabled: s.Disabled().Get()}
 }
 
 // A11y reports the Scale as a slider carrying its current value, both as a
@@ -177,6 +177,7 @@ func (s *Scale) A11y() A11yInfo {
 	return A11yInfo{
 		Role:     RoleSlider,
 		Value:    strconv.FormatFloat(s.Value().Get(), 'g', -1, 64),
+		Disabled: s.Disabled().Get(),
 		HasRange: true,
 		Min:      s.Min,
 		Max:      s.Max,

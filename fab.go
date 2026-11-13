@@ -625,7 +625,7 @@ func (f *Fab) A11y() A11yInfo {
 	if f.IsExpanded() {
 		v = "expanded"
 	}
-	return A11yInfo{Role: RoleButton, Name: f.a11yName(), Value: v}
+	return A11yInfo{Role: RoleButton, Name: f.a11yName(), Value: v, Disabled: f.Disabled().Get()}
 }
 
 // a11yName is the disc's accessible name: its Label, or the Icon glyph when no

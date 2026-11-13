@@ -244,5 +244,5 @@ func (wp *WorkspacePager) A11y() A11yInfo {
 	if cur := wp.Current().Get(); cur >= 0 && cur < wp.Count {
 		name = wp.cellLabel(cur)
 	}
-	return A11yInfo{Role: RoleTablist, Name: name}
+	return A11yInfo{Role: RoleTablist, Name: name, Disabled: wp.Disabled().Get()}
 }

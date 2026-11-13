@@ -52,7 +52,9 @@ func (w *Wallpaper) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
 
 // A11y reports the Scrollbar as presentational. Scroll position is a property of
 // the region being scrolled, not a control to announce on its own.
-func (s *Scrollbar) A11y() A11yInfo { return A11yInfo{Role: RolePresentation} }
+func (s *Scrollbar) A11y() A11yInfo {
+	return A11yInfo{Role: RolePresentation, Disabled: s.Disabled().Get()}
+}
 
 // --- Content ------------------------------------------------------------
 
@@ -69,7 +71,9 @@ func (m *LoadMask) A11y() A11yInfo {
 }
 
 // A11y reports the Browser as a document named by the page it is showing.
-func (b *Browser) A11y() A11yInfo { return A11yInfo{Role: RoleDocument, Name: b.CurrentURL()} }
+func (b *Browser) A11y() A11yInfo {
+	return A11yInfo{Role: RoleDocument, Name: b.CurrentURL(), Disabled: b.Disabled().Get()}
+}
 
 // A11y reports the Dock as a toolbar carrying its docked entries.
 func (d *Dock) A11y() A11yInfo {

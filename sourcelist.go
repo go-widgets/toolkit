@@ -153,7 +153,7 @@ func (s *SourceList) A11y() A11yInfo {
 		s.selRow >= 0 && s.selRow < len(s.Sections[s.selSection].Items) {
 		v = s.Sections[s.selSection].Items[s.selRow].Label
 	}
-	return A11yInfo{Role: RoleNavigation, Value: v}
+	return A11yInfo{Role: RoleNavigation, Value: v, Disabled: s.Disabled().Get()}
 }
 
 // Selected returns the highlighted item as (section, row), or (-1, -1) when

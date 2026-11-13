@@ -480,7 +480,7 @@ func (t *Terminal) A11y() A11yInfo {
 	s := t.Screen()
 	cols, rows := s.Size()
 	first := s.ScrollbackLen() - t.ScrollOffset().Get()
-	return A11yInfo{Role: RoleTextbox, Name: "Terminal",
+	return A11yInfo{Role: RoleTextbox, Name: "Terminal", Disabled: t.Disabled().Get(),
 		Value: s.Text(vt.Pos{Line: first}, vt.Pos{Line: first + rows - 1, Col: cols - 1})}
 }
 

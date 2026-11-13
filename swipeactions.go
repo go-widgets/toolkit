@@ -481,7 +481,7 @@ func (sa *SwipeActions) A11y() A11yInfo {
 	case SwipeTrailingOpen:
 		v = "trailing actions revealed"
 	}
-	return A11yInfo{Role: RoleGroup, Value: v}
+	return A11yInfo{Role: RoleGroup, Value: v, Disabled: sa.Disabled().Get()}
 }
 
 // --- programmatic open / close / invoke ------------------------------------
