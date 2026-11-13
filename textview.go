@@ -551,15 +551,17 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 		if cx < r.X || cx > r.X+r.W || !inView(cx, cy) {
 			continue
 		}
-		fillRect(p, cx, cy-1, 2, t.glyphHeight()+2, d.Color)
+		// The caret and its tag overhang the glyphs by a few logical pixels, which
+		// scale with the glyphs (as the local caret's do).
+		fillRect(p, cx, cy-scaled(1), scaled(2), t.glyphHeight()+scaled(2), d.Color)
 		if d.Label != "" {
-			tagW := t.textWidth(d.Label) + 4
-			tagY := cy - t.glyphHeight() - 3
+			tagW := t.textWidth(d.Label) + scaled(4)
+			tagY := cy - t.glyphHeight() - scaled(3)
 			if tagY < r.Y {
 				tagY = cy // flip below the top edge
 			}
-			fillRect(p, cx, tagY, tagW, t.glyphHeight()+2, d.Color)
-			t.drawText(p, cx+2, tagY+1, d.Label, tagInk(d.Color))
+			fillRect(p, cx, tagY, tagW, t.glyphHeight()+scaled(2), d.Color)
+			t.drawText(p, cx+scaled(2), tagY+scaled(1), d.Label, tagInk(d.Color))
 		}
 	}
 }
