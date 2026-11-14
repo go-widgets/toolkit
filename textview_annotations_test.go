@@ -451,3 +451,37 @@ func TestTheAccessibleRectangleLeavesOutTheGutterAndTheMinimap(t *testing.T) {
 		t.Fatal("a view narrower than its gutter keeps its bounds")
 	}
 }
+
+// A browser reports Enter to the text layer as well as to the key handler: the
+// key saves the comment, and the newline that follows is not the buffer's.
+func TestTheNewlineAfterSavingACommentIsNotTyped(t *testing.T) {
+	c := annEditor("abc")
+	c.OpenAnnotation(0)
+	c.ReplaceInput(-1, -1, "x")
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	c.ReplaceInput(-1, -1, "\n")
+	if c.InputText() != "abc" {
+		t.Fatalf("the buffer gained a newline: %q", c.InputText())
+	}
+	c.ReplaceInput(-1, -1, "\n") // a second one is a person's
+	if c.InputText() != "\nabc" && c.InputText() != "abc\n" {
+		t.Fatalf("%q", c.InputText())
+	}
+	// and the allowance does not outlive the next key
+	c.OpenAnnotation(0)
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "ArrowLeft"})
+	n := len(c.InputText())
+	c.ReplaceInput(-1, -1, "\n")
+	if len(c.InputText()) != n+1 {
+		t.Fatal("a newline after another key was eaten")
+	}
+	// and the first text after Enter ends it
+	c.OpenAnnotation(0)
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	c.ReplaceInput(-1, -1, "z")
+	c.ReplaceInput(-1, -1, "\n")
+	if !strings.Contains(c.InputText(), "z\n") {
+		t.Fatalf("%q", c.InputText())
+	}
+}

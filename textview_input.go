@@ -134,6 +134,12 @@ func (t *TextView) ReplaceInput(start, end int, text string) {
 		t.annType(text) // an input method types into the open annotation panel
 		return
 	}
+	if eat := t.ann.eatNL; eat {
+		t.ann.eatNL = false
+		if text == "\n" {
+			return
+		}
+	}
 	b0, b1, s0 := resolve(t.InputText(), start, end, t.selectionOrMark)
 	if b0 == b1 && text == "" {
 		return

@@ -79,6 +79,7 @@ type annState struct {
 	nextID  int
 	prev    []string // the buffer the annotations were last anchored against
 	open    bool     // the panel is showing
+	eatNL   bool     // the newline an input element reports after Enter saved a comment
 	openAt  int      // its line
 	draft   string   // the text being edited
 	markers []*annotationMarker
@@ -458,6 +459,9 @@ func (t *TextView) annPanelExtra() int {
 
 // annEvent handles an event while the panel is open; true when it consumed it.
 func (t *TextView) annEvent(ev Event) bool {
+	if ev.Kind == EventChar || ev.Kind == EventKeyDown {
+		t.ann.eatNL = false
+	}
 	if !t.ann.open {
 		return false
 	}
@@ -470,6 +474,7 @@ func (t *TextView) annEvent(ev Event) bool {
 		case "Enter":
 			t.SetAnnotation(t.ann.openAt, t.ann.draft)
 			t.ann.open = false
+			t.ann.eatNL = true // a browser reports Enter as text too: it is not the buffer's newline
 		case "Escape":
 			t.ann.open = false
 		case "Backspace":
