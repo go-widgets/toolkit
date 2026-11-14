@@ -170,6 +170,14 @@ type TextView struct {
 	// left of the vertical scrollbar. Zero value false. See textview_minimap.go.
 	ShowMinimap bool
 
+	// MinimapWhenFixed, with ShowMinimap, ShowScrollbars and NoVerticalScroll, keeps
+	// the minimap in a size-to-content view: a whole-buffer overview (no slider,
+	// nothing to scroll) with the same marks, narrower than the scrolling one and
+	// hidden when the view is under 480 logical px wide. A press on it moves the
+	// caret to that line (Shift or a drag extends the selection) instead of
+	// scrolling. Zero value false: NoVerticalScroll keeps its minimap off.
+	MinimapWhenFixed bool
+
 	// minimap and friends: the embedded overview widget, the syntax spans the
 	// CodeEditor feeds it, the caller's marks (+ scratch buffer for marks plus
 	// matches), and the slider-grab state of a press-drag on it.
@@ -179,6 +187,11 @@ type TextView struct {
 	mmBuf   []MinimapMark
 	mmGrab  int
 	mmDrag  bool
+
+	// annOn turns the annotation gutter on; ann is the annotation model and panel
+	// state. See textview_annotations.go.
+	annOn bool
+	ann   annState
 
 	// hscroll is the horizontal scroll offset in device pixels (ScrollX); only
 	// non-zero while ShowScrollbars is true. colsOK/colsMax cache the widest line in
@@ -282,6 +295,7 @@ func (t *TextView) sync() {
 	t.colsOK = false
 	t.rev++
 	t.marked = false // any edit ends a composition; SetMarkedInput re-marks after
+	t.reanchorAnnotations()
 	t.refreshPreferredHeight()
 	t.Text().Set(strings.Join(t.lines, "\n"))
 }
@@ -298,6 +312,7 @@ func (t *TextView) adopt(s string) {
 	} else {
 		t.lines = strings.Split(s, "\n")
 	}
+	t.reanchorAnnotations()
 	t.clampCursorToBuffer()
 	t.refreshPreferredHeight()
 }
@@ -518,6 +533,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 	}
 	t.drawScrollbars(p, theme, vb, hb)
 	t.drawMinimap(p, theme)
+	t.drawAnnotationGutter(p, theme, start, lineH)
 	// With scrollbars a caret (or co-editor caret) scrolled out of the text area
 	// is not drawn: it would land on the gutter, a scrollbar or the border.
 	inView := func(cx, cy int) bool {
@@ -564,6 +580,7 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 			t.drawText(p, cx+scaled(2), tagY+scaled(1), d.Label, tagInk(d.Color))
 		}
 	}
+	t.drawAnnotationPanel(p, theme, start, lineH)
 }
 
 // paintSelectionBand fills the highlight for selection sel on buffer line i, in
@@ -636,6 +653,9 @@ func (t *TextView) OnEvent(ev Event) {
 	if t.Disabled().Get() && editsText(ev) {
 		return
 	}
+	if t.annEvent(ev) {
+		return
+	}
 	switch ev.Kind {
 	case EventClick:
 		if t.Disabled().Get() {
@@ -645,8 +665,8 @@ func (t *TextView) OnEvent(ev Event) {
 			return
 		}
 		t.HasFocus().Set(true)
-		if t.barPress(ev) || t.minimapPress(ev) {
-			return // the click landed on a scrollbar or the minimap, not on the text
+		if t.barPress(ev) || t.minimapPress(ev) || t.annGutterPress(ev) {
+			return // the click landed on a scrollbar, the minimap or the annotation gutter, not on the text
 		}
 		if len(t.lines) == 0 {
 			return
@@ -724,6 +744,8 @@ func (t *TextView) handleKey(code string) {
 	case "Enter":
 		t.pushUndo()
 		t.splitLine()
+	case "Ctrl+Shift+M":
+		t.OpenAnnotation(cl) // no-op unless EnableAnnotations
 	case "Ctrl+Z":
 		t.Undo()
 	case "Ctrl+Y", "Ctrl+Shift+Z":
@@ -921,7 +943,7 @@ func (t *TextView) scrollCaretIntoView() {
 // gutterPadL is the breathing space from the widget's left edge to the line
 // numbers; gutterPadR the space between the numbers and the text. Both are
 // metric-scaled so the gutter stays airy at any resolution.
-func (t *TextView) gutterPadL() int { return scaled(10) }
+func (t *TextView) gutterPadL() int { return scaled(10) + t.annGutter() }
 func (t *TextView) gutterPadR() int { return scaled(12) }
 
 // numbersWidth is the width of the widest line number (the last line's), which
@@ -947,7 +969,7 @@ func (t *TextView) textLeftInset() int {
 	if t.ShowLineNumbers {
 		return t.gutterWidth()
 	}
-	return scaled(4)
+	return scaled(4) + t.annGutter()
 }
 
 // drawSpans paints line at (x, y) as coloured runs: every rune starts
