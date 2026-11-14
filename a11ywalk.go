@@ -59,13 +59,20 @@ type A11yNode struct {
 // knows what its own screen reader does with one.
 func WalkA11y(w Widget) []A11yNode {
 	var out []A11yNode
-	var walk func(x Widget, dx, dy int, key string)
-	walk = func(x Widget, dx, dy int, key string) {
+	var walk func(x Widget, dx, dy int, key string, off bool)
+	walk = func(x Widget, dx, dy int, key string, off bool) {
 		if x == nil {
 			return
 		}
 		if a, ok := x.(Accessible); ok {
-			if info := a.A11y(); info.Role != RolePresentation {
+			info := a.A11y()
+			if off {
+				info.Disabled = true
+			}
+			if _, ok := x.(a11yDisablesSubtree); ok && info.Disabled {
+				off = true
+			}
+			if info.Role != RolePresentation {
 				r := x.Bounds()
 				if ar, ok := x.(a11yRecter); ok {
 					r = ar.A11yRect()
@@ -82,13 +89,30 @@ func WalkA11y(w Widget) []A11yNode {
 			kids := c.Children()
 			segs := a11ySegments(kids)
 			for i, child := range kids {
-				walk(child, dx, dy, key+"/"+segs[i])
+				walk(child, dx, dy, key+"/"+segs[i], off)
 			}
 		}
 	}
-	walk(w, 0, 0, a11ySegment(w, 0))
+	walk(w, 0, 0, a11ySegment(w, 0), false)
 	return out
 }
+
+// a11yDisablesSubtree marks a container whose Disabled flag also makes its
+// children inert: it drops the events meant for them and focus traversal skips
+// them. The walk then reports every descendant as Disabled while the container
+// is, without touching the children's own flags -- so re-enabling the container
+// restores each child to whatever it was, and a child that was disabled on its
+// own stays so. ActionRow, SettingsGroup, SettingRow, ButtonGroup, FormField
+// and Toolbar carry it; TabBar and FolderTabs do the same through the tab nodes
+// they build.
+type a11yDisablesSubtree interface{ a11yDisablesSubtree() }
+
+func (*ActionRow) a11yDisablesSubtree()     {}
+func (*SettingsGroup) a11yDisablesSubtree() {}
+func (*SettingRow) a11yDisablesSubtree()    {}
+func (*ButtonGroup) a11yDisablesSubtree()   {}
+func (*FormField) a11yDisablesSubtree()     {}
+func (*Toolbar) a11yDisablesSubtree()       {}
 
 // a11yRecter is implemented by a widget whose accessible element should cover
 // less than its bounds: [TextView] leaves its annotation column and its minimap

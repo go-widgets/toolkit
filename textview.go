@@ -104,6 +104,8 @@ type TextView struct {
 	scroll  *mvvm.Observable[int]
 	sel     *mvvm.Observable[Selection]
 	focus   *mvvm.Observable[bool]
+	// histWired records that Disabled() is already subscribed to OnHistory.
+	histWired bool
 	// composition holds the in-progress IME preview string (dead-key output, CJK
 	// candidate, …). Non-empty while an IME composition is active; cleared on
 	// EventCompositionEnd. Draw paints it in a muted colour at the cursor; the

@@ -62,6 +62,16 @@ func (g *SettingsGroup) Children() []Widget {
 	return out
 }
 
+// Children yields the group's buttons in layout order, so a generic walk
+// reaches the members the group routes input to.
+func (g *ButtonGroup) Children() []Widget {
+	out := make([]Widget, 0, len(g.Buttons))
+	for _, b := range g.Buttons {
+		out = append(out, b) // SetBounds and Draw already require non-nil members
+	}
+	return out
+}
+
 // Children yields the five regions in reading order: the edges clockwise from
 // the top, then the centre.
 func (b *Border) Children() []Widget {
