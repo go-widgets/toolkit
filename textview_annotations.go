@@ -459,6 +459,10 @@ func (t *TextView) annPanelExtra() int {
 
 // annEvent handles an event while the panel is open; true when it consumed it.
 func (t *TextView) annEvent(ev Event) bool {
+	if ev.Kind == EventChar && t.ann.eatNL && (ev.Code == "\n" || ev.Code == "\r") {
+		t.ann.eatNL = false
+		return true // the same newline, reported as a character
+	}
 	if ev.Kind == EventChar || ev.Kind == EventKeyDown {
 		t.ann.eatNL = false
 	}

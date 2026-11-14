@@ -485,3 +485,15 @@ func TestTheNewlineAfterSavingACommentIsNotTyped(t *testing.T) {
 		t.Fatalf("%q", c.InputText())
 	}
 }
+
+func TestTheNewlineAfterSavingACommentIsNotTypedAsACharacterEither(t *testing.T) {
+	c := annEditor("abc")
+	for _, nl := range []string{"\n", "\r"} {
+		c.OpenAnnotation(0)
+		c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+		c.OnEvent(Event{Kind: EventChar, Code: nl})
+		if c.InputText() != "abc" {
+			t.Fatalf("%q typed a newline: %q", nl, c.InputText())
+		}
+	}
+}
