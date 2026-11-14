@@ -29,6 +29,14 @@ import "github.com/go-widgets/painter"
 // columns of code.
 const minimapWidth = 90
 
+// In NoVerticalScroll mode (see [TextView.MinimapWhenFixed]) the minimap is
+// minimapFixedWidth wide and only shows when the view is at least
+// minimapFixedMinWidth wide, both logical pixels.
+const (
+	minimapFixedWidth    = 64
+	minimapFixedMinWidth = 480
+)
+
 // SetMinimapMarks replaces the line marks (errors, warnings …) the minimap shows,
 // next to the search matches it shows by itself.
 func (t *TextView) SetMinimapMarks(marks []MinimapMark) { t.mmMarks = marks }
@@ -38,8 +46,16 @@ func (t *TextView) MinimapMarks() []MinimapMark { return t.mmMarks }
 
 // minimapW is the minimap's width, 0 when it is off or the window is too narrow.
 func (t *TextView) minimapW() int {
-	if !t.ShowScrollbars || !t.ShowMinimap || t.NoVerticalScroll {
+	if !t.ShowScrollbars || !t.ShowMinimap {
 		return 0
+	}
+	if t.NoVerticalScroll {
+		// A whole-cell overview: opt-in, narrower, and hidden under a width where
+		// it would eat the text column (a 360 px phone keeps its full text width).
+		if !t.MinimapWhenFixed || t.Bounds().W < scaled(minimapFixedMinWidth) {
+			return 0
+		}
+		return scaled(minimapFixedWidth)
 	}
 	w := scaled(minimapWidth)
 	if t.Bounds().W < 4*w {
@@ -70,7 +86,11 @@ func (t *TextView) syncMinimap() *CodeMinimap {
 	r, rc := t.Bounds(), t.minimapRect()
 	m := t.minimap
 	m.SetBounds(Rect{X: r.X + rc.X, Y: r.Y + rc.Y, W: rc.W, H: rc.H})
-	m.Update(t.lines, t.mmSpans, t.clampedScrollLine(), t.visibleLines())
+	if t.NoVerticalScroll {
+		m.Update(t.lines, t.mmSpans, 0, 0) // everything is on show: no slider
+	} else {
+		m.Update(t.lines, t.mmSpans, t.clampedScrollLine(), t.visibleLines())
+	}
 	return m
 }
 
@@ -82,6 +102,7 @@ func (t *TextView) drawMinimap(p painter.Painter, theme *Theme) {
 	}
 	m := t.syncMinimap()
 	t.mmBuf = append(t.mmBuf[:0], t.mmMarks...)
+	t.mmBuf = t.annotationMinimapMarks(t.mmBuf)
 	for _, b := range t.matchBands {
 		t.mmBuf = append(t.mmBuf, MinimapMark{Line: b.sel.StartLine, Kind: MarkMatch, Color: b.color})
 	}
@@ -100,6 +121,11 @@ func (t *TextView) minimapPress(ev Event) bool {
 	}
 	m := t.syncMinimap()
 	line := m.LineAt(t.Bounds().Y + ev.Y)
+	if t.NoVerticalScroll {
+		t.mmDrag = true
+		t.minimapMoveCaret(line, ev.Shift)
+		return true
+	}
 	top, vis := t.clampedScrollLine(), t.visibleLines()
 	if line >= top && line < top+vis {
 		t.mmGrab = line - top // on the slider: keep the pointer where it grabbed it
@@ -116,7 +142,12 @@ func (t *TextView) minimapDrag(ev Event) bool {
 	if !t.mmDrag {
 		return false
 	}
-	t.minimapScrollTo(t.syncMinimap().LineAt(t.Bounds().Y + ev.Y))
+	line := t.syncMinimap().LineAt(t.Bounds().Y + ev.Y)
+	if t.NoVerticalScroll {
+		t.minimapMoveCaret(line, true) // a drag extends the selection
+		return true
+	}
+	t.minimapScrollTo(line)
 	return true
 }
 
@@ -124,4 +155,26 @@ func (t *TextView) minimapDrag(ev Event) bool {
 func (t *TextView) minimapScrollTo(line int) {
 	t.ScrollLine().Set(line - t.mmGrab)
 	t.ScrollLine().Set(t.clampedScrollLine())
+}
+
+// minimapMoveCaret is what a press on a no-scroll minimap does: there is nothing
+// to scroll, so it moves the caret to line (keeping the column where the line is
+// long enough), or, when extend is set, extends the selection from the anchor to
+// it.
+func (t *TextView) minimapMoveCaret(line int, extend bool) {
+	if len(t.lines) == 0 {
+		return
+	}
+	line = max(0, min(line, len(t.lines)-1))
+	col := min(t.CursorCol().Get(), len([]rune(t.lines[line])))
+	if !extend {
+		t.selAnchorLine, t.selAnchorCol = line, col
+	}
+	t.CursorLine().Set(line)
+	t.CursorCol().Set(col)
+	if extend {
+		t.Selection().Set(SelectionRange(t.selAnchorLine, t.selAnchorCol, line, col))
+	} else {
+		t.ClearSelection()
+	}
 }
