@@ -1,10 +1,10 @@
 module github.com/go-widgets/toolkit/rougelex
 
-go 1.27.2
+go 1.27.4
 
 require (
-	github.com/go-rouge/rouge v0.7.1
-	github.com/go-widgets/toolkit v0.345.2
+	github.com/go-rouge/rouge v0.9.0
+	github.com/go-widgets/toolkit v0.374.11
 )
 
 require (
@@ -12,17 +12,17 @@ require (
 	github.com/go-crdt/crdt v0.57.0 // indirect
 	github.com/go-gfx/gfx v0.41.0 // indirect
 	github.com/go-icons/iconoir v0.3.0 // indirect
-	github.com/go-images/images v0.1.1-0.20261026203936-4ac989d310a1 // indirect
+	github.com/go-images/images v0.3.0 // indirect
 	github.com/go-opentype/fonts v0.14.0 // indirect
-	github.com/go-opentype/opentype v0.16.2-0.20261027113239-5e69589e9a5e // indirect
+	github.com/go-opentype/opentype v0.21.1 // indirect
 	github.com/go-opentype/shape v0.7.0 // indirect
-	github.com/go-regexp/engine v0.3.2 // indirect
-	github.com/go-richdoc/richdoc v0.7.0 // indirect
-	github.com/go-ruby-regexp/regexp v0.1.1 // indirect
+	github.com/go-regexp/engine v0.4.2 // indirect
+	github.com/go-richdoc/richdoc v0.10.0 // indirect
+	github.com/go-ruby-regexp/regexp v0.2.1 // indirect
 	github.com/go-typeset/bidi v0.3.1 // indirect
 	github.com/go-widgets/mvvm v0.15.0 // indirect
-	github.com/go-widgets/painter v0.17.0 // indirect
-	github.com/go-widgets/textinput v0.1.0 // indirect
+	github.com/go-widgets/painter v0.17.1 // indirect
+	github.com/go-widgets/textinput v0.1.1 // indirect
 	github.com/go-widgets/vcs v0.1.0 // indirect
 )
 
