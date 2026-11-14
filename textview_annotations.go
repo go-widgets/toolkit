@@ -5,6 +5,7 @@
 package toolkit
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 	"unicode/utf8"
@@ -146,6 +147,11 @@ func (t *TextView) SetAnnotation(line int, text string) bool {
 	if l.Len() >= MaxAnnotations {
 		return false
 	}
+	// An ID no annotation has: the host may have appended its own.
+	t.ann.nextID = max(t.ann.nextID, 0)
+	for i := 0; i < l.Len(); i++ {
+		t.ann.nextID = max(t.ann.nextID, l.At(i).ID)
+	}
 	t.ann.nextID++
 	l.Append(Annotation{ID: t.ann.nextID, Line: line, Text: text})
 	t.annSnapshot()
@@ -230,11 +236,35 @@ func (t *TextView) reanchorAnnotations() {
 		moved[i] = a
 	}
 	t.annSnapshot()
+	// Two comments can land on one line (a join of their lines): they become one,
+	// their texts in the order of the lines they were on, so no line has two
+	// markers or two buttons of the same name and no comment is lost.
+	first := map[int]int{} // new line -> index of the annotation that keeps it
+	var drop []int
+	order := make([]int, len(moved))
+	for i := range order {
+		order[i] = i
+	}
+	slices.SortStableFunc(order, func(a, b int) int { return l.At(a).Line - l.At(b).Line })
+	for _, i := range order {
+		k, dup := first[moved[i].Line]
+		if !dup {
+			first[moved[i].Line] = i
+			continue
+		}
+		moved[k].Text = SanitizeAnnotation(moved[k].Text + "\n" + moved[i].Text)
+		drop = append(drop, i)
+		changed = true
+	}
 	if !changed {
 		return
 	}
 	for i, a := range moved {
 		l.Set(i, a) // the subscription re-takes the snapshot, which is already current
+	}
+	slices.Sort(drop)
+	for j := len(drop) - 1; j >= 0; j-- {
+		l.RemoveAt(drop[j])
 	}
 }
 

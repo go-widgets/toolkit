@@ -497,3 +497,88 @@ func TestTheNewlineAfterSavingACommentIsNotTypedAsACharacterEither(t *testing.T)
 		}
 	}
 }
+
+func TestJoiningTwoCommentedLinesMergesTheirComments(t *testing.T) {
+	c := annEditor("a\nb\nc\nd")
+	c.SetAnnotation(1, "on b")
+	c.SetAnnotation(2, "on c")
+	c.CursorLine().Set(2)
+	c.CursorCol().Set(0)
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"}) // joins c into b
+	if n := c.Annotations().Len(); n != 1 {
+		t.Fatalf("%d annotations, want the two merged into one", n)
+	}
+	if a, ok := c.AnnotationAt(1); !ok || a.Text != "on b\non c" {
+		t.Fatalf("merged %+v", a)
+	}
+	names := 0
+	for _, n := range WalkA11y(c) {
+		if n.Role == RoleButton {
+			names++
+		}
+	}
+	if names != 1 {
+		t.Fatalf("%d buttons", names)
+	}
+	c.DeleteAnnotation(1)
+	if c.Annotations().Len() != 0 {
+		t.Fatal("delete left one behind")
+	}
+	// undo restores the text and never leaves two on a line
+	c.SetAnnotation(1, "on b")
+	c.Undo()
+	seen := map[int]bool{}
+	for i := 0; i < c.Annotations().Len(); i++ {
+		l := c.Annotations().At(i).Line
+		if seen[l] {
+			t.Fatalf("two annotations on line %d after undo", l)
+		}
+		seen[l] = true
+	}
+	// merge order follows the lines, whatever the list order
+	d := annEditor("a\nb\nc")
+	d.Annotations().Append(Annotation{ID: 1, Line: 2, Text: "two"})
+	d.Annotations().Append(Annotation{ID: 2, Line: 1, Text: "one"})
+	d.CursorLine().Set(2)
+	d.CursorCol().Set(0)
+	d.annSnapshot()
+	d.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"})
+	if a, _ := d.AnnotationAt(1); a.Text != "one\ntwo" {
+		t.Fatalf("%q", a.Text)
+	}
+}
+
+func TestANewIDNeverCollidesWithAHostsOwn(t *testing.T) {
+	c := annEditor("a\nb\nc")
+	c.Annotations().Append(Annotation{ID: 1, Line: 0, Text: "host"})
+	c.SetAnnotation(1, "x")
+	c.SetAnnotation(2, "y")
+	ids := map[int]bool{}
+	for i := 0; i < c.Annotations().Len(); i++ {
+		id := c.Annotations().At(i).ID
+		if ids[id] {
+			t.Fatalf("ID %d twice", id)
+		}
+		ids[id] = true
+	}
+}
+
+// With identical lines the prefix and suffix overlap; the choice is the prefix's,
+// every time: a comment on the first of three equal lines stays on the first
+// when one is deleted, one on the last follows it.
+func TestAmbiguousIdenticalLinesAnchorDeterministically(t *testing.T) {
+	for i := 0; i < 5; i++ {
+		c := annEditor("a\na\na\nz")
+		c.SetAnnotation(0, "first")
+		c.SetAnnotation(2, "third")
+		c.CursorLine().Set(1)
+		c.CursorCol().Set(0)
+		c.OnEvent(Event{Kind: EventKeyDown, Code: "Backspace"}) // "a\na\na\nz" -> "a\na\nz"... joins 1 into 0
+		if got := lineOf(c, "first"); got != 0 {
+			t.Fatalf("first on %d", got)
+		}
+		if got := lineOf(c, "third"); got != 1 {
+			t.Fatalf("third on %d, want 1", got)
+		}
+	}
+}
