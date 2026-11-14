@@ -64,7 +64,7 @@ func (t *TextView) computePreferredHeight() int {
 			h += 1 + scrollbarTrack()
 		}
 	}
-	return h
+	return h + t.annPanelExtra()
 }
 
 // refreshPreferredHeight republishes PreferredHeight when it changed; a no-op
