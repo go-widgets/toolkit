@@ -69,7 +69,7 @@ func WalkA11y(w Widget) []A11yNode {
 			if off {
 				info.Disabled = true
 			}
-			if _, ok := x.(a11yDisablesSubtree); ok && info.Disabled {
+			if m, ok := x.(a11yDisablesSubtree); ok && m.a11yDisablesSubtree() && info.Disabled {
 				off = true
 			}
 			if info.Role != RolePresentation {
@@ -105,14 +105,14 @@ func WalkA11y(w Widget) []A11yNode {
 // own stays so. ActionRow, SettingsGroup, SettingRow, ButtonGroup, FormField
 // and Toolbar carry it; TabBar and FolderTabs do the same through the tab nodes
 // they build.
-type a11yDisablesSubtree interface{ a11yDisablesSubtree() }
+type a11yDisablesSubtree interface{ a11yDisablesSubtree() bool }
 
-func (*ActionRow) a11yDisablesSubtree()     {}
-func (*SettingsGroup) a11yDisablesSubtree() {}
-func (*SettingRow) a11yDisablesSubtree()    {}
-func (*ButtonGroup) a11yDisablesSubtree()   {}
-func (*FormField) a11yDisablesSubtree()     {}
-func (*Toolbar) a11yDisablesSubtree()       {}
+func (*ActionRow) a11yDisablesSubtree() bool     { return true }
+func (*SettingsGroup) a11yDisablesSubtree() bool { return true }
+func (*SettingRow) a11yDisablesSubtree() bool    { return true }
+func (*ButtonGroup) a11yDisablesSubtree() bool   { return true }
+func (*FormField) a11yDisablesSubtree() bool     { return true }
+func (*Toolbar) a11yDisablesSubtree() bool       { return true }
 
 // a11yRecter is implemented by a widget whose accessible element should cover
 // less than its bounds: [TextView] leaves its annotation column and its minimap
