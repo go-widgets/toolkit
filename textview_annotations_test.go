@@ -275,3 +275,112 @@ func TestMinimapPressInNoScrollModeMovesTheCaret(t *testing.T) {
 		t.Fatalf("marks %+v", got)
 	}
 }
+
+func TestAnnotationEdgeCases(t *testing.T) {
+	defer SetClipboard(nil)
+	SetClipboard(nil)
+	c := annEditor("a\nb\nc")
+	if !c.AnnotationsEnabled() {
+		t.Fatal("enabled")
+	}
+	if !c.SetAnnotation(1, "  ") || c.Annotations().Len() != 0 {
+		t.Fatal("an empty comment on a bare line adds nothing")
+	}
+	// a host-appended annotation has no ID: its key follows its line
+	c.Annotations().Append(Annotation{Line: 2, Text: "host"})
+	m := c.Children()[0].(*annotationMarker)
+	if m.A11yID() != "annotation-line-2" {
+		t.Fatalf("key %q", m.A11yID())
+	}
+	c.Disabled().Set(true)
+	m.OnEvent(Event{Kind: EventClick})
+	if _, open := c.AnnotationOpen(); open {
+		t.Fatal("a disabled view's marker opened the panel")
+	}
+	c.Disabled().Set(false)
+	m.OnEvent(Event{Kind: EventMouseMove}) // not an opening event
+	if _, open := c.AnnotationOpen(); open {
+		t.Fatal("a mouse move opened the panel")
+	}
+	// paste into the panel
+	c.OpenAnnotation(0)
+	SetClipboardText("pasted")
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "Ctrl+V"})
+	if c.ann.draft != "pasted" {
+		t.Fatalf("draft %q", c.ann.draft)
+	}
+	// a click inside the panel stays in it; one outside closes it
+	rc := c.annPanelRect(0, c.glyphHeight()+lineGap())
+	c.OnEvent(Event{Kind: EventClick, X: rc.X + 2, Y: rc.Y + 2})
+	if _, open := c.AnnotationOpen(); !open {
+		t.Fatal("a click in the panel closed it")
+	}
+	c.OnEvent(Event{Kind: EventClick, X: c.Bounds().W - 2, Y: c.Bounds().H - 2})
+	if _, open := c.AnnotationOpen(); open {
+		t.Fatal("a click outside kept it open")
+	}
+	// a press in the gutter below the last line opens nothing
+	c.OnEvent(Event{Kind: EventClick, X: 3, Y: c.Bounds().H - 3})
+	if _, open := c.AnnotationOpen(); open {
+		t.Fatal("the gutter below the text opened a panel")
+	}
+}
+
+func TestAnnotationPanelLayoutWrapsClampsAndNarrows(t *testing.T) {
+	c := annEditor("a\nb")
+	c.OpenAnnotation(0)
+	c.ann.draft = strings.Repeat("word ", 400)
+	rows := c.annPanelRows(scaled(200))
+	if len(rows) != 6 {
+		t.Fatalf("%d rows, want the 6-row bound", len(rows))
+	}
+	for _, r := range rows[:len(rows)-1] {
+		if c.textWidth(r) > scaled(200) {
+			t.Fatalf("row %q is wider than the panel", r)
+		}
+	}
+	// a narrow view: the panel takes the width it has
+	c.SetBounds(Rect{W: 100, H: 80})
+	rc := c.annPanelRect(0, c.glyphHeight()+lineGap())
+	if rc.X != 1 || rc.W != 98 {
+		t.Fatalf("narrow panel %+v", rc)
+	}
+	// no room below: it is pulled up inside the view
+	c.SetBounds(Rect{W: 600, H: 30})
+	if rc := c.annPanelRect(0, c.glyphHeight()+lineGap()); rc.Y < 0 || rc.Y+rc.H > 30 && rc.Y != 0 {
+		t.Fatalf("panel %+v leaves a 30 px view", rc)
+	}
+	// and it draws, in both
+	buf := make([]byte, 600*30*4)
+	c.Draw(painter.NewPixelPainter(buf, 600, 30), DefaultLight())
+}
+
+func TestAnnotationsOutsideTheWindowAreNotShown(t *testing.T) {
+	c := NewCodeEditor(scrollDoc(40, 0, 0))
+	c.EnableAnnotations(true)
+	c.SetBounds(Rect{W: 600, H: 120})
+	for _, l := range []int{0, 12, 39} {
+		c.SetAnnotation(l, "x")
+	}
+	c.ScrollLine().Set(10)
+	var lines []int
+	for _, w := range c.Children() {
+		lines = append(lines, w.(*annotationMarker).line)
+	}
+	if len(lines) != 1 || lines[0] != 12 {
+		t.Fatalf("markers on %v, want only line 12 (0 is above the window, 39 below)", lines)
+	}
+	buf := make([]byte, 600*120*4)
+	c.Draw(painter.NewPixelPainter(buf, 600, 120), DefaultLight())
+	// a mark on a line the buffer lost is skipped, not drawn
+	c.Annotations().Append(Annotation{Line: 999, Text: "gone"})
+	c.Draw(painter.NewPixelPainter(buf, 600, 120), DefaultLight())
+	if len(c.Children()) != 1 {
+		t.Fatal("a marker for a line that is not there")
+	}
+}
+
+func TestMinimapMoveCaretOnAnEmptyView(t *testing.T) {
+	tv := &TextView{}
+	tv.minimapMoveCaret(3, false) // no lines: nothing to move, nothing to panic
+}

@@ -195,11 +195,7 @@ func (t *TextView) reanchorAnnotations() {
 		t.ann.prev = nil
 		return
 	}
-	old := t.ann.prev
-	if old == nil {
-		t.annSnapshot()
-		return
-	}
+	old := t.ann.prev // every change to the list takes a snapshot, so it is set here
 	nw := t.lines
 	pre := 0
 	for pre < len(old) && pre < len(nw) && old[pre] == nw[pre] {
@@ -290,9 +286,8 @@ func (m *annotationMarker) OnEvent(ev Event) {
 	}
 }
 
-// Draw paints nothing: the TextView draws the marker in its gutter; this widget
-// is the accessibility and focus face of it.
-func (m *annotationMarker) Draw(painter.Painter, *Theme) {}
+// The TextView draws the marker in its gutter; this widget is the
+// accessibility and focus face of it, and paints nothing (Base.Draw).
 
 // Children exposes the annotation markers of the lines on show, so the
 // accessibility walk (and with it the webcanvas mirror) reaches them.
