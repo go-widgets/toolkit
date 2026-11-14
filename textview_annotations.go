@@ -237,6 +237,21 @@ func (t *TextView) reanchorAnnotations() {
 	}
 }
 
+// A11yRect is the rectangle of the view's accessible element: its bounds less
+// the annotation column on the left and the minimap (with whatever lies right of
+// it) on the right, which are controls of their own and not text.
+func (t *TextView) A11yRect() Rect {
+	r := t.Bounds()
+	x0, x1 := r.X+t.annGutter(), r.X+r.W
+	if t.minimapW() > 0 {
+		x1 = r.X + t.minimapRect().X
+	}
+	if x1 <= x0 {
+		return r
+	}
+	return Rect{X: x0, Y: r.Y, W: x1 - x0, H: r.H}
+}
+
 // annGutter is the width of the annotation column, 0 when annotations are off.
 func (t *TextView) annGutter() int {
 	if !t.annOn {

@@ -424,3 +424,30 @@ func TestAnInputMethodTypesIntoTheOpenPanel(t *testing.T) {
 		t.Fatalf("%q", c.InputText())
 	}
 }
+
+// The browser's text layer takes the pointer over its whole element, so the
+// accessible rectangle leaves out the controls that are not text.
+func TestTheAccessibleRectangleLeavesOutTheGutterAndTheMinimap(t *testing.T) {
+	plain := NewCodeEditor("a\nb")
+	plain.SetBounds(Rect{X: 10, Y: 20, W: 600, H: 100})
+	if plain.A11yRect() != plain.Bounds() {
+		t.Fatalf("no annotations, no minimap: %+v", plain.A11yRect())
+	}
+	c := annEditor("a\nb")
+	c.SetBounds(Rect{X: 10, Y: 20, W: 800, H: 100})
+	c.ShowMinimap, c.MinimapWhenFixed = true, true
+	r := c.A11yRect()
+	if r.X != 10+c.annGutter() || r.X+r.W != 10+c.minimapRect().X || r.Y != 20 || r.H != 100 {
+		t.Fatalf("%+v", r)
+	}
+	for _, n := range WalkA11y(c) {
+		if n.Role == RoleTextbox && n.Rect != r {
+			t.Fatalf("the walk reports %+v, want %+v", n.Rect, r)
+		}
+	}
+	narrow := annEditor("a")
+	narrow.SetBounds(Rect{W: 10, H: 30})
+	if narrow.A11yRect() != narrow.Bounds() {
+		t.Fatal("a view narrower than its gutter keeps its bounds")
+	}
+}

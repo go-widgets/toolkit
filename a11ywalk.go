@@ -67,6 +67,9 @@ func WalkA11y(w Widget) []A11yNode {
 		if a, ok := x.(Accessible); ok {
 			if info := a.A11y(); info.Role != RolePresentation {
 				r := x.Bounds()
+				if ar, ok := x.(a11yRecter); ok {
+					r = ar.A11yRect()
+				}
 				r.X, r.Y = r.X+dx, r.Y+dy
 				out = append(out, A11yNode{A11yInfo: info, Rect: r, Key: key})
 			}
@@ -85,6 +88,14 @@ func WalkA11y(w Widget) []A11yNode {
 	}
 	walk(w, 0, 0, a11ySegment(w, 0))
 	return out
+}
+
+// a11yRecter is implemented by a widget whose accessible element should cover
+// less than its bounds: [TextView] leaves its annotation column and its minimap
+// out, so that the browser's text layer, which takes the pointer over its whole
+// element, does not swallow a click meant for them.
+type a11yRecter interface {
+	A11yRect() Rect
 }
 
 // A11yIdentified is implemented by a widget that has an identity of its own,
