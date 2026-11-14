@@ -397,3 +397,30 @@ func TestMinimapMoveCaretOnAnEmptyView(t *testing.T) {
 	tv := &TextView{}
 	tv.minimapMoveCaret(3, false) // no lines: nothing to move, nothing to panic
 }
+
+// An input method (the browser's text layer, an IME) types through ReplaceInput:
+// while the panel is open that is the panel's text, not the buffer's.
+func TestAnInputMethodTypesIntoTheOpenPanel(t *testing.T) {
+	c := annEditor("abc")
+	c.OpenAnnotation(0)
+	c.ReplaceInput(-1, -1, "hi ")
+	c.ReplaceInput(-1, -1, "\n") // Enter's newline: the KeyDown saves, the text must not gain a line
+	c.SetMarkedInput("preview", 0, 0, -1, -1)
+	c.ReplaceInput(-1, -1, "there")
+	if c.ann.draft != "hi there" {
+		t.Fatalf("draft %q", c.ann.draft)
+	}
+	if c.InputText() != "abc" {
+		t.Fatalf("the buffer changed: %q", c.InputText())
+	}
+	c.OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
+	if a, _ := c.AnnotationAt(0); a.Text != "hi there" {
+		t.Fatalf("saved %+v", a)
+	}
+	// closed, it is an ordinary editor again
+	c.SetInputSelection(3, 3)
+	c.ReplaceInput(-1, -1, "d")
+	if c.InputText() != "abcd" {
+		t.Fatalf("%q", c.InputText())
+	}
+}

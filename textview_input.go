@@ -130,6 +130,10 @@ func (t *TextView) ReplaceInput(start, end int, text string) {
 	if t.Disabled().Get() {
 		return
 	}
+	if t.ann.open {
+		t.annType(text) // an input method types into the open annotation panel
+		return
+	}
 	b0, b1, s0 := resolve(t.InputText(), start, end, t.selectionOrMark)
 	if b0 == b1 && text == "" {
 		return
@@ -147,7 +151,7 @@ func (t *TextView) ReplaceInput(start, end int, text string) {
 // start (clamped to it). The whole composition, however many updates, is one
 // undo step.
 func (t *TextView) SetMarkedInput(text string, selStart, selEnd, replStart, replEnd int) {
-	if t.Disabled().Get() {
+	if t.Disabled().Get() || t.ann.open { // a composition is not previewed in the panel: its commit is typed
 		return
 	}
 	b0, b1, s0 := resolve(t.InputText(), replStart, replEnd, t.selectionOrMark)

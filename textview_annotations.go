@@ -448,10 +448,7 @@ func (t *TextView) annEvent(ev Event) bool {
 	}
 	switch ev.Kind {
 	case EventChar:
-		if utf8.RuneCountInString(t.ann.draft) < MaxAnnotationRunes {
-			t.ann.draft = SanitizeAnnotation(t.ann.draft + ev.Code)
-		}
-		t.refreshPreferredHeight()
+		t.annType(ev.Code)
 		return true
 	case EventKeyDown:
 		switch ev.Code {
@@ -465,7 +462,7 @@ func (t *TextView) annEvent(ev Event) bool {
 				t.ann.draft = t.ann.draft[:len(t.ann.draft)-n]
 			}
 		case "Ctrl+V":
-			t.ann.draft = SanitizeAnnotation(t.ann.draft + ClipboardText())
+			t.annType(ClipboardText())
 		}
 		t.refreshPreferredHeight() // Enter and Escape close the panel, the others resize it
 		return true
@@ -478,6 +475,16 @@ func (t *TextView) annEvent(ev Event) bool {
 		t.refreshPreferredHeight()
 	}
 	return false
+}
+
+// annType adds s to the draft of the open panel (what the keyboard, the paste
+// and an input method type): bounded, plain, and without the newline an input
+// element reports for Enter, which saves the comment.
+func (t *TextView) annType(s string) {
+	if s != "\n" {
+		t.ann.draft = SanitizeAnnotation(t.ann.draft + s)
+	}
+	t.refreshPreferredHeight()
 }
 
 // annGutterPress opens the panel when the press landed in the annotation
