@@ -185,7 +185,7 @@ func TestAnnotationMarkersAreAccessible(t *testing.T) {
 	if found == nil {
 		t.Fatalf("no marker node in %+v", nodes)
 	}
-	if found.Name != "Comment on line 2" || found.Value != "look <b>here</b>" {
+	if found.Name != "Comment on line 2: look <b>here</b>" || found.Value != "look <b>here</b>" {
 		t.Fatalf("marker %q / %q", found.Name, found.Value)
 	}
 	if found.Rect.W <= 0 || found.Rect.H <= 0 {
@@ -194,6 +194,19 @@ func TestAnnotationMarkersAreAccessible(t *testing.T) {
 	if _, ok := Widget(c.Children()[0]).(Focusable); !ok {
 		t.Fatal("the marker must be focusable")
 	}
+	// a long, multi-line comment names the button by its first line, bounded
+	c.SetAnnotation(0, strings.Repeat("é", 500)+"\nsecond")
+	for _, n := range WalkA11y(c) {
+		if n.Role == RoleButton && strings.HasPrefix(n.Name, "Comment on line 1: ") {
+			if got := len([]rune(n.Name)); got != len("Comment on line 1: ")+annotationNameRunes+1 || strings.Contains(n.Name, "second") {
+				t.Fatalf("name %d runes: %q", got, n.Name)
+			}
+			if !strings.HasSuffix(n.Value, "second") {
+				t.Fatal("the value must hold the whole comment")
+			}
+		}
+	}
+	c.DeleteAnnotation(0)
 	// the marker opens the panel
 	c.Children()[0].OnEvent(Event{Kind: EventKeyDown, Code: "Enter"})
 	if l, open := c.AnnotationOpen(); !open || l != 1 {

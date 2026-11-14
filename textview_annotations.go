@@ -265,11 +265,24 @@ func (m *annotationMarker) A11yID() string {
 	return "annotation-line-" + strconv.Itoa(m.line)
 }
 
-// A11y reports the marker as a button "Comment on line N" carrying the comment.
+// annotationNameRunes bounds the comment's share of a marker's accessible name.
+const annotationNameRunes = 200
+
+// A11y reports the marker as a button "Comment on line N: <comment>", the
+// comment in full as its Value. The comment is in the name too because a
+// button's name is what a platform tree (and webcanvas's mirror, which writes a
+// button's name and not its value) reads out.
 func (m *annotationMarker) A11y() A11yInfo {
+	name := "Comment on line " + strconv.Itoa(m.line+1)
+	if first, _, _ := strings.Cut(m.text, "\n"); first != "" {
+		if r := []rune(first); len(r) > annotationNameRunes {
+			first = string(r[:annotationNameRunes]) + "…"
+		}
+		name += ": " + first
+	}
 	return A11yInfo{
 		Role:     RoleButton,
-		Name:     "Comment on line " + strconv.Itoa(m.line+1),
+		Name:     name,
 		Value:    m.text,
 		Focused:  m.focused,
 		Disabled: m.tv.Disabled().Get(),
