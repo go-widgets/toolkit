@@ -4,6 +4,8 @@
 
 package toolkit
 
+import "github.com/go-widgets/mvvm"
+
 // A TextView's undo history, as a value. An application that shows several
 // documents in one TextView (a file panel, tabs) keeps each document's
 // history while another is shown and puts it back with SetHistory, so that
@@ -57,6 +59,21 @@ func (t *TextView) ReplaceText(s string) {
 	}
 	t.pushUndo()
 	t.SetText(s)
+}
+
+// Disabled is [Base.Disabled] with one addition: CanUndo and CanRedo answer
+// false while the view is disabled, so a toggle changes what a menu bound to
+// them should show. The first call subscribes the flag to OnHistory, so the
+// host re-reads CanUndo/CanRedo at the toggle instead of keeping the old
+// greying until the next history change. Every access goes through here, so a
+// bare &TextView{} is covered as well as NewTextView.
+func (t *TextView) Disabled() *mvvm.Observable[bool] {
+	d := t.Base.Disabled()
+	if !t.histWired {
+		t.histWired = true
+		d.Subscribe(func(bool) { t.historyChanged(false) })
+	}
+	return d
 }
 
 func (t *TextView) historyChanged(edit bool) {

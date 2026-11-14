@@ -250,6 +250,9 @@ func (c *CardList[T]) ScrollToBottom() {
 // replaces VirtualList.OnEvent (which only scrolls). Scroll and keyboard
 // navigation both feed the infinite-scroll accumulator via noteScroll.
 func (c *CardList[T]) OnEvent(ev toolkit.Event) {
+	if c.Disabled().Get() {
+		return
+	}
 	switch ev.Kind {
 	case toolkit.EventScroll:
 		c.VirtualList.ScrollByRows(ev.Delta)

@@ -466,10 +466,21 @@ func (v *VirtualList[T]) Draw(p painter.Painter, th *toolkit.Theme) {
 // OnEvent handles a wheel EventScroll by scrolling whole rows; every other
 // event kind is ignored (the row-content widgets the Render callback draws
 // handle their own input).
+//
+// A Disabled list drops every event, the wheel included.
 func (v *VirtualList[T]) OnEvent(ev toolkit.Event) {
+	if v.Disabled().Get() {
+		return
+	}
 	if ev.Kind == toolkit.EventScroll {
 		v.ScrollByRows(ev.Delta)
 	}
+}
+
+// A11y reports the list as a list, Disabled while the flag is set. The rows are
+// drawn by the Render callback, so they are not nodes of their own.
+func (v *VirtualList[T]) A11y() toolkit.A11yInfo {
+	return toolkit.A11yInfo{Role: toolkit.RoleList, Disabled: v.Disabled().Get()}
 }
 
 // ---------------------------------------------------------------------------
@@ -738,8 +749,24 @@ func (g *VirtualGrid[T]) Draw(p painter.Painter, th *toolkit.Theme) {
 
 // OnEvent handles a wheel EventScroll by scrolling whole cell-rows; every other
 // event kind is ignored.
+//
+// A Disabled grid drops every event, the wheel included.
 func (g *VirtualGrid[T]) OnEvent(ev toolkit.Event) {
+	if g.Disabled().Get() {
+		return
+	}
 	if ev.Kind == toolkit.EventScroll {
 		g.ScrollByRows(ev.Delta)
 	}
 }
+
+// A11y reports the grid as a grid, Disabled while the flag is set.
+func (g *VirtualGrid[T]) A11y() toolkit.A11yInfo {
+	return toolkit.A11yInfo{Role: toolkit.RoleGrid, Disabled: g.Disabled().Get()}
+}
+
+var (
+	_ toolkit.Accessible = (*VirtualList[int])(nil)
+	_ toolkit.Accessible = (*VirtualGrid[int])(nil)
+	_ toolkit.Accessible = (*CardList[int])(nil)
+)

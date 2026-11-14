@@ -10,6 +10,7 @@ import (
 	"go/parser"
 	"go/token"
 	"os"
+	"path/filepath"
 	"sort"
 	"strings"
 	"testing"
@@ -240,54 +241,82 @@ func disabledReaders(t *testing.T) []string {
 // accessibleBaseTypes returns every exported type of the package that embeds
 // Base -- directly, or through another type of the package that does -- and
 // answers A11y(), its own or one promoted from an embedded type.
-func accessibleBaseTypes(t *testing.T) []string {
+func accessibleBaseTypes(t *testing.T) []string { return scanAccessibleBaseTypes(t, ".") }
+
+// scanAccessibleBaseTypes is accessibleBaseTypes over several package
+// directories at once. A type of the root package is named bare; a type of
+// another directory is named "<dir>.<Type>" (slash-separated, relative to the
+// module root), so two packages may use one name. Inside a sub-package the root
+// package is reached as `toolkit.X`, which resolves to the bare name X, so a type
+// there that embeds toolkit.Base, toolkit.TextView or another sub-package type
+// is followed the same way. Generic types count: `*VirtualList[T]` embeds and
+// receives like `*VirtualList`.
+func scanAccessibleBaseTypes(t *testing.T, dirs ...string) []string {
 	t.Helper()
-	fset := token.NewFileSet()
-	pkgs, err := parser.ParseDir(fset, ".", func(fi os.FileInfo) bool {
-		return !strings.HasSuffix(fi.Name(), "_test.go")
-	}, 0)
-	if err != nil {
-		t.Fatal(err)
-	}
 	embeds := map[string][]string{}
 	ownA11y := map[string]bool{}
-	for _, p := range pkgs {
-		for _, f := range p.Files {
-			for _, d := range f.Decls {
-				switch d := d.(type) {
-				case *ast.GenDecl:
-					for _, s := range d.Specs {
-						ts, ok := s.(*ast.TypeSpec)
-						if !ok {
-							continue
-						}
-						st, ok := ts.Type.(*ast.StructType)
-						if !ok {
-							continue
-						}
-						for _, fld := range st.Fields.List {
-							if len(fld.Names) != 0 {
+	for _, dir := range dirs {
+		qual := ""
+		if dir != "." {
+			qual = filepath.ToSlash(dir) + "."
+		}
+		// name resolves a type expression to its qualified name, or "" for one the
+		// scan cannot follow (a type of an unrelated package).
+		var name func(e ast.Expr) string
+		name = func(e ast.Expr) string {
+			switch x := e.(type) {
+			case *ast.StarExpr:
+				return name(x.X)
+			case *ast.IndexExpr:
+				return name(x.X)
+			case *ast.IndexListExpr:
+				return name(x.X)
+			case *ast.Ident:
+				return qual + x.Name
+			case *ast.SelectorExpr:
+				if id, ok := x.X.(*ast.Ident); ok && id.Name == "toolkit" {
+					return x.Sel.Name
+				}
+			}
+			return ""
+		}
+		fset := token.NewFileSet()
+		pkgs, err := parser.ParseDir(fset, dir, func(fi os.FileInfo) bool {
+			return !strings.HasSuffix(fi.Name(), "_test.go")
+		}, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, p := range pkgs {
+			for _, f := range p.Files {
+				for _, d := range f.Decls {
+					switch d := d.(type) {
+					case *ast.GenDecl:
+						for _, s := range d.Specs {
+							ts, ok := s.(*ast.TypeSpec)
+							if !ok {
 								continue
 							}
-							typ := fld.Type
-							if s, ok := typ.(*ast.StarExpr); ok {
-								typ = s.X
+							st, ok := ts.Type.(*ast.StructType)
+							if !ok {
+								continue
 							}
-							if id, ok := typ.(*ast.Ident); ok {
-								embeds[ts.Name.Name] = append(embeds[ts.Name.Name], id.Name)
+							for _, fld := range st.Fields.List {
+								if len(fld.Names) != 0 {
+									continue
+								}
+								if n := name(fld.Type); n != "" {
+									embeds[qual+ts.Name.Name] = append(embeds[qual+ts.Name.Name], n)
+								}
 							}
 						}
-					}
-				case *ast.FuncDecl:
-					if d.Recv == nil || d.Name.Name != "A11y" {
-						continue
-					}
-					typ := d.Recv.List[0].Type
-					if s, ok := typ.(*ast.StarExpr); ok {
-						typ = s.X
-					}
-					if id, ok := typ.(*ast.Ident); ok {
-						ownA11y[id.Name] = true
+					case *ast.FuncDecl:
+						if d.Recv == nil || d.Name.Name != "A11y" {
+							continue
+						}
+						if n := name(d.Recv.List[0].Type); n != "" {
+							ownA11y[n] = true
+						}
 					}
 				}
 			}
@@ -313,7 +342,7 @@ func accessibleBaseTypes(t *testing.T) []string {
 	}
 	var out []string
 	for name := range embeds {
-		if !ast.IsExported(name) || name == "Base" {
+		if bare := name[strings.LastIndex(name, ".")+1:]; !ast.IsExported(bare) || name == "Base" {
 			continue
 		}
 		isBase := func(n string) bool { return n == "Base" }
@@ -445,6 +474,105 @@ func TestDisabledTabStripsDisableTheirTabs(t *testing.T) {
 				}
 			}
 		}
+	}
+}
+
+// disabledContainerCases builds the containers whose Disabled flag makes their
+// children inert, each holding enabled children (nested ones included), and
+// says how many descendant A11y nodes a walk must find. The Toolbar holds
+// ToolbarItem structs, not widgets, so it has none: the walk has nothing to mark,
+// and the test pins that so a future Children() on it is audited at once.
+func disabledContainerCases() map[string]struct {
+	build func() (Widget, *mvvm.Observable[bool])
+	want  int
+} {
+	type tc = struct {
+		build func() (Widget, *mvvm.Observable[bool])
+		want  int
+	}
+	return map[string]tc{
+		"ActionRow": {func() (Widget, *mvvm.Observable[bool]) {
+			a := NewActionRow("t")
+			a.Prefix, a.Suffix = NewButton("p", nil), &Switch{}
+			return a, a.Disabled()
+		}, 2},
+		"SettingRow": {func() (Widget, *mvvm.Observable[bool]) {
+			r := NewSettingRow("r", &Switch{})
+			return r, r.Disabled()
+		}, 1},
+		"SettingsGroup": {func() (Widget, *mvvm.Observable[bool]) {
+			g := NewSettingsGroup("g", NewSettingRow("a", &Switch{}), NewSettingRow("b", NewButton("x", nil)))
+			return g, g.Disabled()
+		}, 4}, // two rows and their controls
+		"ButtonGroup": {func() (Widget, *mvvm.Observable[bool]) {
+			g := NewButtonGroup(NewButton("a", nil), NewButton("b", nil))
+			return g, g.Disabled()
+		}, 2},
+		"FormField": {func() (Widget, *mvvm.Observable[bool]) {
+			f := NewFormField("f", NewEntry(""))
+			return f, f.Disabled()
+		}, 1},
+		"Toolbar": {func() (Widget, *mvvm.Observable[bool]) {
+			tb := NewToolbar([]ToolbarItem{{Label: "a"}, {Label: "b"}})
+			return tb, tb.Disabled()
+		}, 0},
+	}
+}
+
+// TestDisabledContainersDisableTheirDescendantsInA11y: while a container is
+// disabled every descendant node of the a11y walk reports Disabled, although no
+// child's own flag changed; re-enabled, they clear -- except a child disabled on
+// its own, which stays so.
+func TestDisabledContainersDisableTheirDescendantsInA11y(t *testing.T) {
+	for name, c := range disabledContainerCases() {
+		t.Run(name, func(t *testing.T) {
+			w, off := c.build()
+			descendants := func() []A11yNode { return WalkA11y(w)[1:] }
+			if got := len(descendants()); got != c.want {
+				t.Fatalf("%d descendant nodes, want %d", got, c.want)
+			}
+			for _, n := range descendants() {
+				if n.Disabled {
+					t.Errorf("enabled container: %s node is Disabled", n.Role)
+				}
+			}
+			off.Set(true)
+			for _, n := range descendants() {
+				if !n.Disabled {
+					t.Errorf("disabled container: %s node reports enabled", n.Role)
+				}
+			}
+			off.Set(false)
+			for _, n := range descendants() {
+				if n.Disabled {
+					t.Errorf("re-enabled container: %s node still Disabled", n.Role)
+				}
+			}
+		})
+	}
+}
+
+// A child that was disabled before its container keeps that after the container
+// is enabled again: the walk derives, it never writes the children's flags.
+func TestDisabledContainerLeavesChildFlagsAlone(t *testing.T) {
+	sw := &Switch{}
+	sw.Disabled().Set(true)
+	row := NewSettingRow("r", sw)
+	row.Disabled().Set(true)
+	row.Disabled().Set(false)
+	if got := WalkA11y(row)[1]; !got.Disabled {
+		t.Error("the child disabled on its own was cleared with its container")
+	}
+	sw.Disabled().Set(false)
+	row.Disabled().Set(true)
+	if sw.Disabled().Get() {
+		t.Error("disabling the container wrote the child's own flag")
+	}
+	nested := NewSettingsGroup("g", row)
+	row.Disabled().Set(false)
+	nested.Disabled().Set(true)
+	if got := WalkA11y(nested)[2]; !got.Disabled { // group, row, switch
+		t.Error("a grandchild of a disabled container reads enabled")
 	}
 }
 
