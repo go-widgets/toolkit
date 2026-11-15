@@ -417,34 +417,13 @@ func TestDockPanelOverwideAccessories(t *testing.T) {
 	dp.Draw(newP(makeSurface(200, 40), 200), DefaultLight()) // no panic
 }
 
-// TestAppDockNodeAdapter exercises every method of the AppDock→Widget adapter
-// returned by DockPanel.Children (the walk itself only calls Bounds + A11y).
-func TestAppDockNodeAdapter(t *testing.T) {
+// The dock is itself a Widget now, so DockPanel.Children hands it out as is
+// (there used to be an adapter around it).
+func TestDockPanelChildIsTheDockItself(t *testing.T) {
 	dp := NewDockPanel(NewAppDock(dpItems()...))
 	dp.SetBounds(Rect{X: 0, Y: 0, W: 400, H: 40})
-
-	var node Widget
-	for _, ch := range dp.Children() {
-		if a, ok := ch.(Accessible); ok && a.A11y().Role == RoleToolbar {
-			node = ch
-		}
+	kids := dp.Children()
+	if len(kids) != 1 || kids[0] != Widget(dp.Dock) {
+		t.Errorf("children = %#v, want exactly the dock", kids)
 	}
-	if node == nil {
-		t.Fatal("no toolbar adapter among the children")
-	}
-
-	b := node.Bounds()
-	node.SetBounds(b) // round-trips to the dock
-	if node.Bounds() != dp.Dock.Bounds() {
-		t.Error("adapter bounds diverged from the dock")
-	}
-	item := dp.Dock.ItemRects()[0]
-	if !node.HitTest(item.X+2, item.Y+2) {
-		t.Error("adapter HitTest should be true over an item")
-	}
-	if node.HitTest(b.X+b.W+1000, b.Y) {
-		t.Error("adapter HitTest should be false far outside the run")
-	}
-	node.Draw(newP(makeSurface(400, 40), 400), DefaultLight())
-	node.OnEvent(Event{Kind: EventMouseMove, X: 5, Y: 5}) // forwards to the dock
 }

@@ -205,22 +205,7 @@ func (d *DockPanel) OnEvent(ev Event) {
 			return
 		}
 	}
-	if d.Dock != nil && d.Dock.HitTest(sx, sy) >= 0 {
+	if d.Dock != nil && d.Dock.HitTest(sx, sy) {
 		d.Dock.OnEvent(translateEvent(ev, pr, d.Dock.Bounds()))
 	}
 }
-
-// appDockNode adapts an [AppDock] — whose HitTest returns an item INDEX, not a
-// bool, so the type does not itself satisfy [Widget] — into a Widget, purely so
-// the accessibility walk ([WalkA11y] / [Children]) reaches the dock's toolbar
-// node and reports it at the dock's bounds. Bounds/A11y mirror the dock; Draw
-// and OnEvent forward to it; HitTest collapses the item index to "over an item".
-// It carries no state of its own, so a fresh value per Children call is free.
-type appDockNode struct{ d *AppDock }
-
-func (n appDockNode) Bounds() Rect                     { return n.d.Bounds() }
-func (n appDockNode) SetBounds(r Rect)                 { n.d.SetBounds(r) }
-func (n appDockNode) Draw(p painter.Painter, t *Theme) { n.d.Draw(p, t) }
-func (n appDockNode) HitTest(px, py int) bool          { return n.d.HitTest(px, py) >= 0 }
-func (n appDockNode) OnEvent(ev Event)                 { n.d.OnEvent(ev) }
-func (n appDockNode) A11y() A11yInfo                   { return n.d.A11y() }

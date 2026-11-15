@@ -50,6 +50,7 @@ import (
 // disabledA11yCatalogue maps a type name to a constructor for a fresh instance.
 var disabledA11yCatalogue = map[string]func() Accessible{
 	"Accordion":      func() Accessible { return NewAccordion([]AccordionSection{{Title: "a"}}) },
+	"AppDock":        func() Accessible { return NewAppDock(AppDockItem{Label: "a"}) },
 	"Browser":        func() Accessible { return NewBrowser() },
 	"Button":         func() Accessible { return &Button{} },
 	"CodeEditor":     func() Accessible { return NewCodeEditor("") },
@@ -591,6 +592,10 @@ func disabledContainerCases() map[string]struct {
 			tb := NewToolbar([]ToolbarItem{{Label: "a"}, {Separator: true}, {Label: "b"}})
 			return tb, tb.Disabled()
 		}, 2}, // the separator has no node
+		"AppDock": {func() (Widget, *mvvm.Observable[bool]) {
+			d := NewAppDock(AppDockItem{Label: "a"}, AppDockItem{Label: "b"})
+			return d, d.Disabled()
+		}, 2},
 		"Frame": {func() (Widget, *mvvm.Observable[bool]) {
 			f := NewFrame(NewButton("a", nil))
 			return f, f.Disabled()
@@ -728,14 +733,10 @@ func (noObservable) HitTest(int, int) bool        { return false }
 func (noObservable) OnEvent(Event)                {}
 func (noObservable) A11y() A11yInfo               { return A11yInfo{} }
 
-// The three reasons a widget that embeds Base is not in the catalogue.
+// The two reasons a widget that embeds Base is not in the catalogue.
 const (
 	exemptStatic = "display only: no activation, selection or editing (at most hover or scroll), so it has no inert state to announce"
 	exemptLayout = "layout, routing or decoration: forwards events to children whose own state governs, or paints chrome; it has no control of its own"
-	// exemptNotWidget is what is left of the former "interactive but never honours
-	// Disabled" class (#578): AppDock answers A11y() but is not a Widget, because
-	// HitTest returns the item index, so it cannot be built as an Accessible here.
-	exemptNotWidget = "answers A11y() but is not a Widget (HitTest returns the item index, not a bool), so the catalogue cannot hold it; changing that public signature is a breaking API change, tracked separately"
 )
 
 // disabledA11yExempt lists the accessible Base types that are deliberately not
@@ -756,7 +757,6 @@ var disabledA11yExempt = exemptions(map[string][]string{
 		"Material", "Native", "Overlay", "Padding", "Popover", "PopoverHost", "ScrollView", "Skeleton",
 		"SkeletonGroup", "Stack", "StatusArea", "VBox", "Viewport", "Wallpaper", "WindowDecoration",
 	},
-	exemptNotWidget: {"AppDock"},
 })
 
 // exemptions flattens reason -> names into name -> reason.

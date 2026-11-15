@@ -72,7 +72,7 @@ type AppDockItem struct {
 // item, a rounded Backdrop face, the host's icon painter, a clipped label, a
 // running dot and an attention Badge — so it carries the toolkit look under any
 // theme with no hand-drawn chrome. ItemRects publishes the live geometry and
-// HitTest maps a point to an item, so paint and hit-testing read one layout.
+// ItemAt maps a point to an item, so paint and hit-testing read one layout.
 //
 // (Not to be confused with Dock, the edge-docking LAYOUT container: AppDock is a
 // visual launcher; Dock arranges bars around a body.)
@@ -110,9 +110,43 @@ func NewAppDock(items ...AppDockItem) *AppDock {
 	return &AppDock{Items: items, Magnify: true, MaxScale: appDockDefaultScale, Radius: appDockDefaultRadius}
 }
 
-// A11y describes the dock to a screen reader as a toolbar — a single node, the
-// same way the other data-driven item widgets (ListBox) expose themselves.
-func (d *AppDock) A11y() A11yInfo { return A11yInfo{Role: RoleToolbar} }
+// A11y describes the dock to a screen reader as a toolbar, disabled when the
+// dock is. Its items are the toolbar's child nodes (see Children).
+func (d *AppDock) A11y() A11yInfo {
+	return A11yInfo{Role: RoleToolbar, Disabled: d.Disabled().Get()}
+}
+
+// Children exposes each item as a synthetic, non-drawing button node so the
+// accessibility walk descends toolbar -> button: a screen reader hears each
+// item's label, not just "toolbar". The rect is the item's live rectangle from
+// ItemRects (magnified while hovered), the one Draw paints and ItemAt answers
+// for. Like Toolbar's nodes they are rebuilt on demand, draw nothing and handle
+// no events; the dock paints and routes every item itself. The dock's own
+// Disabled reaches them through the walk (a11yDisablesSubtree).
+func (d *AppDock) Children() []Widget {
+	rects := d.ItemRects()
+	out := make([]Widget, len(d.Items))
+	for i, it := range d.Items {
+		n := &appDockItemNode{label: it.Label}
+		n.SetBounds(rects[i])
+		out[i] = n
+	}
+	return out
+}
+
+// appDockItemNode is the synthetic stand-in for one AppDock item. The dock has
+// no per-item keyboard focus and no per-item disabled flag.
+type appDockItemNode struct {
+	Base
+	label string
+}
+
+// A11y reports the node as a button named by the item's label.
+func (n *appDockItemNode) A11y() A11yInfo {
+	return A11yInfo{Role: RoleButton, Name: n.label}
+}
+
+var _ Accessible = (*appDockItemNode)(nil)
 
 func (d *AppDock) itemH() int { return scaled(AppDockItemH) }
 func (d *AppDock) gap() int   { return scaled(AppDockGap) }
@@ -153,7 +187,7 @@ func (d *AppDock) restingSlots() []appDockSlot {
 // effect is enabled, the cursor is over the bar, the falloff radius is positive
 // and the peak scale exceeds 1.
 func (d *AppDock) magnifyActive() bool {
-	return d.Magnify && d.cursorInside && d.Radius > 0 && d.MaxScale > 1 && len(d.Items) > 0
+	return !d.Disabled().Get() && d.Magnify && d.cursorInside && d.Radius > 0 && d.MaxScale > 1 && len(d.Items) > 0
 }
 
 // slots returns the items as they paint + hit-test right now. With magnification
@@ -242,15 +276,23 @@ func (d *AppDock) ItemRects() []Rect {
 	return out
 }
 
-// HitTest returns the index of the item at the absolute point (x,y), or -1 when
-// the point hits no item.
-func (d *AppDock) HitTest(x, y int) int {
+// ItemAt returns the index of the item at the absolute point (x,y), or -1 when
+// the point hits no item. (It was HitTest before AppDock became a [Widget],
+// whose HitTest answers a bool.)
+func (d *AppDock) ItemAt(x, y int) int {
 	for i, r := range d.ItemRects() {
 		if r.Contains(x, y) {
 			return i
 		}
 	}
 	return -1
+}
+
+// HitTest is the [Widget] contract, in absolute coordinates like every other
+// widget: whether (x,y) is over the dock's bounds or over an item. The second
+// clause matters because a magnified item can overflow the bounds.
+func (d *AppDock) HitTest(x, y int) bool {
+	return d.Base.HitTest(x, y) || d.ItemAt(x, y) >= 0
 }
 
 // SetCursor updates the pointer position that drives magnification, in absolute
@@ -340,7 +382,16 @@ func (d *AppDock) clip(s string, maxW int) string {
 // OnEvent drives magnification from EventMouseMove (the pointer position sets
 // the swell; a move that leaves the bounds flattens the row) and activation from
 // EventClick (the hit item fires OnActivate). Coordinates are widget-local.
+//
+// A disabled dock takes no input. That includes the move: the swell is hover
+// feedback that invites a click, so a dock that cannot be clicked must not
+// offer it; the move also drops any hover already held, so re-enabling never
+// swells from a stale pointer position.
 func (d *AppDock) OnEvent(ev Event) {
+	if d.Disabled().Get() {
+		d.cursorInside = false
+		return
+	}
 	switch ev.Kind {
 	case EventMouseMove:
 		d.cursorInside = d.localInBounds(ev.X, ev.Y)
@@ -350,7 +401,7 @@ func (d *AppDock) OnEvent(ev Event) {
 			return
 		}
 		b := d.Bounds()
-		if i := d.HitTest(b.X+ev.X, b.Y+ev.Y); i >= 0 {
+		if i := d.ItemAt(b.X+ev.X, b.Y+ev.Y); i >= 0 {
 			d.OnActivate(i)
 		}
 	}
