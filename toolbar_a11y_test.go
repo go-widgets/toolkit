@@ -47,6 +47,10 @@ func TestToolbarItemNodeRectsMatchTheHitArea(t *testing.T) {
 				t.Errorf("vertical=%v node %d is %dx%d, want the button size", vertical, i, r.W, r.H)
 			}
 			idx := tb.hitTest(r.X-tb.Bounds().X+1, r.Y-tb.Bounds().Y+1)
+			if idx < 0 {
+				t.Errorf("vertical=%v node %d (%q) sits over no button", vertical, i, n.(Accessible).A11y().Name)
+				continue
+			}
 			if tb.Items[idx].Label != n.(Accessible).A11y().Name {
 				t.Errorf("vertical=%v node %d (%q) sits over item %q", vertical, i, n.(Accessible).A11y().Name, tb.Items[idx].Label)
 			}
