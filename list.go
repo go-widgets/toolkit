@@ -554,9 +554,6 @@ func (l *ListBox) OnEvent(ev Event) {
 // ⛔ Sectioned mode is single-selection (a caption has no place in a range), so
 // none of this runs there: it falls through to the plain roving cursor.
 func (l *ListBox) handleKey(ev Event) {
-	if l.Disabled().Get() {
-		return
-	}
 	// ⌘ is the command modifier on macOS and Ctrl everywhere else; a widget
 	// cannot tell which platform it is painting on, so it answers to both.
 	cmd := ev.Ctrl || ev.Meta
