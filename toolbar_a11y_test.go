@@ -13,7 +13,9 @@ func a11yToolbar(vertical bool) *Toolbar {
 	if vertical {
 		tb.Orientation = Vertical
 	}
-	tb.SetBounds(Rect{X: 10, Y: 20, W: 200, H: 200})
+	// not square: swapping W and H, or taking the wrong one along an axis, shows
+	tb.ButtonW, tb.ButtonH = 30, 18
+	tb.SetBounds(Rect{X: 10, Y: 20, W: 150, H: 150})
 	return tb
 }
 
@@ -86,5 +88,62 @@ func TestToolbarDisabledReachesItemNodes(t *testing.T) {
 	tb.Disabled().Set(false)
 	if tb.Items[0].Disabled || WalkA11y(tb)[1].Disabled {
 		t.Error("re-enabling the toolbar did not restore the item")
+	}
+}
+
+// A node's rectangle is the cell Draw actually paints: the cell's frame is
+// stroked in theme.Border, so its four corners carry that colour and the pixel
+// past the far edge of the cross axis does not. hitTest and itemRect share
+// itemStep, so agreeing with hitTest alone would not catch a wrong step.
+func TestToolbarItemNodeRectsMatchWhatDrawPaints(t *testing.T) {
+	theme := DefaultLight()
+	for _, vertical := range []bool{false, true} {
+		tb := a11yToolbar(vertical)
+		buf := make([]byte, 4*v04SurfW*v04SurfH)
+		tb.Draw(newP(buf, v04SurfW), theme)
+		for i, n := range tb.Children() {
+			r := n.Bounds()
+			for _, c := range [][2]int{{r.X, r.Y}, {r.X + r.W - 1, r.Y}, {r.X, r.Y + r.H - 1}, {r.X + r.W - 1, r.Y + r.H - 1}} {
+				if got := pixelAt(buf, v04SurfW, c[0], c[1]); got != theme.Border {
+					t.Errorf("vertical=%v node %d %+v: corner (%d,%d) is %+v, want the stroked frame %+v", vertical, i, r, c[0], c[1], got, theme.Border)
+				}
+			}
+			// just past the cell on the cross axis is the strip's ground
+			px, py := r.X+1, r.Y+r.H // below the cell
+			if vertical {
+				px, py = r.X+r.W, r.Y+1 // right of the cell
+			}
+			if got := pixelAt(buf, v04SurfW, px, py); got == theme.Border {
+				t.Errorf("vertical=%v node %d %+v: pixel (%d,%d) past the cell is stroked, the rect is too small", vertical, i, r, px, py)
+			}
+		}
+	}
+}
+
+// The cells advance by the button size along the axis and a separator by sepW,
+// in both orientations, with a button that is not square.
+func TestToolbarItemStep(t *testing.T) {
+	h, v := a11yToolbar(false), a11yToolbar(true)
+	bw, bh, sw := h.buttonW(), h.buttonH(), h.sepW()
+	if bw == bh {
+		t.Fatal("the fixture must not be square")
+	}
+	if got := h.itemStep(h.Items[0], bw, bh, sw); got != bw {
+		t.Errorf("horizontal button step = %d, want %d", got, bw)
+	}
+	if got := v.itemStep(v.Items[0], bw, bh, sw); got != bh {
+		t.Errorf("vertical button step = %d, want %d", got, bh)
+	}
+	for _, tb := range []*Toolbar{h, v} {
+		if got := tb.itemStep(tb.Items[1], bw, bh, sw); got != sw {
+			t.Errorf("separator step = %d, want %d", got, sw)
+		}
+	}
+	// the third item sits after a button and a separator
+	if got, want := h.itemRect(2).X, h.Bounds().X+bw+sw; got != want {
+		t.Errorf("horizontal item 2 at x=%d, want %d", got, want)
+	}
+	if got, want := v.itemRect(2).Y, v.Bounds().Y+bh+sw; got != want {
+		t.Errorf("vertical item 2 at y=%d, want %d", got, want)
 	}
 }

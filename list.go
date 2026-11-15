@@ -225,7 +225,7 @@ func (l *ListBox) DragData() string {
 // false for any payload that doesn't carry the scheme (e.g. a different
 // DragSource's payload).
 func (l *ListBox) AcceptsDrop(payload string) bool {
-	if l.sectioned() || !l.Reorderable {
+	if l.sectioned() || !l.Reorderable || l.Disabled().Get() {
 		return false
 	}
 	return strings.HasPrefix(payload, ListRowDragPrefix)
@@ -498,6 +498,12 @@ func (l *ListBox) scrollbarGeom() (sbGeom, bool) {
 // selection cursor and Enter/Space activate it (see handleKey). Every other
 // event kind is ignored.
 func (l *ListBox) OnEvent(ev Event) {
+	if l.Disabled().Get() {
+		// Everything is inert -- click, wheel, drag and drop, not only keys -- and
+		// a scrollbar thumb in hand is let go rather than kept for the next move.
+		l.sbDrag.release()
+		return
+	}
 	switch ev.Kind {
 	case EventScroll:
 		// Native wheel scroll: shift the visible window by Delta rows

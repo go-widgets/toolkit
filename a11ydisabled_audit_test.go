@@ -276,10 +276,17 @@ const toolkitModule = "github.com/go-widgets/toolkit"
 // the alias when there is one, else the last path element -- so `tk
 // "github.com/go-widgets/toolkit"` resolves like the bare import, which the
 // first version (it compared the identifier to the literal "toolkit") did not.
-func qualifiedImports(f *ast.File) map[string]string {
+//
+// A dot import of the module is REFUSED with an error: its names arrive
+// unqualified, indistinguishable from the package's own, so the scan cannot
+// follow them and would otherwise skip the types that embed them in silence.
+func qualifiedImports(f *ast.File) (map[string]string, error) {
 	out := map[string]string{}
 	for _, im := range f.Imports {
 		path := strings.Trim(im.Path.Value, `"`)
+		if im.Name != nil && im.Name.Name == "." && (path == toolkitModule || strings.HasPrefix(path, toolkitModule+"/")) {
+			return nil, fmt.Errorf("dot import of %s: the a11y scan cannot follow unqualified names; import it by name", path)
+		}
 		var qual string
 		switch {
 		case path == toolkitModule:
@@ -295,13 +302,22 @@ func qualifiedImports(f *ast.File) map[string]string {
 		}
 		out[local] = qual
 	}
-	return out
+	return out, nil
 }
 
-// scanBaseTypes returns the exported Base-embedding types with and without an
-// A11y() method.
+// scanBaseTypes is scanBaseTypesErr failing the test on an error.
 func scanBaseTypes(t *testing.T, dirs ...string) (withA11y, withoutA11y []string) {
 	t.Helper()
+	with, without, err := scanBaseTypesErr(dirs...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return with, without
+}
+
+// scanBaseTypesErr returns the exported Base-embedding types with and without an
+// A11y() method, or an error for a source it cannot read or follow.
+func scanBaseTypesErr(dirs ...string) (withA11y, withoutA11y []string, err error) {
 	embeds := map[string][]string{}
 	ownA11y := map[string]bool{}
 	for _, dir := range dirs {
@@ -337,11 +353,14 @@ func scanBaseTypes(t *testing.T, dirs ...string) (withA11y, withoutA11y []string
 			return !strings.HasSuffix(fi.Name(), "_test.go")
 		}, 0)
 		if err != nil {
-			t.Fatal(err)
+			return nil, nil, err
 		}
 		for _, p := range pkgs {
 			for _, f := range p.Files {
-				imports := qualifiedImports(f)
+				imports, err := qualifiedImports(f)
+				if err != nil {
+					return nil, nil, fmt.Errorf("%s: %w", dir, err)
+				}
 				for _, d := range f.Decls {
 					switch d := d.(type) {
 					case *ast.GenDecl:
@@ -410,7 +429,7 @@ func scanBaseTypes(t *testing.T, dirs ...string) (withA11y, withoutA11y []string
 	}
 	sort.Strings(withA11y)
 	sort.Strings(withoutA11y)
-	return withA11y, withoutA11y
+	return withA11y, withoutA11y, nil
 }
 
 // TestA11yDisabledCatalogueIsComplete fails when an exported widget that embeds
@@ -872,5 +891,36 @@ func TestA11yEveryBaseTypeAnswersA11y(t *testing.T) {
 		if reason, ok := noA11yExempt[name]; !ok || strings.TrimSpace(reason) == "" {
 			t.Errorf("%s embeds Base but has no A11y(): give it one, or exempt it in noA11yExempt with a reason", name)
 		}
+	}
+}
+
+// A dot import of the module cannot be followed (its names are unqualified), so
+// the scan fails loudly instead of skipping the types that embed through it.
+func TestScanRefusesADotImport(t *testing.T) {
+	_, _, err := scanBaseTypesErr("testdata/a11ydot")
+	if err == nil || !strings.Contains(err.Error(), "dot import") {
+		t.Fatalf("scan of a dot-importing package: err = %v, want a refusal naming the dot import", err)
+	}
+	if _, _, err := scanBaseTypesErr("testdata/does-not-exist"); err == nil {
+		t.Fatal("scan of a missing directory must report the error, not an empty result")
+	}
+}
+
+// An alias is a property of one file: `tk` is the toolkit in aliased.go and an
+// unrelated package in leak.go, whose type must not be taken for a widget.
+func TestScanAliasDoesNotLeakAcrossFiles(t *testing.T) {
+	const fx = "testdata/a11yscan"
+	with, without := scanBaseTypes(t, fx, ".")
+	for _, n := range append(append([]string{}, with...), without...) {
+		if n == fx+".Leak" {
+			t.Fatalf("%s is reported as a Base type: an alias leaked from another file", n)
+		}
+	}
+	found := false
+	for _, n := range with {
+		found = found || n == fx+".Aliased"
+	}
+	if !found {
+		t.Fatal("the alias in its own file no longer resolves")
 	}
 }

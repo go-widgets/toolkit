@@ -1661,6 +1661,9 @@ func (d *IsoDiagram) OnEvent(ev Event) {
 // ones), so a host shows the accept cursor over the canvas only for a real icon
 // drag and never for an unrelated payload.
 func (d *IsoDiagram) AcceptsDrop(payload string) bool {
+	if d.Disabled().Get() {
+		return false
+	}
 	_, ok := DecodeIsoIconPayload(payload)
 	return ok
 }
