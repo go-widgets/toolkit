@@ -103,9 +103,41 @@ func WalkA11y(w Widget) []A11yNode {
 // is, without touching the children's own flags -- so re-enabling the container
 // restores each child to whatever it was, and a child that was disabled on its
 // own stays so. ActionRow, SettingsGroup, SettingRow, ButtonGroup, FormField
-// and Toolbar carry it; TabBar and FolderTabs do the same through the tab nodes
-// they build.
+// and Toolbar carry it, and so do Frame, Dialog, Window, Wizard, Inspector and
+// Splitter (#580-#582 made them drop their children's input); TabBar and
+// FolderTabs do the same through the tab nodes they build.
+// TestA11yDisabledContainersAreMarked derives the set from the catalogue, so a
+// container that holds children and carries neither this marker nor a reasoned
+// exemption fails there.
 type a11yDisablesSubtree interface{ a11yDisablesSubtree() bool }
+
+func (*Frame) a11yDisablesSubtree() bool     { return true }
+func (*Dialog) a11yDisablesSubtree() bool    { return true }
+func (*Window) a11yDisablesSubtree() bool    { return true }
+func (*Wizard) a11yDisablesSubtree() bool    { return true }
+func (*Inspector) a11yDisablesSubtree() bool { return true }
+func (*Splitter) a11yDisablesSubtree() bool  { return true }
+
+// The rest of the containers whose OnEvent returns before forwarding while
+// disabled (found by TestA11yDisabledContainersAreMarked).
+func (*Border) a11yDisablesSubtree() bool            { return true }
+func (*Dock) a11yDisablesSubtree() bool              { return true }
+func (*ModalWindow) a11yDisablesSubtree() bool       { return true }
+func (*Paned) a11yDisablesSubtree() bool             { return true }
+func (*Surface) a11yDisablesSubtree() bool           { return true }
+func (*ActionSheet) a11yDisablesSubtree() bool       { return true }
+func (*ClosablePane) a11yDisablesSubtree() bool      { return true }
+func (*DatabaseEditor) a11yDisablesSubtree() bool    { return true }
+func (*FindReplace) a11yDisablesSubtree() bool       { return true }
+func (*FontPicker) a11yDisablesSubtree() bool        { return true }
+func (*ForgePane) a11yDisablesSubtree() bool         { return true }
+func (*PullToRefresh) a11yDisablesSubtree() bool     { return true }
+func (*RichEditorToolbar) a11yDisablesSubtree() bool { return true }
+func (*SwipeActions) a11yDisablesSubtree() bool      { return true }
+func (*Statusbar) a11yDisablesSubtree() bool         { return true }
+func (*ListBox) a11yDisablesSubtree() bool           { return true }
+func (*IsoDiagram) a11yDisablesSubtree() bool        { return true }
+func (*Fab) a11yDisablesSubtree() bool               { return true }
 
 func (*ActionRow) a11yDisablesSubtree() bool     { return true }
 func (*SettingsGroup) a11yDisablesSubtree() bool { return true }

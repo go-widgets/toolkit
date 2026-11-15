@@ -253,6 +253,71 @@ func accessibleBaseTypes(t *testing.T) []string { return scanAccessibleBaseTypes
 // receives like `*VirtualList`.
 func scanAccessibleBaseTypes(t *testing.T, dirs ...string) []string {
 	t.Helper()
+	with, _ := scanBaseTypes(t, dirs...)
+	return with
+}
+
+// scanBaseTypesWithoutA11y is the other half of the scan: the exported types
+// that embed Base but answer no A11y() at all, their own or promoted. The
+// completeness gate cannot see them (it asks "which types answer A11y()?"), so a
+// widget that forgot the method altogether was skipped instead of refused.
+func scanBaseTypesWithoutA11y(t *testing.T, dirs ...string) []string {
+	t.Helper()
+	_, without := scanBaseTypes(t, dirs...)
+	return without
+}
+
+// toolkitModule is the import path of the module under audit.
+const toolkitModule = "github.com/go-widgets/toolkit"
+
+// qualifiedImports maps each local name a file gives an import to the qualifier
+// the scan uses for that package: "" for the module root, "<dir>." for a
+// sub-package, and absent for a package outside the module. The local name is
+// the alias when there is one, else the last path element -- so `tk
+// "github.com/go-widgets/toolkit"` resolves like the bare import, which the
+// first version (it compared the identifier to the literal "toolkit") did not.
+//
+// A dot import of the module is REFUSED with an error: its names arrive
+// unqualified, indistinguishable from the package's own, so the scan cannot
+// follow them and would otherwise skip the types that embed them in silence.
+func qualifiedImports(f *ast.File) (map[string]string, error) {
+	out := map[string]string{}
+	for _, im := range f.Imports {
+		path := strings.Trim(im.Path.Value, `"`)
+		if im.Name != nil && im.Name.Name == "." && (path == toolkitModule || strings.HasPrefix(path, toolkitModule+"/")) {
+			return nil, fmt.Errorf("dot import of %s: the a11y scan cannot follow unqualified names; import it by name", path)
+		}
+		var qual string
+		switch {
+		case path == toolkitModule:
+			qual = ""
+		case strings.HasPrefix(path, toolkitModule+"/"):
+			qual = strings.TrimPrefix(path, toolkitModule+"/") + "."
+		default:
+			continue
+		}
+		local := path[strings.LastIndex(path, "/")+1:]
+		if im.Name != nil {
+			local = im.Name.Name
+		}
+		out[local] = qual
+	}
+	return out, nil
+}
+
+// scanBaseTypes is scanBaseTypesErr failing the test on an error.
+func scanBaseTypes(t *testing.T, dirs ...string) (withA11y, withoutA11y []string) {
+	t.Helper()
+	with, without, err := scanBaseTypesErr(dirs...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return with, without
+}
+
+// scanBaseTypesErr returns the exported Base-embedding types with and without an
+// A11y() method, or an error for a source it cannot read or follow.
+func scanBaseTypesErr(dirs ...string) (withA11y, withoutA11y []string, err error) {
 	embeds := map[string][]string{}
 	ownA11y := map[string]bool{}
 	for _, dir := range dirs {
@@ -261,21 +326,24 @@ func scanAccessibleBaseTypes(t *testing.T, dirs ...string) []string {
 			qual = filepath.ToSlash(dir) + "."
 		}
 		// name resolves a type expression to its qualified name, or "" for one the
-		// scan cannot follow (a type of an unrelated package).
-		var name func(e ast.Expr) string
-		name = func(e ast.Expr) string {
+		// scan cannot follow (a type of an unrelated package). imports is the
+		// file's own table: an alias is a property of one file.
+		var name func(e ast.Expr, imports map[string]string) string
+		name = func(e ast.Expr, imports map[string]string) string {
 			switch x := e.(type) {
 			case *ast.StarExpr:
-				return name(x.X)
+				return name(x.X, imports)
 			case *ast.IndexExpr:
-				return name(x.X)
+				return name(x.X, imports)
 			case *ast.IndexListExpr:
-				return name(x.X)
+				return name(x.X, imports)
 			case *ast.Ident:
 				return qual + x.Name
 			case *ast.SelectorExpr:
-				if id, ok := x.X.(*ast.Ident); ok && id.Name == "toolkit" {
-					return x.Sel.Name
+				if id, ok := x.X.(*ast.Ident); ok {
+					if q, ok := imports[id.Name]; ok {
+						return q + x.Sel.Name
+					}
 				}
 			}
 			return ""
@@ -285,10 +353,14 @@ func scanAccessibleBaseTypes(t *testing.T, dirs ...string) []string {
 			return !strings.HasSuffix(fi.Name(), "_test.go")
 		}, 0)
 		if err != nil {
-			t.Fatal(err)
+			return nil, nil, err
 		}
 		for _, p := range pkgs {
 			for _, f := range p.Files {
+				imports, err := qualifiedImports(f)
+				if err != nil {
+					return nil, nil, fmt.Errorf("%s: %w", dir, err)
+				}
 				for _, d := range f.Decls {
 					switch d := d.(type) {
 					case *ast.GenDecl:
@@ -305,7 +377,7 @@ func scanAccessibleBaseTypes(t *testing.T, dirs ...string) []string {
 								if len(fld.Names) != 0 {
 									continue
 								}
-								if n := name(fld.Type); n != "" {
+								if n := name(fld.Type, imports); n != "" {
 									embeds[qual+ts.Name.Name] = append(embeds[qual+ts.Name.Name], n)
 								}
 							}
@@ -314,7 +386,7 @@ func scanAccessibleBaseTypes(t *testing.T, dirs ...string) []string {
 						if d.Recv == nil || d.Name.Name != "A11y" {
 							continue
 						}
-						if n := name(d.Recv.List[0].Type); n != "" {
+						if n := name(d.Recv.List[0].Type, imports); n != "" {
 							ownA11y[n] = true
 						}
 					}
@@ -340,19 +412,24 @@ func scanAccessibleBaseTypes(t *testing.T, dirs ...string) []string {
 		}
 		return false
 	}
-	var out []string
 	for name := range embeds {
 		if bare := name[strings.LastIndex(name, ".")+1:]; !ast.IsExported(bare) || name == "Base" {
 			continue
 		}
 		isBase := func(n string) bool { return n == "Base" }
 		hasA11y := func(n string) bool { return ownA11y[n] }
-		if reach(name, isBase, map[string]bool{}) && reach(name, hasA11y, map[string]bool{}) {
-			out = append(out, name)
+		if !reach(name, isBase, map[string]bool{}) {
+			continue
+		}
+		if reach(name, hasA11y, map[string]bool{}) {
+			withA11y = append(withA11y, name)
+		} else {
+			withoutA11y = append(withoutA11y, name)
 		}
 	}
-	sort.Strings(out)
-	return out
+	sort.Strings(withA11y)
+	sort.Strings(withoutA11y)
+	return withA11y, withoutA11y, nil
 }
 
 // TestA11yDisabledCatalogueIsComplete fails when an exported widget that embeds
@@ -479,9 +556,7 @@ func TestDisabledTabStripsDisableTheirTabs(t *testing.T) {
 
 // disabledContainerCases builds the containers whose Disabled flag makes their
 // children inert, each holding enabled children (nested ones included), and
-// says how many descendant A11y nodes a walk must find. The Toolbar holds
-// ToolbarItem structs, not widgets, so it has none: the walk has nothing to mark,
-// and the test pins that so a future Children() on it is audited at once.
+// says how many descendant A11y nodes a walk must find.
 func disabledContainerCases() map[string]struct {
 	build func() (Widget, *mvvm.Observable[bool])
 	want  int
@@ -513,9 +588,35 @@ func disabledContainerCases() map[string]struct {
 			return f, f.Disabled()
 		}, 1},
 		"Toolbar": {func() (Widget, *mvvm.Observable[bool]) {
-			tb := NewToolbar([]ToolbarItem{{Label: "a"}, {Label: "b"}})
+			tb := NewToolbar([]ToolbarItem{{Label: "a"}, {Separator: true}, {Label: "b"}})
 			return tb, tb.Disabled()
-		}, 0},
+		}, 2}, // the separator has no node
+		"Frame": {func() (Widget, *mvvm.Observable[bool]) {
+			f := NewFrame(NewButton("a", nil))
+			return f, f.Disabled()
+		}, 1},
+		"Dialog": {func() (Widget, *mvvm.Observable[bool]) {
+			d := NewDialog("t", NewButton("a", nil))
+			return d, d.Disabled()
+		}, 1},
+		"Window": {func() (Widget, *mvvm.Observable[bool]) {
+			w := NewWindow("t", NewButton("a", nil))
+			return w, w.Disabled()
+		}, 1},
+		"Wizard": {func() (Widget, *mvvm.Observable[bool]) {
+			w := NewWizard([]WizardStep{{Title: "a", Body: NewButton("x", nil)}, {Title: "b", Body: &Switch{}}})
+			return w, w.Disabled()
+		}, 2},
+		"Inspector": {func() (Widget, *mvvm.Observable[bool]) {
+			in := NewInspector([]InspectorRow{{ID: "t", Kind: InspectorText}})
+			return in, in.Disabled()
+		}, 1},
+		"Splitter": {func() (Widget, *mvvm.Observable[bool]) {
+			s := NewSplitter(false, &SplitPane{Widget: NewButton("a", nil), Weight: mvvm.NewObservable(1)},
+				&SplitPane{Widget: NewButton("b", nil), Weight: mvvm.NewObservable(1)})
+			s.SetBounds(Rect{W: 200, H: 100}) // the visible panes are decided by the layout
+			return s, s.Disabled()
+		}, 2}, // presentational itself: no node of its own
 	}
 }
 
@@ -527,7 +628,11 @@ func TestDisabledContainersDisableTheirDescendantsInA11y(t *testing.T) {
 	for name, c := range disabledContainerCases() {
 		t.Run(name, func(t *testing.T) {
 			w, off := c.build()
-			descendants := func() []A11yNode { return WalkA11y(w)[1:] }
+			skip := 1 // the container's own node
+			if w.(Accessible).A11y().Role == RolePresentation {
+				skip = 0
+			}
+			descendants := func() []A11yNode { return WalkA11y(w)[skip:] }
 			if got := len(descendants()); got != c.want {
 				t.Fatalf("%d descendant nodes, want %d", got, c.want)
 			}
@@ -663,4 +768,159 @@ func exemptions(byReason map[string][]string) map[string]string {
 		}
 	}
 	return out
+}
+
+// TestA11yDisabledContainersAreMarked derives the set of containers from the
+// catalogue instead of a hand-kept list: every catalogued widget that holds
+// children (answers Children()) must carry the a11yDisablesSubtree marker or
+// be in disabledSubtreeExempt with the reason its children are not made inert
+// by its own flag. A container added later fails here until it is decided.
+func TestA11yDisabledContainersAreMarked(t *testing.T) {
+	containers := 0
+	for name, build := range disabledA11yCatalogue {
+		w := build()
+		if _, ok := w.(childContainer); !ok {
+			continue
+		}
+		containers++
+		_, marked := w.(a11yDisablesSubtree)
+		reason, exempt := disabledSubtreeExempt[name]
+		if !marked && !exempt {
+			t.Errorf("%s holds children but is neither an a11yDisablesSubtree nor in disabledSubtreeExempt", name)
+		}
+		if marked && exempt {
+			t.Errorf("%s is both marked and exempt", name)
+		}
+		if exempt && strings.TrimSpace(reason) == "" {
+			t.Errorf("disabledSubtreeExempt[%s] has no reason", name)
+		}
+	}
+	if containers < 20 {
+		t.Fatalf("only %d catalogued containers found: the derivation is blind", containers)
+	}
+	for name := range disabledSubtreeExempt {
+		w, ok := disabledA11yCatalogue[name]
+		if !ok {
+			t.Errorf("disabledSubtreeExempt lists %s, which is not in the catalogue", name)
+			continue
+		}
+		if _, ok := w().(childContainer); !ok {
+			t.Errorf("disabledSubtreeExempt lists %s, which holds no children", name)
+		}
+	}
+}
+
+// disabledSubtreeExempt lists the catalogued containers whose own Disabled flag
+// does not make their children inert, with the reason.
+var disabledSubtreeExempt = map[string]string{
+	"TabBar":     exemptTabNodes,
+	"FolderTabs": exemptTabNodes,
+	"Accordion":  exemptKeysOnly,
+	"Carousel":   exemptKeysOnly,
+	"Expander":   exemptKeysOnly,
+	"Notebook":   exemptKeysOnly,
+	"TextView":   "gates text edits only; its annotation children still take clicks",
+	"CodeEditor": "gates text edits only; its annotation children still take clicks",
+	"Ribbon":     "announces Disabled but does not drop its controls' input, so its children are not inert",
+}
+
+const (
+	exemptTabNodes = "builds its tab nodes from its own flag (TestDisabledTabStripsDisableTheirTabs), so the walk has nothing to derive"
+	exemptKeysOnly = "gates only its own keyboard handling; the body, slide or content still takes pointer input, so its children are not inert"
+)
+
+// Every marked container is walked disabled, so each marker is exercised through
+// the walk and a marked widget's own node reports the flag.
+func TestA11yDisabledMarkedContainersWalkDisabled(t *testing.T) {
+	for name, build := range disabledA11yCatalogue {
+		w := build()
+		if _, ok := w.(a11yDisablesSubtree); !ok {
+			continue
+		}
+		w.(interface{ Disabled() *mvvm.Observable[bool] }).Disabled().Set(true)
+		for _, n := range WalkA11y(w) {
+			if !n.Disabled {
+				t.Errorf("%s: node %s reads enabled inside a disabled marked container", name, n.Role)
+			}
+		}
+	}
+}
+
+// TestScanResolvesAliasedImportsAndFindsWidgetsWithoutA11y drives the scan over
+// a fixture holding each shape: a Base embedded through `tk`, a widget with no
+// A11y(), a type reaching Base through an aliased sub-package, an unrelated
+// aliased package, and an unexported type. The first version compared the
+// identifier to the literal "toolkit" and skipped all of the aliased ones.
+func TestScanResolvesAliasedImportsAndFindsWidgetsWithoutA11y(t *testing.T) {
+	const fx = "testdata/a11yscan"
+	with, without := scanBaseTypes(t, fx, "virtual", ".")
+	has := func(list []string, name string) bool {
+		for _, n := range list {
+			if n == name {
+				return true
+			}
+		}
+		return false
+	}
+	for _, want := range []string{fx + ".Aliased", fx + ".Wrapped"} {
+		if !has(with, want) {
+			t.Errorf("%s (aliased import) is not found among the accessible Base types", want)
+		}
+	}
+	if !has(without, fx+".Forgetful") {
+		t.Errorf("%s.Forgetful has no A11y() and the scan did not report it: %v", fx, without)
+	}
+	for _, not := range []string{fx + ".NotAWidget", fx + ".hidden"} {
+		if has(with, not) || has(without, not) {
+			t.Errorf("%s is not a Base widget but the scan reports it", not)
+		}
+	}
+	if got := scanBaseTypesWithoutA11y(t, fx); len(got) != 1 || got[0] != fx+".Forgetful" {
+		t.Errorf("scanBaseTypesWithoutA11y = %v, want just Forgetful", got)
+	}
+}
+
+// noA11yExempt lists the exported Base types with no A11y() of any kind, each
+// with the reason. Empty: every widget of the module answers.
+var noA11yExempt = map[string]string{}
+
+// TestA11yEveryBaseTypeAnswersA11y refuses a root-package widget that embeds
+// Base and has no A11y(): the completeness gate only ever saw types that answer.
+func TestA11yEveryBaseTypeAnswersA11y(t *testing.T) {
+	for _, name := range scanBaseTypesWithoutA11y(t, ".") {
+		if reason, ok := noA11yExempt[name]; !ok || strings.TrimSpace(reason) == "" {
+			t.Errorf("%s embeds Base but has no A11y(): give it one, or exempt it in noA11yExempt with a reason", name)
+		}
+	}
+}
+
+// A dot import of the module cannot be followed (its names are unqualified), so
+// the scan fails loudly instead of skipping the types that embed through it.
+func TestScanRefusesADotImport(t *testing.T) {
+	_, _, err := scanBaseTypesErr("testdata/a11ydot")
+	if err == nil || !strings.Contains(err.Error(), "dot import") {
+		t.Fatalf("scan of a dot-importing package: err = %v, want a refusal naming the dot import", err)
+	}
+	if _, _, err := scanBaseTypesErr("testdata/does-not-exist"); err == nil {
+		t.Fatal("scan of a missing directory must report the error, not an empty result")
+	}
+}
+
+// An alias is a property of one file: `tk` is the toolkit in aliased.go and an
+// unrelated package in leak.go, whose type must not be taken for a widget.
+func TestScanAliasDoesNotLeakAcrossFiles(t *testing.T) {
+	const fx = "testdata/a11yscan"
+	with, without := scanBaseTypes(t, fx, ".")
+	for _, n := range append(append([]string{}, with...), without...) {
+		if n == fx+".Leak" {
+			t.Fatalf("%s is reported as a Base type: an alias leaked from another file", n)
+		}
+	}
+	found := false
+	for _, n := range with {
+		found = found || n == fx+".Aliased"
+	}
+	if !found {
+		t.Fatal("the alias in its own file no longer resolves")
+	}
 }

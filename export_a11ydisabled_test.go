@@ -7,3 +7,7 @@ package toolkit
 // ScanAccessibleBaseTypes hands the module-wide completeness scan to the
 // external test package, which can import the sub-packages the scan must cover.
 var ScanAccessibleBaseTypes = scanAccessibleBaseTypes
+
+// ScanBaseTypesWithoutA11y is the same scan's refusal half: the Base types that
+// answer no A11y().
+var ScanBaseTypesWithoutA11y = scanBaseTypesWithoutA11y

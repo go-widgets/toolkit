@@ -168,13 +168,7 @@ func (t *Toolbar) hitTest(x, y int) int {
 	}
 	c := 0
 	for i, it := range t.Items {
-		step := bw
-		if t.Orientation == Vertical {
-			step = bh
-		}
-		if it.Separator {
-			step = sepW
-		}
+		step := t.itemStep(it, bw, bh, sepW)
 		if along >= c && along < c+step {
 			if it.Separator {
 				return -1
@@ -199,3 +193,78 @@ func blitRGBA(p painter.Painter, x, y, w, h int, src []byte) {
 		}
 	}
 }
+
+// itemRect is the rectangle item i occupies, in the same surface coordinates
+// Draw paints it at (a separator is a divider of sepW along the axis). An index
+// outside Items answers the empty rectangle.
+func (t *Toolbar) itemRect(i int) Rect {
+	if i < 0 || i >= len(t.Items) {
+		return Rect{}
+	}
+	r := t.Bounds()
+	bw, bh, sepW := t.buttonW(), t.buttonH(), t.sepW()
+	vertical := t.Orientation == Vertical
+	pos := 0
+	for j := 0; j < i; j++ {
+		pos += t.itemStep(t.Items[j], bw, bh, sepW)
+	}
+	if t.Items[i].Separator {
+		bw, bh = sepW, sepW
+		if vertical {
+			bw = t.buttonW()
+		} else {
+			bh = t.buttonH()
+		}
+	}
+	if vertical {
+		return Rect{X: r.X, Y: r.Y + pos, W: bw, H: bh}
+	}
+	return Rect{X: r.X + pos, Y: r.Y, W: bw, H: bh}
+}
+
+// itemStep is how far item it advances the layout axis.
+func (t *Toolbar) itemStep(it ToolbarItem, bw, bh, sepW int) int {
+	switch {
+	case it.Separator:
+		return sepW
+	case t.Orientation == Vertical:
+		return bh
+	}
+	return bw
+}
+
+// Children exposes each button as a synthetic, non-drawing node so the generic
+// accessibility walk (WalkA11y) descends the toolbar into a toolbar -> button
+// structure: a screen reader hears each button's name and disabled state, not
+// just "toolbar, N items". Separators are decoration and get no node. Like
+// TabBar's tab nodes they are rebuilt on demand from the current items and
+// geometry, draw nothing and handle no events; the Toolbar paints and routes
+// every item itself. The toolbar's own Disabled reaches them through the walk
+// (see a11yDisablesSubtree), so only the item's own flag is read here.
+func (t *Toolbar) Children() []Widget {
+	out := make([]Widget, 0, len(t.Items))
+	for i, it := range t.Items {
+		if it.Separator {
+			continue
+		}
+		node := &toolbarItemNode{item: it}
+		node.SetBounds(t.itemRect(i))
+		out = append(out, node)
+	}
+	return out
+}
+
+// toolbarItemNode is the synthetic stand-in for one Toolbar button. The Toolbar
+// has no per-item keyboard focus, so Focused is never set.
+type toolbarItemNode struct {
+	Base
+	item ToolbarItem
+}
+
+// A11y reports the node as a button named by its label, disabled when the item
+// is.
+func (n *toolbarItemNode) A11y() A11yInfo {
+	return A11yInfo{Role: RoleButton, Name: n.item.Label, Disabled: n.item.Disabled}
+}
+
+var _ Accessible = (*toolbarItemNode)(nil)

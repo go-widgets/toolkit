@@ -100,6 +100,11 @@ func TestA11yDisabledEveryPackageIsCovered(t *testing.T) {
 			found[name] = true
 		}
 	}
+	for _, name := range toolkit.ScanBaseTypesWithoutA11y(t, dirs...) {
+		if strings.Contains(name, ".") {
+			t.Errorf("%s embeds toolkit.Base but has no A11y(): give it one", name)
+		}
+	}
 	for name := range found {
 		_, cat := subpackageDisabledCatalogue[name]
 		_, exempt := subpackageDisabledExempt[name]
