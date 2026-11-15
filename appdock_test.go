@@ -33,11 +33,11 @@ func TestAppDockRestingLayout(t *testing.T) {
 	if want := (40 - scaled(AppDockItemH)) / 2; rs[0].Y != want {
 		t.Errorf("item0 Y = %d, want centred %d", rs[0].Y, want)
 	}
-	if d.HitTest(rs[1].X+2, rs[1].Y+2) != 1 {
-		t.Error("HitTest inside item1 should be 1")
+	if d.ItemAt(rs[1].X+2, rs[1].Y+2) != 1 {
+		t.Error("ItemAt inside item1 should be 1")
 	}
-	if d.HitTest(5, 5) != -1 {
-		t.Error("HitTest in the end padding should miss")
+	if d.ItemAt(5, 5) != -1 {
+		t.Error("ItemAt in the end padding should miss")
 	}
 	if d.A11y().Role != RoleToolbar {
 		t.Errorf("A11y role = %q, want toolbar", d.A11y().Role)
@@ -66,11 +66,11 @@ func TestAppDockVariableWidth(t *testing.T) {
 		t.Errorf("variable-width items not laid out sequentially: %+v", rs)
 	}
 	// Hit-testing honours the per-item width.
-	if d.HitTest(rs[1].X+150, rs[1].Y+2) != 1 {
-		t.Error("HitTest deep inside the wide item should return 1")
+	if d.ItemAt(rs[1].X+150, rs[1].Y+2) != 1 {
+		t.Error("ItemAt deep inside the wide item should return 1")
 	}
-	if d.HitTest(rs[2].X+120, rs[2].Y+2) == 2 {
-		t.Error("HitTest past the narrow item's width should not match it")
+	if d.ItemAt(rs[2].X+120, rs[2].Y+2) == 2 {
+		t.Error("ItemAt past the narrow item's width should not match it")
 	}
 
 	// Magnification swells each item from its own resting width.
@@ -145,7 +145,7 @@ func TestAppDockMagnifyReflowAndAnchor(t *testing.T) {
 		}
 	}
 	// The pointer still lands inside item 1 after the reflow (anchor held).
-	if d.HitTest(item1X+3, rs[1].Y+2) != 1 {
+	if d.ItemAt(item1X+3, rs[1].Y+2) != 1 {
 		t.Error("cursor-anchored item 1 should still be under the pointer")
 	}
 

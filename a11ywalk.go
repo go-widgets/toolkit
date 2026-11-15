@@ -145,6 +145,7 @@ func (*SettingRow) a11yDisablesSubtree() bool    { return true }
 func (*ButtonGroup) a11yDisablesSubtree() bool   { return true }
 func (*FormField) a11yDisablesSubtree() bool     { return true }
 func (*Toolbar) a11yDisablesSubtree() bool       { return true }
+func (*AppDock) a11yDisablesSubtree() bool       { return true }
 
 // a11yRecter is implemented by a widget whose accessible element should cover
 // less than its bounds: [TextView] leaves its annotation column and its minimap

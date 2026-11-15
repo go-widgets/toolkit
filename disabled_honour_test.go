@@ -604,6 +604,20 @@ func honourCases() map[string]func() honourCase {
 				events: []Event{click(5, 5)},
 				fired:  func() int { return n }}
 		},
+		"AppDock": func() honourCase {
+			n := 0
+			d := NewAppDock(AppDockItem{Id: "a"})
+			d.OnActivate = func(int) { n++ }
+			d.SetBounds(Rect{W: 300, H: 40})
+			r := d.ItemRects()[0]
+			x, y := centre(r)
+			// The move is input too: it would swell the row (state), and a click
+			// fires OnActivate.
+			return honourCase{w: d, off: d.Disabled(),
+				state:  func() string { return fmt.Sprint(d.cursorInside, d.ItemRects()) },
+				events: []Event{{Kind: EventMouseMove, X: x, Y: y}, click(x, y)},
+				fired:  func() int { return n }}
+		},
 		"Breadcrumbs": func() honourCase {
 			n := 0
 			b := NewBreadcrumbs([]string{"a", "b"})

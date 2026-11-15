@@ -107,7 +107,7 @@ func (d *DockPanel) Children() []Widget {
 	out := make([]Widget, 0, len(d.Leading)+1+len(d.Trailing)+1)
 	out = append(out, nonNil(d.Leading...)...)
 	if d.Dock != nil {
-		out = append(out, appDockNode{d.Dock})
+		out = append(out, d.Dock)
 	}
 	out = append(out, nonNil(d.Trailing...)...)
 	if d.Menu != nil {
