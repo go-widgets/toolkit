@@ -11,25 +11,24 @@ import (
 	"sync"
 
 	"github.com/go-gfx/gfx/svg"
-	"github.com/go-icons/iconoir"
 	"github.com/go-widgets/painter"
 )
 
-// DrawIconoir paints the named Iconoir glyph into r, recoloured to ink: the SVG
-// comes from go-icons/iconoir (data) and [SVGIcon] renders it over go-gfx (code) —
-// icons in one place, rasterising in another. An unknown name draws nothing.
-//
-// It is the toolkit's single seam for an Iconoir glyph, exported so a consumer
-// draws one THROUGH the toolkit (its own controls do the same) rather than
-// depending on an icon-pack renderer directly. Pair it with [IconoirNames] to
-// enumerate the available stems.
-func DrawIconoir(p painter.Painter, r Rect, name string, ink RGBA) {
-	SVGIcon(iconoir.Icon(name))(p, r, ink)
-}
+//go:generate go test -run ^TestBuiltinIconsetIsCurrent$ -update-iconset .
 
-// IconoirNames is the sorted list of available Iconoir glyph stems (the names
-// [DrawIconoir] accepts), from go-icons/iconoir.
-func IconoirNames() []string { return iconoir.Names() }
+// drawBuiltinIcon paints one of the toolkit's built-in Iconoir glyphs into r,
+// recoloured to ink; a name outside the built-in set draws nothing.
+//
+// The toolkit does not import go-icons/iconoir: that package embeds the whole
+// set, which the linker cannot trim, so every toolkit program carried ~1,500
+// SVGs (#588). The glyphs the widgets draw are copied into iconset_gen.go by
+// internal/iconsetgen, and TestBuiltinIconsetIsCurrent fails when that copy is
+// stale. A program that wants any Iconoir glyph imports
+// github.com/go-widgets/toolkit/iconoir, which pays for the whole set on
+// purpose, or hands its own SVG to [SVGIcon].
+func drawBuiltinIcon(p painter.Painter, r Rect, name string, ink RGBA) {
+	SVGIcon(builtinIcon(name))(p, r, ink)
+}
 
 // SVGIcon returns an icon drawer that renders the SVG document doc into the box
 // it is handed — for a [TreeTableNode.Icon], or anywhere a

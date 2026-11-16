@@ -63,7 +63,7 @@ func NewClosablePane(title string, body Widget) *ClosablePane {
 	// made for a 28 px tile and would leave a 6 px cross in this one
 	c.Button.Glyph = func(p painter.Painter, _ Rect, ink RGBA) {
 		b, in := c.Button.Bounds(), scaled(closablePaneGlyphInset)
-		DrawIconoir(p, Rect{X: b.X + in, Y: b.Y + in, W: max(b.W-2*in, 1), H: max(b.H-2*in, 1)}, "xmark", ink)
+		drawBuiltinIcon(p, Rect{X: b.X + in, Y: b.Y + in, W: max(b.W-2*in, 1), H: max(b.H-2*in, 1)}, "xmark", ink)
 	}
 	return c
 }

@@ -172,7 +172,7 @@ func (d *Dialog) closeButton() *IconButton {
 		// it. And flat: a framed square in the corner of a title bar reads as a
 		// control belonging to the content rather than to the window.
 		d.closeBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) {
-			DrawIconoir(p, r, "xmark", ink)
+			drawBuiltinIcon(p, r, "xmark", ink)
 		}
 	}
 	return d.closeBtn
@@ -225,7 +225,7 @@ func (d *Dialog) maxButton() *IconButton {
 	if d.Maximised().Get() {
 		name = "collapse"
 	}
-	d.maxBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { DrawIconoir(p, r, name, ink) }
+	d.maxBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { drawBuiltinIcon(p, r, name, ink) }
 	return d.maxBtn
 }
 
@@ -238,7 +238,7 @@ func (d *Dialog) minButton() *IconButton {
 	if d.Minimised().Get() {
 		name = "plus"
 	}
-	d.minBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { DrawIconoir(p, r, name, ink) }
+	d.minBtn.Glyph = func(p painter.Painter, r Rect, ink RGBA) { drawBuiltinIcon(p, r, name, ink) }
 	return d.minBtn
 }
 
