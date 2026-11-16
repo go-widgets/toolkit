@@ -175,6 +175,14 @@ empty of work and avoids importing packages whose `init` drags code in:
   `CollabSheet` and `IsoCRDTDocument` need only `go-crdt/crdt` and stay here.
 - The e-mail `Rule`'s regexp, the built-in iso icon registry and the
   `RichEditorToolbar` button table are built on first use, not by initializers.
+- The toolkit does not import `github.com/go-icons/iconoir`, whose single
+  `//go:embed` of about 1,500 SVGs the linker cannot trim (#588). The 40 glyphs
+  its widgets draw are copied into `iconset_gen.go` (Iconoir's MIT notice kept),
+  and a test fails when that copy is stale. A program that needs arbitrary
+  Iconoir names imports **`github.com/go-widgets/toolkit/iconoir`** and pays for
+  the whole set on purpose; one that draws a known handful hands their SVGs to
+  `SVGIcon`. A wasm program holding a `RichEditorToolbar` went from 1.52 MB to
+  1.32 MB gzipped (5.87 → 4.75 MB raw).
 
 Measured with `go build -ldflags=-dumpdep` on a `GOOS=js GOARCH=wasm` program
 that draws one `Label` (`-ldflags="-s -w"`, gzip -9):
@@ -189,6 +197,13 @@ What remains is mostly the runtime and the OpenType stack the text renderer
 needs. To see what keeps a symbol in your own program, build with
 `-ldflags=-dumpdep` and follow the first-parent chain from the symbol back to
 `main.main` or `go:main.inittasks`.
+
+### v0.379 breaking change: Iconoir drawing moved to `toolkit/iconoir`
+
+`toolkit.DrawIconoir(p, r, name, ink)` is now `iconoir.Draw(p, r, name, ink)`
+and `toolkit.IconoirNames()` is `iconoir.Names()`, in
+`github.com/go-widgets/toolkit/iconoir`; `iconoir.Drawer(name)` returns the
+drawer for an `Icon` slot. See *Binary size* above for why.
 
 ### v0.357 breaking change: `Focused()` is now `HasFocus()` on the editors
 
