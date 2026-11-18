@@ -364,7 +364,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// (Splitter.Open), enabled is the button's Disabled Observable; the hover
 	// timer is unexported.
 	"ClosablePane": {"Title": true, "Body": true, "CloseLabel": true, "LastLabel": true, "Button": true},
-	"GraphView":    {"Model": true, "Palette": true, "MaxEdgeWidth": true, "ShowLegend": true},
+	"GraphView":    {"Model": true, "Palette": true, "MaxEdgeWidth": true, "ShowLegend": true, "NodeWidth": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
