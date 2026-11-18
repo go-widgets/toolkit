@@ -44,6 +44,23 @@ func TestGraphViewClustersAreSizedByTheirOwnMembers(t *testing.T) {
 	}
 }
 
+func TestGraphViewClusterIsAtLeastAsWideAsItsTitle(t *testing.T) {
+	m := NewGraphViewModel()
+	long := "a cluster title that is far longer than one node is wide"
+	m.Clusters.Append(GraphCluster{ID: "l", Label: long}, GraphCluster{ID: "s", Label: "s"})
+	m.Nodes.Append(GraphNode{ID: "a", Cluster: "l"}, GraphNode{ID: "b", Cluster: "s"})
+	g := NewGraphView(m)
+	g.SetBounds(Rect{W: 900, H: 300})
+	g.layout()
+	l, s := g.clusterBox["l"], g.clusterBox["s"]
+	if l.W < g.textWidth(long) {
+		t.Fatalf("cluster %v is narrower than its title (%d)", l, g.textWidth(long))
+	}
+	if s.X < l.X+l.W {
+		t.Fatalf("the next cluster %v starts inside the long one %v", s, l)
+	}
+}
+
 func TestGraphViewScrollsWhenItOverflows(t *testing.T) {
 	g := NewGraphView(manyClusters(30, 4))
 	g.ShowLegend = true
