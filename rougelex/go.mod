@@ -1,6 +1,6 @@
 module github.com/go-widgets/toolkit/rougelex
 
-go 1.27.2
+go 1.27.4
 
 require (
 	github.com/go-rouge/rouge v0.7.1
@@ -9,7 +9,7 @@ require (
 
 require (
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
-	github.com/go-crdt/crdt v0.57.0 // indirect
+	github.com/go-crdt/crdt v0.58.1-0.20261118092720-ef8fc5065310 // indirect
 	github.com/go-gfx/gfx v0.41.0 // indirect
 	github.com/go-images/images v0.3.0 // indirect
 	github.com/go-opentype/fonts v0.14.0 // indirect
