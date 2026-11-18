@@ -99,6 +99,10 @@ type GraphView struct {
 	// host whose labels are longer than a few characters sets it once, before
 	// the first draw; a node's label is clipped to its box.
 	NodeWidth int
+	// CornerRadius rounds the node pills and, by half as much again, the
+	// cluster boxes, in logical pixels (default 0: square, as before). A
+	// set-once appearance config, like NodeWidth.
+	CornerRadius int
 	// ShowLegend draws the category legend along the bottom edge.
 	ShowLegend bool
 	// OnActivate is called with the selection on Enter or a double selection.
@@ -171,6 +175,27 @@ const (
 	graphTitleH   = 14
 	graphHitSlack = 3
 )
+
+// clusterRadius is the rounding of a cluster box: half again the node pill's.
+func (g *GraphView) clusterRadius() int { return g.CornerRadius * 3 / 2 }
+
+// fillBox fills r, rounded by radius when radius > 0, square otherwise.
+func (g *GraphView) fillBox(p painter.Painter, r Rect, radius int, c RGBA) {
+	if radius > 0 {
+		fillRoundRect(p, r.X, r.Y, r.W, r.H, scaled(radius), c)
+		return
+	}
+	fillRect(p, r.X, r.Y, r.W, r.H, c)
+}
+
+// strokeBox outlines r, rounded by radius when radius > 0, square otherwise.
+func (g *GraphView) strokeBox(p painter.Painter, r Rect, radius int, c RGBA) {
+	if radius > 0 {
+		strokeRoundRect(p, r.X, r.Y, r.W, r.H, scaled(radius), c)
+		return
+	}
+	strokeRect(p, r.X, r.Y, r.W, r.H, c)
+}
 
 // nodeW is the width of a node box.
 func (g *GraphView) nodeW() int {
@@ -404,8 +429,8 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 	visible := map[string]bool{}
 	withClip(p, r, func() {
 		for id, box := range g.clusterBox {
-			fillRect(p, box.X, box.Y, box.W, box.H, theme.Surface)
-			strokeRect(p, box.X, box.Y, box.W, box.H, theme.Border)
+			g.fillBox(p, box, g.clusterRadius(), theme.Surface)
+			g.strokeBox(p, box, g.clusterRadius(), theme.Border)
 			g.drawText(p, box.X+graphGap, box.Y+2, labels[id], theme.OnSurface)
 		}
 		nodes := g.Model.Nodes.Slice()
@@ -426,7 +451,7 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 			if !visible[n.ID] {
 				col = blendRGBA(col, theme.Background, 0.25)
 			}
-			fillRect(p, box.X, box.Y, box.W, box.H, col)
+			g.fillBox(p, box, g.CornerRadius, col)
 			// Label ink by the swatch's lightness, so it reads on every colour.
 			ink := RGB(0x10, 0x10, 0x10)
 			if luminance(col) < 0.4 {
@@ -438,7 +463,7 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 				g.drawText(p, box.X+3, box.Y+(box.H-g.glyphHeight())/2, n.Label, ink)
 			})
 			if sel == "node:"+n.ID {
-				strokeRect(p, box.X-2, box.Y-2, box.W+4, box.H+4, theme.Accent)
+				g.strokeBox(p, Rect{X: box.X - 2, Y: box.Y - 2, W: box.W + 4, H: box.H + 4}, g.CornerRadius+2, theme.Accent)
 			}
 		}
 		if g.ShowLegend {

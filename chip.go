@@ -33,6 +33,10 @@ type Chip struct {
 	// (A == 0) draws no dot and reproduces the original layout exactly,
 	// so the field is fully backward-compatible.
 	Dot RGBA
+	// Style picks the look: ChipDefault (the zero value, the original
+	// rectangle), ChipPlain or ChipBrand (rounded pills). Set-once appearance
+	// config.
+	Style ChipStyle
 }
 
 // Chip sizing constants. PadX / PadY are the inner insets from the
@@ -97,8 +101,19 @@ func (c *Chip) Draw(p painter.Painter, theme *Theme) {
 		}
 		c.SetBounds(r)
 	}
-	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
-	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	ink := theme.OnSurface
+	closeInk := theme.Border
+	switch c.Style {
+	case ChipPlain, ChipBrand:
+		// A pill: fully rounded, no outline, a quiet tinted fill.
+		bg := themeChipBg(theme, c.Style)
+		ink = themeChipInk(theme, c.Style)
+		closeInk = ink
+		fillRoundRect(p, r.X, r.Y, r.W, r.H, r.H/2, bg)
+	default:
+		fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
+		strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
+	}
 	tx := r.X + padX
 	if hasDot {
 		dotY := r.Y + (r.H-dotD)/2
@@ -106,11 +121,54 @@ func (c *Chip) Draw(p painter.Painter, theme *Theme) {
 		tx += dotD + dotGap
 	}
 	ty := r.Y + (r.H-c.glyphHeight())/2
-	c.drawText(p, tx, ty, c.Text, theme.OnSurface)
+	c.drawText(p, tx, ty, c.Text, ink)
 	if c.Closable {
 		cx := r.X + r.W - padX - closeW + (closeW-c.textWidth("x"))/2
-		c.drawText(p, cx, ty, "x", theme.Border)
+		c.drawText(p, cx, ty, "x", closeInk)
 	}
+}
+
+// ChipStyle is how a Chip is painted.
+type ChipStyle int
+
+const (
+	// ChipDefault is the original chip: a SurfaceAlt rectangle with a Border
+	// outline.
+	ChipDefault ChipStyle = iota
+	// ChipPlain is a quiet pill: fully rounded, a neutral tint, no outline
+	// (Tailwind's chip-plain). A theme's Extra["chip_plain_bg"] and
+	// ["chip_plain_ink"] set its colours; without them it is SurfaceAlt and
+	// OnSurface.
+	ChipPlain
+	// ChipBrand is the same pill in the brand colour: the brand at 10% for the
+	// fill and the brand-as-text for the ink (Extra["chip_brand_bg"] and
+	// ["brand_ink"]; without them the Accent over the Surface).
+	ChipBrand
+)
+
+// themeChipBg is the fill of a pill chip of style s.
+func themeChipBg(theme *Theme, s ChipStyle) RGBA {
+	if s == ChipBrand {
+		if c, ok := theme.Extra["chip_brand_bg"]; ok {
+			return c
+		}
+		return blendRGBA(theme.Accent, theme.Surface, 0.10)
+	}
+	if c, ok := theme.Extra["chip_plain_bg"]; ok {
+		return c
+	}
+	return theme.SurfaceAlt
+}
+
+// themeChipInk is the text of a pill chip of style s.
+func themeChipInk(theme *Theme, s ChipStyle) RGBA {
+	if s == ChipBrand {
+		return themeInk(theme)
+	}
+	if c, ok := theme.Extra["chip_plain_ink"]; ok {
+		return c
+	}
+	return theme.OnSurface
 }
 
 // OnEvent fires OnClose when an EventClick lands in the right-hand
