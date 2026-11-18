@@ -108,6 +108,13 @@ type GraphView struct {
 	categories  map[string]int
 	unsub       []func()
 	bound       *GraphViewModel
+
+	// Vertical scrolling: when the clusters need more height than the widget
+	// has, scrollY (px, >= 0) is how far the content is moved up, contentH its
+	// full height and viewH the height it shows in (the bounds minus the legend).
+	scrollY, contentH, viewH int
+	hasBar                   bool
+	sbDrag                   scrollDrag
 }
 
 // NewGraphView returns a GraphView over m (a new empty model when nil).
@@ -177,39 +184,125 @@ func (g *GraphView) layout() {
 	clusters := g.Model.Clusters.Slice()
 	nodes := g.Model.Nodes.Slice()
 	members := map[string][]GraphNode{}
-	most := 1
 	for _, n := range nodes {
 		members[n.Cluster] = append(members[n.Cluster], n)
-		if k := len(members[n.Cluster]); k > most {
-			most = k
-		}
 	}
+	g.contentH, g.viewH, g.hasBar = 0, 0, false
 	if len(clusters) == 0 {
+		g.scrollY = 0
 		return
 	}
 	area := r
 	if g.ShowLegend {
 		area.H -= g.legendHeight()
 	}
-	// Nodes per row inside a cluster, then cluster columns to fill the width.
-	perRow := int(math.Ceil(math.Sqrt(float64(most))))
-	rowsIn := (most + perRow - 1) / perRow
-	cw := perRow*(graphNodeW+graphGap) + graphGap
-	ch := graphTitleH + rowsIn*(graphNodeH+graphGap) + graphGap
-	cols := maxInt(1, (area.W-graphGap)/(cw+graphGap))
-	if cols > len(clusters) {
-		cols = len(clusters)
+	g.viewH = area.H
+	// Each cluster is sized by its OWN members and the clusters flow left to
+	// right, wrapping to a new row. When the rows need more height than the
+	// widget has, a scrollbar takes its column and the rows are flowed again in
+	// what is left of the width.
+	boxes, perRows, h := flowClusters(clusters, members, area.W)
+	if h > area.H {
+		g.hasBar = true
+		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarWidth)
 	}
+	g.contentH = h
+	g.scrollY = clampInt(g.scrollY, 0, maxInt(0, h-area.H))
 	for i, c := range clusters {
-		col, row := i%cols, i/cols
-		box := Rect{X: area.X + graphGap + col*(cw+graphGap), Y: area.Y + graphGap + row*(ch+graphGap), W: cw, H: ch}
+		b := boxes[i]
+		box := Rect{X: area.X + b.X, Y: area.Y + b.Y - g.scrollY, W: b.W, H: b.H}
 		g.clusterBox[c.ID] = box
 		for j, n := range members[c.ID] {
-			nc, nr := j%perRow, j/perRow
+			nc, nr := j%perRows[i], j/perRows[i]
 			g.nodeBox[n.ID] = Rect{X: box.X + graphGap + nc*(graphNodeW+graphGap),
 				Y: box.Y + graphTitleH + graphGap + nr*(graphNodeH+graphGap), W: graphNodeW, H: graphNodeH}
 			g.order = append(g.order, n.ID)
 		}
+	}
+}
+
+// flowClusters sizes each cluster by its own member count and flows them left
+// to right in the width, wrapping when the next one does not fit. It returns
+// the boxes relative to the content origin, each cluster's nodes per row, and
+// the content height.
+func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width int) (boxes []Rect, perRows []int, height int) {
+	x, y, rowH := graphGap, graphGap, 0
+	for _, c := range clusters {
+		n := maxInt(1, len(members[c.ID]))
+		perRow := int(math.Ceil(math.Sqrt(float64(n))))
+		rowsIn := (n + perRow - 1) / perRow
+		cw := perRow*(graphNodeW+graphGap) + graphGap
+		ch := graphTitleH + rowsIn*(graphNodeH+graphGap) + graphGap
+		if x > graphGap && x+cw+graphGap > width {
+			x, y, rowH = graphGap, y+rowH+graphGap, 0
+		}
+		boxes = append(boxes, Rect{X: x, Y: y, W: cw, H: ch})
+		perRows = append(perRows, perRow)
+		x += cw + graphGap
+		rowH = maxInt(rowH, ch)
+	}
+	return boxes, perRows, y + rowH + graphGap
+}
+
+// graphScrollStep is the pixels one wheel row moves the content.
+const graphScrollStep = graphNodeH + graphGap
+
+// graphThumbMin is the smallest scrollbar thumb, in pixels.
+const graphThumbMin = 12
+
+// scrollbarGeom is the vertical scrollbar's widget-local geometry, and whether
+// it is live (the clusters overflow the view).
+func (g *GraphView) scrollbarGeom() (sbGeom, bool) {
+	g.layout()
+	if !g.hasBar {
+		return sbGeom{}, false
+	}
+	r := g.Bounds()
+	maxScroll := g.contentH - g.viewH
+	thumb := maxInt(graphThumbMin, g.viewH*g.viewH/g.contentH)
+	return sbGeom{
+		cross0:     r.W - scrollbarWidth,
+		trackStart: 0,
+		trackLen:   g.viewH,
+		thumbStart: g.scrollY * (g.viewH - thumb) / maxScroll,
+		thumbLen:   thumb,
+		travelNum:  g.viewH - thumb,
+		travelDen:  maxScroll,
+		maxScroll:  maxScroll,
+	}, true
+}
+
+// ScrollTo scrolls the content so px pixels of it are above the view, clamped.
+func (g *GraphView) ScrollTo(px int) {
+	g.layout()
+	px = clampInt(px, 0, maxInt(0, g.contentH-g.viewH))
+	if px != g.scrollY {
+		g.scrollY = px
+		g.layoutValid = false
+	}
+}
+
+// ScrollBy scrolls by delta pixels.
+func (g *GraphView) ScrollBy(delta int) {
+	g.layout()
+	g.ScrollTo(g.scrollY + delta)
+}
+
+// ScrollY is how far the content is scrolled, in pixels.
+func (g *GraphView) ScrollY() int { return g.scrollY }
+
+// revealNode scrolls just enough to bring the node into the view.
+func (g *GraphView) revealNode(id string) {
+	b, ok := g.NodeBox(id)
+	if !ok {
+		return
+	}
+	top := g.Bounds().Y
+	switch {
+	case b.Y < top:
+		g.ScrollBy(b.Y - top - graphGap)
+	case b.Y+b.H > top+g.viewH:
+		g.ScrollBy(b.Y + b.H - (top + g.viewH) + graphGap)
 	}
 }
 
@@ -327,7 +420,14 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 			}
 		}
 		if g.ShowLegend {
+			// Clusters scrolled under the legend must not show through it.
+			h := g.legendHeight()
+			fillRect(p, r.X, r.Y+r.H-h, r.W, h, theme.Background)
 			g.drawLegend(p, theme)
+		}
+		if sg, ok := g.scrollbarGeom(); ok {
+			paintScrollTrack(p, theme, r.X+sg.cross0, r.Y+sg.trackStart, scrollbarWidth, sg.trackLen)
+			paintScrollThumb(p, theme, r.X+sg.cross0, r.Y+sg.thumbStart, scrollbarWidth, sg.thumbLen)
 		}
 	})
 	g.drawFocusRing(p, theme, r)
@@ -527,7 +627,17 @@ func (g *GraphView) OnEvent(ev Event) {
 	}
 	r := g.Bounds()
 	switch ev.Kind {
+	case EventScroll:
+		g.ScrollBy(ev.Delta * graphScrollStep)
+	case EventMouseDrag:
+		sg, ok := g.scrollbarGeom()
+		g.sbDrag.drag(sg, ok, ev, g.ScrollTo)
+	case EventMouseUp:
+		g.sbDrag.release()
 	case EventClick:
+		if sg, ok := g.scrollbarGeom(); g.sbDrag.press(sg, ok, ev, g.viewH, g.ScrollBy) {
+			return
+		}
 		hit := g.Hit(r.X+ev.X, r.Y+ev.Y)
 		if hit != "" && hit == g.Model.Selected.Get() {
 			g.activate()
@@ -578,7 +688,9 @@ func (g *GraphView) key(code string) {
 	if cur < 0 {
 		next = 0
 	}
-	g.Model.Selected.Set("node:" + g.order[clampInt(next, 0, len(g.order)-1)])
+	id := g.order[clampInt(next, 0, len(g.order)-1)]
+	g.Model.Selected.Set("node:" + id)
+	g.revealNode(id)
 }
 
 // A11y describes the graph: how many nodes and edges, how many denied, and

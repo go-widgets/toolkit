@@ -965,7 +965,11 @@ func (t *Table) paintCell(p painter.Painter, widths []int, gutter, cellX, cty, y
 		cellW -= gutter
 	}
 	if j < len(row) {
-		t.drawText(p, cellTextX(&t.Base, cellX, cellW, row[j], t.Columns[j].Align), cty, row[j], ink)
+		// The text is clipped to its own cell: a string wider than its column
+		// must not paint over the next one.
+		withClip(p, Rect{X: cellX, Y: y, W: cellW, H: t.rowH()}, func() {
+			t.drawText(p, cellTextX(&t.Base, cellX, cellW, row[j], t.Columns[j].Align), cty, row[j], ink)
+		})
 	}
 }
 
@@ -2720,10 +2724,12 @@ func (t *Table) OnEvent(ev Event) {
 		if t.reorderActive() && row >= 0 {
 			t.dragRow = row
 		}
-		if !t.MultiSelect {
+		if row < 0 {
 			return
 		}
-		if row < 0 {
+		if !t.MultiSelect {
+			// Single-select: a plain click selects the row it lands on.
+			t.setSelected(row)
 			return
 		}
 		switch {

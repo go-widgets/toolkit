@@ -915,19 +915,28 @@ func TestSelectRowRangeBothDirections(t *testing.T) {
 
 // --- Multi-row selection: OnEvent body-row clicks -----------------------
 
-func TestMultiSelectDisabledBodyClickIsNoOp(t *testing.T) {
-	// MultiSelect defaults false -- a body-row click must be a total
-	// no-op, exactly matching pre-MultiSelect behaviour.
+func TestSingleSelectBodyClickSelectsTheRow(t *testing.T) {
+	// MultiSelect defaults false -- a body-row click selects that row (the
+	// cursor), and builds no multi-row set.
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}})
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 200})
 	tb.Selected().Set(-1)
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + 5})
-	if tb.Selected().Get() != -1 {
-		t.Fatalf("Selected mutated by body click w/o MultiSelect: %d", tb.Selected().Get())
+	if tb.Selected().Get() != 0 {
+		t.Fatalf("body click w/o MultiSelect left Selected at %d, want 0", tb.Selected().Get())
+	}
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: TableHeaderHeight + TableRowHeight + 5})
+	if tb.Selected().Get() != 1 {
+		t.Fatalf("second click: Selected %d, want 1", tb.Selected().Get())
 	}
 	if got := tb.SelectedRows(); got != nil {
-		t.Fatalf("SelectedRows mutated by body click w/o MultiSelect: %v", got)
+		t.Fatalf("SelectedRows built by body click w/o MultiSelect: %v", got)
+	}
+	// A click below the last row selects nothing and leaves the cursor.
+	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: 190})
+	if tb.Selected().Get() != 1 {
+		t.Fatalf("click on empty space moved Selected to %d", tb.Selected().Get())
 	}
 }
 
@@ -1761,13 +1770,15 @@ func TestTableReorderDropMovesRowUpAndShiftsIntermediateSelection(t *testing.T) 
 	tb := NewTable([]TableColumn{{Title: "A", Width: 100}},
 		[][]string{{"r0"}, {"r1"}, {"r2"}, {"r3"}, {"r4"}})
 	tb.Reorderable = true
-	tb.Selected().Set(2) // an intermediate row, in the shifted range [to, from)
 	tb.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 5*TableRowHeight + TableHeaderHeight})
 
 	tb.OnEvent(Event{Kind: EventClick, X: 10, Y: tableBodyClickY(4)})
 	if got := tb.DragData(); got != "tablerow:4" {
 		t.Fatalf("DragData() = %q, want %q", got, "tablerow:4")
 	}
+	// The press selected row 4; the selection under test is an intermediate
+	// row, in the shifted range [to, from).
+	tb.Selected().Set(2)
 
 	var gotFrom, gotTo int
 	tb.OnReorder = func(from, to int) { gotFrom, gotTo = from, to }
