@@ -133,6 +133,9 @@ type TextView struct {
 	// coalescing of consecutive keystrokes -- simplest correct
 	// behaviour, matching the sibling's documented choice).
 	undo, redo []tvSnapshot
+	// hist, when set, owns undo and redo instead of the snapshot stacks. See
+	// [TextView.SetHistoryDelegate].
+	hist *HistoryDelegate
 
 	// selAnchorLine/selAnchorCol remember where a mouse selection began: an
 	// EventClick records the caret it placed as the anchor, and each
@@ -370,6 +373,12 @@ func (t *TextView) restore(s tvSnapshot) {
 // no-op edits -- e.g. Backspace at the buffer start, an empty
 // EventChar -- don't waste a stack slot).
 func (t *TextView) pushUndo() {
+	if t.hist != nil {
+		// The delegate records the edit itself; a snapshot of the buffer is exactly
+		// what it must not be given back.
+		t.historyChanged(true)
+		return
+	}
 	t.undo = append(t.undo, t.snapshot())
 	if len(t.undo) > maxUndo {
 		t.undo = t.undo[len(t.undo)-maxUndo:]
@@ -385,6 +394,11 @@ func (t *TextView) Undo() {
 	if !t.CanUndo() {
 		return
 	}
+	if t.hist != nil {
+		t.hist.Undo()
+		t.historyChanged(false)
+		return
+	}
 	t.redo = append(t.redo, t.snapshot())
 	last := t.undo[len(t.undo)-1]
 	t.undo = t.undo[:len(t.undo)-1]
@@ -398,6 +412,11 @@ func (t *TextView) Undo() {
 // nothing to redo.
 func (t *TextView) Redo() {
 	if !t.CanRedo() {
+		return
+	}
+	if t.hist != nil {
+		t.hist.Redo()
+		t.historyChanged(false)
 		return
 	}
 	t.undo = append(t.undo, t.snapshot())

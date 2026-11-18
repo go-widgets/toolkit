@@ -120,6 +120,11 @@ type CollabText struct {
 	// editor, so the editor's own change notifications do not echo that update
 	// back into the session as a fresh local edit. UI goroutine only.
 	applyingRemote bool
+	// grouping is set while an undo group is open on the text part, and lastEnd is
+	// the rune offset where the last local edit ended, which a keystroke has to
+	// start at to join it. UI goroutine only.
+	grouping bool
+	lastEnd  int
 	// closed short-circuits a remote application still queued when Close ran. UI
 	// goroutine only.
 	closed bool
@@ -157,7 +162,16 @@ func NewCollabText(ed *toolkit.CodeEditor, client *collab.Client, textName strin
 	// for a local edit.
 	ed.SetText(handle.String())
 	c.prev = ed.Text().Get()
+	// Undo in a shared text is the undo of this participant's own edits. The
+	// editor's snapshot undo would restore a buffer that predates what peers have
+	// typed, and this binding would publish that as deleting it (toolkit#591).
+	handle.EnableUndo()
+	ed.SetHistoryDelegate(&toolkit.HistoryDelegate{
+		Undo: c.undo, Redo: c.redo,
+		CanUndo: handle.CanUndo, CanRedo: handle.CanRedo,
+	})
 	c.unsub = append(c.unsub,
+		func() { ed.SetHistoryDelegate(nil) },
 		ed.Text().SubscribeChanged(c.syncLocal),
 		ed.CursorLine().SubscribeChanged(c.publishCursor),
 		ed.CursorCol().SubscribeChanged(c.publishCursor),
@@ -199,15 +213,60 @@ func (c *CollabText) syncLocal() {
 		// Both are exact deltas from the same base, so a rebased offset is within
 		// the replica by construction and these calls cannot be out of range.
 		for _, op := range replay(ch, pending) {
+			c.group(op)
 			if op.Removed > 0 {
 				_ = c.text.Delete(op.Pos, op.Removed)
 			}
 			if op.Text != "" {
 				_ = c.text.Insert(op.Pos, op.Text)
 			}
+			c.lastEnd = op.Pos + utf8.RuneCountInString(op.Text)
+			if !typed(op) || isSpace(op.Text) {
+				// A word ends here: what comes next is a step of its own.
+				c.text.Commit()
+				c.grouping = false
+			}
 		}
 	}
 	c.prev = next
+}
+
+// group opens or continues the undo group an edit belongs to. Undo is per word,
+// not per keystroke: single characters typed one after another, each where the
+// last ended, are one step, closed by a space, a newline, a deletion, or a
+// keystroke somewhere else. Only this participant's edits are in the group; what
+// peers type in between is theirs and never part of it.
+func (c *CollabText) group(op crdt.Change) {
+	if c.grouping && typed(op) && op.Pos == c.lastEnd {
+		return
+	}
+	c.text.Commit()
+	c.text.Begin()
+	c.grouping = true
+}
+
+// typed reports whether op is one character typed, rather than a deletion, a
+// replacement or a paste.
+func typed(op crdt.Change) bool {
+	return op.Removed == 0 && utf8.RuneCountInString(op.Text) == 1
+}
+
+func isSpace(s string) bool { return strings.TrimSpace(s) == "" }
+
+// undo and redo are the editor's history, handed to it with
+// [toolkit.TextView.SetHistoryDelegate]. They take back this participant's own
+// edits in the session and then show the result; the editor never restores a
+// buffer of its own, which in a shared text would read as deleting a peer's work.
+func (c *CollabText) undo() {
+	c.grouping = false
+	_ = c.text.Undo()
+	c.applyRemote()
+}
+
+func (c *CollabText) redo() {
+	c.grouping = false
+	_ = c.text.Redo()
+	c.applyRemote()
 }
 
 // publishCursor publishes the local caret and selection as presence. It is the
