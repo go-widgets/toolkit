@@ -5,10 +5,10 @@ github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6p
 github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 h1:2tV76y6Q9BB+NEBasnqvs7e49aEBFI8ejC89PSnWH+4=
 github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707/go.mod h1:qssHWj60/X5sZFNxpG4HBPDHVqxNm4DfnCKgrbZOT+s=
 github.com/dsnet/golib v0.0.0-20171103203638-1ea166775780/go.mod h1:Lj+Z9rebOhdfkVLjJ8T6VcRQv3SXugXy999NBtR9aFY=
-github.com/go-crdt/collab v0.82.2-0.20261118092807-bfe63255a266 h1:TNBq6u4pWtKXQwcO087lHkR1rv8ZDWx7qMuyGiUh7pg=
-github.com/go-crdt/collab v0.82.2-0.20261118092807-bfe63255a266/go.mod h1:ah6sBwUY/LavmnycU32V0WIl4SLF5bX98RI4c9OCL9E=
-github.com/go-crdt/crdt v0.58.1-0.20261118092720-ef8fc5065310 h1:Qx2mEmefnE8UGNHC4BFQdQ03rrfFljmWIKO5dZsFUR8=
-github.com/go-crdt/crdt v0.58.1-0.20261118092720-ef8fc5065310/go.mod h1:kHlReXEoryOyNeoSZv7GizHHuSZ+DmVi2AuGIRb0jNc=
+github.com/go-crdt/collab v0.83.0 h1:U51D8EIC9EaKMJ3UHYbXwfYs3Vnq7ylwUav4pa6nfK0=
+github.com/go-crdt/collab v0.83.0/go.mod h1:h3iZ9uR+tT7ghQawUM5sFtvH4Wq9qw1j7AMJBrTsM3s=
+github.com/go-crdt/crdt v0.59.0 h1:2gp9+qVo6zN4Y5A6fUKkHufZjJGUJQZ2R4xecDrO0xQ=
+github.com/go-crdt/crdt v0.59.0/go.mod h1:kHlReXEoryOyNeoSZv7GizHHuSZ+DmVi2AuGIRb0jNc=
 github.com/go-gfx/gfx v0.41.0 h1:MVEnory0Zx8ypzuVDrTIWz4Cekv8hn5ilcYg3glJPrk=
 github.com/go-gfx/gfx v0.41.0/go.mod h1:4OenoKrgdht6UXYf5SV8w2tb41hfAdy4QoxJRPsRDz4=
 github.com/go-icons/iconoir v0.3.0 h1:kHG2sU5IsCvtBS1JICuXgfFo5f8UfwY1m7KYMVy97CI=
