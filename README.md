@@ -24,6 +24,13 @@ in headless tests (screenshot-hash regressions).
   `LoadGTKTheme(css)` parses libadwaita / GTK3 `@define-color`
   declarations into a `Theme`, so any GTK-desktop palette (Adwaita,
   Juno, WhiteSur, Solarized …) drives the widget ink colours.
+  `SlateLight(brand)` / `SlateDark(brand)` / `Slate(brand, dark)` is the Tailwind
+  slate look with one brand accent (modelled on the go-authn account page, whose
+  `#0079a8` it reproduces with the derived hover and ink): a slate-50 page, white
+  cards, soft borders and shadows. `Frame.Card` is the card (rounded surface,
+  shadow, heading over a hairline), `Chip.Style` the plain and brand pills, and
+  `GraphView.CornerRadius` the rounded nodes and clusters. The host reads the
+  system's light/dark preference and picks the variant.
 - **Pure Go + CGO=0**: no C toolchain, no shared libraries. Builds
   for every Go target including `GOOS=js GOARCH=wasm`.
 - **A11y bridge**: core widgets implement an opt-in `Accessible`

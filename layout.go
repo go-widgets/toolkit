@@ -682,6 +682,16 @@ type Frame struct {
 	// on the bar toggles the collapsed state. It forces a title bar even when
 	// Title is "".
 	Collapsible bool
+	// Card turns the frame into a CARD: a rounded Theme.Surface with a soft
+	// Theme.Border outline and, when the theme has one (Extra["shadow"]), the
+	// soft two-layer card shadow, padded by Padding (default 12) with a title,
+	// if any, set as a heading over a hairline rather than as a filled band. It
+	// is the surface of a Tailwind-style page: Slate gives it its colours. The
+	// zero value keeps the plain border-only frame. Set-once appearance config,
+	// like Padding.
+	Card bool
+	// CornerRadius is a Card's corner rounding in logical pixels (default 14).
+	CornerRadius int
 
 	// collapsed holds the reactive collapse state, MVVM-only, exposed via
 	// [Frame.Collapsed]. Meaningful only when a title bar is present.
@@ -704,6 +714,43 @@ func (f *Frame) Collapsed() *mvvm.Observable[bool] {
 // the Frame lays it out at scaled(FrameTitleH) device pixels.
 const FrameTitleH = 22
 
+// Card-style frame metrics, in logical pixels.
+const (
+	frameCardPadding = 12
+	frameCardRadius  = 14
+)
+
+// cardRadius is the corner rounding of a Card frame.
+func (f *Frame) cardRadius() int {
+	if f.CornerRadius > 0 {
+		return scaled(f.CornerRadius)
+	}
+	return scaled(frameCardRadius)
+}
+
+// drawCard paints a Card frame's ground: the shadow (when the theme has one),
+// the rounded Theme.Surface, and the soft outline.
+func (f *Frame) drawCard(p painter.Painter, theme *Theme, r Rect) {
+	rad := f.cardRadius()
+	if sh, ok := theme.Extra["shadow"]; ok && sh.A != 0 {
+		// Two soft layers, as CSS `0 1px 2px, 0 4px 16px -4px`: a tight one under
+		// the edge and a wide faint one below it.
+		fillRoundRect(p, r.X, r.Y+1, r.W, r.H, rad, RGBA{R: sh.R, G: sh.G, B: sh.B, A: sh.A / 2})
+		fillRoundRect(p, r.X+scaled(4), r.Y+scaled(5), r.W-2*scaled(4), r.H, rad, RGBA{R: sh.R, G: sh.G, B: sh.B, A: sh.A / 2})
+	}
+	fillRoundRect(p, r.X, r.Y, r.W, r.H, rad, theme.Surface)
+	strokeRoundRect(p, r.X, r.Y, r.W, r.H, rad, theme.Border)
+}
+
+// drawCardTitle paints a Card's heading in the theme's ink over a hairline.
+func (f *Frame) drawCardTitle(p painter.Painter, theme *Theme, r Rect, hh int) {
+	bw := strokeWidth()
+	pad := f.inset()
+	ty := r.Y + bw + scaled(frameCardPadding)/2 + (hh-f.glyphHeight())/2
+	f.drawText(p, r.X+pad, ty, f.Title, theme.OnSurface)
+	fillRect(p, r.X+pad, r.Y+bw+scaled(frameCardPadding)/2+hh, r.W-2*pad, 1, theme.Border)
+}
+
 // NewFrame wraps child in a Frame. child may be nil (the Frame then
 // just draws its border + accepts no events).
 func NewFrame(child Widget) *Frame { return &Frame{child: child} }
@@ -724,6 +771,9 @@ func (f *Frame) inset() int {
 	pad := f.Padding
 	if pad == 0 {
 		pad = defaultPadding
+		if f.Card {
+			pad = frameCardPadding
+		}
 	}
 	if pad < 0 {
 		pad = 0
@@ -802,6 +852,16 @@ func (f *Frame) drawTitleBar(p painter.Painter, theme *Theme, r Rect, hh int) {
 func (f *Frame) Draw(p painter.Painter, theme *Theme) {
 	r := f.Bounds()
 	hh := f.headerH()
+	if f.Card {
+		f.drawCard(p, theme, r)
+		if f.Title != "" {
+			f.drawCardTitle(p, theme, r, hh)
+		}
+		if f.child != nil {
+			f.child.Draw(p, theme)
+		}
+		return
+	}
 	if f.Collapsed().Get() && hh > 0 {
 		strokeRect(p, r.X, r.Y, r.W, hh+2*strokeWidth(), theme.Border)
 		f.drawTitleBar(p, theme, r, hh)

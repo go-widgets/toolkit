@@ -54,7 +54,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Expander":       {"Label": true, "Content": true},
 	// Batch 3 (index/selection widgets): the current index / open / collapsed
 	// state is unexported behind accessors; the slices + flags below are config.
-	"Frame":        {"Padding": true, "Title": true, "Collapsible": true},
+	"Frame":        {"Padding": true, "Title": true, "Collapsible": true, "Card": true, "CornerRadius": true},
 	"ViewSwitcher": {"Views": true},
 	"CycleButton":  {"Options": true},
 	"Pagination":   {"Total": true},
@@ -298,7 +298,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Card":           {"Body": true, "Footer": true, "Title": true},
 	"CardMeta":       {"Author": true, "Comments": true, "Score": true, "Time": true},
 	"ChatBubble":     {"Sender": true, "Text": true},
-	"Chip":           {"Closable": true, "Dot": true, "Text": true},
+	"Chip":           {"Closable": true, "Dot": true, "Text": true, "Style": true},
 	"Container":      {"Layout": true},
 	"DatabaseEditor": {"BarHeight": true, "EditorHeight": true, "ErrorHeight": true, "TreeWidth": true},
 	// Closable is a set-once capability flag (like Window.Closable); Input is the
@@ -364,7 +364,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// (Splitter.Open), enabled is the button's Disabled Observable; the hover
 	// timer is unexported.
 	"ClosablePane": {"Title": true, "Body": true, "CloseLabel": true, "LastLabel": true, "Button": true},
-	"GraphView":    {"Model": true, "Palette": true, "MaxEdgeWidth": true, "ShowLegend": true, "NodeWidth": true},
+	"GraphView":    {"Model": true, "Palette": true, "MaxEdgeWidth": true, "ShowLegend": true, "NodeWidth": true, "CornerRadius": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
