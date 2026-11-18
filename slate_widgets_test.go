@@ -117,6 +117,18 @@ func TestChipStyles(t *testing.T) {
 	if themeChipBg(bare, ChipBrand) != blendRGBA(bare.Accent, bare.Surface, 0.10) || themeChipInk(bare, ChipBrand) != bare.Accent {
 		t.Error("brand chip fallback")
 	}
+	// An empty pill is not drawn at all; an empty default chip still is.
+	for _, st := range []ChipStyle{ChipPlain, ChipBrand} {
+		e := NewChip("")
+		e.Style = st
+		e.SetBounds(Rect{X: 2, Y: 2, W: 60, H: 16})
+		surf := make([]byte, w*h*4)
+		fillRect(newP(surf, w), 0, 0, w, h, light.Surface)
+		e.Draw(newP(surf, w), light)
+		if pixelAt(surf, w, 30, 4) != light.Surface {
+			t.Errorf("style %d: an empty pill was drawn", st)
+		}
+	}
 	// A closable pill draws its x in the chip's ink.
 	cc := NewClosableChip("ok", nil)
 	cc.Style = ChipBrand
