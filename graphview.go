@@ -95,6 +95,10 @@ type GraphView struct {
 	Palette []RGBA
 	// MaxEdgeWidth caps an edge's stroke (default 6).
 	MaxEdgeWidth int
+	// NodeWidth is the width of a node box in painter units (default 72). A
+	// host whose labels are longer than a few characters sets it once, before
+	// the first draw; a node's label is clipped to its box.
+	NodeWidth int
 	// ShowLegend draws the category legend along the bottom edge.
 	ShowLegend bool
 	// OnActivate is called with the selection on Enter or a double selection.
@@ -112,6 +116,7 @@ type GraphView struct {
 	// Vertical scrolling: when the clusters need more height than the widget
 	// has, scrollY (px, >= 0) is how far the content is moved up, contentH its
 	// full height and viewH the height it shows in (the bounds minus the legend).
+	laidNodeW                int // the node width the layout was computed for
 	scrollY, contentH, viewH int
 	hasBar                   bool
 	sbDrag                   scrollDrag
@@ -167,17 +172,27 @@ const (
 	graphHitSlack = 3
 )
 
+// nodeW is the width of a node box.
+func (g *GraphView) nodeW() int {
+	if g.NodeWidth > 0 {
+		return g.NodeWidth
+	}
+	return graphNodeW
+}
+
 // layout places clusters on a grid filling the bounds and nodes on a sub-grid
 // inside each cluster. Deterministic: the same lists and bounds give the
 // same boxes.
 func (g *GraphView) layout() {
 	g.bind()
-	if g.layoutValid {
+	nw := g.nodeW()
+	if g.layoutValid && g.laidNodeW == nw {
 		return
 	}
 	r := g.Bounds()
 	g.layoutFor = r
 	g.layoutValid = true
+	g.laidNodeW = nw
 	g.clusterBox = map[string]Rect{}
 	g.nodeBox = map[string]Rect{}
 	g.order = g.order[:0]
@@ -204,10 +219,10 @@ func (g *GraphView) layout() {
 	// A cluster is at least as wide as its title, so a long label never
 	// spills over the next cluster.
 	titleW := func(c GraphCluster) int { return g.textWidth(c.Label) + 2*graphGap }
-	boxes, perRows, h := flowClusters(clusters, members, area.W, titleW)
+	boxes, perRows, h := flowClusters(clusters, members, area.W, nw, titleW)
 	if h > area.H {
 		g.hasBar = true
-		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarWidth, titleW)
+		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarWidth, nw, titleW)
 	}
 	g.contentH = h
 	g.scrollY = clampInt(g.scrollY, 0, maxInt(0, h-area.H))
@@ -217,8 +232,8 @@ func (g *GraphView) layout() {
 		g.clusterBox[c.ID] = box
 		for j, n := range members[c.ID] {
 			nc, nr := j%perRows[i], j/perRows[i]
-			g.nodeBox[n.ID] = Rect{X: box.X + graphGap + nc*(graphNodeW+graphGap),
-				Y: box.Y + graphTitleH + graphGap + nr*(graphNodeH+graphGap), W: graphNodeW, H: graphNodeH}
+			g.nodeBox[n.ID] = Rect{X: box.X + graphGap + nc*(nw+graphGap),
+				Y: box.Y + graphTitleH + graphGap + nr*(graphNodeH+graphGap), W: nw, H: graphNodeH}
 			g.order = append(g.order, n.ID)
 		}
 	}
@@ -228,13 +243,13 @@ func (g *GraphView) layout() {
 // to right in the width, wrapping when the next one does not fit. It returns
 // the boxes relative to the content origin, each cluster's nodes per row, and
 // the content height.
-func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width int, titleW func(GraphCluster) int) (boxes []Rect, perRows []int, height int) {
+func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width, nodeW int, titleW func(GraphCluster) int) (boxes []Rect, perRows []int, height int) {
 	x, y, rowH := graphGap, graphGap, 0
 	for _, c := range clusters {
 		n := maxInt(1, len(members[c.ID]))
 		perRow := int(math.Ceil(math.Sqrt(float64(n))))
 		rowsIn := (n + perRow - 1) / perRow
-		cw := maxInt(perRow*(graphNodeW+graphGap)+graphGap, titleW(c))
+		cw := maxInt(perRow*(nodeW+graphGap)+graphGap, titleW(c))
 		ch := graphTitleH + rowsIn*(graphNodeH+graphGap) + graphGap
 		if x > graphGap && x+cw+graphGap > width {
 			x, y, rowH = graphGap, y+rowH+graphGap, 0
@@ -417,7 +432,11 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 			if luminance(col) < 0.4 {
 				ink = RGB(0xFF, 0xFF, 0xFF)
 			}
-			g.drawText(p, box.X+3, box.Y+(box.H-g.glyphHeight())/2, n.Label, ink)
+			// The label is clipped to its box: a long one must not run into the
+			// node beside it.
+			withClip(p, box, func() {
+				g.drawText(p, box.X+3, box.Y+(box.H-g.glyphHeight())/2, n.Label, ink)
+			})
 			if sel == "node:"+n.ID {
 				strokeRect(p, box.X-2, box.Y-2, box.W+4, box.H+4, theme.Accent)
 			}
