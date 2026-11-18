@@ -101,6 +101,11 @@ func (c *Chip) Draw(p painter.Painter, theme *Theme) {
 		}
 		c.SetBounds(r)
 	}
+	if c.Text == "" && c.Style != ChipDefault {
+		// A pill with nothing in it is not drawn: a row of fixed chip slots
+		// bound to counts shows only the slots that have one.
+		return
+	}
 	ink := theme.OnSurface
 	closeInk := theme.Border
 	switch c.Style {
