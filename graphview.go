@@ -201,10 +201,13 @@ func (g *GraphView) layout() {
 	// right, wrapping to a new row. When the rows need more height than the
 	// widget has, a scrollbar takes its column and the rows are flowed again in
 	// what is left of the width.
-	boxes, perRows, h := flowClusters(clusters, members, area.W)
+	// A cluster is at least as wide as its title, so a long label never
+	// spills over the next cluster.
+	titleW := func(c GraphCluster) int { return g.textWidth(c.Label) + 2*graphGap }
+	boxes, perRows, h := flowClusters(clusters, members, area.W, titleW)
 	if h > area.H {
 		g.hasBar = true
-		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarWidth)
+		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarWidth, titleW)
 	}
 	g.contentH = h
 	g.scrollY = clampInt(g.scrollY, 0, maxInt(0, h-area.H))
@@ -225,13 +228,13 @@ func (g *GraphView) layout() {
 // to right in the width, wrapping when the next one does not fit. It returns
 // the boxes relative to the content origin, each cluster's nodes per row, and
 // the content height.
-func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width int) (boxes []Rect, perRows []int, height int) {
+func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width int, titleW func(GraphCluster) int) (boxes []Rect, perRows []int, height int) {
 	x, y, rowH := graphGap, graphGap, 0
 	for _, c := range clusters {
 		n := maxInt(1, len(members[c.ID]))
 		perRow := int(math.Ceil(math.Sqrt(float64(n))))
 		rowsIn := (n + perRow - 1) / perRow
-		cw := perRow*(graphNodeW+graphGap) + graphGap
+		cw := maxInt(perRow*(graphNodeW+graphGap)+graphGap, titleW(c))
 		ch := graphTitleH + rowsIn*(graphNodeH+graphGap) + graphGap
 		if x > graphGap && x+cw+graphGap > width {
 			x, y, rowH = graphGap, y+rowH+graphGap, 0
