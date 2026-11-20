@@ -26,6 +26,8 @@ type ProgressBar struct {
 	Orientation   Orientation
 	Indeterminate bool
 	Phase         float64 // 0..1, only used when Indeterminate
+	// fill is the reactive fill colour; see [ProgressBar.FillColor].
+	fill *mvvm.Observable[RGBA]
 
 	// fraction is the reactive determinate fill in [0,1]; see [ProgressBar.Fraction].
 	fraction *mvvm.Observable[float64]
@@ -98,19 +100,39 @@ func indetSpan(trackLen int, ph float64) (offset, length int) {
 	return s, e - s
 }
 
+// FillColor is the colour of the filled portion (and of the indeterminate chunk)
+// as a shared [mvvm.Observable]: a bar that says something by its colour (a
+// pressure, a quota) picks it per instance. Lazily created; a value whose alpha
+// is 0 (the default) keeps Theme.Accent.
+func (pb *ProgressBar) FillColor() *mvvm.Observable[RGBA] {
+	if pb.fill == nil {
+		pb.fill = mvvm.NewObservable(RGBA{})
+	}
+	return pb.fill
+}
+
+// fillColor is the colour the fill is drawn in: FillColor when it is set, else
+// the theme's Accent.
+func (pb *ProgressBar) fillColor(theme *Theme) RGBA {
+	if c := pb.FillColor().Get(); c.A != 0 {
+		return c
+	}
+	return theme.Accent
+}
+
 // drawIndeterminate paints the track, the sliding Accent chunk, the border and
 // an optional label (horizontal only).
 func (pb *ProgressBar) drawIndeterminate(p painter.Painter, theme *Theme, r Rect) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.SurfaceAlt)
 	if pb.Orientation == Vertical {
 		if off, ln := indetSpan(r.H, pb.Phase); ln > 0 {
-			fillRect(p, r.X, r.Y+off, r.W, ln, theme.Accent)
+			fillRect(p, r.X, r.Y+off, r.W, ln, pb.fillColor(theme))
 		}
 		strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 		return
 	}
 	if off, ln := indetSpan(r.W, pb.Phase); ln > 0 {
-		fillRect(p, r.X+off, r.Y, ln, r.H, theme.Accent)
+		fillRect(p, r.X+off, r.Y, ln, r.H, pb.fillColor(theme))
 	}
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	if pb.Label != "" {
@@ -138,14 +160,14 @@ func (pb *ProgressBar) Draw(p painter.Painter, theme *Theme) {
 		// Fill from the bottom up.
 		fillH := int(float64(r.H) * f)
 		if fillH > 0 {
-			fillRect(p, r.X, r.Y+r.H-fillH, r.W, fillH, theme.Accent)
+			fillRect(p, r.X, r.Y+r.H-fillH, r.W, fillH, pb.fillColor(theme))
 		}
 		strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 		return // a centred label doesn't fit a narrow vertical bar
 	}
 	fillW := int(float64(r.W) * f)
 	if fillW > 0 {
-		fillRect(p, r.X, r.Y, fillW, r.H, theme.Accent)
+		fillRect(p, r.X, r.Y, fillW, r.H, pb.fillColor(theme))
 	}
 	strokeRect(p, r.X, r.Y, r.W, r.H, theme.Border)
 	if pb.Label != "" {

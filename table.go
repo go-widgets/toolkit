@@ -94,6 +94,18 @@ type Table struct {
 	// behaviour, byte-for-byte.
 	CellFill func(row, col int) (fill RGBA, ok bool)
 
+	// CellBar, when non-nil, draws a progress bar in a body cell, under its text:
+	// what puts a gauge (a context window, a quota, a completion) in a row next to
+	// the number that says it. It is called with a 0-indexed body row and column
+	// and returns the filled fraction (clamped to [0,1]; NaN counts as 0), the
+	// fill colour (alpha 0 keeps Theme.Accent) and an ok flag; ok == false leaves
+	// the cell as a text cell. The bar is the cell inset by the cell padding, drawn
+	// like a [ProgressBar] (track, fill, border), and the cell's text is inked
+	// Theme.OnSurface over it so it reads on the track and on the fill alike, the
+	// highlighted row included. The zero value (nil) is the original behaviour,
+	// byte-for-byte.
+	CellBar func(row, col int) (fraction float64, fill RGBA, ok bool)
+
 	// MultiSelect switches body-row clicks (handled by OnEvent) from
 	// inert to selection-driving: a plain click selects only that row
 	// (clearing any other selection, moving the Selected anchor to
@@ -903,7 +915,7 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 	if !t.hScrollable() {
 		cx := r.X
 		for j := range t.Columns {
-			t.paintFilledCell(p, fill, widths, gutter, cx, cty, y, i, j, ink, row)
+			t.paintFilledCell(p, theme, fill, widths, gutter, cx, cty, y, i, j, ink, row)
 			cx += widths[j]
 		}
 		return
@@ -917,11 +929,11 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 	right := r.X + t.contentWidth()
 	withClip(p, Rect{X: fx, Y: y, W: right - fx, H: t.rowH()}, func() {
 		for j := f; j < len(t.Columns); j++ {
-			t.paintFilledCell(p, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
+			t.paintFilledCell(p, theme, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
 		}
 	})
 	for j := 0; j < f; j++ {
-		t.paintFilledCell(p, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
+		t.paintFilledCell(p, theme, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
 	}
 }
 
@@ -929,14 +941,40 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 // CellFill background when fill supplies one for it and switching the text to
 // the ink that contrasts with that background. With fill nil, or declining the
 // cell, it is exactly paintCell.
-func (t *Table) paintFilledCell(p painter.Painter, fill func(row, col int) (RGBA, bool), widths []int, gutter, cellX, cty, y, i, j int, ink RGBA, row []string) {
+func (t *Table) paintFilledCell(p painter.Painter, theme *Theme, fill func(row, col int) (RGBA, bool), widths []int, gutter, cellX, cty, y, i, j int, ink RGBA, row []string) {
 	if fill != nil {
 		if c, ok := fill(i, j); ok {
 			fillRect(p, cellX, y, widths[j], t.rowH(), c)
 			ink = ContrastInk(c)
 		}
 	}
+	if t.CellBar != nil {
+		if f, c, ok := t.CellBar(i, j); ok {
+			t.paintCellBar(p, theme, cellX, y, widths[j], f, c)
+			ink = theme.OnSurface
+		}
+	}
 	t.paintCell(p, widths, gutter, cellX, cty, y, i, j, ink, row)
+}
+
+// paintCellBar draws the CellBar gauge of a cell at (cellX, y), cellW wide: the
+// SurfaceAlt track, the fill (c, or Accent when c is transparent) over the
+// fraction f of it, and the border, inset by the cell padding.
+func (t *Table) paintCellBar(p painter.Painter, theme *Theme, cellX, y, cellW int, f float64, c RGBA) {
+	if f != f || f < 0 {
+		f = 0
+	}
+	if f > 1 {
+		f = 1
+	}
+	if c.A == 0 {
+		c = theme.Accent
+	}
+	inset := scaled(2)
+	bx, by, bw, bh := cellX+t.cellPadX()/2, y+inset, cellW-t.cellPadX(), t.rowH()-2*inset
+	fillRect(p, bx, by, bw, bh, theme.SurfaceAlt)
+	fillRect(p, bx, by, int(float64(bw)*f), bh, c)
+	strokeRect(p, bx, by, bw, bh, theme.Border)
 }
 
 // paintCell paints one body cell of row i, column j: column 0's optional
