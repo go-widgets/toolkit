@@ -1146,15 +1146,16 @@ func (t *Table) scrollbarGeom() (sbGeom, bool) {
 		thumbH = tableScrollbarThumbMin
 	}
 	scroll := t.clampScrollRow()
+	maxScroll := max(t.maxScrollRow(), 1) // the thumb travels over the rows the body can scroll
 	return sbGeom{
 		cross0:     r.W - scrollbarWidth,
 		trackStart: trackTop,
 		trackLen:   trackH,
-		thumbStart: trackTop + scroll*t.rowH()*(trackH-thumbH)/(contentH-trackH),
+		thumbStart: trackTop + scroll*(trackH-thumbH)/maxScroll,
 		thumbLen:   thumbH,
-		travelNum:  t.rowH() * (trackH - thumbH),
-		travelDen:  contentH - trackH,
-		maxScroll:  t.maxScrollRow(),
+		travelNum:  trackH - thumbH,
+		travelDen:  maxScroll,
+		maxScroll:  maxScroll,
 	}, true
 }
 
@@ -1473,7 +1474,20 @@ func (t *Table) bodyVisibleRows() int {
 // scrollbar track to occupy.
 func (t *Table) bodyOverflows() bool {
 	vis := t.bodyVisibleRows()
-	return vis > 0 && t.lineCount() > vis
+	return vis > 0 && t.lineCount() > t.wholeRows(0)
+}
+
+// wholeRows is how many rows fit WHOLE in the body, less reserve pixels at
+// its bottom (the horizontal scrollbar's strip), at least 1 while the body has
+// any height. A row that only partly fits is not counted: the last row must be
+// reachable in full, never left half-clipped at the scroll end.
+func (t *Table) wholeRows(reserve int) int {
+	h := t.Bounds().H - scaled(TableHeaderHeight) - reserve
+	n := h / t.rowH()
+	if n < 1 && t.bodyVisibleRows() > 0 {
+		n = 1
+	}
+	return max(n, 0)
 }
 
 // maxScrollRow is the highest legal ScrollRow: enough rows short of
@@ -1482,7 +1496,11 @@ func (t *Table) bodyOverflows() bool {
 // case) -- exactly the "[0, max(0, len(Rows)-visibleRows)]" range
 // ScrollRow's doc promises.
 func (t *Table) maxScrollRow() int {
-	max := t.lineCount() - t.bodyVisibleRows()
+	reserve := 0
+	if t.hScrollable() {
+		reserve = scrollbarWidth // the horizontal scrollbar covers the body's bottom strip
+	}
+	max := t.lineCount() - t.wholeRows(reserve)
 	if max < 0 {
 		max = 0
 	}
