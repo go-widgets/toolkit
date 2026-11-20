@@ -742,3 +742,40 @@ func TestTimeSeriesChartPinnedRangeWithNoPointsStillDrawsScaffolding(t *testing.
 		t.Errorf("a pinned range with zero points painted %d Border pixels, want more than the truly-empty baseline (%d) — vertical gridlines should still show the full window", got, base)
 	}
 }
+
+func TestTimeSeriesChartDrawsMarkersInsideTheSpanOnly(t *testing.T) {
+	ink := RGBA{R: 1, G: 2, B: 3, A: 255}
+	c := NewTimeSeriesChart(nil, 0, 100)
+	c.TimeMin, c.TimeMax = 0, 1000
+	c.Markers = []TimeMarker{{At: 250, Ink: ink}, {At: 5000, Ink: ink}, {At: 900, Label: "reset"}, {At: 100, Label: "early"}, {At: -5, Ink: ink}}
+	c.SetBounds(Rect{W: 240, H: 100})
+	surf := makeSurface(240, 100)
+	th := DefaultLight()
+	c.Draw(newP(surf, 240), th)
+	bare := NewTimeSeriesChart(nil, 0, 100)
+	bare.TimeMin, bare.TimeMax = 0, 1000
+	bare.SetBounds(Rect{W: 240, H: 100})
+	surf2 := makeSurface(240, 100)
+	bare.Draw(newP(surf2, 240), th)
+	if countPainted(surf, 240, 100) <= countPainted(surf2, 240, 100) {
+		t.Fatal("markers inside the span not drawn")
+	}
+}
+
+func TestTimeSeriesChartDrawsOverlayLinesWithALegend(t *testing.T) {
+	th := DefaultLight()
+	c := NewTimeSeriesChart(nil, 0, 100)
+	c.TimeMin, c.TimeMax = 0, 700
+	c.SetBounds(Rect{W: 240, H: 100})
+	bare := makeSurface(240, 100)
+	c.Draw(newP(bare, 240), th)
+	c.Overlays = []TimeLine{
+		{Name: "w1", Ink: RGBA{R: 200, A: 255}, Points: []TimePoint{{At: 0, Value: 0}, {At: 700, Value: 90}}},
+		{Ink: RGBA{B: 200, A: 255}, Points: []TimePoint{{At: 0, Value: 10}}},
+	}
+	surf := makeSurface(240, 100)
+	c.Draw(newP(surf, 240), th)
+	if countPainted(surf, 240, 100) <= countPainted(bare, 240, 100) {
+		t.Fatal("overlay not drawn")
+	}
+}

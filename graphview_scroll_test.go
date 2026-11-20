@@ -80,7 +80,7 @@ func TestGraphViewScrollsWhenItOverflows(t *testing.T) {
 	}
 	// The wheel moves it, in rows.
 	g.OnEvent(Event{Kind: EventScroll, Delta: 3})
-	if g.ScrollY() != 3*graphScrollStep {
+	if g.ScrollY() != 3*graphScrollStep() {
 		t.Fatalf("wheel: scroll %d", g.ScrollY())
 	}
 	// Scrolling past the end clamps, and then the last node is reachable.

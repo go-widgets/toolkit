@@ -749,7 +749,7 @@ var disabledA11yExempt = exemptions(map[string][]string{
 		"ContrastBadge", "Diff", "Gauge", "GroupCard", "Image", "Kbd", "Label", "LevelBar", "LineChart",
 		"LinkCard", "LoadMask", "MarkdownView", "MediaCard", "Notification", "PieChart", "PostCard",
 		"ProgressBar", "ProgressCircle", "RadarChart", "SelectionBox",
-		"ScatterChart", "SegmentedBar", "Sparkline", "Spinner", "Stat", "TimeSeriesChart", "Timeline",
+		"ScatterChart", "SegmentedBar", "Sparkline", "Spinner", "Stat", "StackedBarChart", "TimeSeriesChart", "Timeline",
 		"Tooltip", "XYPlot",
 	},
 	exemptLayout: {
