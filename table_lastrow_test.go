@@ -2,6 +2,20 @@ package toolkit
 
 import "testing"
 
+// A body shorter than one row still shows (a sliver of) one row at a time, and
+// one with no height at all scrolls nowhere.
+func TestTableWholeRowsFloorAtOneWhileBodyHasHeight(t *testing.T) {
+	tb := NewTable([]TableColumn{{Title: "A", Width: 100}}, tableManyRows(20))
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: scaled(TableHeaderHeight) + 5})
+	if got := tb.maxScrollRow(); got != 19 {
+		t.Fatalf("maxScrollRow with a 5px body = %d, want 19", got)
+	}
+	tb.SetBounds(Rect{X: 0, Y: 0, W: 120, H: scaled(TableHeaderHeight)})
+	if got := tb.maxScrollRow(); got != 20 || tb.bodyOverflows() {
+		t.Fatalf("no body: maxScrollRow=%d overflows=%v, want 20 and false", got, tb.bodyOverflows())
+	}
+}
+
 // TestTableLastRowFullyVisibleAtBottom: scrolled to its end, the last row's
 // bottom edge must lie within the viewport -- above the horizontal scrollbar
 // when one is shown -- whatever the height (a multiple of the row height or
