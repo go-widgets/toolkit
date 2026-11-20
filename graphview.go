@@ -200,10 +200,16 @@ func (g *GraphView) strokeBox(p painter.Painter, r Rect, radius int, c RGBA) {
 // nodeW is the width of a node box.
 func (g *GraphView) nodeW() int {
 	if g.NodeWidth > 0 {
-		return g.NodeWidth
+		return scaled(g.NodeWidth)
 	}
-	return graphNodeW
+	return scaled(graphNodeW)
 }
+
+// The layout metrics, scaled by the global metric scale ([SetMetricScale]) so a
+// graph drawn on a HiDPI surface grows with its text.
+func gGap() int    { return scaled(graphGap) }
+func gNodeH() int  { return scaled(graphNodeH) }
+func gTitleH() int { return scaled(graphTitleH) }
 
 // layout places clusters on a grid filling the bounds and nodes on a sub-grid
 // inside each cluster. Deterministic: the same lists and bounds give the
@@ -211,6 +217,8 @@ func (g *GraphView) nodeW() int {
 func (g *GraphView) layout() {
 	g.bind()
 	nw := g.nodeW()
+	// A change of node width (NodeWidth set late, or the metric scale changed)
+	// lays out again; an edge update never does.
 	if g.layoutValid && g.laidNodeW == nw {
 		return
 	}
@@ -243,7 +251,7 @@ func (g *GraphView) layout() {
 	// what is left of the width.
 	// A cluster is at least as wide as its title, so a long label never
 	// spills over the next cluster.
-	titleW := func(c GraphCluster) int { return g.textWidth(c.Label) + 2*graphGap }
+	titleW := func(c GraphCluster) int { return g.textWidth(c.Label) + 2*gGap() }
 	boxes, perRows, h := flowClusters(clusters, members, area.W, nw, titleW)
 	if h > area.H {
 		g.hasBar = true
@@ -257,8 +265,8 @@ func (g *GraphView) layout() {
 		g.clusterBox[c.ID] = box
 		for j, n := range members[c.ID] {
 			nc, nr := j%perRows[i], j/perRows[i]
-			g.nodeBox[n.ID] = Rect{X: box.X + graphGap + nc*(nw+graphGap),
-				Y: box.Y + graphTitleH + graphGap + nr*(graphNodeH+graphGap), W: nw, H: graphNodeH}
+			g.nodeBox[n.ID] = Rect{X: box.X + gGap() + nc*(nw+gGap()),
+				Y: box.Y + gTitleH() + gGap() + nr*(gNodeH()+gGap()), W: nw, H: gNodeH()}
 			g.order = append(g.order, n.ID)
 		}
 	}
@@ -269,26 +277,27 @@ func (g *GraphView) layout() {
 // the boxes relative to the content origin, each cluster's nodes per row, and
 // the content height.
 func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width, nodeW int, titleW func(GraphCluster) int) (boxes []Rect, perRows []int, height int) {
-	x, y, rowH := graphGap, graphGap, 0
+	gap := gGap()
+	x, y, rowH := gap, gap, 0
 	for _, c := range clusters {
 		n := maxInt(1, len(members[c.ID]))
 		perRow := int(math.Ceil(math.Sqrt(float64(n))))
 		rowsIn := (n + perRow - 1) / perRow
-		cw := maxInt(perRow*(nodeW+graphGap)+graphGap, titleW(c))
-		ch := graphTitleH + rowsIn*(graphNodeH+graphGap) + graphGap
-		if x > graphGap && x+cw+graphGap > width {
-			x, y, rowH = graphGap, y+rowH+graphGap, 0
+		cw := maxInt(perRow*(nodeW+gap)+gap, titleW(c))
+		ch := gTitleH() + rowsIn*(gNodeH()+gap) + gap
+		if x > gap && x+cw+gap > width {
+			x, y, rowH = gap, y+rowH+gap, 0
 		}
 		boxes = append(boxes, Rect{X: x, Y: y, W: cw, H: ch})
 		perRows = append(perRows, perRow)
-		x += cw + graphGap
+		x += cw + gap
 		rowH = maxInt(rowH, ch)
 	}
-	return boxes, perRows, y + rowH + graphGap
+	return boxes, perRows, y + rowH + gap
 }
 
 // graphScrollStep is the pixels one wheel row moves the content.
-const graphScrollStep = graphNodeH + graphGap
+func graphScrollStep() int { return gNodeH() + gGap() }
 
 // graphThumbMin is the smallest scrollbar thumb, in pixels.
 const graphThumbMin = 12
@@ -343,9 +352,9 @@ func (g *GraphView) revealNode(id string) {
 	top := g.Bounds().Y
 	switch {
 	case b.Y < top:
-		g.ScrollBy(b.Y - top - graphGap)
+		g.ScrollBy(b.Y - top - gGap())
 	case b.Y+b.H > top+g.viewH:
-		g.ScrollBy(b.Y + b.H - (top + g.viewH) + graphGap)
+		g.ScrollBy(b.Y + b.H - (top + g.viewH) + gGap())
 	}
 }
 
@@ -431,7 +440,7 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 		for id, box := range g.clusterBox {
 			g.fillBox(p, box, g.clusterRadius(), theme.Surface)
 			g.strokeBox(p, box, g.clusterRadius(), theme.Border)
-			g.drawText(p, box.X+graphGap, box.Y+2, labels[id], theme.OnSurface)
+			g.drawText(p, box.X+gGap(), box.Y+scaled(2), labels[id], theme.OnSurface)
 		}
 		nodes := g.Model.Nodes.Slice()
 		for _, n := range nodes {
@@ -609,7 +618,7 @@ func (g *GraphView) drawLegend(p painter.Painter, theme *Theme) {
 	top := r.Y + r.H - h + graphLegendPad
 	ty := top + (line-g.glyphHeight())/2 // text
 	sy := top + (line-graphSwatch)/2     // swatch
-	x := r.X + graphGap
+	x := r.X + gGap()
 	names := make([]string, len(g.categories))
 	for cat, i := range g.categories {
 		names[i] = cat
@@ -675,7 +684,7 @@ func (g *GraphView) OnEvent(ev Event) {
 	r := g.Bounds()
 	switch ev.Kind {
 	case EventScroll:
-		g.ScrollBy(ev.Delta * graphScrollStep)
+		g.ScrollBy(ev.Delta * graphScrollStep())
 	case EventMouseDrag:
 		sg, ok := g.scrollbarGeom()
 		g.sbDrag.drag(sg, ok, ev, g.ScrollTo)
