@@ -85,11 +85,15 @@ func LayoutProblems(root Widget) []LayoutProblem {
 // checkLayout is the recursive half: it compares each child against the parent
 // it was given, then descends.
 func checkLayout(parent Widget, path string, out *[]LayoutProblem) {
+	if g, ok := parent.(*GraphView); ok {
+		*out = append(*out, graphProblems(g, path)...)
+	}
 	c, ok := parent.(childContainer)
 	if !ok {
 		return
 	}
 	pr := parent.Bounds()
+	_, scrolls := parent.(scrollViewport)
 	for _, kid := range c.Children() {
 		if kid == nil {
 			continue
@@ -104,6 +108,9 @@ func checkLayout(parent Widget, path string, out *[]LayoutProblem) {
 					Path: where, Rect: kr, In: pr,
 				})
 			}
+		case scrolls:
+			// A scroll viewport's content is meant to reach past it: that is what
+			// the scrolling is for.
 		case !inside(kr, pr):
 			*out = append(*out, LayoutProblem{
 				Kind: LayoutOutside, Widget: kid, Parent: parent,
@@ -112,6 +119,48 @@ func checkLayout(parent Widget, path string, out *[]LayoutProblem) {
 		}
 		checkLayout(kid, where, out)
 	}
+}
+
+// scrollViewport is a container whose children may extend past its bounds
+// because it scrolls them into view: LayoutProblems does not call that outside.
+type scrollViewport interface{ ScrollsContent() bool }
+
+// ScrollsContent says a [ScrollView] is a scroll viewport.
+func (*ScrollView) ScrollsContent() bool { return true }
+
+// graphProblems checks a GraphView's own geometry, which is not made of
+// widgets: every node's box must be inside its cluster's box, and every cluster's
+// box must be as wide as the area the graph flows in (the widget less its scroll
+// bar), however narrow that is. A graph that scrolls vertically is not a problem;
+// a box reaching past the right edge is, since nothing scrolls sideways.
+func graphProblems(g *GraphView, path string) []LayoutProblem {
+	g.layout()
+	var out []LayoutProblem
+	r := g.Bounds()
+	right := r.X + r.W
+	if g.hasBar {
+		right -= scrollbarWidth
+	}
+	for _, c := range g.Model.Clusters.Slice() {
+		cb, ok := g.clusterBox[c.ID]
+		if !ok {
+			continue
+		}
+		where := path + " > cluster " + c.ID
+		if cb.X < r.X || cb.X+cb.W > right {
+			out = append(out, LayoutProblem{Kind: LayoutOutside, Widget: g, Parent: g, Path: where, Rect: cb, In: r})
+		}
+	}
+	for _, n := range g.Model.Nodes.Slice() {
+		nb, ok := g.nodeBox[n.ID]
+		if !ok {
+			continue
+		}
+		if cb := g.clusterBox[n.Cluster]; !inside(nb, cb) {
+			out = append(out, LayoutProblem{Kind: LayoutOutside, Widget: g, Parent: g, Path: path + " > node " + n.ID, Rect: nb, In: cb})
+		}
+	}
+	return out
 }
 
 // inside reports whether the whole of a is within b. An empty b contains

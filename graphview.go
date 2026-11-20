@@ -241,6 +241,9 @@ func (g *GraphView) layout() {
 		return
 	}
 	area := r
+	for _, n := range nodes { // the legend's entries, in the order the nodes name them
+		g.categoryColor(n.Category)
+	}
 	if g.ShowLegend {
 		area.H -= g.legendHeight()
 	}
@@ -266,7 +269,7 @@ func (g *GraphView) layout() {
 		for j, n := range members[c.ID] {
 			nc, nr := j%perRows[i], j/perRows[i]
 			g.nodeBox[n.ID] = Rect{X: box.X + gGap() + nc*(nw+gGap()),
-				Y: box.Y + gTitleH() + gGap() + nr*(gNodeH()+gGap()), W: nw, H: gNodeH()}
+				Y: box.Y + gTitleH() + gGap() + nr*(gNodeH()+gGap()), W: min(nw, max(box.W-2*gGap(), 1)), H: gNodeH()}
 			g.order = append(g.order, n.ID)
 		}
 	}
@@ -282,8 +285,17 @@ func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width
 	for _, c := range clusters {
 		n := maxInt(1, len(members[c.ID]))
 		perRow := int(math.Ceil(math.Sqrt(float64(n))))
+		// A cluster never grows wider than the view: past that its nodes wrap into
+		// more rows (the box grows taller) and its title is clipped to the box.
+		capW := width - 2*gap
+		if fit := (capW - gap) / (nodeW + gap); capW > 0 && fit < perRow {
+			perRow = maxInt(1, fit)
+		}
 		rowsIn := (n + perRow - 1) / perRow
 		cw := maxInt(perRow*(nodeW+gap)+gap, titleW(c))
+		if capW > 0 {
+			cw = min(cw, capW)
+		}
 		ch := gTitleH() + rowsIn*(gNodeH()+gap) + gap
 		if x > gap && x+cw+gap > width {
 			x, y, rowH = gap, y+rowH+gap, 0
@@ -440,7 +452,10 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 		for id, box := range g.clusterBox {
 			g.fillBox(p, box, g.clusterRadius(), theme.Surface)
 			g.strokeBox(p, box, g.clusterRadius(), theme.Border)
-			g.drawText(p, box.X+gGap(), box.Y+scaled(2), labels[id], theme.OnSurface)
+			// The title is clipped to its box: a long one never runs out of it.
+			withClip(p, box, func() {
+				g.drawText(p, box.X+gGap(), box.Y+scaled(2), labels[id], theme.OnSurface)
+			})
 		}
 		nodes := g.Model.Nodes.Slice()
 		for _, n := range nodes {
@@ -460,20 +475,24 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 			if !visible[n.ID] {
 				col = blendRGBA(col, theme.Background, 0.25)
 			}
-			g.fillBox(p, box, g.CornerRadius, col)
-			// Label ink by the swatch's lightness, so it reads on every colour.
-			ink := RGB(0x10, 0x10, 0x10)
-			if luminance(col) < 0.4 {
-				ink = RGB(0xFF, 0xFF, 0xFF)
-			}
-			// The label is clipped to its box: a long one must not run into the
-			// node beside it.
-			withClip(p, box, func() {
-				g.drawText(p, box.X+3, box.Y+(box.H-g.glyphHeight())/2, n.Label, ink)
+			// Nothing of a node is drawn outside its cluster's box.
+			limit := g.clusterBox[n.Cluster]
+			withClip(p, limit, func() {
+				g.fillBox(p, box, g.CornerRadius, col)
+				// Label ink by the swatch's lightness, so it reads on every colour.
+				ink := RGB(0x10, 0x10, 0x10)
+				if luminance(col) < 0.4 {
+					ink = RGB(0xFF, 0xFF, 0xFF)
+				}
+				// The label is clipped to its box: a long one must not run into the
+				// node beside it.
+				withClip(p, box, func() {
+					g.drawText(p, box.X+3, box.Y+(box.H-g.glyphHeight())/2, n.Label, ink)
+				})
+				if sel == "node:"+n.ID {
+					g.strokeBox(p, Rect{X: box.X - 2, Y: box.Y - 2, W: box.W + 4, H: box.H + 4}, g.CornerRadius+2, theme.Accent)
+				}
 			})
-			if sel == "node:"+n.ID {
-				g.strokeBox(p, Rect{X: box.X - 2, Y: box.Y - 2, W: box.W + 4, H: box.H + 4}, g.CornerRadius+2, theme.Accent)
-			}
 		}
 		if g.ShowLegend {
 			// Clusters scrolled under the legend must not show through it.
@@ -604,32 +623,70 @@ const (
 )
 
 // legendHeight is the legend strip's height, from the widget's font: one
-// line of text (or a swatch, if the font is smaller) with its padding.
+// line of text (or a swatch, if the font is smaller) with its padding per row.
+// The legend wraps to as many rows as its entries need in the widget's width, so
+// it never runs off the right edge.
 func (g *GraphView) legendHeight() int {
-	return max(g.glyphHeight(), graphSwatch) + 2*graphLegendPad
+	rows := len(g.legendRows())
+	return rows*max(g.glyphHeight(), graphSwatch) + (rows+1)*graphLegendPad
 }
 
-// drawLegend draws one swatch per category seen, and the denied style, on a
-// line centred in the legend strip.
-func (g *GraphView) drawLegend(p painter.Painter, theme *Theme) {
-	r := g.Bounds()
-	h := g.legendHeight()
-	line := h - 2*graphLegendPad
-	top := r.Y + r.H - h + graphLegendPad
-	ty := top + (line-g.glyphHeight())/2 // text
-	sy := top + (line-graphSwatch)/2     // swatch
-	x := r.X + gGap()
+// legendItem is one entry of the legend: a swatch (or the dashed denied style)
+// and its caption, and the width the pair takes.
+type legendItem struct {
+	cat    string
+	denied bool
+	w      int
+}
+
+// legendRows flows the legend's entries (one per category, then "denied") into
+// rows no wider than the widget less its margins.
+func (g *GraphView) legendRows() [][]legendItem {
 	names := make([]string, len(g.categories))
 	for cat, i := range g.categories {
 		names[i] = cat
 	}
+	items := make([]legendItem, 0, len(names)+1)
 	for _, cat := range names {
-		fillRect(p, x, sy, graphSwatch, graphSwatch, g.categoryColor(cat))
-		g.drawText(p, x+13, ty, cat, theme.OnBackground)
-		x += 13 + g.textWidth(cat) + 10
+		items = append(items, legendItem{cat: cat, w: 13 + g.textWidth(cat) + 10})
 	}
-	drawDashed(p, x, sy+graphSwatch/2, x+16, sy+graphSwatch/2, graphDeniedInk(theme))
-	g.drawText(p, x+20, ty, "denied", theme.OnBackground)
+	items = append(items, legendItem{cat: "denied", denied: true, w: 20 + g.textWidth("denied")})
+	avail := g.Bounds().W - 2*gGap()
+	rows := [][]legendItem{nil}
+	x := 0
+	for _, it := range items {
+		if x > 0 && x+it.w > avail {
+			rows = append(rows, nil)
+			x = 0
+		}
+		rows[len(rows)-1] = append(rows[len(rows)-1], it)
+		x += it.w
+	}
+	return rows
+}
+
+// drawLegend draws one swatch per category seen, and the denied style, on lines
+// centred in the legend strip.
+func (g *GraphView) drawLegend(p painter.Painter, theme *Theme) {
+	r := g.Bounds()
+	h := g.legendHeight()
+	line := max(g.glyphHeight(), graphSwatch)
+	for i, row := range g.legendRows() {
+		top := r.Y + r.H - h + graphLegendPad + i*(line+graphLegendPad)
+		ty := top + (line-g.glyphHeight())/2 // text
+		sy := top + (line-graphSwatch)/2     // swatch
+		x := r.X + gGap()
+		for _, it := range row {
+			if it.denied {
+				drawDashed(p, x, sy+graphSwatch/2, x+16, sy+graphSwatch/2, graphDeniedInk(theme))
+				g.drawText(p, x+20, ty, it.cat, theme.OnBackground)
+			} else {
+				fillRect(p, x, sy, graphSwatch, graphSwatch, g.categoryColor(it.cat))
+				g.drawText(p, x+13, ty, it.cat, theme.OnBackground)
+			}
+			x += it.w
+		}
+	}
 }
 
 // edgeAt returns the edge whose segment passes within graphHitSlack of (x,y).
