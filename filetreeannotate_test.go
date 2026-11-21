@@ -162,6 +162,49 @@ func TestAnnotateSeesThePathNotTheLabel(t *testing.T) {
 	}
 }
 
+// TestAnnotateIsHandedTheCleanedRelativePath pins what the doc now says the
+// hook receives, which is NOT always the FileEntry.Path the host supplied.
+//
+// ⛔ Measured by the first consumer (#613). A host walked a directory and passed
+// the absolute paths it had. The tree cleaned "/var/…/a.png" to "var/…/a.png",
+// the host's map was keyed on the former, and every lookup missed. Nothing
+// failed, and the tree drew a folder for every ancestor.
+func TestAnnotateIsHandedTheCleanedRelativePath(t *testing.T) {
+	f := NewFileTree([]FileEntry{
+		{Path: "/abs/./pics/a.png", Size: 1},
+		{Path: "rel/b.png", Size: 1},
+		{Path: "/top.png", Size: 1},
+	})
+	f.SetBounds(Rect{W: 300, H: 400})
+	got := map[string]bool{}
+	f.Annotate = func(p string, dir bool) string {
+		got[p] = true
+		return ""
+	}
+	f.MenuExtra = func(p string, dir bool) []MenuItem {
+		got["menu:"+p] = true
+		return nil
+	}
+	for _, p := range []string{"abs/pics/a.png", "rel/b.png"} {
+		f.Selected().Set(p)
+		_ = f.A11y()
+	}
+	for _, want := range []string{"abs/pics/a.png", "rel/b.png"} {
+		if !got[want] {
+			t.Errorf("the hook never saw %q; it saw %v", want, got)
+		}
+	}
+	if got["/abs/./pics/a.png"] || got["/abs/pics/a.png"] {
+		t.Errorf("the hook was handed the path as supplied, %v; the doc says cleaned and relative", got)
+	}
+	// MenuExtra, through the context menu of a top-level row supplied as
+	// "/top.png".
+	f.Context(40, rowY(t, f, "top.png"))
+	if !got["menu:top.png"] || got["menu:/top.png"] {
+		t.Errorf("MenuExtra saw %v; want \"top.png\", the same form as Annotate", got)
+	}
+}
+
 // TestTheAnnotationInkIsReadable guards the reason the host does not choose
 // the colour.
 //
