@@ -32,6 +32,11 @@ func (s *Splitter) Hovered() int { return s.hover }
 type PointerRouter struct {
 	Edges   func() []PointerClaimer
 	Targets func() []Widget
+	// OnGrab, when set, is told which widget a press is about to be given to (nil
+	// when nothing is under the pointer) before the press is delivered: the place
+	// a host moves its keyboard focus, so a press that itself changes the focus
+	// (a button that opens a dialog) has the last word.
+	OnGrab func(Widget)
 
 	grab  Widget
 	grabR Rect
@@ -72,6 +77,9 @@ func (r *PointerRouter) Press(x, y int, code string) Widget {
 				break
 			}
 		}
+	}
+	if r.OnGrab != nil {
+		r.OnGrab(hit)
 	}
 	if hit == nil {
 		return nil
