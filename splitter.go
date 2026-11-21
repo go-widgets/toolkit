@@ -90,6 +90,11 @@ type SplitPane struct {
 	// of an IDE: either may be closed, not both); when none is, at least one pane
 	// of any kind stays on. See [Splitter.CanClose].
 	Essential bool
+	// Default, when above 0, is the Size (fixed pane) or Weight (flexible pane)
+	// a double-click on a divider next to this pane puts back, for a divider
+	// that has no collapsible pane to toggle: the "reset the split" gesture. A
+	// pair of flexible panes with Defaults 55 and 45 returns to 55 / 45.
+	Default int
 
 	restore int // the logical size before the pane was collapsed
 }
@@ -717,7 +722,11 @@ func (s *Splitter) press(j, main int, double bool) {
 	if double || (s.lastDiv == j && now.Sub(s.lastAt) < splitterDoubleClick) {
 		s.lastDiv = -1
 		before := append([]int(nil), s.px...)
-		s.toggle(j)
+		if s.control(s.handles[j]) < 0 {
+			s.reset(j)
+		} else {
+			s.toggle(j)
+		}
 		s.fire(before)
 		return
 	}
@@ -725,6 +734,25 @@ func (s *Splitter) press(j, main int, double bool) {
 	s.grab, s.grabAt = j, main
 	s.grabBase = append([]int(nil), s.px...)
 	s.dragging.Set(true)
+}
+
+// reset puts the two panes around divider j back to their Default size or
+// weight (those without one keep theirs), laying out once.
+func (s *Splitter) reset(j int) {
+	h := s.handles[j]
+	s.batch = true
+	for _, i := range []int{h.a, h.b} {
+		p := s.panes[i]
+		switch {
+		case p.Default <= 0:
+		case p.Size != nil:
+			p.Size.Set(p.Default) // the layout holds it between Min and Max
+		default:
+			p.Weight.Set(p.Default)
+		}
+	}
+	s.batch = false
+	s.layout()
 }
 
 // control is the pane divider j's collapse acts on: the fixed collapsible one

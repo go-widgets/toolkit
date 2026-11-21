@@ -94,6 +94,18 @@ type Table struct {
 	// behaviour, byte-for-byte.
 	CellFill func(row, col int) (fill RGBA, ok bool)
 
+	// CellBar, when non-nil, draws a progress bar in a body cell, under its text:
+	// what puts a gauge (a context window, a quota, a completion) in a row next to
+	// the number that says it. It is called with a 0-indexed body row and column
+	// and returns the filled fraction (clamped to [0,1]; NaN counts as 0), the
+	// fill colour (alpha 0 keeps Theme.Accent) and an ok flag; ok == false leaves
+	// the cell as a text cell. The bar is the cell inset by the cell padding, drawn
+	// like a [ProgressBar] (track, fill, border), and the cell's text is inked
+	// Theme.OnSurface over it so it reads on the track and on the fill alike, the
+	// highlighted row included. The zero value (nil) is the original behaviour,
+	// byte-for-byte.
+	CellBar func(row, col int) (fraction float64, fill RGBA, ok bool)
+
 	// MultiSelect switches body-row clicks (handled by OnEvent) from
 	// inert to selection-driving: a plain click selects only that row
 	// (clearing any other selection, moving the Selected anchor to
@@ -903,7 +915,7 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 	if !t.hScrollable() {
 		cx := r.X
 		for j := range t.Columns {
-			t.paintFilledCell(p, fill, widths, gutter, cx, cty, y, i, j, ink, row)
+			t.paintFilledCell(p, theme, fill, widths, gutter, cx, cty, y, i, j, ink, row)
 			cx += widths[j]
 		}
 		return
@@ -917,11 +929,11 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 	right := r.X + t.contentWidth()
 	withClip(p, Rect{X: fx, Y: y, W: right - fx, H: t.rowH()}, func() {
 		for j := f; j < len(t.Columns); j++ {
-			t.paintFilledCell(p, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
+			t.paintFilledCell(p, theme, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
 		}
 	})
 	for j := 0; j < f; j++ {
-		t.paintFilledCell(p, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
+		t.paintFilledCell(p, theme, fill, widths, gutter, t.columnScreenX(r.X, widths, j), cty, y, i, j, ink, row)
 	}
 }
 
@@ -929,14 +941,40 @@ func (t *Table) drawDataRow(p painter.Painter, theme *Theme, r Rect, widths []in
 // CellFill background when fill supplies one for it and switching the text to
 // the ink that contrasts with that background. With fill nil, or declining the
 // cell, it is exactly paintCell.
-func (t *Table) paintFilledCell(p painter.Painter, fill func(row, col int) (RGBA, bool), widths []int, gutter, cellX, cty, y, i, j int, ink RGBA, row []string) {
+func (t *Table) paintFilledCell(p painter.Painter, theme *Theme, fill func(row, col int) (RGBA, bool), widths []int, gutter, cellX, cty, y, i, j int, ink RGBA, row []string) {
 	if fill != nil {
 		if c, ok := fill(i, j); ok {
 			fillRect(p, cellX, y, widths[j], t.rowH(), c)
 			ink = ContrastInk(c)
 		}
 	}
+	if t.CellBar != nil {
+		if f, c, ok := t.CellBar(i, j); ok {
+			t.paintCellBar(p, theme, cellX, y, widths[j], f, c)
+			ink = theme.OnSurface
+		}
+	}
 	t.paintCell(p, widths, gutter, cellX, cty, y, i, j, ink, row)
+}
+
+// paintCellBar draws the CellBar gauge of a cell at (cellX, y), cellW wide: the
+// SurfaceAlt track, the fill (c, or Accent when c is transparent) over the
+// fraction f of it, and the border, inset by the cell padding.
+func (t *Table) paintCellBar(p painter.Painter, theme *Theme, cellX, y, cellW int, f float64, c RGBA) {
+	if f != f || f < 0 {
+		f = 0
+	}
+	if f > 1 {
+		f = 1
+	}
+	if c.A == 0 {
+		c = theme.Accent
+	}
+	inset := scaled(2)
+	bx, by, bw, bh := cellX+t.cellPadX()/2, y+inset, cellW-t.cellPadX(), t.rowH()-2*inset
+	fillRect(p, bx, by, bw, bh, theme.SurfaceAlt)
+	fillRect(p, bx, by, int(float64(bw)*f), bh, c)
+	strokeRect(p, bx, by, bw, bh, theme.Border)
 }
 
 // paintCell paints one body cell of row i, column j: column 0's optional
@@ -965,7 +1003,11 @@ func (t *Table) paintCell(p painter.Painter, widths []int, gutter, cellX, cty, y
 		cellW -= gutter
 	}
 	if j < len(row) {
-		t.drawText(p, cellTextX(&t.Base, cellX, cellW, row[j], t.Columns[j].Align), cty, row[j], ink)
+		// The text is clipped to its own cell: a string wider than its column
+		// must not paint over the next one.
+		withClip(p, Rect{X: cellX, Y: y, W: cellW, H: t.rowH()}, func() {
+			t.drawText(p, cellTextX(&t.Base, cellX, cellW, row[j], t.Columns[j].Align), cty, row[j], ink)
+		})
 	}
 }
 
@@ -1104,15 +1146,16 @@ func (t *Table) scrollbarGeom() (sbGeom, bool) {
 		thumbH = tableScrollbarThumbMin
 	}
 	scroll := t.clampScrollRow()
+	maxScroll := max(t.maxScrollRow(), 1) // the thumb travels over the rows the body can scroll
 	return sbGeom{
 		cross0:     r.W - scrollbarWidth,
 		trackStart: trackTop,
 		trackLen:   trackH,
-		thumbStart: trackTop + scroll*t.rowH()*(trackH-thumbH)/(contentH-trackH),
+		thumbStart: trackTop + scroll*(trackH-thumbH)/maxScroll,
 		thumbLen:   thumbH,
-		travelNum:  t.rowH() * (trackH - thumbH),
-		travelDen:  contentH - trackH,
-		maxScroll:  t.maxScrollRow(),
+		travelNum:  trackH - thumbH,
+		travelDen:  maxScroll,
+		maxScroll:  maxScroll,
 	}, true
 }
 
@@ -1431,7 +1474,20 @@ func (t *Table) bodyVisibleRows() int {
 // scrollbar track to occupy.
 func (t *Table) bodyOverflows() bool {
 	vis := t.bodyVisibleRows()
-	return vis > 0 && t.lineCount() > vis
+	return vis > 0 && t.lineCount() > t.wholeRows(0)
+}
+
+// wholeRows is how many rows fit WHOLE in the body, less reserve pixels at
+// its bottom (the horizontal scrollbar's strip), at least 1 while the body has
+// any height. A row that only partly fits is not counted: the last row must be
+// reachable in full, never left half-clipped at the scroll end.
+func (t *Table) wholeRows(reserve int) int {
+	h := t.Bounds().H - scaled(TableHeaderHeight) - reserve
+	n := h / t.rowH()
+	if n < 1 && t.bodyVisibleRows() > 0 {
+		n = 1
+	}
+	return max(n, 0)
 }
 
 // maxScrollRow is the highest legal ScrollRow: enough rows short of
@@ -1440,7 +1496,11 @@ func (t *Table) bodyOverflows() bool {
 // case) -- exactly the "[0, max(0, len(Rows)-visibleRows)]" range
 // ScrollRow's doc promises.
 func (t *Table) maxScrollRow() int {
-	max := t.lineCount() - t.bodyVisibleRows()
+	reserve := 0
+	if t.hScrollable() {
+		reserve = scrollbarWidth // the horizontal scrollbar covers the body's bottom strip
+	}
+	max := t.lineCount() - t.wholeRows(reserve)
 	if max < 0 {
 		max = 0
 	}
@@ -2720,10 +2780,12 @@ func (t *Table) OnEvent(ev Event) {
 		if t.reorderActive() && row >= 0 {
 			t.dragRow = row
 		}
-		if !t.MultiSelect {
+		if row < 0 {
 			return
 		}
-		if row < 0 {
+		if !t.MultiSelect {
+			// Single-select: a plain click selects the row it lands on.
+			t.setSelected(row)
 			return
 		}
 		switch {

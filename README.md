@@ -24,6 +24,13 @@ in headless tests (screenshot-hash regressions).
   `LoadGTKTheme(css)` parses libadwaita / GTK3 `@define-color`
   declarations into a `Theme`, so any GTK-desktop palette (Adwaita,
   Juno, WhiteSur, Solarized …) drives the widget ink colours.
+  `SlateLight(brand)` / `SlateDark(brand)` / `Slate(brand, dark)` is the Tailwind
+  slate look with one brand accent (modelled on the go-authn account page, whose
+  `#0079a8` it reproduces with the derived hover and ink): a slate-50 page, white
+  cards, soft borders and shadows. `Frame.Card` is the card (rounded surface,
+  shadow, heading over a hairline), `Chip.Style` the plain and brand pills, and
+  `GraphView.CornerRadius` the rounded nodes and clusters. The host reads the
+  system's light/dark preference and picks the variant.
 - **Pure Go + CGO=0**: no C toolchain, no shared libraries. Builds
   for every Go target including `GOOS=js GOARCH=wasm`.
 - **A11y bridge**: core widgets implement an opt-in `Accessible`
@@ -104,7 +111,7 @@ every native target Go ships.
 | Input        | `Entry`, `TextView` (and so `CodeEditor`) + `Selection` + IME preview + `textinput.Client` (`github.com/go-widgets/textinput`: UTF-16 offsets, marked-text composition, `ReplaceInput`, `InputRect`) + optional `Highlighter` (syntax spans) + `ShowLineNumbers` gutter + size-to-content (`NoVerticalScroll` lays out every line, keeps the horizontal bar; `PreferredHeight()` is an `Observable[int]` following lines, font and width), `SpinButton`, `Scale`, `RangeSlider`, `SearchEntry`, `TagField`, `ComboBox`, `FormField`, `Validate`/`Rule` |
 | Terminal     | `Terminal` (an xterm-subset emulator over the pure-Go `vt.Screen` model: cursor movement, erase, insert/delete, scroll regions, SGR 16/256/truecolor, bounded scrollback, selection + copy/paste, key encoding, `ClaimsKey` for hosts with global shortcuts, `SetFont` + `SetCellSize` (pin a cell box such as 16x16 and an OpenType face; the grid is refitted and `OnResize` fires, like `TerminalView.SetCellSize`); safe for untrusted output — no reply channel, every OSC/DCS/APC string discarded, so no clipboard write, no links, no title, no reports; parser fuzzed), `TerminalView` (Cols×Rows `TermCell` grid, block cursor, wrap/scroll, per-cell FG/BG) |
 | Selection    | `ListBox`, `TreeView`, `DropDown`                                  |
-| Containers   | `Container` + swappable `Layout` (`FitLayout`, `BoxLayout`, `BorderLayout`, `CardLayout`, `FlowLayout`); convenience wrappers `HBox`, `VBox`, `Grid`, `Frame`, `Dock`, `Border`, `Stack`, `Overlay`, `Paned`, `Splitter` (N panes with draggable, focusable dividers after the WAI-ARIA window-splitter pattern: fixed panes sized by an `mvvm.Observable`, flexible ones by weight, min/max, collapse on double-click, Enter or a drag to the minimum, arrows/Home/End/Enter, 3:1 divider and focus ring, resize cursor; panes close and reopen through `Open(i)`, an `mvvm.Observable`, the last `Essential` pane refusing, with `ClosablePane` for a titled header and a close button), `Expander`, `Accordion`; declarative `Node` builder + `ViewController` (`LookupAs`) |
+| Containers   | `Container` + swappable `Layout` (`FitLayout`, `BoxLayout`, `BorderLayout`, `CardLayout`, `FlowLayout`); convenience wrappers `HBox`, `VBox`, `Grid`, `Frame`, `Dock`, `Border`, `Stack`, `Overlay`, `Paned`, `Splitter` (N panes with draggable, focusable dividers after the WAI-ARIA window-splitter pattern: fixed panes sized by an `mvvm.Observable`, flexible ones by weight, min/max, collapse on double-click, Enter or a drag to the minimum, a `Default` size or weight a double-click restores on a divider with nothing to collapse, arrows/Home/End/Enter, 3:1 divider and focus ring, resize cursor; panes close and reopen through `Open(i)`, an `mvvm.Observable`, the last `Essential` pane refusing, with `ClosablePane` for a titled header and a close button), `Expander`, `Accordion`; declarative `Node` builder + `ViewController` (`LookupAs`) |
 | Tabs         | `Notebook`, `ViewSwitcher`, `Carousel`                             |
 | Scroll       | `ScrollView`, `Scrollbar`                                          |
 | Feedback     | `ProgressBar`, `ProgressCircle`, `LevelBar`, `Spinner`, `Image`, `Tooltip`, `Notification`, `Toast`, `Banner`, `Alert`, `Badge`, `LoadMask`, `Backdrop`, `FocusRing` |
@@ -118,7 +125,7 @@ every native target Go ships.
 | Text compare | `DiffView` (two texts compared side by side or inline: the changed words of a changed line marked (`WordChanges`), long lines wrapped with both sides level so nothing is cut, line numbers of both, unchanged runs folded around `Context` lines, an overview ruler of the changes, ↑/↓/PageUp/PageDown/Home/End, F7/Shift+F7 or n/p to the next/previous change (outlined); colours from the theme's darkness, text at 4.5:1 and markers at 3:1 in both default themes, +/- marks so it reads without colour); `textdiff` (a pure package, no widget): the shortest line edit script (Myers O(ND), linear space, a work budget past which a block is replaced whole), `Hunks` with context, `Unified` (diff -u), `SideBySide` rows; fuzzed |
 | Document     | `PagedView` (a page viewer over pre-rendered bitmaps — or over sizes alone, with a host drawing the pages through `PageRect`: `SetPageSizes` lays out, cards and all, what it will not blit; `SetPageBitmap` fills one page in afterwards, so a viewer of a five-hundred-page document lays out all of them while holding bitmaps for a window around the reader, and a coarse stand-in can be replaced by a sharp rendering without the page changing shape): a continuous stack of page cards or one centred page with prev/next, its own toolbar, uniform zoom, keyboard and wheel navigation (a wheel notch past a page's edge flips, so a tall page scrolls within itself first), and two **sticky** fits — `PagedFitWidth` and `PagedFitPage` — re-derived on every resize, page change and new document, because a page fitted once and then resized is a page that no longer fits; a manual zoom turns the fit off. `PageAt` and `ScrollToPage` are an exact inverse pair, which is what turns a click on a page into a source position and a caret move back into a scroll. `TextSelection` is the selection over a host's text runs (press, drag, `SelectedText`, `CopySelection`): `SelectedRects` answers *where* the selection is, as the rectangles `Draw` paints — by construction, since `Draw` is a loop over it, so a host that writes a PDF highlight annotation over the selected words marks exactly what the reader sees lit, instead of re-deriving the covered spans and drifting |
 | Charts       | `LineChart`, `BarChart`, `PieChart`, `AreaChart`, `ScatterChart`, `RadarChart`, `Gauge`, `Sparkline` |
-| Graphs       | `GraphView` over a `GraphViewModel` (clusters, nodes, edges, selection and filter as `mvvm` lists and observables): nodes in cluster boxes on a stable grid that never moves on an edge update, edge width by weight, denied edges dashed in the error colour, category colours (Okabe-Ito by default), legend, click and arrow-key selection, filter dimming |
+| Graphs       | `GraphView` over a `GraphViewModel` (clusters, nodes, edges, selection and filter as `mvvm` lists and observables): nodes in cluster boxes, each sized by its own members and flowed in rows on a stable layout that never moves on an edge update, a scrollbar, wheel and arrow-key reveal when the clusters overflow the view, edge width by weight, denied edges dashed in the error colour, category colours (Okabe-Ito by default), legend, click and arrow-key selection, filter dimming |
 | Shell        | `StatusIcon`, `StatusArea`, `Wallpaper`, `Thumbnail`               |
 | Motion       | `Easing`/`Tween` (`Linear`, `EaseIn*/Out*/InOut*`), `GestureRecognizer` |
 | Theming      | `LoadGTKTheme(css)` (GTK3 + libadwaita @define-color → Theme)      |
@@ -175,6 +182,14 @@ empty of work and avoids importing packages whose `init` drags code in:
   `CollabSheet` and `IsoCRDTDocument` need only `go-crdt/crdt` and stay here.
 - The e-mail `Rule`'s regexp, the built-in iso icon registry and the
   `RichEditorToolbar` button table are built on first use, not by initializers.
+- The toolkit does not import `github.com/go-icons/iconoir`, whose single
+  `//go:embed` of about 1,500 SVGs the linker cannot trim (#588). The 40 glyphs
+  its widgets draw are copied into `iconset_gen.go` (Iconoir's MIT notice kept),
+  and a test fails when that copy is stale. A program that needs arbitrary
+  Iconoir names imports **`github.com/go-widgets/toolkit/iconoir`** and pays for
+  the whole set on purpose; one that draws a known handful hands their SVGs to
+  `SVGIcon`. A wasm program holding a `RichEditorToolbar` went from 1.52 MB to
+  1.32 MB gzipped (5.87 → 4.75 MB raw).
 
 Measured with `go build -ldflags=-dumpdep` on a `GOOS=js GOARCH=wasm` program
 that draws one `Label` (`-ldflags="-s -w"`, gzip -9):
@@ -189,6 +204,13 @@ What remains is mostly the runtime and the OpenType stack the text renderer
 needs. To see what keeps a symbol in your own program, build with
 `-ldflags=-dumpdep` and follow the first-parent chain from the symbol back to
 `main.main` or `go:main.inittasks`.
+
+### v0.379 breaking change: Iconoir drawing moved to `toolkit/iconoir`
+
+`toolkit.DrawIconoir(p, r, name, ink)` is now `iconoir.Draw(p, r, name, ink)`
+and `toolkit.IconoirNames()` is `iconoir.Names()`, in
+`github.com/go-widgets/toolkit/iconoir`; `iconoir.Drawer(name)` returns the
+drawer for an `Icon` slot. See *Binary size* above for why.
 
 ### v0.357 breaking change: `Focused()` is now `HasFocus()` on the editors
 

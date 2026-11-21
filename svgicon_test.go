@@ -12,36 +12,27 @@ import (
 
 const redSquareSVG = `<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg"><rect width="10" height="10" fill="#ff0000"/></svg>`
 
-// TestDrawIconoir: the exported Iconoir seam paints a known glyph (ink appears in
-// the box) and draws nothing for an unknown stem, and IconoirNames lists stems
-// DrawIconoir accepts.
-func TestDrawIconoir(t *testing.T) {
+// TestDrawBuiltinIcon: a glyph of the built-in set paints ink; a name outside
+// it — a real Iconoir icon the toolkit never draws, and a non-icon — draws
+// nothing rather than panicking.
+func TestDrawBuiltinIcon(t *testing.T) {
 	const sz = 24
-	names := IconoirNames()
-	if len(names) == 0 {
-		t.Fatal("IconoirNames() is empty")
-	}
-
-	// A known stem paints ink.
-	buf := make([]byte, sz*sz*4)
-	DrawIconoir(painter.NewPixelPainter(buf, sz, sz), Rect{X: 0, Y: 0, W: sz, H: sz}, names[0], RGB(0x20, 0x20, 0x20))
-	inked := false
-	for _, b := range buf {
-		if b != 0 {
-			inked = true
-			break
+	ink := func(name string) bool {
+		buf := make([]byte, sz*sz*4)
+		drawBuiltinIcon(painter.NewPixelPainter(buf, sz, sz), Rect{W: sz, H: sz}, name, RGB(0x20, 0x20, 0x20))
+		for _, b := range buf {
+			if b != 0 {
+				return true
+			}
 		}
+		return false
 	}
-	if !inked {
-		t.Fatalf("DrawIconoir(%q) painted no ink", names[0])
+	if !ink("xmark") {
+		t.Error(`drawBuiltinIcon("xmark") painted no ink`)
 	}
-
-	// An unknown stem draws nothing (transparent), not a panic.
-	blank := make([]byte, sz*sz*4)
-	DrawIconoir(painter.NewPixelPainter(blank, sz, sz), Rect{X: 0, Y: 0, W: sz, H: sz}, "not-a-real-iconoir-stem", RGB(0x20, 0x20, 0x20))
-	for _, b := range blank {
-		if b != 0 {
-			t.Fatal("DrawIconoir of an unknown stem painted something")
+	for _, name := range []string{"airplane", "not-a-real-iconoir-stem", ""} {
+		if ink(name) {
+			t.Errorf("drawBuiltinIcon(%q) painted something; it is not in the built-in set", name)
 		}
 	}
 }
@@ -149,7 +140,7 @@ func TestIconRastersAtTheBoxSize(t *testing.T) {
 	// pixels: more than two distinct alpha values.
 	const sz = 14
 	buf := make([]byte, sz*sz*4)
-	DrawIconoir(painter.NewPixelPainter(buf, sz, sz), Rect{W: sz, H: sz}, "box", RGB(0, 0, 0))
+	drawBuiltinIcon(painter.NewPixelPainter(buf, sz, sz), Rect{W: sz, H: sz}, "folder", RGB(0, 0, 0))
 	alphas := map[byte]bool{}
 	for i := 3; i < len(buf); i += 4 {
 		alphas[buf[i]] = true

@@ -109,6 +109,15 @@ type TimeSeriesChart struct {
 	// exactly as before this field existed.
 	TimeMin, TimeMax int64
 
+	// Markers are vertical reference lines at given instants; see [TimeMarker].
+	Markers []TimeMarker
+
+	// Overlays are further lines drawn on the same axes and scale as Points,
+	// each with its own colour and a legend entry (swatch and name) at the top
+	// left of the plot. Comparing four weeks day by day is four overlays whose
+	// instants have been shifted onto one common week.
+	Overlays []TimeLine
+
 	// series is the bindable form of Points, created by Series().
 	series *mvvm.ObservableList[TimePoint]
 	// ceiling is where FollowPeak has the scale now.
@@ -302,6 +311,25 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 		}
 	}
 
+	c.drawMarkers(p, theme, pl, rangeStart, span)
+
+	lx := pl.X + scaled(TimeSeriesChartPad)
+	for _, ov := range c.Overlays {
+		if len(ov.Points) >= 2 {
+			px, py := pointAt(ov.Points[0])
+			for _, pt := range ov.Points[1:] {
+				x, y := pointAt(pt)
+				drawCurveLine(p, px, py, x, y, ov.Ink)
+				px, py = x, y
+			}
+		}
+		if ov.Name != "" {
+			fillRect(p, lx, pl.Y+scaled(TimeSeriesChartPad), gh, gh, ov.Ink)
+			c.drawText(p, lx+gh+scaled(TimeSeriesChartPad), pl.Y+scaled(TimeSeriesChartPad), ov.Name, theme.OnSurface)
+			lx += gh + 3*scaled(TimeSeriesChartPad) + c.textWidth(ov.Name)
+		}
+	}
+
 	if pts := c.points(); len(pts) >= 2 {
 		px, py := pointAt(pts[0])
 		for _, pt := range pts[1:] {
@@ -316,6 +344,49 @@ func (c *TimeSeriesChart) Draw(p painter.Painter, theme *Theme) {
 	endText := c.formatTime(rangeEnd)
 	c.drawText(p, pl.X, ty, startText, label)
 	c.drawText(p, pl.X+pl.W-c.textWidth(endText), ty, endText, label)
+}
+
+// TimeLine is a named, coloured series drawn over a TimeSeriesChart; see
+// [TimeSeriesChart.Overlays].
+type TimeLine struct {
+	Name   string
+	Ink    RGBA
+	Points []TimePoint
+}
+
+// TimeMarker is a vertical reference line at one instant on a TimeSeriesChart's
+// time axis -- a window reset, a deploy, an incident. Label, when set, is drawn
+// at the top of the line, on its left when the line is in the right half of the
+// plot so the text stays inside it.
+type TimeMarker struct {
+	At    int64
+	Label string
+	// Ink is the line's color; the zero value uses theme.OnSurface.
+	Ink RGBA
+}
+
+// drawMarkers paints the Markers that fall inside the time axis span as dashed
+// vertical lines; one outside the span is not drawn.
+func (c *TimeSeriesChart) drawMarkers(p painter.Painter, theme *Theme, pl Rect, start, span int64) {
+	for _, m := range c.Markers {
+		if m.At < start || m.At > start+span {
+			continue
+		}
+		ink := m.Ink
+		if ink == (RGBA{}) {
+			ink = theme.OnSurface
+		}
+		x := pl.X + int(float64(m.At-start)/float64(span)*float64(pl.W-1))
+		drawDashedLine(p, x, pl.Y, x, pl.Y+pl.H-1, ink)
+		if m.Label == "" {
+			continue
+		}
+		tx := x + scaled(TimeSeriesChartPad)
+		if w := c.textWidth(m.Label); x > pl.X+pl.W/2 {
+			tx = x - scaled(TimeSeriesChartPad) - w
+		}
+		c.drawText(p, tx, pl.Y+scaled(TimeSeriesChartPad), m.Label, ink)
+	}
 }
 
 // timeRange is the time axis span Draw plots against: the explicit

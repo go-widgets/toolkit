@@ -853,8 +853,8 @@ func (f *FileTree) iconFor(name string, dir, open bool) func(painter.Painter, Re
 
 // The default glyphs, made once: a row's draw allocates no drawer.
 var (
-	fileTreeFolderIcon = func(p painter.Painter, r Rect, ink RGBA) { DrawIconoir(p, r, "folder", ink) }
-	fileTreePageIcon   = func(p painter.Painter, r Rect, ink RGBA) { DrawIconoir(p, r, "page", ink) }
+	fileTreeFolderIcon = func(p painter.Painter, r Rect, ink RGBA) { drawBuiltinIcon(p, r, "folder", ink) }
+	fileTreePageIcon   = func(p painter.Painter, r Rect, ink RGBA) { drawBuiltinIcon(p, r, "page", ink) }
 )
 
 // drawRow paints a row's icon, name and size (TreeView.RowRenderer).

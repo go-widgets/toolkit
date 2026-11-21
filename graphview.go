@@ -95,6 +95,14 @@ type GraphView struct {
 	Palette []RGBA
 	// MaxEdgeWidth caps an edge's stroke (default 6).
 	MaxEdgeWidth int
+	// NodeWidth is the width of a node box in painter units (default 72). A
+	// host whose labels are longer than a few characters sets it once, before
+	// the first draw; a node's label is clipped to its box.
+	NodeWidth int
+	// CornerRadius rounds the node pills and, by half as much again, the
+	// cluster boxes, in logical pixels (default 0: square, as before). A
+	// set-once appearance config, like NodeWidth.
+	CornerRadius int
 	// ShowLegend draws the category legend along the bottom edge.
 	ShowLegend bool
 	// OnActivate is called with the selection on Enter or a double selection.
@@ -108,6 +116,14 @@ type GraphView struct {
 	categories  map[string]int
 	unsub       []func()
 	bound       *GraphViewModel
+
+	// Vertical scrolling: when the clusters need more height than the widget
+	// has, scrollY (px, >= 0) is how far the content is moved up, contentH its
+	// full height and viewH the height it shows in (the bounds minus the legend).
+	laidNodeW                int // the node width the layout was computed for
+	scrollY, contentH, viewH int
+	hasBar                   bool
+	sbDrag                   scrollDrag
 }
 
 // NewGraphView returns a GraphView over m (a new empty model when nil).
@@ -160,56 +176,197 @@ const (
 	graphHitSlack = 3
 )
 
+// clusterRadius is the rounding of a cluster box: half again the node pill's.
+func (g *GraphView) clusterRadius() int { return g.CornerRadius * 3 / 2 }
+
+// fillBox fills r, rounded by radius when radius > 0, square otherwise.
+func (g *GraphView) fillBox(p painter.Painter, r Rect, radius int, c RGBA) {
+	if radius > 0 {
+		fillRoundRect(p, r.X, r.Y, r.W, r.H, scaled(radius), c)
+		return
+	}
+	fillRect(p, r.X, r.Y, r.W, r.H, c)
+}
+
+// strokeBox outlines r, rounded by radius when radius > 0, square otherwise.
+func (g *GraphView) strokeBox(p painter.Painter, r Rect, radius int, c RGBA) {
+	if radius > 0 {
+		strokeRoundRect(p, r.X, r.Y, r.W, r.H, scaled(radius), c)
+		return
+	}
+	strokeRect(p, r.X, r.Y, r.W, r.H, c)
+}
+
+// nodeW is the width of a node box.
+func (g *GraphView) nodeW() int {
+	if g.NodeWidth > 0 {
+		return scaled(g.NodeWidth)
+	}
+	return scaled(graphNodeW)
+}
+
+// The layout metrics, scaled by the global metric scale ([SetMetricScale]) so a
+// graph drawn on a HiDPI surface grows with its text.
+func gGap() int    { return scaled(graphGap) }
+func gNodeH() int  { return scaled(graphNodeH) }
+func gTitleH() int { return scaled(graphTitleH) }
+
 // layout places clusters on a grid filling the bounds and nodes on a sub-grid
 // inside each cluster. Deterministic: the same lists and bounds give the
 // same boxes.
 func (g *GraphView) layout() {
 	g.bind()
-	if g.layoutValid {
+	nw := g.nodeW()
+	// A change of node width (NodeWidth set late, or the metric scale changed)
+	// lays out again; an edge update never does.
+	if g.layoutValid && g.laidNodeW == nw {
 		return
 	}
 	r := g.Bounds()
 	g.layoutFor = r
 	g.layoutValid = true
+	g.laidNodeW = nw
 	g.clusterBox = map[string]Rect{}
 	g.nodeBox = map[string]Rect{}
 	g.order = g.order[:0]
 	clusters := g.Model.Clusters.Slice()
 	nodes := g.Model.Nodes.Slice()
 	members := map[string][]GraphNode{}
-	most := 1
 	for _, n := range nodes {
 		members[n.Cluster] = append(members[n.Cluster], n)
-		if k := len(members[n.Cluster]); k > most {
-			most = k
-		}
 	}
+	g.contentH, g.viewH, g.hasBar = 0, 0, false
 	if len(clusters) == 0 {
+		g.scrollY = 0
 		return
 	}
 	area := r
+	for _, n := range nodes { // the legend's entries, in the order the nodes name them
+		g.categoryColor(n.Category)
+	}
 	if g.ShowLegend {
 		area.H -= g.legendHeight()
 	}
-	// Nodes per row inside a cluster, then cluster columns to fill the width.
-	perRow := int(math.Ceil(math.Sqrt(float64(most))))
-	rowsIn := (most + perRow - 1) / perRow
-	cw := perRow*(graphNodeW+graphGap) + graphGap
-	ch := graphTitleH + rowsIn*(graphNodeH+graphGap) + graphGap
-	cols := maxInt(1, (area.W-graphGap)/(cw+graphGap))
-	if cols > len(clusters) {
-		cols = len(clusters)
+	g.viewH = area.H
+	// Each cluster is sized by its OWN members and the clusters flow left to
+	// right, wrapping to a new row. When the rows need more height than the
+	// widget has, a scrollbar takes its column and the rows are flowed again in
+	// what is left of the width.
+	// A cluster is at least as wide as its title, so a long label never
+	// spills over the next cluster.
+	titleW := func(c GraphCluster) int { return g.textWidth(c.Label) + 2*gGap() }
+	boxes, perRows, h := flowClusters(clusters, members, area.W, nw, titleW)
+	if h > area.H {
+		g.hasBar = true
+		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarWidth, nw, titleW)
 	}
+	g.contentH = h
+	g.scrollY = clampInt(g.scrollY, 0, maxInt(0, h-area.H))
 	for i, c := range clusters {
-		col, row := i%cols, i/cols
-		box := Rect{X: area.X + graphGap + col*(cw+graphGap), Y: area.Y + graphGap + row*(ch+graphGap), W: cw, H: ch}
+		b := boxes[i]
+		box := Rect{X: area.X + b.X, Y: area.Y + b.Y - g.scrollY, W: b.W, H: b.H}
 		g.clusterBox[c.ID] = box
 		for j, n := range members[c.ID] {
-			nc, nr := j%perRow, j/perRow
-			g.nodeBox[n.ID] = Rect{X: box.X + graphGap + nc*(graphNodeW+graphGap),
-				Y: box.Y + graphTitleH + graphGap + nr*(graphNodeH+graphGap), W: graphNodeW, H: graphNodeH}
+			nc, nr := j%perRows[i], j/perRows[i]
+			g.nodeBox[n.ID] = Rect{X: box.X + gGap() + nc*(nw+gGap()),
+				Y: box.Y + gTitleH() + gGap() + nr*(gNodeH()+gGap()), W: min(nw, max(box.W-2*gGap(), 1)), H: gNodeH()}
 			g.order = append(g.order, n.ID)
 		}
+	}
+}
+
+// flowClusters sizes each cluster by its own member count and flows them left
+// to right in the width, wrapping when the next one does not fit. It returns
+// the boxes relative to the content origin, each cluster's nodes per row, and
+// the content height.
+func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width, nodeW int, titleW func(GraphCluster) int) (boxes []Rect, perRows []int, height int) {
+	gap := gGap()
+	x, y, rowH := gap, gap, 0
+	for _, c := range clusters {
+		n := maxInt(1, len(members[c.ID]))
+		perRow := int(math.Ceil(math.Sqrt(float64(n))))
+		// A cluster never grows wider than the view: past that its nodes wrap into
+		// more rows (the box grows taller) and its title is clipped to the box.
+		capW := width - 2*gap
+		if fit := (capW - gap) / (nodeW + gap); capW > 0 && fit < perRow {
+			perRow = maxInt(1, fit)
+		}
+		rowsIn := (n + perRow - 1) / perRow
+		cw := maxInt(perRow*(nodeW+gap)+gap, titleW(c))
+		if capW > 0 {
+			cw = min(cw, capW)
+		}
+		ch := gTitleH() + rowsIn*(gNodeH()+gap) + gap
+		if x > gap && x+cw+gap > width {
+			x, y, rowH = gap, y+rowH+gap, 0
+		}
+		boxes = append(boxes, Rect{X: x, Y: y, W: cw, H: ch})
+		perRows = append(perRows, perRow)
+		x += cw + gap
+		rowH = maxInt(rowH, ch)
+	}
+	return boxes, perRows, y + rowH + gap
+}
+
+// graphScrollStep is the pixels one wheel row moves the content.
+func graphScrollStep() int { return gNodeH() + gGap() }
+
+// graphThumbMin is the smallest scrollbar thumb, in pixels.
+const graphThumbMin = 12
+
+// scrollbarGeom is the vertical scrollbar's widget-local geometry, and whether
+// it is live (the clusters overflow the view).
+func (g *GraphView) scrollbarGeom() (sbGeom, bool) {
+	g.layout()
+	if !g.hasBar {
+		return sbGeom{}, false
+	}
+	r := g.Bounds()
+	maxScroll := g.contentH - g.viewH
+	thumb := maxInt(graphThumbMin, g.viewH*g.viewH/g.contentH)
+	return sbGeom{
+		cross0:     r.W - scrollbarWidth,
+		trackStart: 0,
+		trackLen:   g.viewH,
+		thumbStart: g.scrollY * (g.viewH - thumb) / maxScroll,
+		thumbLen:   thumb,
+		travelNum:  g.viewH - thumb,
+		travelDen:  maxScroll,
+		maxScroll:  maxScroll,
+	}, true
+}
+
+// ScrollTo scrolls the content so px pixels of it are above the view, clamped.
+func (g *GraphView) ScrollTo(px int) {
+	g.layout()
+	px = clampInt(px, 0, maxInt(0, g.contentH-g.viewH))
+	if px != g.scrollY {
+		g.scrollY = px
+		g.layoutValid = false
+	}
+}
+
+// ScrollBy scrolls by delta pixels.
+func (g *GraphView) ScrollBy(delta int) {
+	g.layout()
+	g.ScrollTo(g.scrollY + delta)
+}
+
+// ScrollY is how far the content is scrolled, in pixels.
+func (g *GraphView) ScrollY() int { return g.scrollY }
+
+// revealNode scrolls just enough to bring the node into the view.
+func (g *GraphView) revealNode(id string) {
+	b, ok := g.NodeBox(id)
+	if !ok {
+		return
+	}
+	top := g.Bounds().Y
+	switch {
+	case b.Y < top:
+		g.ScrollBy(b.Y - top - gGap())
+	case b.Y+b.H > top+g.viewH:
+		g.ScrollBy(b.Y + b.H - (top + g.viewH) + gGap())
 	}
 }
 
@@ -293,9 +450,12 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 	visible := map[string]bool{}
 	withClip(p, r, func() {
 		for id, box := range g.clusterBox {
-			fillRect(p, box.X, box.Y, box.W, box.H, theme.Surface)
-			strokeRect(p, box.X, box.Y, box.W, box.H, theme.Border)
-			g.drawText(p, box.X+graphGap, box.Y+2, labels[id], theme.OnSurface)
+			g.fillBox(p, box, g.clusterRadius(), theme.Surface)
+			g.strokeBox(p, box, g.clusterRadius(), theme.Border)
+			// The title is clipped to its box: a long one never runs out of it.
+			withClip(p, box, func() {
+				g.drawText(p, box.X+gGap(), box.Y+scaled(2), labels[id], theme.OnSurface)
+			})
 		}
 		nodes := g.Model.Nodes.Slice()
 		for _, n := range nodes {
@@ -315,19 +475,34 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 			if !visible[n.ID] {
 				col = blendRGBA(col, theme.Background, 0.25)
 			}
-			fillRect(p, box.X, box.Y, box.W, box.H, col)
-			// Label ink by the swatch's lightness, so it reads on every colour.
-			ink := RGB(0x10, 0x10, 0x10)
-			if luminance(col) < 0.4 {
-				ink = RGB(0xFF, 0xFF, 0xFF)
-			}
-			g.drawText(p, box.X+3, box.Y+(box.H-g.glyphHeight())/2, n.Label, ink)
-			if sel == "node:"+n.ID {
-				strokeRect(p, box.X-2, box.Y-2, box.W+4, box.H+4, theme.Accent)
-			}
+			// Nothing of a node is drawn outside its cluster's box.
+			limit := g.clusterBox[n.Cluster]
+			withClip(p, limit, func() {
+				g.fillBox(p, box, g.CornerRadius, col)
+				// Label ink by the swatch's lightness, so it reads on every colour.
+				ink := RGB(0x10, 0x10, 0x10)
+				if luminance(col) < 0.4 {
+					ink = RGB(0xFF, 0xFF, 0xFF)
+				}
+				// The label is clipped to its box: a long one must not run into the
+				// node beside it.
+				withClip(p, box, func() {
+					g.drawText(p, box.X+3, box.Y+(box.H-g.glyphHeight())/2, n.Label, ink)
+				})
+				if sel == "node:"+n.ID {
+					g.strokeBox(p, Rect{X: box.X - 2, Y: box.Y - 2, W: box.W + 4, H: box.H + 4}, g.CornerRadius+2, theme.Accent)
+				}
+			})
 		}
 		if g.ShowLegend {
+			// Clusters scrolled under the legend must not show through it.
+			h := g.legendHeight()
+			fillRect(p, r.X, r.Y+r.H-h, r.W, h, theme.Background)
 			g.drawLegend(p, theme)
+		}
+		if sg, ok := g.scrollbarGeom(); ok {
+			paintScrollTrack(p, theme, r.X+sg.cross0, r.Y+sg.trackStart, scrollbarWidth, sg.trackLen)
+			paintScrollThumb(p, theme, r.X+sg.cross0, r.Y+sg.thumbStart, scrollbarWidth, sg.thumbLen)
 		}
 	})
 	g.drawFocusRing(p, theme, r)
@@ -448,32 +623,70 @@ const (
 )
 
 // legendHeight is the legend strip's height, from the widget's font: one
-// line of text (or a swatch, if the font is smaller) with its padding.
+// line of text (or a swatch, if the font is smaller) with its padding per row.
+// The legend wraps to as many rows as its entries need in the widget's width, so
+// it never runs off the right edge.
 func (g *GraphView) legendHeight() int {
-	return max(g.glyphHeight(), graphSwatch) + 2*graphLegendPad
+	rows := len(g.legendRows())
+	return rows*max(g.glyphHeight(), graphSwatch) + (rows+1)*graphLegendPad
 }
 
-// drawLegend draws one swatch per category seen, and the denied style, on a
-// line centred in the legend strip.
-func (g *GraphView) drawLegend(p painter.Painter, theme *Theme) {
-	r := g.Bounds()
-	h := g.legendHeight()
-	line := h - 2*graphLegendPad
-	top := r.Y + r.H - h + graphLegendPad
-	ty := top + (line-g.glyphHeight())/2 // text
-	sy := top + (line-graphSwatch)/2     // swatch
-	x := r.X + graphGap
+// legendItem is one entry of the legend: a swatch (or the dashed denied style)
+// and its caption, and the width the pair takes.
+type legendItem struct {
+	cat    string
+	denied bool
+	w      int
+}
+
+// legendRows flows the legend's entries (one per category, then "denied") into
+// rows no wider than the widget less its margins.
+func (g *GraphView) legendRows() [][]legendItem {
 	names := make([]string, len(g.categories))
 	for cat, i := range g.categories {
 		names[i] = cat
 	}
+	items := make([]legendItem, 0, len(names)+1)
 	for _, cat := range names {
-		fillRect(p, x, sy, graphSwatch, graphSwatch, g.categoryColor(cat))
-		g.drawText(p, x+13, ty, cat, theme.OnBackground)
-		x += 13 + g.textWidth(cat) + 10
+		items = append(items, legendItem{cat: cat, w: 13 + g.textWidth(cat) + 10})
 	}
-	drawDashed(p, x, sy+graphSwatch/2, x+16, sy+graphSwatch/2, graphDeniedInk(theme))
-	g.drawText(p, x+20, ty, "denied", theme.OnBackground)
+	items = append(items, legendItem{cat: "denied", denied: true, w: 20 + g.textWidth("denied")})
+	avail := g.Bounds().W - 2*gGap()
+	rows := [][]legendItem{nil}
+	x := 0
+	for _, it := range items {
+		if x > 0 && x+it.w > avail {
+			rows = append(rows, nil)
+			x = 0
+		}
+		rows[len(rows)-1] = append(rows[len(rows)-1], it)
+		x += it.w
+	}
+	return rows
+}
+
+// drawLegend draws one swatch per category seen, and the denied style, on lines
+// centred in the legend strip.
+func (g *GraphView) drawLegend(p painter.Painter, theme *Theme) {
+	r := g.Bounds()
+	h := g.legendHeight()
+	line := max(g.glyphHeight(), graphSwatch)
+	for i, row := range g.legendRows() {
+		top := r.Y + r.H - h + graphLegendPad + i*(line+graphLegendPad)
+		ty := top + (line-g.glyphHeight())/2 // text
+		sy := top + (line-graphSwatch)/2     // swatch
+		x := r.X + gGap()
+		for _, it := range row {
+			if it.denied {
+				drawDashed(p, x, sy+graphSwatch/2, x+16, sy+graphSwatch/2, graphDeniedInk(theme))
+				g.drawText(p, x+20, ty, it.cat, theme.OnBackground)
+			} else {
+				fillRect(p, x, sy, graphSwatch, graphSwatch, g.categoryColor(it.cat))
+				g.drawText(p, x+13, ty, it.cat, theme.OnBackground)
+			}
+			x += it.w
+		}
+	}
 }
 
 // edgeAt returns the edge whose segment passes within graphHitSlack of (x,y).
@@ -527,7 +740,17 @@ func (g *GraphView) OnEvent(ev Event) {
 	}
 	r := g.Bounds()
 	switch ev.Kind {
+	case EventScroll:
+		g.ScrollBy(ev.Delta * graphScrollStep())
+	case EventMouseDrag:
+		sg, ok := g.scrollbarGeom()
+		g.sbDrag.drag(sg, ok, ev, g.ScrollTo)
+	case EventMouseUp:
+		g.sbDrag.release()
 	case EventClick:
+		if sg, ok := g.scrollbarGeom(); g.sbDrag.press(sg, ok, ev, g.viewH, g.ScrollBy) {
+			return
+		}
 		hit := g.Hit(r.X+ev.X, r.Y+ev.Y)
 		if hit != "" && hit == g.Model.Selected.Get() {
 			g.activate()
@@ -578,7 +801,9 @@ func (g *GraphView) key(code string) {
 	if cur < 0 {
 		next = 0
 	}
-	g.Model.Selected.Set("node:" + g.order[clampInt(next, 0, len(g.order)-1)])
+	id := g.order[clampInt(next, 0, len(g.order)-1)]
+	g.Model.Selected.Set("node:" + id)
+	g.revealNode(id)
 }
 
 // A11y describes the graph: how many nodes and edges, how many denied, and

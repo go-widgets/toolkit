@@ -7,7 +7,6 @@ package toolkit
 import (
 	"strconv"
 
-	"github.com/go-icons/iconoir"
 	"github.com/go-widgets/painter"
 )
 
@@ -220,12 +219,12 @@ func reToolbarIcon(name string, inset int) func(p painter.Painter, r Rect, ink R
 	if name == "" {
 		return nil
 	}
-	if !iconoir.Has(name) {
+	if builtinIcon(name) == "" {
 		return nil
 	}
 	return func(p painter.Painter, r Rect, ink RGBA) {
 		ir := Rect{X: r.X + inset, Y: r.Y + inset, W: r.W - 2*inset, H: r.H - 2*inset}
-		DrawIconoir(p, ir, name, ink)
+		drawBuiltinIcon(p, ir, name, ink)
 	}
 }
 

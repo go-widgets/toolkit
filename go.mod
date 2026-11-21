@@ -1,10 +1,10 @@
 module github.com/go-widgets/toolkit
 
-go 1.27.2
+go 1.27.4
 
 require (
-	github.com/go-crdt/collab v0.77.4
-	github.com/go-crdt/crdt v0.57.0
+	github.com/go-crdt/collab v0.83.0
+	github.com/go-crdt/crdt v0.59.0
 	github.com/go-gfx/gfx v0.41.0
 	github.com/go-icons/iconoir v0.3.0
 	github.com/go-images/images v0.3.0
@@ -20,13 +20,13 @@ require (
 )
 
 require (
-	github.com/andybalholm/brotli v1.2.8 // indirect
+	github.com/andybalholm/brotli v1.3.0 // indirect
 	github.com/coder/websocket v1.8.15 // indirect
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
-	golang.org/x/net v0.60.0 // indirect
+	golang.org/x/net v0.62.0 // indirect
 	golang.org/x/sys v0.49.0 // indirect
 	golang.org/x/text v0.43.0 // indirect
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20260706201446-f0a921348800 // indirect
-	google.golang.org/grpc v1.84.0 // indirect
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20260817212433-ac3dfec99bb1 // indirect
+	google.golang.org/grpc v1.85.0 // indirect
 	google.golang.org/protobuf v1.36.12 // indirect
 )

@@ -46,10 +46,46 @@ func (t *TextView) ClearHistory() { t.SetHistory(TextHistory{}) }
 
 // CanUndo reports whether Undo would change anything. A Disabled view cannot
 // undo: the history is kept, but a menu or ribbon greys its command.
-func (t *TextView) CanUndo() bool { return len(t.undo) > 0 && !t.Disabled().Get() }
+func (t *TextView) CanUndo() bool {
+	if t.hist != nil {
+		return t.hist.CanUndo() && !t.Disabled().Get()
+	}
+	return len(t.undo) > 0 && !t.Disabled().Get()
+}
 
 // CanRedo reports whether Redo would change anything (never while Disabled).
-func (t *TextView) CanRedo() bool { return len(t.redo) > 0 && !t.Disabled().Get() }
+func (t *TextView) CanRedo() bool {
+	if t.hist != nil {
+		return t.hist.CanRedo() && !t.Disabled().Get()
+	}
+	return len(t.redo) > 0 && !t.Disabled().Get()
+}
+
+// A HistoryDelegate answers undo and redo for a TextView whose text is not the
+// view's alone. All four are required.
+type HistoryDelegate struct {
+	// Undo and Redo do the work; they are called only when the matching Can
+	// function reports true. Whatever they change in the text, they change by
+	// themselves (the view does not restore a buffer).
+	Undo, Redo       func()
+	CanUndo, CanRedo func() bool
+}
+
+// SetHistoryDelegate hands undo and redo to d, or takes them back when d is nil.
+//
+// Ctrl+Z, Ctrl+Y, Ctrl+Shift+Z, [TextView.Undo], [TextView.Redo], CanUndo and
+// CanRedo then answer from d, and the view keeps no snapshot of its own. It
+// exists for text that other people edit as well. A snapshot restores a whole
+// buffer, so undoing in such text restores it to a state that predates what the
+// others typed since — and a binding that publishes what the buffer became
+// publishes that as the local user deleting their work. A delegate undoes the
+// local user's own edits, and only those.
+//
+// The snapshot history is kept as it was and comes back when d is nil.
+func (t *TextView) SetHistoryDelegate(d *HistoryDelegate) {
+	t.hist = d
+	t.historyChanged(false)
+}
 
 // ReplaceText replaces the whole buffer as one undoable edit (SetText is
 // not undoable: it loads a document). The caret goes to the start.
