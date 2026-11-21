@@ -40,9 +40,17 @@ func TestPointerRouterLocalCoordinatesAndGrab(t *testing.T) {
 		Edges:   func() []PointerClaimer { return []PointerClaimer{s} },
 		Targets: func() []Widget { return []Widget{empty, btn} },
 	}
-	if w := pr.Press(15, 505, ""); w != Widget(btn) || pr.Grabbed() != Widget(btn) {
-		t.Fatalf("press hit %v", w)
+	var told []Widget
+	pr.OnGrab = func(w Widget) {
+		if len(btn.got) != len(told) { // told before the press is delivered
+			t.Fatal("OnGrab ran after the press")
+		}
+		told = append(told, w)
 	}
+	if w := pr.Press(15, 505, ""); w != Widget(btn) || pr.Grabbed() != Widget(btn) || len(told) != 1 || told[0] != Widget(btn) {
+		t.Fatalf("press hit %v, told %v", w, told)
+	}
+	pr.OnGrab = nil
 	if e := btn.got[0]; e.Kind != EventClick || e.X != 5 || e.Y != 5 {
 		t.Fatalf("click %+v, want local (5,5)", e)
 	}
@@ -134,6 +142,12 @@ func TestPointerRouterScrollAndNilLists(t *testing.T) {
 	pr.Hover(1, 1)
 	if pr.Cursor(1, 1) != "" {
 		t.Fatal("no edges, no cursor")
+	}
+	told := false
+	pr.OnGrab = func(w Widget) { told = w == nil }
+	pr.Press(5, 5, "")
+	if !told {
+		t.Fatal("a press on nothing tells OnGrab nil")
 	}
 	var none PointerRouter
 	if none.Press(1, 1, "") != nil || none.Scroll(1, 1, 1) {
