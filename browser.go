@@ -986,9 +986,9 @@ func (b *Browser) ScrollExtent() (offset, viewport, total int, shown bool) {
 // overflows vertically). It is the single definition shared by drawScrollbars
 // (paint) and OnEvent (hit-test + drag), so the drawn thumb and the drag target
 // can never drift apart. The track sits on the content's right edge and is
-// shortened by scrollbarWidth at the bottom when the horizontal bar also shows,
+// shortened by scrollbarTrack() at the bottom when the horizontal bar also shows,
 // leaving the corner clear. The thumb is sized to the visible fraction cr.H/dispH
-// (floored at scrollbarWidth) and positioned from scroll/maxScroll.
+// (floored at scrollbarTrack()) and positioned from scroll/maxScroll.
 func (b *Browser) vscrollGeom(t *browserTab, cr Rect) (sbGeom, bool) {
 	maxOff := b.maxScroll(t, cr)
 	if maxOff <= 0 || cr.W <= 0 || cr.H <= 0 {
@@ -997,21 +997,21 @@ func (b *Browser) vscrollGeom(t *browserTab, cr Rect) (sbGeom, bool) {
 	_, dispH := b.pageDisplaySize(t, cr)
 	trackLen := cr.H
 	if b.maxScrollX(t, cr) > 0 {
-		trackLen -= scrollbarWidth // reserve the corner for the horizontal bar
+		trackLen -= scrollbarTrack() // reserve the corner for the horizontal bar
 	}
 	if trackLen <= 0 {
 		return sbGeom{}, false
 	}
 	thumb := trackLen * cr.H / dispH
-	if thumb < scrollbarWidth {
-		thumb = scrollbarWidth
+	if thumb < scrollbarTrack() {
+		thumb = scrollbarTrack()
 	}
 	if thumb > trackLen {
 		thumb = trackLen
 	}
 	travelNum := trackLen - thumb
 	return sbGeom{
-		cross0:     cr.W - scrollbarWidth,
+		cross0:     cr.W - scrollbarTrack(),
 		trackStart: 0,
 		trackLen:   trackLen,
 		thumbStart: travelNum * t.scroll / maxOff,
@@ -1025,9 +1025,9 @@ func (b *Browser) vscrollGeom(t *browserTab, cr Rect) (sbGeom, bool) {
 // hscrollGeom returns the horizontal content scrollbar's geometry (in coordinates
 // RELATIVE to the content rect's top-left) and whether it is live (the page
 // overflows horizontally, i.e. under zoom > 1). The track sits on the content's
-// bottom edge and is shortened by scrollbarWidth at the right when the vertical
+// bottom edge and is shortened by scrollbarTrack() at the right when the vertical
 // bar also shows, leaving the corner clear. The thumb is sized to the visible
-// fraction cr.W/dispW (floored at scrollbarWidth) and positioned from
+// fraction cr.W/dispW (floored at scrollbarTrack()) and positioned from
 // scrollX/maxScrollX.
 func (b *Browser) hscrollGeom(t *browserTab, cr Rect) (sbGeom, bool) {
 	maxOff := b.maxScrollX(t, cr)
@@ -1037,14 +1037,14 @@ func (b *Browser) hscrollGeom(t *browserTab, cr Rect) (sbGeom, bool) {
 	dispW, _ := b.pageDisplaySize(t, cr)
 	trackLen := cr.W
 	if b.maxScroll(t, cr) > 0 {
-		trackLen -= scrollbarWidth // reserve the corner for the vertical bar
+		trackLen -= scrollbarTrack() // reserve the corner for the vertical bar
 	}
 	if trackLen <= 0 {
 		return sbGeom{}, false
 	}
 	thumb := trackLen * cr.W / dispW
-	if thumb < scrollbarWidth {
-		thumb = scrollbarWidth
+	if thumb < scrollbarTrack() {
+		thumb = scrollbarTrack()
 	}
 	if thumb > trackLen {
 		thumb = trackLen
@@ -1052,7 +1052,7 @@ func (b *Browser) hscrollGeom(t *browserTab, cr Rect) (sbGeom, bool) {
 	travelNum := trackLen - thumb
 	return sbGeom{
 		horizontal: true,
-		cross0:     cr.H - scrollbarWidth,
+		cross0:     cr.H - scrollbarTrack(),
 		trackStart: 0,
 		trackLen:   trackLen,
 		thumbStart: travelNum * t.scrollX / maxOff,
@@ -1214,19 +1214,19 @@ func (b *Browser) drawPage(p painter.Painter, cr Rect, t *browserTab) {
 // house style shared with ScrollView and Table: a SurfaceAlt track with an Accent
 // thumb sized to the visible fraction. Both read the same vscrollGeom/hscrollGeom
 // the input path hit-tests against, so the drawn thumb and the drag target are one
-// geometry. When both show, each track is shortened by scrollbarWidth so the
+// geometry. When both show, each track is shortened by scrollbarTrack() so the
 // bottom-right corner stays clear.
 func (b *Browser) drawScrollbars(p painter.Painter, theme *Theme, cr Rect, t *browserTab) {
 	if b.HideScrollbar {
 		return // the host overlays its own bar (see HideScrollbar / ScrollExtent)
 	}
 	if g, ok := b.vscrollGeom(t, cr); ok {
-		paintScrollTrack(p, theme, cr.X+g.cross0, cr.Y+g.trackStart, scrollbarWidth, g.trackLen)
-		paintScrollThumb(p, theme, cr.X+g.cross0, cr.Y+g.thumbStart, scrollbarWidth, g.thumbLen)
+		paintScrollTrack(p, theme, cr.X+g.cross0, cr.Y+g.trackStart, scrollbarTrack(), g.trackLen)
+		paintScrollThumb(p, theme, cr.X+g.cross0, cr.Y+g.thumbStart, scrollbarTrack(), g.thumbLen)
 	}
 	if g, ok := b.hscrollGeom(t, cr); ok {
-		paintScrollTrack(p, theme, cr.X+g.trackStart, cr.Y+g.cross0, g.trackLen, scrollbarWidth)
-		paintScrollThumb(p, theme, cr.X+g.thumbStart, cr.Y+g.cross0, g.thumbLen, scrollbarWidth)
+		paintScrollTrack(p, theme, cr.X+g.trackStart, cr.Y+g.cross0, g.trackLen, scrollbarTrack())
+		paintScrollThumb(p, theme, cr.X+g.thumbStart, cr.Y+g.cross0, g.thumbLen, scrollbarTrack())
 	}
 }
 

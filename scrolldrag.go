@@ -19,11 +19,11 @@ package toolkit
 //
 // which drawScrollbar evaluates and scrollForGrabStart inverts to turn a grabbed
 // pixel back into a clamped scroll value. cross0 is the fixed cross-axis start of
-// the track column; the track is scrollbarWidth wide on the cross axis.
+// the track column; the track is scrollbarTrack() wide on the cross axis.
 type sbGeom struct {
 	horizontal           bool
 	cross0               int // cross-axis start of the track column
-	crossW               int // cross-axis track thickness; 0 => scrollbarWidth (see crossWidth)
+	crossW               int // cross-axis track thickness; 0 => scrollbarTrack() (see crossWidth)
 	trackStart, trackLen int // along-axis track extent
 	thumbStart, thumbLen int // along-axis thumb extent
 	travelNum, travelDen int // thumbStart = trackStart + scroll*travelNum/travelDen
@@ -31,14 +31,14 @@ type sbGeom struct {
 }
 
 // crossWidth is the track's cross-axis thickness. A widget that lays its track
-// out at a metric-scaled thickness sets crossW so the hit-test band matches the
-// painted track at any scale; the widgets that still paint an unscaled track
-// leave it 0 and fall back to scrollbarWidth, so their behaviour is unchanged.
+// out at another thickness sets crossW so the hit-test band matches the painted
+// track; every other widget leaves it 0 and gets the one shared metric, the same
+// scaled thickness every scrollable widget paints.
 func (g sbGeom) crossWidth() int {
 	if g.crossW > 0 {
 		return g.crossW
 	}
-	return scrollbarWidth
+	return scrollbarTrack()
 }
 
 // along returns the along-axis component of a widget-local point.

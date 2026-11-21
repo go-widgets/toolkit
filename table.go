@@ -1120,8 +1120,8 @@ func (t *Table) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	// The caller only invokes this while the body overflows, which is exactly
 	// when scrollbarGeom reports live, so the ok flag is always true here.
 	g, _ := t.scrollbarGeom()
-	paintScrollTrack(p, theme, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen)
-	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen)
+	paintScrollTrack(p, theme, r.X+g.cross0, r.Y+g.trackStart, scrollbarTrack(), g.trackLen)
+	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, scrollbarTrack(), g.thumbLen)
 }
 
 // scrollbarGeom returns the vertical scrollbar's widget-local geometry and
@@ -1148,7 +1148,7 @@ func (t *Table) scrollbarGeom() (sbGeom, bool) {
 	scroll := t.clampScrollRow()
 	maxScroll := max(t.maxScrollRow(), 1) // the thumb travels over the rows the body can scroll
 	return sbGeom{
-		cross0:     r.W - scrollbarWidth,
+		cross0:     r.W - scrollbarTrack(),
 		trackStart: trackTop,
 		trackLen:   trackH,
 		thumbStart: trackTop + scroll*(trackH-thumbH)/maxScroll,
@@ -1169,16 +1169,16 @@ func (t *Table) scrollbarGeom() (sbGeom, bool) {
 func (t *Table) drawHScrollbar(p painter.Painter, theme *Theme, r Rect, widths []int) {
 	fw := t.frozenWidth(widths)
 	trackX := r.X + fw
-	trackY := r.Y + r.H - scrollbarWidth
+	trackY := r.Y + r.H - scrollbarTrack()
 	trackW := t.contentWidth() - fw
-	paintScrollTrack(p, theme, trackX, trackY, trackW, scrollbarWidth)
+	paintScrollTrack(p, theme, trackX, trackY, trackW, scrollbarTrack())
 	contentW := t.naturalWidth() - fw
 	thumbW := trackW * trackW / contentW
 	if thumbW < tableScrollbarThumbMin {
 		thumbW = tableScrollbarThumbMin
 	}
 	thumbX := trackX + t.clampScrollX()*(trackW-thumbW)/(contentW-trackW)
-	paintScrollThumb(p, theme, thumbX, trackY, thumbW, scrollbarWidth)
+	paintScrollThumb(p, theme, thumbX, trackY, thumbW, scrollbarTrack())
 }
 
 // columnWidths distributes the total pixel budget across every column.
@@ -1498,7 +1498,7 @@ func (t *Table) wholeRows(reserve int) int {
 func (t *Table) maxScrollRow() int {
 	reserve := 0
 	if t.hScrollable() {
-		reserve = scrollbarWidth // the horizontal scrollbar covers the body's bottom strip
+		reserve = scrollbarTrack() // the horizontal scrollbar covers the body's bottom strip
 	}
 	max := t.lineCount() - t.wholeRows(reserve)
 	if max < 0 {
@@ -1805,7 +1805,7 @@ func (t *Table) clampScrollRow() int {
 }
 
 // contentWidth is the pixel budget columnWidths distributes for both
-// the header + body: the widget's full width, minus a scrollbarWidth
+// the header + body: the widget's full width, minus a scrollbarTrack()
 // reservation on the right edge while the body overflows vertically.
 // Draw, columnAt, ColumnSeparatorAt and the resize-drag branch of
 // OnEvent all resolve column geometry through this one spot so the
@@ -1814,7 +1814,7 @@ func (t *Table) clampScrollRow() int {
 func (t *Table) contentWidth() int {
 	w := t.Bounds().W
 	if t.bodyOverflows() {
-		w -= scrollbarWidth
+		w -= scrollbarTrack()
 		if w < 0 {
 			w = 0
 		}

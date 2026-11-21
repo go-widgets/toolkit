@@ -258,7 +258,7 @@ func (g *GraphView) layout() {
 	boxes, perRows, h := flowClusters(clusters, members, area.W, nw, titleW)
 	if h > area.H {
 		g.hasBar = true
-		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarWidth, nw, titleW)
+		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarTrack(), nw, titleW)
 	}
 	g.contentH = h
 	g.scrollY = clampInt(g.scrollY, 0, maxInt(0, h-area.H))
@@ -325,7 +325,7 @@ func (g *GraphView) scrollbarGeom() (sbGeom, bool) {
 	maxScroll := g.contentH - g.viewH
 	thumb := maxInt(graphThumbMin, g.viewH*g.viewH/g.contentH)
 	return sbGeom{
-		cross0:     r.W - scrollbarWidth,
+		cross0:     r.W - scrollbarTrack(),
 		trackStart: 0,
 		trackLen:   g.viewH,
 		thumbStart: g.scrollY * (g.viewH - thumb) / maxScroll,
@@ -501,8 +501,8 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 			g.drawLegend(p, theme)
 		}
 		if sg, ok := g.scrollbarGeom(); ok {
-			paintScrollTrack(p, theme, r.X+sg.cross0, r.Y+sg.trackStart, scrollbarWidth, sg.trackLen)
-			paintScrollThumb(p, theme, r.X+sg.cross0, r.Y+sg.thumbStart, scrollbarWidth, sg.thumbLen)
+			paintScrollTrack(p, theme, r.X+sg.cross0, r.Y+sg.trackStart, scrollbarTrack(), sg.trackLen)
+			paintScrollThumb(p, theme, r.X+sg.cross0, r.Y+sg.thumbStart, scrollbarTrack(), sg.thumbLen)
 		}
 	})
 	g.drawFocusRing(p, theme, r)

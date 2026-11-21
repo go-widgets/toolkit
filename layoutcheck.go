@@ -139,7 +139,7 @@ func graphProblems(g *GraphView, path string) []LayoutProblem {
 	r := g.Bounds()
 	right := r.X + r.W
 	if g.hasBar {
-		right -= scrollbarWidth
+		right -= scrollbarTrack()
 	}
 	for _, c := range g.Model.Clusters.Slice() {
 		cb, ok := g.clusterBox[c.ID]
