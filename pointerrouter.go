@@ -44,6 +44,13 @@ func localEvent(e Event, r Rect) Event {
 	return e
 }
 
+// takes reports whether w, laid out where it is, has the surface point (x, y): a
+// widget a container left out is laid out in an empty rectangle and takes nothing.
+func takes(w Widget, x, y int) bool {
+	b := w.Bounds()
+	return b.W > 0 && b.H > 0 && b.Contains(x, y)
+}
+
 // Press gives a press at the surface point (x, y) to the edge or target under it,
 // which is then the grabbed widget, and returns it; with nothing under the point
 // the grab is dropped and the result is nil. code is the Event.Code of the press.
@@ -60,7 +67,7 @@ func (r *PointerRouter) Press(x, y int, code string) Widget {
 	}
 	if hit == nil && r.Targets != nil {
 		for _, w := range r.Targets() {
-			if w.Bounds().Contains(x, y) {
+			if takes(w, x, y) {
 				hit = w
 				break
 			}
@@ -109,8 +116,8 @@ func (r *PointerRouter) Scroll(x, y, delta int) bool {
 		return false
 	}
 	for _, w := range r.Targets() {
-		if b := w.Bounds(); b.Contains(x, y) {
-			w.OnEvent(localEvent(Event{Kind: EventScroll, X: x, Y: y, Delta: delta}, b))
+		if takes(w, x, y) {
+			w.OnEvent(localEvent(Event{Kind: EventScroll, X: x, Y: y, Delta: delta}, w.Bounds()))
 			return true
 		}
 	}
