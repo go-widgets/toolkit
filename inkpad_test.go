@@ -574,6 +574,23 @@ func TestScrollViewOnlyGrabsTheWidgetThePressLandedOn(t *testing.T) {
 	sv.OnEvent(Event{Kind: EventMouseUp, X: 10, Y: -10})
 }
 
+// The pen is genuinely down on the pad, and a press lands on the label.
+func TestScrollViewDoesNotGrabAPenDownElsewhere(t *testing.T) {
+	sv, pad := inkColumn()
+	sv.OnEvent(Event{Kind: EventClick, X: 10, Y: 60}) // the pad's pen goes down
+	sv.OnEvent(Event{Kind: EventClick, X: 10, Y: 30}) // the label
+	if !pad.PointerGrabbed() {
+		t.Fatal("test needs the pad's pen still down")
+	}
+	if sv.PointerGrabbed() {
+		t.Fatal("the view grabbed a pad the press did not land on")
+	}
+	sv.OnEvent(Event{Kind: EventMouseDrag, X: 10, Y: -10})
+	if sv.OffsetY().Get() != 40 {
+		t.Fatalf("offset %d, want the pan to 40", sv.OffsetY().Get())
+	}
+}
+
 func TestScrollViewForgetsAGrabAnotherPressSupersedes(t *testing.T) {
 	sv, pad := inkColumn()
 	sv.OnEvent(Event{Kind: EventClick, X: 10, Y: 60}) // grabbed, and the release is lost
