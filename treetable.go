@@ -428,7 +428,7 @@ func (t *TreeTable) Draw(p painter.Painter, theme *Theme) {
 
 	bodyW := r.W
 	if windowed {
-		bodyW = r.W - scrollbarWidth
+		bodyW = r.W - scrollbarTrack()
 	}
 	widths := t.columnWidths(bodyW)
 
@@ -549,7 +549,7 @@ func (t *TreeTable) scrollbarGeom() (sbGeom, bool) {
 	maxScroll := total - wr // > 0 here (total > wr)
 	scroll := t.clampScrollRow(t.ScrollRow().Get(), total, wr)
 	return sbGeom{
-		cross0:     r.W - scrollbarWidth,
+		cross0:     r.W - scrollbarTrack(),
 		trackStart: trackTop,
 		trackLen:   trackH,
 		thumbStart: trackTop + scroll*(trackH-thumbH)/maxScroll,
@@ -566,8 +566,8 @@ func (t *TreeTable) drawScrollbar(p painter.Painter, theme *Theme, r Rect) {
 	// The caller only invokes this while windowed, which is exactly when
 	// scrollbarGeom reports live, so the ok flag is always true here.
 	g, _ := t.scrollbarGeom()
-	paintScrollTrack(p, theme, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen)
-	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen)
+	paintScrollTrack(p, theme, r.X+g.cross0, r.Y+g.trackStart, scrollbarTrack(), g.trackLen)
+	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, scrollbarTrack(), g.thumbLen)
 }
 
 // OnEvent: a click on the first column's disclosure glyph toggles that

@@ -121,10 +121,10 @@ func (s *Spreadsheet) gridRect() Rect {
 	w := r.W - spRowHdrW()
 	h := r.H - spHeaderH()
 	if s.vOverflow() {
-		w -= scrollbarWidth
+		w -= scrollbarTrack()
 	}
 	if s.hOverflow() {
-		h -= scrollbarWidth
+		h -= scrollbarTrack()
 	}
 	return Rect{X: r.X + spRowHdrW(), Y: r.Y + spHeaderH(), W: w, H: h}
 }

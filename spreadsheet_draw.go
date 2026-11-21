@@ -139,8 +139,8 @@ func (s *Spreadsheet) vscrollGeom() (sbGeom, bool) {
 		thumbH = spreadsheetThumbMin
 	}
 	return sbGeom{
-		cross0:     r.W - scrollbarWidth,
-		crossW:     scrollbarWidth,
+		cross0:     r.W - scrollbarTrack(),
+		crossW:     scrollbarTrack(),
 		trackStart: spHeaderH(),
 		trackLen:   trackH,
 		thumbStart: spHeaderH() + s.scrollRow*spRowH()*(trackH-thumbH)/(contentH-trackH),
@@ -166,8 +166,8 @@ func (s *Spreadsheet) hscrollGeom() (sbGeom, bool) {
 	}
 	return sbGeom{
 		horizontal: true,
-		cross0:     r.H - scrollbarWidth,
-		crossW:     scrollbarWidth,
+		cross0:     r.H - scrollbarTrack(),
+		crossW:     scrollbarTrack(),
 		trackStart: spRowHdrW(),
 		trackLen:   trackW,
 		thumbStart: spRowHdrW() + s.scrollCol*spColW()*(trackW-thumbW)/(contentW-trackW),
@@ -183,8 +183,8 @@ func (s *Spreadsheet) hscrollGeom() (sbGeom, bool) {
 func (s *Spreadsheet) drawVScroll(p painter.Painter, theme *Theme) {
 	g, _ := s.vscrollGeom()
 	r := s.Bounds()
-	paintScrollTrack(p, theme, r.X+g.cross0, r.Y+g.trackStart, scrollbarWidth, g.trackLen)
-	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, scrollbarWidth, g.thumbLen)
+	paintScrollTrack(p, theme, r.X+g.cross0, r.Y+g.trackStart, scrollbarTrack(), g.trackLen)
+	paintScrollThumb(p, theme, r.X+g.cross0, r.Y+g.thumbStart, scrollbarTrack(), g.thumbLen)
 }
 
 // drawHScroll paints the bottom-edge horizontal scrollbar; caller guards on
@@ -192,6 +192,6 @@ func (s *Spreadsheet) drawVScroll(p painter.Painter, theme *Theme) {
 func (s *Spreadsheet) drawHScroll(p painter.Painter, theme *Theme) {
 	g, _ := s.hscrollGeom()
 	r := s.Bounds()
-	paintScrollTrack(p, theme, r.X+g.trackStart, r.Y+g.cross0, g.trackLen, scrollbarWidth)
-	paintScrollThumb(p, theme, r.X+g.thumbStart, r.Y+g.cross0, g.thumbLen, scrollbarWidth)
+	paintScrollTrack(p, theme, r.X+g.trackStart, r.Y+g.cross0, g.trackLen, scrollbarTrack())
+	paintScrollThumb(p, theme, r.X+g.thumbStart, r.Y+g.cross0, g.thumbLen, scrollbarTrack())
 }
