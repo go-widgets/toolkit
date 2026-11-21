@@ -202,7 +202,8 @@ type FileTree struct {
 	// every refresh synchronous.
 	PostUI func(apply func())
 	// MenuExtra adds the host's items to the context menu of an entry ("" and
-	// dir for the root).
+	// dir for the root). p is the cleaned relative path, the same form as
+	// Annotate's.
 	MenuExtra func(p string, dir bool) []MenuItem
 	// Annotate, when set, returns a short mark to draw at the right of an
 	// entry's row — "2×", "DUP", "3" — or "" for none.
@@ -227,6 +228,15 @@ type FileTree struct {
 	//
 	// It is called while drawing, once per visible row, so it must be cheap
 	// and must not block: look up a prepared map, do not stat a file.
+	//
+	// ⛔ p is the entry's path as the TREE holds it: slash-separated, cleaned,
+	// and RELATIVE to the root. That is FileEntry.Path as long as the host
+	// follows its contract. An absolute "/home/me/a.png" is accepted, but it
+	// becomes "home/me/a.png" and a folder for each ancestor. A map keyed on
+	// the absolute paths then matches nothing, and nothing fails to say why
+	// (#613). A host that walked a directory keys its map on
+	// filepath.ToSlash(filepath.Rel(root, path)), and passes the same value
+	// as FileEntry.Path.
 	Annotate func(p string, dir bool) string
 
 	entries  *mvvm.Observable[[]FileEntry]
