@@ -9,13 +9,13 @@ require (
 	github.com/go-icons/iconoir v0.3.0
 	github.com/go-images/images v0.3.0
 	github.com/go-opentype/fonts v0.14.0
-	github.com/go-opentype/opentype v0.20.0
+	github.com/go-opentype/opentype v0.24.0
 	github.com/go-opentype/shape v0.7.0
-	github.com/go-richdoc/richdoc v0.7.0
+	github.com/go-richdoc/richdoc v0.10.0
 	github.com/go-typeset/bidi v0.3.1
 	github.com/go-widgets/mvvm v0.15.0
-	github.com/go-widgets/painter v0.17.0
-	github.com/go-widgets/textinput v0.1.0
+	github.com/go-widgets/painter v0.17.1
+	github.com/go-widgets/textinput v0.1.1
 	github.com/go-widgets/vcs v0.1.0
 )
 
