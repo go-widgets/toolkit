@@ -52,9 +52,6 @@ func (l *WrapList) SetItems(items []string) {
 	l.ScrollTo(l.ScrollLine().Get())
 }
 
-// Items is the text the list was given, before wrapping.
-func (l *WrapList) Items() []string { return l.items }
-
 // ScrollLine is the index of the top visible line as a shared [mvvm.Observable].
 func (l *WrapList) ScrollLine() *mvvm.Observable[int] {
 	if l.scroll == nil {
@@ -119,10 +116,7 @@ func (l *WrapList) Measure(width int) int {
 
 // fullLines is how many lines fit entirely in the widget's height.
 func (l *WrapList) fullLines() int {
-	if lh := l.LineHeight(); lh > 0 {
-		return l.Bounds().H / lh
-	}
-	return 0
+	return l.Bounds().H / max(l.LineHeight(), 1)
 }
 
 func (l *WrapList) maxScroll() int {

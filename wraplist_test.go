@@ -174,6 +174,59 @@ func TestWrapListDisabledAndEmptyExtent(t *testing.T) {
 	}
 }
 
+// The scrollbar: a click on the track pages, a drag of the thumb scrolls to the
+// pointer, and a release ends the drag.
+func TestWrapListScrollbarClickDragRelease(t *testing.T) {
+	items := make([]string, 50)
+	for i := range items {
+		items[i] = "line"
+	}
+	l := NewWrapList(items)
+	l.SetBounds(Rect{W: 200, H: 5 * l.LineHeight()})
+	g, ok := l.scrollbarGeom()
+	if !ok {
+		t.Fatal("no scrollbar")
+	}
+	x := g.cross0 + 1
+	l.OnEvent(Event{Kind: EventClick, X: x, Y: l.Bounds().H - 1})
+	if got := l.ScrollLine().Get(); got != 5 {
+		t.Fatalf("track click paged to %d, want 5", got)
+	}
+	g, _ = l.scrollbarGeom()
+	l.OnEvent(Event{Kind: EventClick, X: x, Y: g.thumbStart + 1})
+	l.OnEvent(Event{Kind: EventMouseDrag, X: x, Y: l.Bounds().H + 500})
+	if got, want := l.ScrollLine().Get(), len(l.Lines())-5; got != want {
+		t.Fatalf("drag to the end gave %d, want %d", got, want)
+	}
+	l.OnEvent(Event{Kind: EventMouseUp, X: x, Y: 0})
+	l.OnEvent(Event{Kind: EventMouseDrag, X: x, Y: 0})
+	if got, want := l.ScrollLine().Get(), len(l.Lines())-5; got != want {
+		t.Errorf("a drag after release moved to %d", got)
+	}
+}
+
+// A zero-value list is usable, and a fixed sibling of an optional child counts
+// against its room.
+func TestWrapListZeroValueAndFixedSibling(t *testing.T) {
+	var z WrapList
+	if z.ScrollLine().Get() != 0 {
+		t.Error("zero-value scroll not 0")
+	}
+	col := NewVBox()
+	col.AddFixed(NewLabel("head"), 20)
+	opt := NewLabel("opt")
+	col.AddOptional(opt, 20, 10)
+	col.AddFlex(NewLabel("rest"), 1)
+	col.SetBounds(Rect{W: 100, H: 35}) // 35 - 20 fixed - 20 optional < keep 10
+	if opt.Bounds() != (Rect{}) {
+		t.Errorf("optional child kept in %+v", opt.Bounds())
+	}
+	col.SetBounds(Rect{W: 100, H: 80})
+	if opt.Bounds() == (Rect{}) {
+		t.Error("optional child dropped with room")
+	}
+}
+
 type countingFont struct {
 	Font
 	n *int
