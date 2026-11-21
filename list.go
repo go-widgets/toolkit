@@ -194,7 +194,9 @@ func (l *ListBox) rowHeight() int {
 	if l.RowHeight <= 0 {
 		return 0
 	}
-	return TouchTarget(l.RowHeight)
+	// Never under the font's own height: a RowHeight fixed at construction (at
+	// another metric scale) must not stack lines closer than their glyphs.
+	return max(TouchTarget(l.RowHeight), GlyphHeight())
 }
 
 // ListBox is a DragSource + DropTarget when Reorderable (see the type doc).
