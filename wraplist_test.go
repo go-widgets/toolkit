@@ -144,6 +144,36 @@ func TestWrapListDrawStaysInside(t *testing.T) {
 	}
 }
 
+// A disabled list ignores the wheel and the keys; a list with no height has no
+// scrollbar to grab.
+func TestWrapListDisabledAndEmptyExtent(t *testing.T) {
+	items := make([]string, 50)
+	for i := range items {
+		items[i] = "line"
+	}
+	l := NewWrapList(items)
+	l.SetBounds(Rect{W: 200, H: 5 * l.LineHeight()})
+	l.Disabled().Set(true)
+	l.OnEvent(Event{Kind: EventScroll, Delta: 5})
+	l.OnEvent(Event{Kind: EventKeyDown, Code: "End"})
+	if l.ScrollLine().Get() != 0 {
+		t.Errorf("a disabled list scrolled to %d", l.ScrollLine().Get())
+	}
+	l.Disabled().Set(false)
+	l.OnEvent(Event{Kind: EventScroll, Delta: 5})
+	if l.ScrollLine().Get() != 5 {
+		t.Errorf("an enabled list scrolled to %d", l.ScrollLine().Get())
+	}
+	l.SetBounds(Rect{W: 200, H: 0})
+	if _, ok := l.scrollbarGeom(); ok {
+		t.Error("a list with no height has a scrollbar")
+	}
+	l.SetBounds(Rect{W: 200, H: 100 * l.LineHeight()})
+	if _, ok := l.scrollbarGeom(); ok {
+		t.Error("a list that fits has a scrollbar")
+	}
+}
+
 func TestWrapItemCases(t *testing.T) {
 	f := NewBitmapFont(1)
 	cases := []struct {

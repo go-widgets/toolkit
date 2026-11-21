@@ -34,9 +34,8 @@ type WrapList struct {
 	scroll *mvvm.Observable[int]
 	sbDrag scrollDrag
 
-	// the lines laid out for the width they were laid out at
+	// the lines laid out for the current items and bounds
 	lines []string
-	laidW int
 	valid bool
 }
 
@@ -90,11 +89,11 @@ func (l *WrapList) Lines() []string {
 }
 
 func (l *WrapList) layout() {
-	w := l.Bounds().W
-	if l.valid && l.laidW == w {
+	if l.valid { // SetBounds and SetItems are the only things that change the answer
 		return
 	}
-	l.valid, l.laidW = true, w
+	l.valid = true
+	w := l.Bounds().W
 	l.lines = l.wrapAt(w)
 	if len(l.lines)*l.LineHeight() > l.Bounds().H { // a scrollbar takes its gutter: wrap again narrower
 		l.lines = l.wrapAt(w - scrollGutter())
