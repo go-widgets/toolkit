@@ -114,8 +114,19 @@ func (r *PointerRouter) Release(x, y int) bool {
 	return true
 }
 
-// Cancel lets the grabbed widget go without telling it.
-func (r *PointerRouter) Cancel() { r.grab = nil }
+// PointerCanceler is a grabbed widget that wants to know the host dropped the
+// gesture without a release, so it can let go of its own state (an [InkPad]
+// lifts its pen, a [ScrollView] drops the child it was forwarding to).
+type PointerCanceler interface{ CancelPointer() }
+
+// Cancel lets the grabbed widget go without a release; a widget that is a
+// [PointerCanceler] is told, any other is not.
+func (r *PointerRouter) Cancel() {
+	if c, ok := r.grab.(PointerCanceler); ok {
+		c.CancelPointer()
+	}
+	r.grab = nil
+}
 
 // Scroll gives a wheel turn (delta in rows, positive down) to the target under
 // the pointer and reports whether one took it.

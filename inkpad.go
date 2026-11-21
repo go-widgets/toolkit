@@ -61,9 +61,9 @@ type InkPad struct {
 	points  int
 	pen     bool
 	warned  bool
-	// aspect is height over width of the box when the ink was drawn: the proportions
-	// of the picture.
-	aspect float64
+	// boxW and boxH are the box's size, in logical pixels, when the ink was
+	// drawn: the proportions and the pen scale of the picture.
+	boxW, boxH float64
 }
 
 // InkPoint is one sample of a stroke, each coordinate 0..1 across the box.
@@ -92,8 +92,9 @@ const (
 	// InkMinStep is how far, in pixels, a point must be from the last to be kept.
 	InkMinStep = 1.0
 	// InkRenderW is how wide the whole pad is drawn into the picture, in pixels,
-	// and InkRenderMaxH how tall; the picture is cropped to the ink, so is never
-	// larger than 900 x 600 x 4 bytes = 2 MiB.
+	// and InkRenderMaxH how tall; the picture is cropped to the ink and scaled
+	// uniformly, so with its margin it is never larger than 900 x 600 x 4 bytes
+	// = 2 MiB.
 	InkRenderW    = 900
 	InkRenderMaxH = 600
 	// InkPenW is the pen's thickness in the pad's own logical pixels.
@@ -118,15 +119,32 @@ var (
 )
 
 // NewInkPad is an empty pad with the default caps and colours.
-func NewInkPad() *InkPad { return &InkPad{aspect: 0.4} }
+func NewInkPad() *InkPad { return &InkPad{boxW: 300, boxH: 120} }
 
 // Strokes is the strokes drawn so far as a shared observable list: a host
-// subscribes to it (the list changes on every kept point), it is not settable.
+// subscribes to it (the list changes on every kept point). The pad's counts and
+// Empty are derived from the list on every change, so a host that edits it
+// (Clear, RemoveAt) leaves the pad consistent rather than stuck.
 func (p *InkPad) Strokes() *mvvm.ObservableList[InkStroke] {
 	if p.strokes == nil {
 		p.strokes = mvvm.NewObservableList[InkStroke]()
+		p.strokes.SubscribeChanged(p.sync)
 	}
 	return p.strokes
+}
+
+// sync re-derives the point count and Empty from the list, and lifts the pen
+// when the stroke it was drawing is gone.
+func (p *InkPad) sync() {
+	n := 0
+	for _, s := range p.strokes.Slice() {
+		n += len(s)
+	}
+	p.points = n
+	if p.strokes.Len() == 0 {
+		p.pen = false
+	}
+	p.Empty().Set(p.strokes.Len() == 0)
 }
 
 // Empty is true while nothing is drawn, as a shared observable.
@@ -203,12 +221,9 @@ func (p *InkPad) begin(x, y int) {
 		p.refuse(InkPointsFull)
 		return
 	}
-	w, h := p.size()
-	p.aspect = h / w
+	p.boxW, p.boxH = p.size()
 	p.Strokes().Append(InkStroke{p.norm(x, y)})
-	p.points++
 	p.pen = true
-	p.Empty().Set(false)
 }
 
 // move extends the open stroke; a point under [InkMinStep] from the last is dropped.
@@ -221,6 +236,11 @@ func (p *InkPad) move(x, y int) {
 		return
 	}
 	at := p.Strokes().Len() - 1
+	if at < 0 || len(p.Strokes().At(at)) == 0 {
+		// The host edited the list under the open stroke.
+		p.pen = false
+		return
+	}
 	line := p.Strokes().At(at)
 	last, now := line[len(line)-1], p.norm(x, y)
 	w, h := p.size()
@@ -230,7 +250,6 @@ func (p *InkPad) move(x, y int) {
 		return
 	}
 	p.Strokes().Set(at, append(line, now))
-	p.points++
 }
 
 // Undo takes the last stroke back off and says whether there was one: on an empty
@@ -240,18 +259,15 @@ func (p *InkPad) Undo() bool {
 	if n == 0 {
 		return false
 	}
-	p.points -= len(p.Strokes().At(n - 1))
 	p.Strokes().RemoveAt(n - 1)
 	p.pen, p.warned = false, false
-	p.Empty().Set(n == 1)
 	return true
 }
 
 // Clear empties the pad.
 func (p *InkPad) Clear() {
 	p.Strokes().Clear()
-	p.points, p.pen, p.warned = 0, false, false
-	p.Empty().Set(true)
+	p.pen, p.warned = false, false
 }
 
 // PointerGrabber is a widget that, once a press has been delivered to it, wants
@@ -267,11 +283,21 @@ type PointerGrabber interface {
 // PointerGrabbed is true between the press that started a stroke and its release.
 func (p *InkPad) PointerGrabbed() bool { return p.pen }
 
+// CancelPointer lifts the pen without a release: the host dropped the gesture
+// ([PointerRouter.Cancel]).
+func (p *InkPad) CancelPointer() { p.pen = false }
+
 // OnEvent takes the pointer: a press (or touch start) begins a stroke, a drag (or
-// touch move) extends it and the release lifts the pen. A disabled pad takes
-// nothing.
+// touch move) extends it and the release lifts the pen. A disabled pad takes no
+// ink, but a release still lifts the pen: disabling it mid-stroke must not leave
+// the pointer held.
 func (p *InkPad) OnEvent(ev Event) {
+	if ev.Kind == EventMouseUp || ev.Kind == EventTouchEnd {
+		p.pen = false
+		return
+	}
 	if p.Disabled().Get() {
+		p.pen = false
 		return
 	}
 	switch ev.Kind {
@@ -279,8 +305,6 @@ func (p *InkPad) OnEvent(ev Event) {
 		p.begin(ev.X, ev.Y)
 	case EventMouseDrag, EventTouchMove:
 		p.move(ev.X, ev.Y)
-	case EventMouseUp, EventTouchEnd:
-		p.pen = false
 	}
 }
 
@@ -324,20 +348,29 @@ func (p *InkPad) Image() (*raster.Image, error) {
 	if len(strokes) == 0 {
 		return nil, ErrInkEmpty
 	}
-	sx := float64(InkRenderW)
-	sy := math.Min(sx*p.aspect, InkRenderMaxH)
-	width := InkPenW * sx / 300
-	margin := width + 2
-
+	bw, bh := p.boxW, p.boxH
+	if bw <= 0 || bh <= 0 {
+		bw, bh = 300, 120
+	}
+	// The ink's extent in the pad's logical pixels.
 	lo, hi := [2]float64{math.Inf(1), math.Inf(1)}, [2]float64{math.Inf(-1), math.Inf(-1)}
 	for _, line := range strokes {
 		for _, q := range line {
-			lo[0], hi[0] = math.Min(lo[0], q.X*sx), math.Max(hi[0], q.X*sx)
-			lo[1], hi[1] = math.Min(lo[1], q.Y*sy), math.Max(hi[1], q.Y*sy)
+			lo[0], hi[0] = math.Min(lo[0], q.X*bw), math.Max(hi[0], q.X*bw)
+			lo[1], hi[1] = math.Min(lo[1], q.Y*bh), math.Max(hi[1], q.Y*bh)
 		}
 	}
-	ox, oy := lo[0]-margin, lo[1]-margin
-	img := raster.New(int(math.Ceil(hi[0]-lo[0]+2*margin)), int(math.Ceil(hi[1]-lo[1]+2*margin)))
+	// One scale for both axes, so the picture keeps the drawing's proportions:
+	// the whole box fits 900 x 600, and so does the ink with its margin (a pen
+	// width and 2 px each side), the half pixel absorbing the rounding up.
+	f := math.Min(InkRenderW/bw, InkRenderMaxH/bh)
+	f = math.Min(f, (InkRenderW-4.5)/(hi[0]-lo[0]+2*InkPenW))
+	f = math.Min(f, (InkRenderMaxH-4.5)/(hi[1]-lo[1]+2*InkPenW))
+	sx, sy := bw*f, bh*f
+	width := InkPenW * f
+	margin := width + 2
+	ox, oy := lo[0]*f-margin, lo[1]*f-margin
+	img := raster.New(int(math.Ceil((hi[0]-lo[0])*f+2*margin)), int(math.Ceil((hi[1]-lo[1])*f+2*margin)))
 
 	var rz vector.Rasterizer
 	style := vector.StrokeStyle{Width: width, Cap: vector.RoundCap, Join: vector.RoundJoin}

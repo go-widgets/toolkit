@@ -420,10 +420,187 @@ func TestInkPadImageIsBounded(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	margin := 2*(InkPenW*InkRenderW/300+2) + 1
-	if float64(img.W) > InkRenderW+margin || float64(img.H) > InkRenderMaxH+margin {
+	if img.W > InkRenderW || img.H > InkRenderMaxH {
 		t.Fatalf("picture %dx%d exceeds %dx%d", img.W, img.H, InkRenderW, InkRenderMaxH)
 	}
+}
+
+// The stated bound holds margin included, for every shape of box and drawing.
+func TestInkPadImageNeverExceedsTheBoundWithItsMargin(t *testing.T) {
+	for _, c := range []struct{ w, h int }{{300, 300}, {300, 120}, {2000, 100}, {100, 2000}, {10, 10}, {900, 600}, {5000, 5000}} {
+		p := sizedPad(c.w, c.h)
+		stroke(p, [2]int{0, 0}, [2]int{c.w, c.h}, [2]int{0, c.h}, [2]int{c.w, 0})
+		img, err := p.Image()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if img.W > InkRenderW || img.H > InkRenderMaxH {
+			t.Errorf("%dx%d pad: picture %dx%d exceeds %dx%d", c.w, c.h, img.W, img.H, InkRenderW, InkRenderMaxH)
+		}
+	}
+}
+
+// One scale for both axes: a square drawn on a square pad is a square picture.
+func TestInkPadImageKeepsTheDrawingsProportions(t *testing.T) {
+	p := sizedPad(300, 300)
+	stroke(p, [2]int{50, 50}, [2]int{250, 50}, [2]int{250, 250}, [2]int{50, 250}, [2]int{50, 50})
+	img, err := p.Image()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d := img.W - img.H; d < -2 || d > 2 {
+		t.Fatalf("a square exported as %dx%d", img.W, img.H)
+	}
+}
+
+// The pen is 2.5 logical pixels of the pad it was drawn on, whatever its width.
+func TestInkPadPenWidthFollowsTheRealBox(t *testing.T) {
+	p := sizedPad(600, 100)
+	stroke(p, [2]int{100, 50}, [2]int{500, 50})
+	img, err := p.Image()
+	if err != nil {
+		t.Fatal(err)
+	}
+	// 600 px of box scale to 900: the factor is 1.5, the pen 3.75 px.
+	x, rows := img.W/2, 0
+	for y := 0; y < img.H; y++ {
+		if img.Pix[4*(y*img.W+x)+3] > 127 {
+			rows++
+		}
+	}
+	if rows < 3 || rows > 5 {
+		t.Fatalf("the line is %d px thick, want about 3.75", rows)
+	}
+}
+
+// A host that edits the strokes list leaves the pad consistent.
+func TestInkPadSurvivesAHostEditingTheList(t *testing.T) {
+	p := sizedPad(100, 50)
+	p.MaxStrokes, p.MaxPoints = 3, 3
+	stroke(p, [2]int{10, 10}, [2]int{20, 20}, [2]int{30, 30})
+	p.Strokes().Clear()
+	if !p.Empty().Get() || p.points != 0 {
+		t.Fatalf("after the host's Clear: empty=%v points=%d", p.Empty().Get(), p.points)
+	}
+	stroke(p, [2]int{10, 10}, [2]int{20, 20})
+	if p.Strokes().Len() != 1 || p.Empty().Get() || len(p.Strokes().At(0)) != 2 {
+		t.Fatal("a press after the host's Clear was refused")
+	}
+	// The host removes or empties the stroke the pen is drawing.
+	p.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
+	refusesWithoutPanic(t, "a drag after the host emptied the list", func() {
+		p.Strokes().Clear()
+		p.OnEvent(Event{Kind: EventMouseDrag, X: 50, Y: 20})
+	})
+	if p.PointerGrabbed() {
+		t.Fatal("the pen stayed down on a list with no stroke")
+	}
+	p.OnEvent(Event{Kind: EventClick, X: 5, Y: 5})
+	p.Strokes().Set(0, InkStroke{})
+	refusesWithoutPanic(t, "a drag on an emptied stroke", func() {
+		p.OnEvent(Event{Kind: EventMouseDrag, X: 50, Y: 20})
+	})
+	if p.PointerGrabbed() {
+		t.Fatal("the pen stayed down on an emptied stroke")
+	}
+}
+
+// A zero-value pad that a host filled through the list exports at the nominal box.
+func TestInkPadZeroValueExportsAtTheNominalBox(t *testing.T) {
+	p := &InkPad{}
+	p.Strokes().Append(InkStroke{{0.2, 0.2}, {0.8, 0.5}})
+	img, err := p.Image()
+	if err != nil || img.W == 0 || img.H == 0 || p.Empty().Get() {
+		t.Fatalf("image %v, err %v, empty %v", img, err, p.Empty().Get())
+	}
+}
+
+// Disabling the pad mid-stroke must not leave the pen down.
+func TestInkPadReleaseWhileDisabledLiftsThePen(t *testing.T) {
+	p := sizedPad(100, 50)
+	p.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
+	p.Disabled().Set(true)
+	p.OnEvent(Event{Kind: EventMouseDrag, X: 40, Y: 10})
+	if p.PointerGrabbed() || len(p.Strokes().At(0)) != 1 {
+		t.Fatal("a drag while disabled must lift the pen and add nothing")
+	}
+	p.Disabled().Set(false)
+	p.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
+	p.Disabled().Set(true)
+	p.OnEvent(Event{Kind: EventMouseUp, X: 10, Y: 10})
+	if p.PointerGrabbed() {
+		t.Fatal("a release while disabled left the pen down")
+	}
+	p.Disabled().Set(false)
+	p.OnEvent(Event{Kind: EventClick, X: 10, Y: 10})
+	p.CancelPointer()
+	if p.PointerGrabbed() {
+		t.Fatal("CancelPointer must lift the pen")
+	}
+}
+
+// inkColumn is a VBox{Label, InkPad} in a ScrollView, the pad below the label.
+func inkColumn() (*ScrollView, *InkPad) {
+	pad := NewInkPad()
+	v := NewVBox()
+	v.Spacing = 0
+	v.AddFixed(NewLabel("x"), 40)
+	v.AddFixed(pad, 100)
+	sv := NewScrollView(v)
+	sv.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 100})
+	v.SetBounds(Rect{X: 0, Y: 0, W: 100, H: 140})
+	sv.SetContentSize(100, 140)
+	return sv, pad
+}
+
+func TestScrollViewOnlyGrabsTheWidgetThePressLandedOn(t *testing.T) {
+	sv, pad := inkColumn()
+	sv.OnEvent(Event{Kind: EventClick, X: 10, Y: 60}) // on the pad
+	if !pad.PointerGrabbed() {
+		t.Fatal("test needs the pad to take the press")
+	}
+	pad.Disabled().Set(true)
+	sv.OnEvent(Event{Kind: EventMouseUp, X: 10, Y: 60})
+	pad.Disabled().Set(false)
+	// A press on the label, then a drag: the view pans, the pad draws nothing.
+	sv.OnEvent(Event{Kind: EventClick, X: 10, Y: 30})
+	sv.OnEvent(Event{Kind: EventMouseDrag, X: 10, Y: -10})
+	if sv.OffsetY().Get() != 40 {
+		t.Fatalf("offset %d, want 40: the pad stole the gesture", sv.OffsetY().Get())
+	}
+	if pad.Strokes().Len() != 1 || len(pad.Strokes().At(0)) != 1 {
+		t.Fatalf("stray ink: %v", pad.Strokes().Slice())
+	}
+	sv.OnEvent(Event{Kind: EventMouseUp, X: 10, Y: -10})
+}
+
+func TestScrollViewForgetsAGrabAnotherPressSupersedes(t *testing.T) {
+	sv, pad := inkColumn()
+	sv.OnEvent(Event{Kind: EventClick, X: 10, Y: 60}) // grabbed, and the release is lost
+	pad.CancelPointer()                               // the pad lets go on its own
+	sv.OnEvent(Event{Kind: EventClick, X: 10, Y: 30})
+	if sv.PointerGrabbed() {
+		t.Fatal("a press on the label must end the old grab")
+	}
+}
+
+func TestPointerRouterCancelLetsTheGrabbedPadGo(t *testing.T) {
+	sv, pad := inkColumn()
+	r := &PointerRouter{Targets: func() []Widget { return []Widget{sv} }}
+	r.Press(10, 60, "")
+	if !pad.PointerGrabbed() || !sv.PointerGrabbed() {
+		t.Fatal("test needs the press to be grabbed")
+	}
+	r.Cancel()
+	if pad.PointerGrabbed() || sv.PointerGrabbed() || r.Grabbed() != nil {
+		t.Fatal("Cancel must let the pad, the view and the router go")
+	}
+	r.Press(10, 30, "")
+	r.Drag(10, -10)
+	if sv.OffsetY().Get() != 40 || len(pad.Strokes().At(0)) != 1 {
+		t.Fatalf("after Cancel: offset %d, ink %v; want the pan and no ink", sv.OffsetY().Get(), pad.Strokes().Slice())
+	}
+	r.Release(10, -10)
 }
 
 func TestInkPadAFullStopIsAMark(t *testing.T) {

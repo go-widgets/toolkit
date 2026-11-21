@@ -401,6 +401,7 @@ func (s *ScrollView) OnEvent(ev Event) {
 		// of being dropped. Scroll clamps each axis independently.
 		s.Scroll(ev.DeltaX*line, ev.Delta*line)
 	case EventClick:
+		s.grab = nil // a new press ends any gesture a lost release left open
 		// A press on either scrollbar grabs its thumb, or pages the track
 		// toward the click; the content area stays passive for clicks.
 		if g, ok := s.vscrollGeom(); s.sbV.press(g, ok, ev, s.viewport().H, func(d int) { s.Scroll(0, d) }) {
@@ -430,7 +431,7 @@ func (s *ScrollView) OnEvent(ev Event) {
 			// A child that took the press and wants the rest of the gesture (an
 			// InkPad) keeps it: no pan, and the drag and the release are handed
 			// to it.
-			if g := pointerGrabber(s.Child); g != nil {
+			if g := pointerGrabber(s.Child, ev.X+s.Bounds().X+s.OffsetX().Get(), ev.Y+s.Bounds().Y+s.OffsetY().Get()); g != nil {
 				s.grab = g
 				return
 			}
@@ -490,16 +491,21 @@ func (s *ScrollView) OnEvent(ev Event) {
 	}
 }
 
-// pointerGrabber is the widget at or under w that holds the pointer now: w
-// itself when it says so (a nested ScrollView forwarding to its own grabber),
-// else the first descendant that does.
-func pointerGrabber(w Widget) PointerGrabber {
+// pointerGrabber is the widget at or under w, and under the content point
+// (x, y) the press landed on, that holds the pointer now: w itself when it says
+// so (a nested ScrollView forwarding to its own grabber), else the first
+// descendant that does. A widget the press did not land on is never taken, so a
+// pen left down elsewhere cannot steal the gesture.
+func pointerGrabber(w Widget, x, y int) PointerGrabber {
+	if !w.Bounds().Contains(x, y) {
+		return nil
+	}
 	if g, ok := w.(PointerGrabber); ok && g.PointerGrabbed() {
 		return g
 	}
 	if c, ok := w.(childContainer); ok {
 		for _, ch := range c.Children() {
-			if g := pointerGrabber(ch); g != nil {
+			if g := pointerGrabber(ch, x, y); g != nil {
 				return g
 			}
 		}
@@ -509,6 +515,15 @@ func pointerGrabber(w Widget) PointerGrabber {
 
 // PointerGrabbed reports whether the view is forwarding a gesture to a child.
 func (s *ScrollView) PointerGrabbed() bool { return s.grab != nil }
+
+// CancelPointer drops the gesture the view was forwarding, and tells the child
+// that held it ([PointerRouter.Cancel]).
+func (s *ScrollView) CancelPointer() {
+	if c, ok := s.grab.(PointerCanceler); ok {
+		c.CancelPointer()
+	}
+	s.grab = nil
+}
 
 // forwardGrab hands a drag or a release to the child that grabbed the press, in
 // that child's own frame: the view-local point moved to the content (the view's
