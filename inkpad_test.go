@@ -107,9 +107,11 @@ func TestInkPadUndoOnAnEmptyPadIsARefusal(t *testing.T) {
 	p := sizedPad(100, 50)
 	var told int
 	p.OnFull = func(InkLimit) { told++ }
-	if p.Undo() {
-		t.Fatal("Undo on an empty pad must answer false")
-	}
+	refusesWithoutPanic(t, "Undo on an empty pad", func() {
+		if p.Undo() {
+			t.Error("Undo on an empty pad must answer false")
+		}
+	})
 	if !p.Empty().Get() || p.Strokes().Len() != 0 || told != 0 {
 		t.Fatal("Undo on an empty pad must change nothing")
 	}
@@ -307,6 +309,42 @@ func TestInkPadDrawDisabledIsMuted(t *testing.T) {
 	if got == defaultInk || got == defaultPaper {
 		t.Fatalf("a disabled pad must draw a muted ink, got %+v", got)
 	}
+}
+
+// refusesWithoutPanic runs f and fails the test, by an assertion, if it panics:
+// the guards below are what keep these calls from crashing, and a crash must
+// read as a broken guard rather than as an aborted test binary.
+func refusesWithoutPanic(t *testing.T, what string, f func()) {
+	t.Helper()
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("%s panicked: %v", what, r)
+		}
+	}()
+	f()
+}
+
+func TestInkPadGuardsAnswerInsteadOfPanicking(t *testing.T) {
+	refusesWithoutPanic(t, "Undo on an empty pad", func() {
+		p := NewInkPad()
+		if p.Undo() {
+			t.Error("Undo on an empty pad answered true")
+		}
+		if !p.Empty().Get() || p.Strokes().Len() != 0 {
+			t.Error("Undo on an empty pad changed it")
+		}
+	})
+	refusesWithoutPanic(t, "PNG of an empty pad", func() {
+		if data, err := sizedPad(100, 50).PNG(); !errors.Is(err, ErrInkEmpty) || data != nil {
+			t.Errorf("PNG of an empty pad = %d bytes, %v; want a refusal", len(data), err)
+		}
+	})
+	refusesWithoutPanic(t, "Draw on a painter without paths", func() {
+		p := NewInkPad()
+		p.SetBounds(Rect{X: 5, Y: 5, W: 100, H: 50})
+		stroke(p, [2]int{10, 20}, [2]int{30, 20})
+		p.Draw(&nonPathPainter{buf: makeSurface(120, 70), w: 120, h: 70}, DefaultLight())
+	})
 }
 
 func TestInkPadDrawWithoutPathPainterDrawsTheFrameOnly(t *testing.T) {
@@ -564,7 +602,7 @@ func FuzzInkPadEvents(f *testing.F) {
 			data = data[5:]
 			p.OnEvent(Event{Kind: kind, X: x, Y: y})
 			if len(data)%7 == 0 {
-				p.Undo()
+				refusesWithoutPanic(t, "Undo", func() { p.Undo() })
 			}
 		}
 		n, points := p.Strokes().Len(), 0
