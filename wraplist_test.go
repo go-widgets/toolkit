@@ -174,6 +174,33 @@ func TestWrapListDisabledAndEmptyExtent(t *testing.T) {
 	}
 }
 
+type countingFont struct {
+	Font
+	n *int
+}
+
+func (c countingFont) Measure(s string) int { *c.n++; return c.Font.Measure(s) }
+
+// Laying out is done once per SetBounds or SetItems, not once per question.
+func TestWrapListLaysOutOncePerChange(t *testing.T) {
+	n := 0
+	l := NewWrapList([]string{wlText})
+	l.Base.Font = countingFont{NewBitmapFont(1), &n}
+	l.SetBounds(Rect{W: 160, H: 4000})
+	l.Lines()
+	after := n
+	l.Lines()
+	l.Lines()
+	if n != after {
+		t.Errorf("Lines re-wrapped: %d Measure calls, then %d", after, n)
+	}
+	l.SetItems([]string{"other text"})
+	l.Lines()
+	if n == after {
+		t.Error("SetItems did not re-wrap")
+	}
+}
+
 func TestWrapItemCases(t *testing.T) {
 	f := NewBitmapFont(1)
 	cases := []struct {
