@@ -115,6 +115,27 @@ func fileStatusInk(theme *Theme, s FileStatus, ink RGBA) RGBA {
 	return ink
 }
 
+// fileAnnotationInk is the colour of a host's [FileTree.Annotate] mark.
+//
+// ⛔ The host does not choose it, and that is the point: a mark exists to be
+// READ, and a host picking its own colour can pick one that vanishes into the
+// row. So the widget offers a muted tone for a light row and one for a dark
+// row, takes the first that clears 4.5:1 against the row, and otherwise falls
+// back to the row's own ink — which always passes, since it is what the name
+// beside it is drawn in.
+//
+// Muted rather than coloured on purpose: the status marks own the eye-catching
+// hues, because an unmerged conflict is more urgent than any host's note, and
+// a second set of bright marks beside them would compete with the first.
+func fileAnnotationInk(theme *Theme, ink RGBA) RGBA {
+	for _, c := range []RGBA{RGB(0x4a, 0x5a, 0x66), RGB(0x9e, 0xb2, 0xc0)} {
+		if contrastRatio(c, theme.SurfaceAlt) >= 4.5 {
+			return c
+		}
+	}
+	return ink
+}
+
 // FileAction is what a [FileRequest] asks the host to do.
 type FileAction int
 
@@ -183,6 +204,30 @@ type FileTree struct {
 	// MenuExtra adds the host's items to the context menu of an entry ("" and
 	// dir for the root).
 	MenuExtra func(p string, dir bool) []MenuItem
+	// Annotate, when set, returns a short mark to draw at the right of an
+	// entry's row — "2×", "DUP", "3" — or "" for none.
+	//
+	// ⛔ IT IS THE HOST'S MARK, NOT THE WIDGET'S VOCABULARY, which is the
+	// opposite choice from [FileStatus] and for the opposite reason. The six
+	// file statuses are a closed set that git, Mercurial, Subversion, Jujutsu
+	// and Fossil all share, so the widget can name them without taking sides.
+	// What a host wants to say ABOUT a file has no such closed set: "three
+	// copies of this", "not backed up", "38 % smaller as WebP", "last opened
+	// in 2019". Enumerating those here would be guessing at other people's
+	// tools, and each guess would be a field nobody else can use.
+	//
+	// So the division is the same as FileStatus's, drawn differently: the tree
+	// knows HOW to draw a mark and the host knows WHAT it means — but here the
+	// host supplies the text too.
+	//
+	// The COLOUR is not the host's, deliberately. It is drawn in a tone the
+	// widget checks for contrast against the row, because the one thing a host
+	// must not be able to do is add a mark nobody can read — the same reason
+	// fileStatusInk picks for contrast rather than for the expected hue.
+	//
+	// It is called while drawing, once per visible row, so it must be cheap
+	// and must not block: look up a prepared map, do not stat a file.
+	Annotate func(p string, dir bool) string
 
 	entries  *mvvm.Observable[[]FileEntry]
 	selected *mvvm.Observable[string]
@@ -836,6 +881,16 @@ func (f *FileTree) drawRow(p painter.Painter, theme *Theme, r Rect, n *TreeNode,
 		f.drawText(p, right, ty, mark, fileStatusInk(theme, fn.status, ink))
 		right -= scaled(6)
 	}
+	// The host's annotation sits inboard of the status mark, for the same
+	// reason: a repository that gains and loses marks must not shuffle the
+	// host's column sideways under the reader.
+	if f.Annotate != nil {
+		if mark := f.Annotate(fn.path, fn.dir); mark != "" {
+			right -= f.textWidth(mark)
+			f.drawText(p, right, ty, mark, fileAnnotationInk(theme, ink))
+			right -= scaled(6)
+		}
+	}
 	f.drawText(p, x, ty, elideToWidth(n.Label, right-x, f.textWidth), ink)
 }
 
@@ -1187,17 +1242,30 @@ func (f *FileTree) expandSiblings() {
 }
 
 // A11y describes the tree: its name and the selected path, with that entry's
-// status spelled out when it has one.
+// status and the host's annotation spelled out when it has them.
 //
 // ⛔ The mark is a glyph in a colour, and both are unavailable to a screen
 // reader — so a status that only reached drawRow would be information for
 // sighted users and decoration for everyone else. "main.tex, modified" is the
 // same fact the M carries.
+//
+// ⛔ The SAME ARGUMENT COVERS Annotate, which is why it is announced here and
+// not only drawn. A host's mark is drawn by exactly the code the status mark
+// is drawn by, so it would have inherited exactly the status mark's old bug:
+// visible to some readers and absent for the rest. The host's text is spoken
+// verbatim, since the host chose words the widget cannot interpret — which is
+// a reason to choose readable ones ("3 copies" announces better than "3×").
 func (f *FileTree) A11y() A11yInfo {
 	value := f.selected.Get()
 	if n := f.nodes[value]; n != nil && value != "" {
-		if s := fileStatusName(n.Data.(*fileNode).status); s != "" {
+		fn := n.Data.(*fileNode)
+		if s := fileStatusName(fn.status); s != "" {
 			value += ", " + s
+		}
+		if f.Annotate != nil {
+			if a := f.Annotate(fn.path, fn.dir); a != "" {
+				value += ", " + a
+			}
 		}
 	}
 	return A11yInfo{Role: RoleTree, Name: f.Label, Value: value, Disabled: f.Disabled().Get()}
