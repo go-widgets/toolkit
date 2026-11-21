@@ -51,6 +51,11 @@ type boxChild struct {
 	// natural asks the box to fill size in from what the child MEASURES, at
 	// layout time, when the box knows its cross extent. See boxNatural.
 	natural bool
+	// optional marks a fixed child the box may leave out when the room is short:
+	// it is laid out only while the flexible children keep at least keep pixels
+	// (see boxShed). Set by AddOptional.
+	optional bool
+	keep     int
 }
 
 // clampSpacing takes a box's Spacing literally, clamping only negative values to
@@ -281,7 +286,7 @@ func (h *HBox) SetBounds(r Rect) {
 		return
 	}
 	sp := clampSpacing(h.Spacing)
-	kids := boxResolveNatural(h.children, r.H, false)
+	kids := boxShed(boxResolveNatural(h.children, r.H, false), r.W, sp)
 	sizes := boxCells(r.W, sp, kids)
 	x := r.X + boxLead(h.Pack, boxSlack(r.W, sp, sizes))
 	for i, c := range kids {
@@ -409,7 +414,7 @@ func (v *VBox) SetBounds(r Rect) {
 		return
 	}
 	sp := clampSpacing(v.Spacing)
-	kids := boxResolveNatural(v.children, r.W, true)
+	kids := boxShed(boxResolveNatural(v.children, r.W, true), r.H, sp)
 	sizes := boxCells(r.H, sp, kids)
 	y := r.Y + boxLead(v.Pack, boxSlack(r.H, sp, sizes))
 	for i, c := range kids {
