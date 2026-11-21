@@ -56,6 +56,18 @@ func TestPointerRouterLocalCoordinatesAndGrab(t *testing.T) {
 	if pr.Drag(1, 1) || pr.Release(1, 1) || pr.Grabbed() != nil {
 		t.Fatal("nothing is held after the release")
 	}
+	// a widget of no height or no width takes nothing, at any point of its line
+	flat := newRec(Rect{X: 600, Y: 600, W: 40, H: 0})
+	thin := newRec(Rect{X: 700, Y: 600, W: 0, H: 40})
+	pr.Targets = func() []Widget { return []Widget{empty, flat, thin, btn} }
+	for _, p := range [][2]int{{600, 600}, {620, 600}, {640, 600}, {700, 600}, {700, 620}} {
+		if pr.Press(p[0], p[1], "") != nil || pr.Scroll(p[0], p[1], 1) {
+			t.Fatalf("an empty widget took the point %v", p)
+		}
+	}
+	if len(flat.got)+len(thin.got) != 0 {
+		t.Fatal("an empty widget was given an event")
+	}
 	if pr.Press(3, 3, "") != nil || len(empty.got) != 0 {
 		t.Fatal("an empty rectangle takes no press, and a press on nothing grabs nothing")
 	}
