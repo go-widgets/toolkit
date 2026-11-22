@@ -32,6 +32,10 @@ type ScrollView struct {
 	// pan tracks an in-progress drag of the CONTENT itself.
 	pan contentPan
 
+	// grab is the child that took a press and wants the drag and the release
+	// (see PointerGrabber); while set, the view neither pans nor drags a thumb.
+	grab PointerGrabber
+
 	// momX and momY are the per-axis touch-scroll engines, created on first
 	// use. They hold the authoritative position, which OffsetX/OffsetY mirror
 	// clamped and overscrollX/Y complete.
@@ -397,6 +401,7 @@ func (s *ScrollView) OnEvent(ev Event) {
 		// of being dropped. Scroll clamps each axis independently.
 		s.Scroll(ev.DeltaX*line, ev.Delta*line)
 	case EventClick:
+		s.grab = nil // a new press ends any gesture a lost release left open
 		// A press on either scrollbar grabs its thumb, or pages the track
 		// toward the click; the content area stays passive for clicks.
 		if g, ok := s.vscrollGeom(); s.sbV.press(g, ok, ev, s.viewport().H, func(d int) { s.Scroll(0, d) }) {
@@ -423,6 +428,13 @@ func (s *ScrollView) OnEvent(ev Event) {
 			inner.X += s.OffsetX().Get()
 			inner.Y += s.OffsetY().Get()
 			s.Child.OnEvent(inner)
+			// A child that took the press and wants the rest of the gesture (an
+			// InkPad) keeps it: no pan, and the drag and the release are handed
+			// to it.
+			if g := pointerGrabber(s.Child, ev.X+s.Bounds().X+s.OffsetX().Get(), ev.Y+s.Bounds().Y+s.OffsetY().Get()); g != nil {
+				s.grab = g
+				return
+			}
 		}
 		// And a pan as well, on the same press: a click acts on what it hits,
 		// and a DRAG that follows scrolls the view. Both are true of every
@@ -435,6 +447,10 @@ func (s *ScrollView) OnEvent(ev Event) {
 			s.beginTouchScroll()
 		}
 	case EventMouseDrag:
+		if s.grab != nil {
+			s.forwardGrab(ev)
+			return
+		}
 		gv, okv := s.vscrollGeom()
 		s.sbV.drag(gv, okv, ev, func(target int) { s.Scroll(0, target-s.OffsetY().Get()) })
 		gh, okh := s.hscrollGeom()
@@ -446,6 +462,10 @@ func (s *ScrollView) OnEvent(ev Event) {
 			s.dragTouchScroll(s.pan.delta(ev))
 		}
 	case EventMouseUp:
+		if s.grab != nil {
+			s.forwardGrab(ev)
+			return
+		}
 		s.sbV.release()
 		s.sbH.release()
 		if s.pan.active {
@@ -469,6 +489,55 @@ func (s *ScrollView) OnEvent(ev Event) {
 			s.Scroll(0, scrollExtreme)
 		}
 	}
+}
+
+// pointerGrabber is the widget at or under w, and under the content point
+// (x, y) the press landed on, that holds the pointer now: w itself when it says
+// so (a nested ScrollView forwarding to its own grabber), else the first
+// descendant that does. A widget the press did not land on is never taken, so a
+// pen left down elsewhere cannot steal the gesture.
+func pointerGrabber(w Widget, x, y int) PointerGrabber {
+	if !w.Bounds().Contains(x, y) {
+		return nil
+	}
+	if g, ok := w.(PointerGrabber); ok && g.PointerGrabbed() {
+		return g
+	}
+	if c, ok := w.(childContainer); ok {
+		for _, ch := range c.Children() {
+			if g := pointerGrabber(ch, x, y); g != nil {
+				return g
+			}
+		}
+	}
+	return nil
+}
+
+// PointerGrabbed reports whether the view is forwarding a gesture to a child.
+func (s *ScrollView) PointerGrabbed() bool { return s.grab != nil }
+
+// CancelPointer drops the gesture the view was forwarding, and tells the child
+// that held it ([PointerRouter.Cancel]).
+func (s *ScrollView) CancelPointer() {
+	if c, ok := s.grab.(PointerCanceler); ok {
+		c.CancelPointer()
+	}
+	s.grab = nil
+}
+
+// forwardGrab hands a drag or a release to the child that grabbed the press, in
+// that child's own frame: the view-local point moved to the content (the view's
+// origin and the scroll offset) and out of the child's bounds. The release lets
+// the grab go.
+func (s *ScrollView) forwardGrab(ev Event) {
+	g := s.grab
+	if ev.Kind == EventMouseUp {
+		s.grab = nil
+	}
+	gb := g.Bounds()
+	ev.X += s.Bounds().X + s.OffsetX().Get() - gb.X
+	ev.Y += s.Bounds().Y + s.OffsetY().Get() - gb.Y
+	g.OnEvent(ev)
 }
 
 // Draw paints the child clipped to the viewport, then the scrollbar

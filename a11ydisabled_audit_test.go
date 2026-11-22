@@ -55,6 +55,7 @@ var disabledA11yCatalogue = map[string]func() Accessible{
 	"Button":         func() Accessible { return &Button{} },
 	"CodeEditor":     func() Accessible { return NewCodeEditor("") },
 	"Entry":          func() Accessible { return NewEntry("") },
+	"InkPad":         func() Accessible { return NewInkPad() },
 	"TextView":       func() Accessible { return NewTextView("") },
 	"Calendar":       func() Accessible { return NewCalendar(2026, 8, 16) },
 	"Carousel":       func() Accessible { return NewCarousel(nil) },
