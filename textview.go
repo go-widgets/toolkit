@@ -112,6 +112,7 @@ type TextView struct {
 	// preview is NOT part of the buffer until the host commits via EventChar, so
 	// Text() sees only committed input.
 	composition string
+	pre         preeditMeta // cursor and segments of composition, from SetPreedit
 
 	// rev counts the edits (see InputRevision); marked, markStart and markEnd
 	// are the input-method composition range, in UTF-16 units over the whole
@@ -572,9 +573,11 @@ func (t *TextView) Draw(p painter.Painter, theme *Theme) {
 		// sees dead-key / CJK candidates without them entering the
 		// buffer. Underlined by a 1-px SurfaceAlt strip beneath.
 		if t.composition != "" {
-			cw := t.textWidth(t.composition)
-			t.drawText(p, cx, cy, t.composition, theme.SurfaceAlt)
-			fillRect(p, cx, cy+t.glyphHeight(), cw, 1, theme.SurfaceAlt)
+			pre := t.pre.view(t.composition)
+			_, px := t.drawPreedit(p, theme, cx, cy, pre)
+			if pre.Cursor >= 0 {
+				fillRect(p, px, cy-scaled(1), 1, t.glyphHeight()+scaled(2), theme.OnSurface)
+			}
 		}
 	}
 	// Remote co-editor carets + name tags, on top of everything, each in the

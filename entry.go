@@ -54,6 +54,9 @@ type Entry struct {
 	// EventCompositionEnd. The preview is NOT part of the text until the host
 	// commits it via EventChar, so the text always reflects only committed input.
 	composition string
+	// pre is the cursor and underline segments that came with composition when it
+	// was set through [Entry.SetPreedit]; used only while it describes it.
+	pre preeditMeta
 	// scrollX is the horizontal scroll offset in device pixels: how far the text
 	// is shifted left under the field so a caret past the right edge stays in view.
 	// Recomputed each Draw to follow the caret and clamped so the text never
@@ -193,11 +196,15 @@ func (e *Entry) Draw(p painter.Painter, theme *Theme) {
 			// CursorCol), Entry pushes its single caret past the
 			// preview's pixel width so it visually tracks where the
 			// next committed rune will land.
-			e.drawText(p, cx, textY, comp, theme.SurfaceAlt)
-			fillRect(p, cx, textY+e.glyphHeight(), compW, 1, theme.SurfaceAlt)
-			cx += compW
+			pre := e.pre.view(comp)
+			_, cx = e.drawPreedit(p, theme, cx, textY, pre)
+			if pre.Cursor < 0 {
+				cx = -1 // the input method shows no caret of its own
+			}
 		}
-		fillRect(p, cx, textY-1, 1, e.glyphHeight()+2, theme.OnSurface)
+		if cx >= 0 {
+			fillRect(p, cx, textY-1, 1, e.glyphHeight()+2, theme.OnSurface)
+		}
 	}
 	if canClip {
 		clr.PopClip()
