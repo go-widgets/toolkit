@@ -273,20 +273,9 @@ func (e *Entry) SetPreedit(p Preedit) {
 		e.composition, e.pre = "", preeditMeta{}
 		return
 	}
-	p = p.Sanitize()
-	e.composition = firstLine(p.Text)
-	if e.composition != p.Text { // a single-line field has no second line to compose on
-		p = Preedit{Text: e.composition, Cursor: -1}.Sanitize()
-	}
+	p = p.Sanitize() // line breaks and tabs are dropped: an entry has one line
+	e.composition = p.Text
 	e.pre.remember(p)
-}
-
-// firstLine is s up to its first line break.
-func firstLine(s string) string {
-	if i := strings.IndexAny(s, "\n\t"); i >= 0 {
-		return s[:i]
-	}
-	return s
 }
 
 // Preedit implements [Composer].

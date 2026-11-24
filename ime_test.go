@@ -299,9 +299,40 @@ func (g *ghost) OnEvent(Event)                {}
 func (g *ghost) Children() []Widget           { return g.kids }
 func (g *ghost) ChildOffset() (int, int)      { return g.off[0], g.off[1] }
 
+// While an annotation panel is open an input method types into the panel: the
+// text view shows no preedit of its own.
+func TestTextViewPreeditRefusedWhileAnnotationOpen(t *testing.T) {
+	v := NewTextView("abc")
+	v.SetBounds(Rect{W: 300, H: 100})
+	v.SetFocused(true)
+	v.EnableAnnotations(true)
+	v.SetPreedit(Preedit{Text: "x"})
+	if v.Preedit().Text != "x" {
+		t.Fatal("control: a closed panel should show the preedit")
+	}
+	v.OpenAnnotation(0)
+	if !v.ann.open {
+		t.Fatal("the annotation panel did not open")
+	}
+	v.SetPreedit(Preedit{Text: "y"})
+	if v.Preedit().Text != "" {
+		t.Errorf("preedit shown under an open annotation panel: %+v", v.Preedit())
+	}
+}
+
 func TestFocusedComposition(t *testing.T) {
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("a nil widget panicked the walk: %v", r)
+		}
+	}()
 	if _, _, ok := FocusedComposition(nil); ok {
 		t.Error("nil root")
+	}
+	withNil := &ghost{kids: []Widget{nil}}
+	withNil.SetBounds(Rect{W: 10, H: 10})
+	if _, _, ok := FocusedComposition(withNil); ok {
+		t.Error("nil child")
 	}
 	a := NewEntry("a")
 	a.SetBounds(Rect{X: 1, Y: 2, W: 100, H: 30})
