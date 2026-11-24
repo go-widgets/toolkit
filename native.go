@@ -300,6 +300,22 @@ func (n *Native) Children() []Widget {
 	return nonNil(n.Fallback)
 }
 
+// focusableChildren lets the focus walk descend into the fallback while no host
+// has claimed the region.
+//
+// ⛔ Without it the fallback was a dead end for the keyboard: a click focused an
+// Entry placed as the fallback of a NativeEntry, then every key and character
+// was routed past it (routeFocusKey finds the focused widget by walking
+// focusEnumerators, and Native was not one), so the one place a fallback matters
+// — a platform with no native host — could not be typed into. Once claimed the
+// host's own control takes the keys, so there is nothing to enumerate.
+func (n *Native) focusableChildren() []Widget {
+	if n.Claimed().Get() {
+		return nil
+	}
+	return nonNil(n.Fallback)
+}
+
 // A11y reports [RolePresentation]: this region's accessibility is the fallback's
 // (walked as a child) while unclaimed, and the host control's own once claimed —
 // never the Native's.
