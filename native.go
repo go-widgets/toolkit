@@ -61,6 +61,14 @@ type Native struct {
 	Menu  []NativeMenuItem
 	Items []string
 
+	// Columns and Rows are the headers and cells of a [NativeTable]; Tree the
+	// nodes of a [NativeTree]. Change them through [Native.SetRows] (or bump the
+	// revision) so a host knows to re-read.
+	Columns  []string
+	Rows     [][]string
+	Tree     []NativeTreeNode
+	revision uint64
+
 	// Min and Max bound a [NativeSlider]. Ignored for other kinds.
 	Min, Max float64
 
@@ -147,6 +155,18 @@ const (
 	// rectangle. The number rides the same observable a slider uses, so a list
 	// binds through a seam that already exists.
 	NativeList
+	// NativeTable is a grid: [Native.Columns] headers over [Native.Rows] of
+	// strings, the chosen row in [Native.Number] (-1 for none), two-way. A host
+	// shows it in virtual mode and re-reads the rows only when
+	// [Native.Revision] moves.
+	NativeTable
+	// NativeTree is a hierarchy of [Native.Tree] nodes a person expands and
+	// collapses; the chosen node is its path in [Native.Text], two-way.
+	NativeTree
+	// NativeTabs is a row of tabs titled [Native.Items], the chosen tab in
+	// [Native.Number] two-way. It is the strip: the toolkit lays the content out
+	// below it.
+	NativeTabs
 )
 
 // NewNativeButton makes a push button. onClick runs when it is activated.
@@ -357,6 +377,14 @@ type NativeControl struct {
 	Image     []byte
 	ImageOnly bool
 
+	// Columns, Rows and Tree carry a table or a tree, already cut to the
+	// MaxNative* bounds. Revision moves when they change: a host re-reads them
+	// only then.
+	Columns  []string
+	Rows     [][]string
+	Tree     []NativeTreeNode
+	Revision uint64
+
 	OnText     func(string)
 	OnBool     func(bool)
 	OnNumber   func(float64)
@@ -432,6 +460,19 @@ func (n *Native) control(rect, clip Rect) NativeControl {
 		OnNumber:   func(v float64) { n.Number().Set(v) },
 		OnActivate: n.Activate,
 		OnClaim:    func(b bool) { n.Claimed().Set(b) },
+	}
+	switch n.Kind {
+	case NativeTable:
+		c.Columns, c.Rows = clampedTable(n.Columns, n.Rows)
+		c.Revision = n.revision
+	case NativeTree:
+		c.Tree = clampedTree(n.Tree)
+		c.Revision = n.revision
+	case NativeTabs:
+		if len(c.Items) > MaxNativeTabs {
+			c.Items = c.Items[:MaxNativeTabs]
+		}
+		c.Revision = n.revision
 	}
 	if n.text != nil {
 		c.Text = n.text.Get()
