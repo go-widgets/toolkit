@@ -104,6 +104,10 @@ type SurfaceElement struct {
 	Role  Role
 	Name  string
 	Value string
+	// Disabled reports that the element is shown but cannot be operated: a grey
+	// button. It reaches the platform as A11yInfo.Disabled (macOS AXEnabled false,
+	// UI Automation IsEnabled false, AT-SPI without ENABLED/SENSITIVE).
+	Disabled bool
 	// X, Y, W and H are in the buffer's pixel coordinates.
 	X, Y, W, H int
 }
@@ -231,7 +235,7 @@ func (s *Surface) Children() []Widget {
 	r := s.Bounds()
 	out := make([]Widget, 0, len(els))
 	for _, e := range els {
-		p := &surfaceProxy{info: A11yInfo{Role: e.Role, Name: e.Name, Value: e.Value}}
+		p := &surfaceProxy{info: A11yInfo{Role: e.Role, Name: e.Name, Value: e.Value, Disabled: e.Disabled}}
 		p.SetBounds(Rect{X: r.X + e.X, Y: r.Y + e.Y, W: e.W, H: e.H})
 		out = append(out, p)
 	}
