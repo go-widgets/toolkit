@@ -74,6 +74,17 @@ the convenience containers (`HBox`/`VBox`/`Grid`/`Frame`/`Dock`/
 face. As of v0.355.0 that includes a `Frame`'s title bar, border and
 padding (`Frame.Padding` is in logical pixels); at scale 1 nothing changes.
 
+**Native table, tree and tabs.** `NewNativeTable(columns, rows, selected)`,
+`NewNativeTree(nodes, selectedPath)` and `NewNativeTabs(titles, selected)`
+(v0.400.0) hand a window back-end a real `NSTableView` / `NSOutlineView` /
+`NSTabView`, GTK4 `GtkColumnView` / `GtkListView` / `GtkNotebook`, or Win32
+`SysListView32` / `SysTreeView32` / `SysTabControl32`; `Table`, `TreeView` and
+`TabBar` stay as painted fallbacks. The table row and tab index travel through
+`Number`/`OnNumber` (-1 = none), the tree path (`2.0.1`) through `Text`/`OnText`.
+Bounds: `MaxNativeRows` and `MaxNativeTreeNodes` 100000, `MaxNativeColumns` and
+`MaxNativeTabs` 64, `MaxNativeTreeDepth` 32. Sorting is not implemented. The
+frame is keyed on `Native.Revision()`, so unchanged rows are never walked.
+
 **159** exported widget types + 10 stock icons, **68 kLoC** of widget
 code across 233 files, 100% statement coverage.
 
