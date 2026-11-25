@@ -128,6 +128,22 @@ func TestSurfaceExposesTheApplicationsElements(t *testing.T) {
 	}
 }
 
+// A button the application draws greyed out is announced as disabled; the
+// enabled one beside it is not.
+func TestSurfaceElementDisabledReachesTheWalk(t *testing.T) {
+	s := surfaceOf(40, 40, func() ([]byte, int, int) { return gradient(40, 40), 40, 40 })
+	s.Elements = func() []SurfaceElement {
+		return []SurfaceElement{
+			{Role: RoleButton, Name: "Connect", W: 10, H: 10},
+			{Role: RoleButton, Name: "Disconnect", Disabled: true, X: 12, W: 10, H: 10},
+		}
+	}
+	nodes := WalkA11y(s)
+	if len(nodes) != 2 || nodes[0].Disabled || !nodes[1].Disabled {
+		t.Fatalf("Disabled = %+v, want [false true]", nodes)
+	}
+}
+
 // An application that cannot describe itself is not a broken one: it simply has
 // no children, and the walk finds nothing rather than an unnamed group.
 func TestSurfaceWithoutElementsHasNoChildren(t *testing.T) {
