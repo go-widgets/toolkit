@@ -94,6 +94,34 @@ func TestNativeTabsSelectionBothWays(t *testing.T) {
 	}
 }
 
+func TestNativeTreeFallbackIsDepthBounded(t *testing.T) {
+	deep := NativeTreeNode{Title: "leaf"}
+	for i := 0; i < MaxNativeTreeDepth+10; i++ {
+		deep = NativeTreeNode{Title: "n", Expanded: true, Children: []NativeTreeNode{deep}}
+	}
+	tv := NewNativeTree([]NativeTreeNode{deep}, "").Fallback.(*TreeView)
+	d := 0
+	for c := tv.Root; len(c.Children) > 0; c = c.Children[0] {
+		d++
+	}
+	if d != MaxNativeTreeDepth {
+		t.Errorf("fallback depth = %d, want %d", d, MaxNativeTreeDepth)
+	}
+}
+
+func TestParseNativeTreePathDepthLimit(t *testing.T) {
+	ok := "0"
+	for i := 1; i < MaxNativeTreeDepth; i++ {
+		ok += ".0"
+	}
+	if p, good := ParseNativeTreePath(ok); !good || len(p) != MaxNativeTreeDepth {
+		t.Errorf("a path of exactly the limit was refused")
+	}
+	if _, good := ParseNativeTreePath(ok + ".0"); good {
+		t.Errorf("a path past the limit was accepted")
+	}
+}
+
 func TestParseNativeTreePath(t *testing.T) {
 	if p, ok := ParseNativeTreePath("2.0.1"); !ok || len(p) != 3 || p[0] != 2 || p[2] != 1 {
 		t.Errorf("got %v %v", p, ok)

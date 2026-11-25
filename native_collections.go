@@ -205,9 +205,6 @@ func clampedTree(nodes []NativeTreeNode) []NativeTreeNode {
 // ParseNativeTreePath turns a tree path ("2.0.1") into its indices, or false for
 // the empty path or a malformed one. Hosts use it to find the node to select.
 func ParseNativeTreePath(p string) ([]int, bool) {
-	if p == "" {
-		return nil, false
-	}
 	parts := strings.Split(p, ".")
 	if len(parts) > MaxNativeTreeDepth {
 		return nil, false
