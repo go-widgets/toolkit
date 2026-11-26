@@ -2,6 +2,11 @@
 // Use of this source code is governed by a BSD-3-Clause license that can be
 // found in the LICENSE file at the root of this repository.
 
+// collab's server half (Server.ServeWebSocket) is not built for js/wasm, only its
+// client is; these tests need a real in-process server, so they are not built there.
+
+//go:build !js
+
 package collabui
 
 import (
