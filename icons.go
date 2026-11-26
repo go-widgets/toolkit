@@ -317,6 +317,34 @@ func DrawIconPlus(p painter.Painter, r Rect, ink RGBA) {
 	fillRect(p, x, y+off, side, thick, ink)
 }
 
+// DrawIconMinus paints a minus: the horizontal bar of [DrawIconPlus], with the
+// same square box, the same thickness rule (a fifth of the box, the parity of the
+// box so the two ends are equal to the pixel) and so the same weight beside it.
+// A "-" typeset from a font is a hyphen, with side bearings and a baseline, and
+// would not match the plus it sits next to.
+func DrawIconMinus(p painter.Painter, r Rect, ink RGBA) {
+	inset := iconInset(r)
+	x, y := r.X+inset, r.Y+inset
+	w, h := r.W-2*inset, r.H-2*inset
+	if w < 1 || h < 1 {
+		return
+	}
+	side := w
+	if h < side {
+		side = h
+	}
+	x += (w - side) / 2
+	y += (h - side) / 2
+	thick := side / 5
+	if thick < 1 {
+		thick = 1
+	}
+	if (side-thick)%2 != 0 {
+		thick++
+	}
+	fillRect(p, x, y+(side-thick)/2, side, thick, ink)
+}
+
 // DrawIconDot paints a filled disc: the smallest thing a picture can say.
 //
 // It is what a status LIGHT is — "this is live", "this is recording", "this is
