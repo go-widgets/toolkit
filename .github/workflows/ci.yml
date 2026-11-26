@@ -113,6 +113,7 @@ jobs:
   test-arm64:
     name: Test (linux/arm64, native)
     runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
@@ -123,9 +124,47 @@ jobs:
       - name: go test
         run: go test ./...
 
+  # The other four 64-bit targets run under QEMU user-mode, registered through
+  # binfmt_misc (the fleet's pattern, vcdiff's ci.yml). With the handlers
+  # installed the kernel runs a foreign test binary directly, so `go test` runs
+  # it exactly as on the native lanes: from the package directory of the
+  # checkout, which the source-reading tests (MVVM gate, module walk) need.
+  # s390x is big-endian, so it is a genuine byte-order test.
+  test-qemu:
+    name: Test (${{ matrix.goarch }}, qemu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: riscv64
+            qemu_cpu: "rv64,v=true,vlen=128"
+          - goarch: loong64
+            qemu_cpu: la464
+          - goarch: ppc64le
+            qemu_cpu: power9
+          - goarch: s390x
+            qemu_cpu: qemu
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.4"
+          check-latest: true
+          cache: true
+      - name: Register QEMU (binfmt)
+        run: docker run --privileged --rm tonistiigi/binfmt --install all
+      - name: go test under QEMU
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          QEMU_CPU: ${{ matrix.qemu_cpu }}
+        run: go test -timeout 100m ./...
+
   test-wasm:
     name: Test (js/wasm, node)
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v7
       - uses: actions/setup-go@v7
