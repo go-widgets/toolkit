@@ -10,7 +10,7 @@ require (
 require (
 	github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 // indirect
 	github.com/go-crdt/crdt v0.59.0 // indirect
-	github.com/go-gfx/gfx v0.41.0 // indirect
+	github.com/go-gfx/gfx v0.42.0 // indirect
 	github.com/go-images/images v0.3.0 // indirect
 	github.com/go-opentype/fonts v0.14.0 // indirect
 	github.com/go-opentype/opentype v0.20.0 // indirect
@@ -18,11 +18,13 @@ require (
 	github.com/go-regexp/engine v0.3.2 // indirect
 	github.com/go-richdoc/richdoc v0.7.0 // indirect
 	github.com/go-ruby-regexp/regexp v0.1.1 // indirect
+	github.com/go-simd/floats v0.42.0 // indirect
 	github.com/go-typeset/bidi v0.3.1 // indirect
 	github.com/go-widgets/mvvm v0.15.0 // indirect
 	github.com/go-widgets/painter v0.19.0 // indirect
 	github.com/go-widgets/textinput v0.1.0 // indirect
 	github.com/go-widgets/vcs v0.1.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
 
 // rougelex is developed in-tree against the parent toolkit working copy. An

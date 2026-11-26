@@ -40,8 +40,10 @@ func drawBuiltinIcon(p painter.Painter, r Rect, name string, ink RGBA) {
 // real icon-pack glyph without re-parsing the SVG every frame.
 //
 // ink recolours the SVG's default / currentColor fills; a pack whose icons carry
-// their own colours keeps them. A document that fails to parse caches empty and
-// draws nothing, so one bad icon never panics a tree. A painter that cannot blit
+// their own colours keeps them. A document that fails to parse, is refused by
+// the rasteriser's resource limits (1 MiB, 20,000 elements, 200,000 path
+// segments -- safe for server-supplied logos), or makes it panic, caches empty
+// and draws nothing, so one bad icon never panics a tree. A painter that cannot blit
 // an image draws nothing (only PixelPainter and CellPainter implement
 // painter.ImagePainter — both do).
 func SVGIcon(doc string) func(p painter.Painter, r Rect, ink RGBA) {
@@ -104,15 +106,44 @@ func rasterizeIcon(doc string, ink RGBA, size int) iconRaster {
 	if v, ok := iconCache.Load(key); ok {
 		return v.(iconRaster)
 	}
-	var ras iconRaster
-	res, err := svg.Rasterize(doc, svg.Options{
-		Scale: iconScale(doc, float64(size)),
-		Ink:   color.RGBA{R: ink.R, G: ink.G, B: ink.B, A: ink.A},
+	ras := safeRasterize(doc, ink, size)
+	iconCache.Store(key, ras)
+	return ras
+}
+
+// Icon documents may come from a server (a logo), so the rasteriser is held to
+// icon-sized ceilings: a document past one is refused with a *svg.LimitError
+// and the icon draws nothing. These are far below the svg package's defaults.
+const (
+	iconMaxBytes    = 1 << 20
+	iconMaxElements = 20_000
+	iconMaxSegments = 200_000
+	iconMaxPixels   = 2 * maxIconPx * maxIconPx
+)
+
+// rasterizeSVG is svg.Rasterize; a variable so a test can make it panic.
+var rasterizeSVG = svg.Rasterize
+
+// safeRasterize renders one icon. Any failure -- a refused document, a parse
+// error or a panic inside the rasteriser -- yields the empty raster, so an
+// icon that fails draws nothing and never takes the program down.
+func safeRasterize(doc string, ink RGBA, size int) (ras iconRaster) {
+	defer func() {
+		if recover() != nil {
+			ras = iconRaster{}
+		}
+	}()
+	res, err := rasterizeSVG(doc, svg.Options{
+		Scale:       iconScale(doc, float64(size)),
+		Ink:         color.RGBA{R: ink.R, G: ink.G, B: ink.B, A: ink.A},
+		MaxBytes:    iconMaxBytes,
+		MaxElements: iconMaxElements,
+		MaxSegments: iconMaxSegments,
+		MaxPixels:   iconMaxPixels,
 	})
 	if err == nil && res != nil && res.Image != nil && res.Image.W > 0 && res.Image.H > 0 {
 		ras = iconRaster{pix: res.Image.Pix, w: res.Image.W, h: res.Image.H}
 	}
-	iconCache.Store(key, ras)
 	return ras
 }
 
