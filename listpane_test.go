@@ -290,6 +290,37 @@ func TestListPaneNilContentAndZeroSize(t *testing.T) {
 	(&ListPane{}).Draw(newP(buf, 20), DefaultLight()) // a literal, never laid out
 }
 
+func TestListPaneSetAddTextWithoutAddIsANoOp(t *testing.T) {
+	p := NewListPane(nil, ListBarWindows)
+	p.Add = nil
+	p.SetAddText("Add Tunnel") // must not panic
+}
+
+func TestListPaneButtonAtFindsTheButtonUnderAPaneLocalPoint(t *testing.T) {
+	f := newListPaneFixture(ListBarMac, true)
+	r := f.pane.Bounds()
+	for _, b := range []*Button{f.pane.Add, f.pane.Remove, f.pane.Extra[0]} {
+		sx, sy := centreOf(b.Bounds())
+		if got := f.pane.ButtonAt(sx-r.X, sy-r.Y); got != b {
+			t.Errorf("ButtonAt(%d,%d) = %p, want %p", sx-r.X, sy-r.Y, got, b)
+		}
+	}
+	if got := f.pane.ButtonAt(5, 5); got != nil {
+		t.Errorf("ButtonAt over the list = %v, want nil", got)
+	}
+}
+
+func TestListPaneEmptyBoundsPaintNothing(t *testing.T) {
+	f := newListPaneFixture(ListBarGNOME, true)
+	f.pane.SetBounds(Rect{X: 5, Y: 5})
+	buf := makeSurface(40, 40)
+	before := append([]byte(nil), buf...)
+	f.pane.Draw(newP(buf, 40), DefaultLight())
+	if string(before) != string(buf) {
+		t.Error("a pane with empty bounds painted pixels")
+	}
+}
+
 func TestListPaneDrawsADistinctBarInsideAFrame(t *testing.T) {
 	th := DefaultLight()
 	if th.SurfaceAlt == th.Surface {

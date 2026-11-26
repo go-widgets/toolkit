@@ -487,9 +487,8 @@ func (p *ListPane) OnEvent(ev Event) {
 			return
 		}
 	}
-	if p.lay.bar.Contains(sx, sy) {
-		return // filler, separator, padding: inert
-	}
+	// Filler, separator and padding of the bar are inert: the content's bounds
+	// stop above the bar, so its HitTest refuses them.
 	if p.Content != nil && p.Content.HitTest(sx, sy) {
 		toContent()
 	}

@@ -326,9 +326,6 @@ func DrawIconMinus(p painter.Painter, r Rect, ink RGBA) {
 	inset := iconInset(r)
 	x, y := r.X+inset, r.Y+inset
 	w, h := r.W-2*inset, r.H-2*inset
-	if w < 1 || h < 1 {
-		return
-	}
 	side := w
 	if h < side {
 		side = h
@@ -342,7 +339,7 @@ func DrawIconMinus(p painter.Painter, r Rect, ink RGBA) {
 	if (side-thick)%2 != 0 {
 		thick++
 	}
-	fillRect(p, x, y+(side-thick)/2, side, thick, ink)
+	fillRect(p, x, y+(side-thick)/2, side, thick, ink) // fillRect refuses a side below 1
 }
 
 // DrawIconDot paints a filled disc: the smallest thing a picture can say.
