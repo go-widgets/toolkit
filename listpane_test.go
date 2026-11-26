@@ -523,3 +523,62 @@ func TestListPaneWritesPNGs(t *testing.T) {
 		fh.Close()
 	}
 }
+
+// inkBox is the bounding box of the ink-coloured pixels of a w x h surface.
+func inkBox(buf []byte, w, h int, ink RGBA) (x0, y0, x1, y1 int, ok bool) {
+	x0, y0, x1, y1 = w, h, -1, -1
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if pixelAt(buf, w, x, y) == ink {
+				x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
+			}
+		}
+	}
+	return x0, y0, x1, y1, x1 >= 0
+}
+
+// TestListPaneMinusIsThePlusBar: in every style, the pane's Remove glyph is the
+// horizontal bar of its Add glyph at the same button size -- inside its box, as
+// long and as thick -- and in the Windows style both match the plus of a captioned
+// Add (SetAddText), which sits beside the minus in the same bar.
+func TestListPaneMinusIsThePlusBar(t *testing.T) {
+	ink := RGB(0xFF, 0, 0)
+	const w, h = 40, 40
+	box := Rect{X: 4, Y: 6, W: lpWinBtnW, H: lpWinBarH}
+	for _, st := range []ListBarStyle{ListBarMac, ListBarWindows, ListBarGNOME} {
+		p := NewListPane(nil, st)
+		pl, mi := makeSurface(w, h), makeSurface(w, h)
+		p.Add.Icon(newP(pl, w), box, ink)
+		p.Remove.Icon(newP(mi, w), box, ink)
+		px0, py0, px1, py1, ok1 := inkBox(pl, w, h, ink)
+		mx0, my0, mx1, my1, ok2 := inkBox(mi, w, h, ink)
+		if !ok1 || !ok2 {
+			t.Fatalf("style %d: a glyph drew nothing", st)
+		}
+		if mx0 < px0 || mx1 > px1 || my0 < py0 || my1 > py1 {
+			t.Errorf("style %d: minus box (%d,%d)-(%d,%d) is not inside plus box (%d,%d)-(%d,%d)", st, mx0, my0, mx1, my1, px0, py0, px1, py1)
+		}
+		if mx1-mx0 != px1-px0 {
+			t.Errorf("style %d: minus is %d wide, plus %d", st, mx1-mx0+1, px1-px0+1)
+		}
+		thick := 0 // the plus's leftmost column holds its horizontal bar only
+		for y := 0; y < h; y++ {
+			if pixelAt(pl, w, px0, y) == ink {
+				thick++
+			}
+		}
+		if got := my1 - my0 + 1; got != thick {
+			t.Errorf("style %d: minus is %d thick, the plus bar %d", st, got, thick)
+		}
+		if st != ListBarWindows {
+			continue
+		}
+		gh := p.Add.glyphHeight()
+		lead := makeSurface(w, h)
+		DrawIconPlus(newP(lead, w), Rect{X: 4, Y: 4, W: gh, H: gh}, ink)
+		lx0, _, lx1, _, _ := inkBox(lead, w, h, ink)
+		if mx1-mx0 != lx1-lx0 {
+			t.Errorf("windows: minus is %d wide, the captioned Add's plus %d", mx1-mx0+1, lx1-lx0+1)
+		}
+	}
+}

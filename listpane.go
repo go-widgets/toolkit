@@ -127,12 +127,13 @@ type listPaneLayout struct {
 // Nothing is wired: set Add.OnClick and Remove.OnClick.
 func NewListPane(content Widget, style ListBarStyle) *ListPane {
 	add := NewButton(Tr("listpane.add", "Add"), nil)
-	add.Icon = listPaneGlyph(DrawIconPlus)
 	add.Flat = true
 	rm := NewButton(Tr("listpane.remove", "Remove"), nil)
-	rm.Icon = listPaneGlyph(DrawIconMinus)
 	rm.Flat = true
-	return &ListPane{Content: content, Style: style, Add: add, Remove: rm}
+	p := &ListPane{Content: content, Style: style, Add: add, Remove: rm}
+	add.Icon = p.glyph(add, DrawIconPlus)
+	rm.Icon = p.glyph(rm, DrawIconMinus)
+	return p
 }
 
 // barNode is the bar's accessibility node, created on first use so a pane built
@@ -144,11 +145,16 @@ func (p *ListPane) barNode() *listPaneBar {
 	return p.bar
 }
 
-// listPaneGlyph centres draw in a square a little over half the button's height,
-// the weight of a smallSquare button's symbol.
-func listPaneGlyph(draw func(painter.Painter, Rect, RGBA)) func(painter.Painter, Rect, RGBA) {
+// glyph centres draw in a square a little over half the button's height, the
+// weight of a smallSquare button's symbol. In the Windows style the square is the
+// text's glyph height instead: the very box the captioned Add (SetAddText) draws
+// its plus in, so the plus and the minus have the same bar beside each other.
+func (p *ListPane) glyph(b *Button, draw func(painter.Painter, Rect, RGBA)) func(painter.Painter, Rect, RGBA) {
 	return func(pt painter.Painter, r Rect, ink RGBA) {
 		s := r.H * 14 / 24
+		if p.Style == ListBarWindows {
+			s = b.glyphHeight()
+		}
 		if s < 5 {
 			s = 5
 		}
