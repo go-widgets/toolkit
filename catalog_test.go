@@ -132,6 +132,10 @@ func TestNegotiateLocale(t *testing.T) {
 			t.Errorf("NegotiateLocale(%v) = %q, want %q", c.req, got, c.want)
 		}
 	}
+	// An exact match wins over an earlier entry of the same language.
+	if got := NegotiateLocale([]string{"fr-CA"}, []string{"fr-FR", "fr-CA"}, "en"); got != "fr-CA" {
+		t.Errorf("exact match after a same-language entry: %q, want %q", got, "fr-CA")
+	}
 	if got := testCatalog().Negotiate([]string{"fr-BE"}); got != "fr" {
 		t.Fatalf("Catalog.Negotiate: %q", got)
 	}
