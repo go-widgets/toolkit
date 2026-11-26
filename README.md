@@ -202,7 +202,9 @@ empty of work and avoids importing packages whose `init` drags code in:
   Iconoir names imports **`github.com/go-widgets/toolkit/iconoir`** and pays for
   the whole set on purpose; one that draws a known handful hands their SVGs to
   `SVGIcon`. A wasm program holding a `RichEditorToolbar` went from 1.52 MB to
-  1.32 MB gzipped (5.87 → 4.75 MB raw).
+  1.32 MB gzipped (5.87 → 4.75 MB raw). An icon-only bar button draws its
+  glyph at a fraction of the button with `SVGGlyph(svg, num, den)`; a small
+  Tabler set is in `github.com/go-widgets/tabler-icons`.
 
 Measured with `go build -ldflags=-dumpdep` on a `GOOS=js GOARCH=wasm` program
 that draws one `Label` (`-ldflags="-s -w"`, gzip -9):
