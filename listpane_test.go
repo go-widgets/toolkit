@@ -293,7 +293,12 @@ func TestListPaneNilContentAndZeroSize(t *testing.T) {
 func TestListPaneSetAddTextWithoutAddIsANoOp(t *testing.T) {
 	p := NewListPane(nil, ListBarWindows)
 	p.Add = nil
-	p.SetAddText("Add Tunnel") // must not panic
+	defer func() {
+		if r := recover(); r != nil {
+			t.Errorf("SetAddText without an Add panicked: %v", r)
+		}
+	}()
+	p.SetAddText("Add Tunnel")
 }
 
 func TestListPaneButtonAtFindsTheButtonUnderAPaneLocalPoint(t *testing.T) {

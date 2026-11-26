@@ -318,9 +318,6 @@ func (p *ListPane) ButtonAt(x, y int) *Button {
 // pane's bounds.
 func (p *ListPane) Draw(p2 painter.Painter, theme *Theme) {
 	r := p.Bounds()
-	if r.W <= 0 || r.H <= 0 {
-		return
-	}
 	if len(p.lay.buttons) != len(p.barButtons()) {
 		p.SetBounds(r) // buttons added after the last layout
 	}
