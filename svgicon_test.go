@@ -5,8 +5,10 @@
 package toolkit
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/go-gfx/gfx/svg"
 	"github.com/go-widgets/painter"
 )
 
@@ -153,5 +155,48 @@ func TestIconRastersAtTheBoxSize(t *testing.T) {
 	SVGIcon(`<svg width="40" height="40"><rect width="40" height="40" fill="#ff0000"/></svg>`)(painter.NewPixelPainter(big, 8, 8), Rect{W: 8, H: 8}, RGBA{A: 255})
 	if big[(4*8+4)*4] < 180 {
 		t.Error("a viewBox-less icon was not scaled into its box")
+	}
+}
+
+// blank reports whether the 24x24 box drawn by draw stayed fully transparent.
+func blank(draw func(painter.Painter, Rect, RGBA)) bool {
+	buf := make([]byte, 24*24*4)
+	draw(painter.NewPixelPainter(buf, 24, 24), Rect{W: 24, H: 24}, RGBA{A: 255})
+	for _, b := range buf {
+		if b != 0 {
+			return false
+		}
+	}
+	return true
+}
+
+// TestSVGIconRefusedDocumentDrawsNothing: a document past the icon ceilings is
+// refused by the rasteriser and draws nothing; the same shape within them draws.
+func TestSVGIconRefusedDocumentDrawsNothing(t *testing.T) {
+	var many strings.Builder
+	many.WriteString(`<svg viewBox="0 0 10 10" xmlns="http://www.w3.org/2000/svg">`)
+	for range iconMaxElements + 1 {
+		many.WriteString(`<g/>`)
+	}
+	many.WriteString(`</svg>`)
+	if !blank(SVGIcon(many.String())) {
+		t.Error("a document past the element ceiling drew something")
+	}
+	deep := strings.Repeat("<g>", 100_000) + strings.Repeat("</g>", 100_000)
+	if !blank(SVGIcon(`<svg viewBox="0 0 10 10">` + deep + `</svg>`)) {
+		t.Error("a 100000-deep document drew something")
+	}
+	if blank(SVGIcon(redSquareSVG)) {
+		t.Error("a small document drew nothing")
+	}
+}
+
+// TestSVGIconPanicDrawsNothing: a panic inside the rasteriser is contained.
+func TestSVGIconPanicDrawsNothing(t *testing.T) {
+	old := rasterizeSVG
+	defer func() { rasterizeSVG = old }()
+	rasterizeSVG = func(string, svg.Options) (*svg.Result, error) { panic("boom") }
+	if !blank(SVGIcon(`<svg viewBox="0 0 10 10"><rect width="9" height="9" fill="#123456"/></svg>`)) {
+		t.Error("an icon whose rasteriser panicked drew something")
 	}
 }
