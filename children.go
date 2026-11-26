@@ -72,6 +72,10 @@ func (g *ButtonGroup) Children() []Widget {
 	return out
 }
 
+// Children yields the list, then the bar: a toolbar node whose own children are
+// the bar's buttons, so a reader finds them inside it.
+func (p *ListPane) Children() []Widget { return nonNil(p.Content, p.barNode()) }
+
 // Children yields the five regions in reading order: the edges clockwise from
 // the top, then the centre.
 func (b *Border) Children() []Widget {

@@ -77,6 +77,7 @@ var disabledA11yCatalogue = map[string]func() Accessible{
 	"IsoIconPalette": func() Accessible { return NewIsoIconPalette(NewIsoIconRegistry()) },
 	"Link":           func() Accessible { return NewLink("l", nil) },
 	"ListBox":        func() Accessible { return NewListBox([]string{"a"}) },
+	"ListPane":       func() Accessible { return NewListPane(NewListBox([]string{"a"}), ListBarMac) },
 	"WrapList":       func() Accessible { return NewWrapList([]string{"a"}) },
 	"Menu":           func() Accessible { return NewMenu([]MenuItem{{Label: "a"}}) },
 	"MenuBar":        func() Accessible { return NewMenuBar() },
@@ -586,6 +587,11 @@ func disabledContainerCases() map[string]struct {
 			g := NewButtonGroup(NewButton("a", nil), NewButton("b", nil))
 			return g, g.Disabled()
 		}, 2},
+		"ListPane": {func() (Widget, *mvvm.Observable[bool]) {
+			l := NewListPane(NewButton("c", nil), ListBarMac)
+			l.Extra = []*Button{NewButton("x", nil)}
+			return l, l.Disabled()
+		}, 5}, // content, bar, add, remove, extra (the pane's own node is skipped)
 		"FormField": {func() (Widget, *mvvm.Observable[bool]) {
 			f := NewFormField("f", NewEntry(""))
 			return f, f.Disabled()
