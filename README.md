@@ -376,6 +376,13 @@ model, not the widget catalogue:
   the core widgets (Button/Label/Entry/CheckButton/RadioButton/
   Switch/Scale), plus `CollectA11y([]Widget)` so a host republishes
   them to the platform layer (WAI-ARIA on wasm, TTY metadata on tui).
+- ~~**Application i18n and theme mode**~~ — **done**: `Catalog` (per-locale
+  message tables, plugs into `SetLocalizer`), `NegotiateLocale` (browser
+  languages → best match → fallback), `i18ntest.Check` (fails on a key missing
+  from a locale or a translation whose fmt verbs differ), a theme registry
+  (`RegisterThemeFamily`) and `ThemeManager` with `ThemeMode`
+  Dark / Light / System; System follows a host-provided `ColorScheme`
+  (prefers-color-scheme in a browser) live and tells its subscribers.
 
 ## Architecture
 
