@@ -5,6 +5,7 @@
 package toolkit
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
@@ -198,5 +199,59 @@ func TestSVGIconPanicDrawsNothing(t *testing.T) {
 	rasterizeSVG = func(string, svg.Options) (*svg.Result, error) { panic("boom") }
 	if !blank(SVGIcon(`<svg viewBox="0 0 10 10"><rect width="9" height="9" fill="#123456"/></svg>`)) {
 		t.Error("an icon whose rasteriser panicked drew something")
+	}
+}
+
+// TestIconCacheStaysBoundedUnderADistinctStream: a stream of distinct documents
+// (a server handing out logos) cannot grow the cache past its two ceilings.
+func TestIconCacheStaysBoundedUnderADistinctStream(t *testing.T) {
+	for i := range 3 * maxIconCacheEntries {
+		doc := fmt.Sprintf(`<svg viewBox="0 0 10 10"><rect width="%d" height="10" fill="#123456"/><!-- %d --></svg>`, 1+i%10, i)
+		if rasterizeIcon(doc, RGBA{A: 255}, 64).pix == nil {
+			t.Fatalf("doc %d did not rasterise", i)
+		}
+	}
+	iconCache.mu.Lock()
+	n, b := iconCache.order.Len(), iconCache.bytes
+	iconCache.mu.Unlock()
+	if n > maxIconCacheEntries || b > maxIconCacheBytes {
+		t.Errorf("cache holds %d entries / %d bytes, ceilings %d / %d", n, b, maxIconCacheEntries, maxIconCacheBytes)
+	}
+	if n != maxIconCacheEntries {
+		t.Errorf("cache holds %d entries after 3x the cap, want exactly the cap", n)
+	}
+}
+
+// TestIconLRUEvictsLeastRecentlyUsedAndByBytes covers both ceilings and the
+// recency order.
+func TestIconLRUEvictsLeastRecentlyUsedAndByBytes(t *testing.T) {
+	key := func(n int) iconKey { return iconKey{size: n} }
+	ras := func(n int) iconRaster { return iconRaster{pix: make([]byte, n), w: 1, h: 1} }
+
+	c := newIconLRU(2, 1<<20)
+	c.put(key(1), ras(1))
+	c.put(key(2), ras(1))
+	if _, ok := c.get(key(1)); !ok { // 1 becomes the most recent
+		t.Fatal("entry 1 missing")
+	}
+	c.put(key(3), ras(1)) // evicts 2, the least recent
+	if _, ok := c.get(key(2)); ok {
+		t.Error("the least recently used entry survived")
+	}
+	for _, k := range []int{1, 3} {
+		if _, ok := c.get(key(k)); !ok {
+			t.Errorf("entry %d was evicted", k)
+		}
+	}
+	c.put(key(3), ras(1)) // a duplicate put changes nothing
+	if c.order.Len() != 2 || c.bytes != 2 {
+		t.Errorf("duplicate put: %d entries, %d bytes", c.order.Len(), c.bytes)
+	}
+
+	b := newIconLRU(100, 10)
+	b.put(key(1), ras(6))
+	b.put(key(2), ras(6)) // 12 > 10: the older goes
+	if _, ok := b.get(key(1)); ok || b.bytes != 6 {
+		t.Errorf("byte ceiling: entry 1 kept=%v, bytes=%d", ok, b.bytes)
 	}
 }
