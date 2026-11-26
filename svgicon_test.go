@@ -222,6 +222,24 @@ func TestIconCacheStaysBoundedUnderADistinctStream(t *testing.T) {
 	}
 }
 
+// TestIconIsRasterisedOncePerKey: the cache answers the second draw.
+func TestIconIsRasterisedOncePerKey(t *testing.T) {
+	old := rasterizeSVG
+	defer func() { rasterizeSVG = old }()
+	calls := 0
+	rasterizeSVG = func(doc string, o svg.Options) (*svg.Result, error) { calls++; return old(doc, o) }
+	doc := `<svg viewBox="0 0 10 10"><rect width="9" height="9"/><!-- once per key -->` + `</svg>`
+	rasterizeIcon(doc, RGBA{A: 255}, 32)
+	rasterizeIcon(doc, RGBA{A: 255}, 32)
+	if calls != 1 {
+		t.Errorf("rasterised %d times, want 1", calls)
+	}
+	rasterizeIcon(doc, RGBA{A: 255}, 33) // another size is another key
+	if calls != 2 {
+		t.Errorf("rasterised %d times after a new size, want 2", calls)
+	}
+}
+
 // TestIconLRUEvictsLeastRecentlyUsedAndByBytes covers both ceilings and the
 // recency order.
 func TestIconLRUEvictsLeastRecentlyUsedAndByBytes(t *testing.T) {
@@ -231,6 +249,9 @@ func TestIconLRUEvictsLeastRecentlyUsedAndByBytes(t *testing.T) {
 	c := newIconLRU(2, 1<<20)
 	c.put(key(1), ras(1))
 	c.put(key(2), ras(1))
+	if r, ok := newIconLRU(2, 1<<20).get(key(9)); ok || r.pix != nil || r.w != 0 {
+		t.Error("a miss on an empty cache must return the zero raster and false")
+	}
 	if _, ok := c.get(key(1)); !ok { // 1 becomes the most recent
 		t.Fatal("entry 1 missing")
 	}
@@ -246,6 +267,9 @@ func TestIconLRUEvictsLeastRecentlyUsedAndByBytes(t *testing.T) {
 	c.put(key(3), ras(1)) // a duplicate put changes nothing
 	if c.order.Len() != 2 || c.bytes != 2 {
 		t.Errorf("duplicate put: %d entries, %d bytes", c.order.Len(), c.bytes)
+	}
+	if _, ok := c.get(key(1)); !ok {
+		t.Error("a duplicate put evicted a live entry")
 	}
 
 	b := newIconLRU(100, 10)
