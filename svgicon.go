@@ -5,6 +5,8 @@
 package toolkit
 
 import (
+	"container/list"
+	"crypto/sha256"
 	"image/color"
 	"strconv"
 	"strings"
@@ -43,10 +45,13 @@ func drawBuiltinIcon(p painter.Painter, r Rect, name string, ink RGBA) {
 // their own colours keeps them. A document that fails to parse, is refused by
 // the rasteriser's resource limits (1 MiB, 20,000 elements, 200,000 path
 // segments -- safe for server-supplied logos), or makes it panic, caches empty
-// and draws nothing, so one bad icon never panics a tree. A painter that cannot blit
+// and draws nothing, so one bad icon never panics a tree. The cache of
+// rasterised icons is bounded (512 icons, 32 MiB of pixels, least recently drawn
+// evicted), so a program may hand SVGIcon any number of distinct documents. A painter that cannot blit
 // an image draws nothing (only PixelPainter and CellPainter implement
 // painter.ImagePainter — both do).
 func SVGIcon(doc string) func(p painter.Painter, r Rect, ink RGBA) {
+	sum := sha256.Sum256([]byte(doc))
 	return func(p painter.Painter, r Rect, ink RGBA) {
 		if r.W <= 0 || r.H <= 0 {
 			return
@@ -55,7 +60,7 @@ func SVGIcon(doc string) func(p painter.Painter, r Rect, ink RGBA) {
 		if !ok {
 			return
 		}
-		ras := rasterizeIcon(doc, ink, iconTargetPx(r))
+		ras := rasterizeIconSum(doc, sum, ink, iconTargetPx(r))
 		if ras.pix == nil {
 			return
 		}
@@ -84,30 +89,93 @@ type iconRaster struct {
 	w, h int
 }
 
-// iconKey identifies a cached raster by its source document, recolour ink and
-// pixel size.
+// iconKey identifies a cached raster by the SHA-256 of its source document
+// (never the document itself: a key holding a server-supplied string would keep
+// up to 1 MiB alive per entry), the recolour ink and the pixel size.
 type iconKey struct {
-	doc  string
+	doc  [sha256.Size]byte
 	ink  RGBA
 	size int
 }
 
+// The icon cache is bounded, because the documents may come from a server and
+// a stream of distinct ones must not grow it without limit: at most
+// maxIconCacheEntries rasters and maxIconCacheBytes of pixels, the least
+// recently drawn evicted first. An evicted icon is simply rasterised again.
+const (
+	maxIconCacheEntries = 512
+	maxIconCacheBytes   = 32 << 20
+)
+
+// iconLRU is a mutex-guarded LRU of rasterised icons, bounded in entries and in
+// pixel bytes. It is safe for concurrent use (a native host may draw off the
+// main goroutine); the wasm host is single-threaded and pays nothing.
+type iconLRU struct {
+	mu         sync.Mutex
+	maxEntries int
+	maxBytes   int
+	bytes      int
+	order      *list.List // front = most recently used; values are *iconEntry
+	byKey      map[iconKey]*list.Element
+}
+
+type iconEntry struct {
+	key iconKey
+	ras iconRaster
+}
+
+func newIconLRU(maxEntries, maxBytes int) *iconLRU {
+	return &iconLRU{maxEntries: maxEntries, maxBytes: maxBytes, order: list.New(), byKey: map[iconKey]*list.Element{}}
+}
+
+func (c *iconLRU) get(k iconKey) (iconRaster, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	e, ok := c.byKey[k]
+	if !ok {
+		return iconRaster{}, false
+	}
+	c.order.MoveToFront(e)
+	return e.Value.(*iconEntry).ras, true
+}
+
+func (c *iconLRU) put(k iconKey, ras iconRaster) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if e, ok := c.byKey[k]; ok { // two goroutines rasterised the same icon
+		c.order.MoveToFront(e)
+		return
+	}
+	c.byKey[k] = c.order.PushFront(&iconEntry{key: k, ras: ras})
+	c.bytes += len(ras.pix)
+	for c.order.Len() > c.maxEntries || c.bytes > c.maxBytes {
+		last := c.order.Back() // never nil: the loop runs only while over a bound
+		ev := c.order.Remove(last).(*iconEntry)
+		delete(c.byKey, ev.key)
+		c.bytes -= len(ev.ras.pix)
+	}
+}
+
 // iconCache memoises rasterised icons so the SVG is parsed once per (doc, ink,
-// size), not once per frame. It is safe for concurrent use (a native host may
-// draw off the main goroutine); the wasm host is single-threaded and pays
-// nothing.
-var iconCache sync.Map // iconKey -> iconRaster
+// size), not once per frame.
+var iconCache = newIconLRU(maxIconCacheEntries, maxIconCacheBytes)
 
 // rasterizeIcon renders doc so its viewBox's longer side is size pixels,
 // recoloured to ink, with a transparent background, and caches the result
 // (empty on any parse error).
 func rasterizeIcon(doc string, ink RGBA, size int) iconRaster {
-	key := iconKey{doc: doc, ink: ink, size: size}
-	if v, ok := iconCache.Load(key); ok {
-		return v.(iconRaster)
+	return rasterizeIconSum(doc, sha256.Sum256([]byte(doc)), ink, size)
+}
+
+// rasterizeIconSum is rasterizeIcon with the document's digest already taken,
+// so a drawer hashes its document once rather than once per frame.
+func rasterizeIconSum(doc string, sum [sha256.Size]byte, ink RGBA, size int) iconRaster {
+	key := iconKey{doc: sum, ink: ink, size: size}
+	if ras, ok := iconCache.get(key); ok {
+		return ras
 	}
 	ras := safeRasterize(doc, ink, size)
-	iconCache.Store(key, ras)
+	iconCache.put(key, ras)
 	return ras
 }
 
