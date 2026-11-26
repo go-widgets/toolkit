@@ -128,12 +128,24 @@ func TestExplicitRefreshSupersedesTheAsyncOne(t *testing.T) {
 	repo.ignoreCtx = true
 	f, posted := asyncTree(repo)
 	old := <-repo.calls
-	done := make(chan error, 1)
-	go func() { done <- f.RefreshStatus(context.Background()) }()
-	explicit := <-repo.calls
-	explicit.reply <- slowReply{states: modified("docs/guide.md")}
-	if err := <-done; err != nil {
-		t.Fatal(err)
+	if syncStatusBlocks {
+		// On js/wasm a synchronous Status would block the only thread: the explicit
+		// refresh is refused without asking, and the newer refresh is the async one.
+		if err := f.RefreshStatus(context.Background()); !errors.Is(err, ErrSyncStatusBlocks) {
+			t.Fatalf("RefreshStatus = %v, want ErrSyncStatusBlocks", err)
+		}
+		f.RefreshStatusAsync()
+		explicit := <-repo.calls
+		explicit.reply <- slowReply{states: modified("docs/guide.md")}
+		(<-posted)()
+	} else {
+		done := make(chan error, 1)
+		go func() { done <- f.RefreshStatus(context.Background()) }()
+		explicit := <-repo.calls
+		explicit.reply <- slowReply{states: modified("docs/guide.md")}
+		if err := <-done; err != nil {
+			t.Fatal(err)
+		}
 	}
 	old.reply <- slowReply{states: modified("README.md")}
 	(<-posted)()
