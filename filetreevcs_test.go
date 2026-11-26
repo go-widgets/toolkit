@@ -306,11 +306,15 @@ func TestRefreshStatusPassesTheContext(t *testing.T) {
 		// js/wasm: no caller context reaches Status (the tree owns the context of
 		// its asynchronous refresh); what is asserted is that the tree cancels it
 		// when a newer refresh supersedes it, so a stale answer never lands.
+		// The first refresh answers Modified before the second is started, and its
+		// answer is held back; the second answers Deleted. They are applied newest
+		// first, so a stale answer that is not discarded ends up on top.
 		repo.Set(map[string]vcs.State{"README.md": vcs.Modified})
 		f.RefreshStatusAsync()
+		h.wait()
 		repo.Set(map[string]vcs.State{"README.md": vcs.Deleted})
 		f.RefreshStatusAsync()
-		h.settle()
+		h.drainNewestFirst()
 		if got := f.Marks().Get()["README.md"]; got != FileDeleted {
 			t.Errorf("after two refreshes README.md = %v, want the newer FileDeleted", got)
 		}

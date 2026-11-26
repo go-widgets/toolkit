@@ -154,7 +154,9 @@ jobs:
           check-latest: true
           cache: true
       - name: Register QEMU (binfmt)
-        run: docker run --privileged --rm tonistiigi/binfmt --install all
+        # Pinned by digest (the index of tonistiigi/binfmt:qemu-v10.2.3-68, read
+        # from the registry), and only the four emulators the matrix uses.
+        run: docker run --privileged --rm tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 --install riscv64,loong64,ppc64le,s390x
       - name: go test under QEMU
         env:
           GOARCH: ${{ matrix.goarch }}

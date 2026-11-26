@@ -47,26 +47,52 @@ func (h *vcsHarness) post(apply func()) {
 	h.cond.Broadcast()
 }
 
-// drain waits until every Status call made so far has posted its answer, then
-// runs the queued closures on the calling goroutine, in order.
-func (h *vcsHarness) drain() {
-	// A refresh the tree just started has not called Status yet: its goroutine has
-	// not run (on js/wasm nothing runs until this one yields). Let them run, so
-	// that Calls counts every refresh started, then wait for their answers.
+// drain waits until every Status call made so far has posted its answer (a refresh
+// the tree just started has not called Status yet: on js/wasm its goroutine runs
+// only when this one yields), then runs the queued closures on the calling
+// goroutine, in order.
+func (h *vcsHarness) drain() { h.collect(false) }
+
+// drainNewestFirst is drain with the answers applied in reverse: the newer
+// refresh's answer lands BEFORE the older one's, the order in which a stale answer
+// overwrites a fresh one unless the tree discards it.
+func (h *vcsHarness) drainNewestFirst() { h.collect(true) }
+
+// wait lets every refresh started so far call Status and post its answer, and
+// applies none of them.
+func (h *vcsHarness) wait() {
+	h.mu.Lock()
+	h.waitLocked()
+	h.mu.Unlock()
+}
+
+func (h *vcsHarness) waitLocked() {
+	h.mu.Unlock()
 	for range 3 {
 		runtime.Gosched()
 	}
+	h.mu.Lock()
 	calls := 0
 	for _, r := range h.repos {
 		calls += r.Calls()
 	}
-	h.mu.Lock()
 	for h.posted < calls {
 		h.cond.Wait()
 	}
+}
+
+func (h *vcsHarness) collect(reverse bool) {
+	h.mu.Lock()
+	h.waitLocked()
 	q := h.queue
 	h.queue = nil
 	h.mu.Unlock()
+	if reverse {
+		for i := len(q) - 1; i >= 0; i-- {
+			q[i]()
+		}
+		return
+	}
 	for _, apply := range q {
 		apply()
 	}
