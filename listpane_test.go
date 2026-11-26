@@ -315,6 +315,89 @@ func TestListPaneButtonAtFindsTheButtonUnderAPaneLocalPoint(t *testing.T) {
 	}
 }
 
+func TestListPaneRelaysOutWhenButtonsWereAddedAfterTheLastLayout(t *testing.T) {
+	f := newListPaneFixture(ListBarMac, false)
+	f.pane.Extra = []*Button{NewButton("x", nil)}
+	buf := makeSurface(240, 170)
+	f.pane.Draw(newP(buf, 240), DefaultLight())
+	if got := len(f.pane.lay.buttons); got != 3 {
+		t.Errorf("laid-out buttons = %d, want 3 after Draw", got)
+	}
+}
+
+func TestListPaneDrawsEveryButtonState(t *testing.T) {
+	th := DefaultLight()
+	for _, st := range []ListBarStyle{ListBarMac, ListBarWindows, ListBarGNOME} {
+		face := func(setup func(f *listPaneFixture)) RGBA {
+			f := newListPaneFixture(st, false)
+			setup(f)
+			const w, h = 240, 170
+			buf := makeSurface(w, h)
+			f.pane.Draw(newP(buf, w), th)
+			b := f.pane.Add.Bounds() // a pixel at the top edge, off the glyph
+			return pixelAt(buf, w, b.X+b.W/2, b.Y+2)
+		}
+		rest := face(func(*listPaneFixture) {})
+		sel := face(func(f *listPaneFixture) { f.pane.Add.Selected().Set(true) })
+		prs := face(func(f *listPaneFixture) { f.pane.Add.pressed = true })
+		hov := face(func(f *listPaneFixture) { f.pane.Add.hovered = true })
+		dis := face(func(f *listPaneFixture) { f.pane.Add.Disabled().Set(true) })
+		if sel != th.Accent || prs != th.Accent {
+			t.Errorf("style %d: selected %v / pressed %v, want Accent %v", st, sel, prs, th.Accent)
+		}
+		if hov == rest {
+			t.Errorf("style %d: hover face equals the resting face %v", st, rest)
+		}
+		if dis != th.SurfaceAlt {
+			t.Errorf("style %d: disabled face %v, want SurfaceAlt %v", st, dis, th.SurfaceAlt)
+		}
+	}
+}
+
+func TestListPanePointerAndCharEventsReachTheirTargets(t *testing.T) {
+	f := newListPaneFixture(ListBarMac, true)
+	r := f.pane.Bounds()
+	sx, sy := centreOf(f.pane.Add.Bounds())
+	lx, ly := sx-r.X, sy-r.Y
+	f.pane.OnEvent(Event{Kind: EventMouseMove, X: lx, Y: ly})
+	if !f.pane.Add.hovered {
+		t.Error("a move over Add did not hover it")
+	}
+	f.pane.OnEvent(Event{Kind: EventMouseMove, X: 5, Y: 5})
+	if f.pane.Add.hovered {
+		t.Error("a move away did not clear Add's hover")
+	}
+	f.pane.OnEvent(Event{Kind: EventMouseUp, X: lx, Y: ly})
+	f.pane.OnEvent(Event{Kind: EventMouseDrag, X: 12, Y: 12})
+	f.pane.OnEvent(Event{Kind: EventChar, Code: "a"})
+}
+
+func TestDrawIconMinusFitsAWideBoxToItsHeight(t *testing.T) {
+	ink := RGB(0xFF, 0, 0)
+	const w, h = 40, 14
+	buf := makeSurface(w, h)
+	DrawIconMinus(newP(buf, w), Rect{W: w, H: h}, ink)
+	minX, maxX := w, -1
+	for y := 0; y < h; y++ {
+		for x := 0; x < w; x++ {
+			if pixelAt(buf, w, x, y) == ink {
+				if x < minX {
+					minX = x
+				}
+				if x > maxX {
+					maxX = x
+				}
+			}
+		}
+	}
+	if maxX < 0 {
+		t.Fatal("nothing drawn")
+	}
+	if got := maxX - minX + 1; got > h {
+		t.Errorf("bar is %d px wide in a %d px high box, want at most the height", got, h)
+	}
+}
+
 func TestListPaneEmptyBoundsPaintNothing(t *testing.T) {
 	f := newListPaneFixture(ListBarGNOME, true)
 	f.pane.SetBounds(Rect{X: 5, Y: 5})
