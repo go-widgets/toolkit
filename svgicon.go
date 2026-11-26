@@ -160,3 +160,19 @@ func svgViewBoxLongestSide(doc string) float64 {
 	}
 	return h
 }
+
+// SVGGlyph is [SVGIcon] drawn in a square centred in its box whose side is
+// num/den of the box's height — the idiom of an icon-only bar button, whose
+// glyph is a fraction of the button (the list bar's + and − use 14/24), so an
+// application never computes that layout itself. A den or num that is not
+// positive draws the icon into the whole box, as SVGIcon does.
+func SVGGlyph(doc string, num, den int) func(p painter.Painter, r Rect, ink RGBA) {
+	icon := SVGIcon(doc)
+	return func(p painter.Painter, r Rect, ink RGBA) {
+		if num > 0 && den > 0 {
+			s := r.H * num / den
+			r = Rect{X: r.X + (r.W-s)/2, Y: r.Y + (r.H-s)/2, W: s, H: s}
+		}
+		icon(p, r, ink)
+	}
+}

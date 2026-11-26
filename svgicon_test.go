@@ -62,7 +62,34 @@ func TestSVGIconRenders(t *testing.T) {
 	}
 }
 
-// TestSVGIconBadDocDrawsNothing: an unparseable document caches empty and paints
+// TestSVGGlyphDrawsInACentredFraction: with 1/2 a 26x24 box carries the glyph in
+// the centred 12-px square only; a non-positive fraction fills the whole box.
+func TestSVGGlyphDrawsInACentredFraction(t *testing.T) {
+	const w, h = 26, 24
+	inked := func(num, den int) (x0, y0, x1, y1 int) {
+		buf := make([]byte, w*h*4)
+		SVGGlyph(redSquareSVG, num, den)(painter.NewPixelPainter(buf, w, h), Rect{W: w, H: h}, RGBA{A: 255})
+		x0, y0, x1, y1 = w, h, -1, -1
+		for y := 0; y < h; y++ {
+			for x := 0; x < w; x++ {
+				if buf[(y*w+x)*4+3] != 0 {
+					x0, y0, x1, y1 = min(x0, x), min(y0, y), max(x1, x), max(y1, y)
+				}
+			}
+		}
+		return
+	}
+	if x0, y0, x1, y1 := inked(1, 2); x0 != 7 || y0 != 6 || x1 != 18 || y1 != 17 {
+		t.Errorf("1/2 inked x %d..%d y %d..%d, want x 7..18 y 6..17", x0, x1, y0, y1)
+	}
+	for _, f := range [][2]int{{0, 2}, {1, 0}, {-1, 2}, {1, -2}} {
+		if x0, y0, x1, y1 := inked(f[0], f[1]); x0 != 0 || y0 != 0 || x1 != 25 || y1 != 23 {
+			t.Errorf("%v inked x %d..%d y %d..%d, want the whole box (x 0..25 y 0..23)", f, x0, x1, y0, y1)
+		}
+	}
+}
+
+// TestSVGIconBadDocDrawsNothing:an unparseable document caches empty and paints
 // nothing, rather than panicking.
 func TestSVGIconBadDocDrawsNothing(t *testing.T) {
 	const w, h = 16, 16
