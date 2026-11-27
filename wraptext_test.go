@@ -97,6 +97,45 @@ func TestLabelWrapStaysInItsBounds(t *testing.T) {
 	}
 }
 
+// Each alignment of a wrapped label moves the text, and none leaves the bounds.
+func TestLabelWrapAlignments(t *testing.T) {
+	theme := DefaultLight()
+	const W, H = 220, 160
+	box := Rect{X: 30, Y: 20, W: 130, H: 120}
+	draw := func(a Align, v VAlign, ink RGBA) []byte {
+		l := NewLabel("alpha beta gamma delta " + longURL)
+		l.Wrap, l.Align, l.VAlign, l.Ink = true, a, v, ink
+		l.SetBounds(box)
+		buf := makeSurface(W, H)
+		l.Draw(newP(buf, W), theme)
+		if paintedOutside(buf, W, H, box) {
+			t.Errorf("align %v valign %v painted outside the bounds", a, v)
+		}
+		return buf
+	}
+	base := draw(AlignLeft, VAuto, RGBA{})
+	for _, c := range []struct {
+		a Align
+		v VAlign
+	}{{AlignCenter, VAuto}, {AlignRight, VAuto}, {AlignLeft, VBottom}} {
+		if bytes.Equal(base, draw(c.a, c.v, RGBA{})) {
+			t.Errorf("align %v valign %v drew exactly like the default", c.a, c.v)
+		}
+	}
+	// In a box taller than the text VAuto centres, as VMiddle does.
+	if !bytes.Equal(base, draw(AlignLeft, VMiddle, RGBA{})) {
+		t.Error("VMiddle and VAuto centre alike in a tall box")
+	}
+	if bytes.Equal(base, draw(AlignLeft, VAuto, RGBA{R: 200, A: 255})) {
+		t.Error("Ink must recolour a wrapped label")
+	}
+	// A box shorter than the text anchors it at the top, then runs past the bottom only.
+	short := NewLabel("alpha beta gamma delta epsilon zeta eta theta")
+	short.Wrap = true
+	short.SetBounds(Rect{X: 30, Y: 20, W: 40, H: 8})
+	short.Draw(newP(makeSurface(W, H), W), theme)
+}
+
 func TestButtonCaptionWrapsInsteadOfOverflowing(t *testing.T) {
 	theme := DefaultLight()
 	const W, H = 200, 120
