@@ -73,6 +73,10 @@ type Label struct {
 	// label in it (e.g. a muted or accent tone).
 	Ink RGBA
 
+	// FontSize is in LOGICAL pixels: it is multiplied by [MetricScale] when the
+	// face is built, so 18 reads the same size on a 1x and a 2x display.
+	// Do not pass a pre-scaled value.
+	//
 	// FontSize, when positive, renders this label at that pixel size regardless
 	// of the global font size — e.g. a large clock face over the app's default
 	// body text. It re-renders the widget's base face (its Font override, else
@@ -133,14 +137,22 @@ func (l *Label) faceFor() Font {
 	if !ok {
 		return base // base face has no outline to re-scale (bitmap font)
 	}
-	if l.sizedFont != nil && l.sizedFor == l.FontSize && l.sizedBase == base {
+	// FontSize is in LOGICAL pixels, like every other size here: the face is
+	// rendered at FontSize x MetricScale, the same rule as the body face
+	// (rescaleText). The cache is keyed on the DEVICE size, so a scale change
+	// (a window dragged between a 2x and a 1x display) rebuilds it.
+	px := dpiScaled(l.FontSize)
+	if px < 1 {
+		px = 1
+	}
+	if l.sizedFont != nil && l.sizedFor == px && l.sizedBase == base {
 		return l.sizedFont // cache hit
 	}
-	f, err := NewTrueTypeFont(fd.FontData(), l.FontSize)
+	f, err := NewTrueTypeFont(fd.FontData(), px)
 	if err != nil {
 		return base
 	}
-	l.sizedFont, l.sizedFor, l.sizedBase = f, l.FontSize, base
+	l.sizedFont, l.sizedFor, l.sizedBase = f, px, base
 	return f
 }
 

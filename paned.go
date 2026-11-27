@@ -33,6 +33,9 @@ type Paned struct {
 	// resizing is true between grabbing the handle (EventClick on it) and
 	// releasing it, so EventMouseDrag moves the split.
 	resizing bool
+
+	// posScale is the MetricScale Position was last laid out at.
+	posScale float64
 }
 
 // Position is reactive state as a shared [mvvm.Observable]; edits Set it. Lazily created.
@@ -61,6 +64,13 @@ func NewVPaned(first, second Widget) *Paned {
 // SetBounds lays out First/Second around the handle.
 func (p *Paned) SetBounds(r Rect) {
 	p.Base.SetBounds(r)
+	// Position is device pixels; when the scale moved since the last layout (a
+	// window dragged to the other display) the same logical split is
+	// scale-proportionally the same device split.
+	if ms := MetricScale(); p.posScale > 0 && p.posScale != ms && p.Position().Get() != 0 {
+		p.Position().Set(int(float64(p.Position().Get())*ms/p.posScale + 0.5))
+	}
+	p.posScale = MetricScale()
 	if p.Position().Get() == 0 { // first sizing -- centre.
 		if p.Orientation == PanedHorizontal {
 			p.Position().Set(r.W / 2)

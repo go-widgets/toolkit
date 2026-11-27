@@ -85,12 +85,15 @@ func (c *ChatBubble) Draw(p painter.Painter, theme *Theme) {
 			maxW = w
 		}
 	}
-	bubbleW := maxW + 2*ChatBubblePadX
-	if bubbleW > ChatBubbleMaxW {
-		bubbleW = ChatBubbleMaxW
+	// Every constant is in logical pixels; the metric scale makes them device
+	// pixels, as for every other widget.
+	padX, padY, spacing := scaled(ChatBubblePadX), scaled(ChatBubblePadY), scaled(ChatBubbleLineSpacing)
+	bubbleW := maxW + 2*padX
+	if bubbleW > scaled(ChatBubbleMaxW) {
+		bubbleW = scaled(ChatBubbleMaxW)
 	}
-	lineH := c.glyphHeight() + ChatBubbleLineSpacing
-	bubbleH := len(lines)*lineH - ChatBubbleLineSpacing + 2*ChatBubblePadY
+	lineH := c.glyphHeight() + spacing
+	bubbleH := len(lines)*lineH - spacing + 2*padY
 
 	var bx int
 	var fill, ink RGBA
@@ -108,9 +111,9 @@ func (c *ChatBubble) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, bx, by, bubbleW, bubbleH, fill)
 	strokeRect(p, bx, by, bubbleW, bubbleH, theme.Border)
 
-	ty := by + ChatBubblePadY
+	ty := by + padY
 	for _, ln := range lines {
-		c.drawText(p, bx+ChatBubblePadX, ty, ln, ink)
+		c.drawText(p, bx+padX, ty, ln, ink)
 		ty += lineH
 	}
 }

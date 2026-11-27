@@ -69,6 +69,9 @@ type ForgePane struct {
 
 	wrapText  string // what the notes were last wrapped from
 	wrapWidth int
+	wrapScale float64
+	// builtScale is the MetricScale the layouts were built at (see refit).
+	builtScale float64
 }
 
 // ForgeMode is which layout the pane shows.
@@ -232,6 +235,17 @@ func NewForgePane(m ForgeModel) *ForgePane {
 	f.committer, _ = m.(ForgeCommitter)
 	f.chooser, _ = m.(ForgeChooser)
 	f.locatable, _ = m.(ForgeLocatable)
+	f.assemble()
+	return f
+}
+
+// assemble builds the three layouts and binds them to the model. The layouts
+// hold FIXED pixel heights, resolved against the scale in force, so a scale
+// change rebuilds them (see refit) rather than leaving the heights of the
+// display the window came from.
+func (f *ForgePane) assemble() {
+	m := f.model
+	f.builtScale = MetricScale()
 	f.client = f.newClientPage(false)
 	f.frame = f.newClientPage(true)
 	f.server = f.newServerPage()
@@ -244,7 +258,16 @@ func NewForgePane(m ForgeModel) *ForgePane {
 		m.Note().Subscribe(func(string) { f.rewrap(false) }),
 	)
 	f.show()
-	return f
+}
+
+// refit rebuilds the layouts when the metric scale moved since they were built.
+func (f *ForgePane) refit() {
+	if f.builtScale == MetricScale() {
+		return
+	}
+	f.Close()
+	f.hidden = map[Widget]struct{}{}
+	f.assemble()
 }
 
 // Close detaches the pane from its model: nothing the model does afterwards
@@ -287,19 +310,22 @@ func (f *ForgePane) SetTitleFont(font Font) {
 	for _, l := range []*Label{f.client.title, f.frame.title, f.server.title} {
 		l.FontSize, l.Font = 0, font
 		if font == nil {
-			l.FontSize = scaled(forgeFontPx + 2)
+			l.FontSize = forgeFontPx + 2
 		}
 	}
 }
 
 // SetBounds places the pane and re-wraps the note to its width.
 func (f *ForgePane) SetBounds(r Rect) {
+	f.Base.SetBounds(r) // refit's show() lays the new pages out at these bounds
+	f.refit()
 	f.Stack.SetBounds(r)
 	f.rewrap(false)
 }
 
 // Draw paints the layout in use.
 func (f *ForgePane) Draw(p painter.Painter, theme *Theme) {
+	f.refit()
 	f.rewrap(false)
 	f.Stack.Draw(p, theme)
 }
@@ -396,10 +422,14 @@ func (f *ForgePane) invalidate() {
 // width changed since (or always, force).
 func (f *ForgePane) rewrap(force bool) {
 	text, w := f.model.Note().Get(), f.Bounds().W
-	if !force && text == f.wrapText && w == f.wrapWidth {
+	// The wrap is in columns of the face's size, so it depends on the scale as
+	// much as on the width: a cache keyed on (text, width) alone kept the old
+	// display's line breaks after a drag to the other one.
+	ms := MetricScale()
+	if !force && text == f.wrapText && w == f.wrapWidth && ms == f.wrapScale {
 		return
 	}
-	f.wrapText, f.wrapWidth = text, w
+	f.wrapText, f.wrapWidth, f.wrapScale = text, w, ms
 	cols := max(w*100/max(scaled(forgeFontPx)*55, 1)-forgeNoteMargin, forgeMinCols)
 	wrap := f.NoteWrap
 	if wrap == nil {
@@ -535,7 +565,7 @@ func (f *ForgePane) addCommitRows(box *VBox, r *forgeCommitRows) {
 }
 
 func newForgeTitle(key, english string) *Label {
-	return NewLabel(Tr(key, english)).SetFontSize(scaled(forgeFontPx + 2))
+	return NewLabel(Tr(key, english)).SetFontSize(forgeFontPx + 2)
 }
 
 // --- the client and frame layouts ---------------------------------------------

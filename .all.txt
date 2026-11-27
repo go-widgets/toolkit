@@ -1,0 +1,16 @@
+ok  	github.com/go-widgets/toolkit	6.664s
+ok  	github.com/go-widgets/toolkit/anim	(cached)
+ok  	github.com/go-widgets/toolkit/collabui	(cached)
+ok  	github.com/go-widgets/toolkit/examples/isodemo	(cached)
+ok  	github.com/go-widgets/toolkit/examples/isodemo/cmd/isodemo	(cached)
+ok  	github.com/go-widgets/toolkit/i18ntest	(cached)
+ok  	github.com/go-widgets/toolkit/iconoir	(cached)
+ok  	github.com/go-widgets/toolkit/internal/formula	(cached)
+ok  	github.com/go-widgets/toolkit/internal/iconsetgen	(cached)
+?   	github.com/go-widgets/toolkit/internal/scalesweep	[no test files]
+?   	github.com/go-widgets/toolkit/internal/scalesweep/gen	[no test files]
+ok  	github.com/go-widgets/toolkit/isointerop	(cached)
+ok  	github.com/go-widgets/toolkit/scene	(cached)
+ok  	github.com/go-widgets/toolkit/textdiff	(cached)
+ok  	github.com/go-widgets/toolkit/virtual	(cached)
+ok  	github.com/go-widgets/toolkit/vt	(cached)
