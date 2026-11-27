@@ -60,9 +60,6 @@ func (g *GraphView) SetZoom(z, ax, ay int) {
 	g.layout()
 	old := g.zoomPct()
 	z = clampInt(z, GraphZoomMin, GraphZoomMax)
-	if z == old {
-		return
-	}
 	// The content point under the anchor stays put: scroll/pan absorb the change.
 	g.panX = g.panX + int(math.Round(float64(ax)*100/float64(old)-float64(ax)*100/float64(z)))
 	g.scrollY = g.scrollY + int(math.Round(float64(ay)*100/float64(old)-float64(ay)*100/float64(z)))
@@ -143,51 +140,35 @@ func (g *GraphView) PanBy(dx int) { g.PanTo(g.panX + dx) }
 // rnd rounds to the nearest integer, halves up.
 func rnd(v float64) int { return int(math.Floor(v + 0.5)) }
 
-func (g *GraphView) identity() bool { return g.zoomPct() == 100 && g.panX == 0 }
-
 // sx and sy map a content coordinate (what clusterBox and nodeBox hold) to the
-// surface coordinate it is drawn at; cx and cy are their inverses.
+// surface coordinate it is drawn at; cx and cy are their inverses. At 100 % with
+// no pan the arithmetic is exact on integers, so each is the identity.
 func (g *GraphView) sx(x int) int {
-	if g.identity() {
-		return x
-	}
 	o := g.Bounds().X
 	return o + rnd(float64(x-o-g.panX)*float64(g.zoomPct())/100)
 }
 
 func (g *GraphView) sy(y int) int {
-	z := g.zoomPct()
-	if z == 100 {
-		return y
-	}
 	o := g.Bounds().Y
-	return o + rnd(float64(y-o)*float64(z)/100)
+	return o + rnd(float64(y-o)*float64(g.zoomPct())/100)
 }
 
 func (g *GraphView) cx(x int) int {
-	if g.identity() {
-		return x
-	}
 	o := g.Bounds().X
 	return o + g.panX + rnd(float64(x-o)*100/float64(g.zoomPct()))
 }
 
 func (g *GraphView) cy(y int) int {
-	z := g.zoomPct()
-	if z == 100 {
-		return y
-	}
 	o := g.Bounds().Y
-	return o + rnd(float64(y-o)*100/float64(z))
+	return o + rnd(float64(y-o)*100/float64(g.zoomPct()))
 }
 
-// screen maps a content rectangle to where it is drawn.
+// screen maps a content rectangle to where it is drawn. A side that has size
+// keeps at least one pixel when zoomed far out.
 func (g *GraphView) screen(r Rect) Rect {
-	if g.identity() {
-		return r
-	}
 	x0, y0 := g.sx(r.X), g.sy(r.Y)
-	return Rect{X: x0, Y: y0, W: maxInt(g.sx(r.X+r.W)-x0, 1), H: maxInt(g.sy(r.Y+r.H)-y0, 1)}
+	w, h := g.sx(r.X+r.W)-x0, g.sy(r.Y+r.H)-y0
+	return Rect{X: x0, Y: y0, W: max(w, min(r.W, 1)), H: max(h, min(r.H, 1))}
 }
 
 // zoomEvent handles a wheel event with the zoom modifier: it reports whether
