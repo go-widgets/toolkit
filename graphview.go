@@ -444,12 +444,17 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Background)
 	sel := g.Model.Selected.Get()
 	labels := map[string]string{}
-	for _, c := range g.Model.Clusters.Slice() {
+	clusters := g.Model.Clusters.Slice()
+	for _, c := range clusters {
 		labels[c.ID] = c.Label
 	}
 	visible := map[string]bool{}
 	withClip(p, r, func() {
-		for id, box := range g.clusterBox {
+		// In the model's order, not a map's: the same model draws the same
+		// operations in the same sequence, so a recording is reproducible.
+		for _, c := range clusters {
+			id := c.ID
+			box := g.clusterBox[id] // layout() boxed every cluster just above
 			g.fillBox(p, box, g.clusterRadius(), theme.Surface)
 			g.strokeBox(p, box, g.clusterRadius(), theme.Border)
 			// The title is clipped to its box: a long one never runs out of it.
