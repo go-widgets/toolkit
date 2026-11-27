@@ -134,6 +134,23 @@ func TestLabelWrapAlignments(t *testing.T) {
 	short.Wrap = true
 	short.SetBounds(Rect{X: 30, Y: 20, W: 40, H: 8})
 	short.Draw(newP(makeSurface(W, H), W), theme)
+
+	// A box narrower than one glyph: each rune is wider than the box, and a
+	// centred or right-aligned line still never starts left of it.
+	for _, a := range []Align{AlignCenter, AlignRight} {
+		tiny := NewLabel("ab")
+		tiny.Wrap, tiny.Align = true, a
+		tiny.SetBounds(Rect{X: 60, Y: 20, W: 2, H: 60})
+		tbuf := makeSurface(W, H)
+		tiny.Draw(newP(tbuf, W), theme)
+		for y := 0; y < H; y++ {
+			for x := 0; x < 60; x++ {
+				if px := pixelAt(tbuf, W, x, y); px.R != 0xC8 || px.G != 0xC8 || px.B != 0xC8 {
+					t.Fatalf("align %v: a line started left of its box at (%d,%d)", a, x, y)
+				}
+			}
+		}
+	}
 }
 
 func TestButtonCaptionWrapsInsteadOfOverflowing(t *testing.T) {
