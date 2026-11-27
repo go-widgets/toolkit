@@ -253,3 +253,39 @@ func TestGraphViewIdentityTransformIsExact(t *testing.T) {
 		t.Fatal("at 100 % and no pan the transform is the identity")
 	}
 }
+
+func TestGraphViewPanByAndSidewaysWheel(t *testing.T) {
+	g := zoomGraph()
+	g.SetZoom(400, 0, 0)
+	g.PanBy(40)
+	if g.panX != 40 {
+		t.Fatalf("PanBy(40): panX = %d", g.panX)
+	}
+	g.OnEvent(Event{Kind: EventScroll, Shift: true, Delta: 1})
+	if g.panX != 40+graphScrollStep() {
+		t.Fatalf("shift+wheel pans sideways: panX = %d", g.panX)
+	}
+	before := g.panX
+	g.OnEvent(Event{Kind: EventScroll, DeltaX: -1})
+	if g.panX != before-graphScrollStep() {
+		t.Fatalf("horizontal wheel pans: panX = %d, was %d", g.panX, before)
+	}
+}
+
+func TestGraphViewRevealPansHorizontally(t *testing.T) {
+	g := zoomGraph()
+	g.SetZoom(400, 0, 0)
+	first, last := g.order[0], g.order[len(g.order)-1]
+	g.PanTo(g.maxPanX())
+	g.revealNode(first)
+	b, _ := g.NodeBox(first)
+	if b.X < g.Bounds().X {
+		t.Fatalf("first node still left of the view: %+v", b)
+	}
+	g.PanTo(0)
+	g.revealNode(last)
+	b, _ = g.NodeBox(last)
+	if b.X+b.W > g.Bounds().X+g.Bounds().W {
+		t.Fatalf("last node still right of the view: %+v", b)
+	}
+}
