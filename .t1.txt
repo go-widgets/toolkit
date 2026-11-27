@@ -1,0 +1,6 @@
+gotest: added -v, because only -v prints which tests ran
+=== RUN   TestEveryWidgetFollowsAScaleChange
+    scalesweep_test.go:210: swept 179 widgets, skipped 0
+--- PASS: TestEveryWidgetFollowsAScaleChange (1.32s)
+PASS
+ok  	github.com/go-widgets/toolkit	1.618s

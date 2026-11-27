@@ -47,11 +47,13 @@ type RichEditorToolbar struct {
 	// Negative is clamped to 0.
 	Spacing int
 
-	ed      *RichEditor
-	box     *HBox
-	buttons []*Button
-	actives []func(*RichEditor) bool
-	subs    []func()
+	ed  *RichEditor
+	box *HBox
+	// boxScale is the MetricScale the box was assembled at (see fit).
+	boxScale float64
+	buttons  []*Button
+	actives  []func(*RichEditor) bool
+	subs     []func()
 }
 
 // Toolbar sizing defaults, in logical pixels.
@@ -175,21 +177,42 @@ func (t *RichEditorToolbar) iconInset() int { return t.iconSize() / 5 }
 // build constructs the child buttons + dividers into an HBox and wires the
 // editor subscriptions. Called once from the constructor.
 func (t *RichEditorToolbar) build() {
+	for _, group := range reToolbarGroups() {
+		for _, spec := range group {
+			t.buttons = append(t.buttons, t.makeButton(spec))
+			t.actives = append(t.actives, spec.active)
+		}
+	}
+	t.assemble()
+	t.subscribe()
+	t.refresh()
+}
+
+// assemble lays the buttons and dividers into a fresh HBox at the scale in
+// force NOW. The box holds fixed pixel sizes, so it is rebuilt (the buttons are
+// kept) whenever the scale changes -- see fit.
+func (t *RichEditorToolbar) assemble() {
 	t.box = NewHBox()
 	t.box.Spacing = t.spacing()
+	i := 0
 	for gi, group := range reToolbarGroups() {
 		if gi > 0 {
 			t.box.AddFixed(&reToolbarSeparator{}, t.sepW())
 		}
-		for _, spec := range group {
-			b := t.makeButton(spec)
-			t.buttons = append(t.buttons, b)
-			t.actives = append(t.actives, spec.active)
-			t.box.AddFixed(b, t.iconSize())
+		for range group {
+			t.box.AddFixed(t.buttons[i], t.iconSize())
+			i++
 		}
 	}
-	t.subscribe()
-	t.refresh()
+	t.boxScale = MetricScale()
+}
+
+// fit re-assembles the strip if the metric scale moved since it was built.
+func (t *RichEditorToolbar) fit() {
+	if t.boxScale != MetricScale() {
+		t.assemble()
+		t.box.SetBounds(t.Bounds())
+	}
 }
 
 // makeButton builds one icon button from a spec: an iconoir glyph when the icon
@@ -199,7 +222,7 @@ func (t *RichEditorToolbar) makeButton(spec reToolbarSpec) *Button {
 	b := NewButton(spec.glyph, nil)
 	// The active state is the sticky Accent pill; no transient press flash.
 	b.PressFeedback = false
-	if icon := reToolbarIcon(spec.icon, t.iconInset()); icon != nil {
+	if icon := reToolbarIcon(spec.icon, t.iconInset); icon != nil {
 		b.Icon = icon
 	}
 	verb := spec.verb
@@ -215,7 +238,7 @@ func (t *RichEditorToolbar) makeButton(spec reToolbarSpec) *Button {
 // reToolbarIcon returns a Button.Icon painter that draws the named iconoir glyph
 // inset by inset pixels, or nil when name is empty or the icon does not exist —
 // the caller then falls back to the button's text label.
-func reToolbarIcon(name string, inset int) func(p painter.Painter, r Rect, ink RGBA) {
+func reToolbarIcon(name string, insetFn func() int) func(p painter.Painter, r Rect, ink RGBA) {
 	if name == "" {
 		return nil
 	}
@@ -223,6 +246,7 @@ func reToolbarIcon(name string, inset int) func(p painter.Painter, r Rect, ink R
 		return nil
 	}
 	return func(p painter.Painter, r Rect, ink RGBA) {
+		inset := insetFn() // read at paint time: the scale may have moved
 		ir := Rect{X: r.X + inset, Y: r.Y + inset, W: r.W - 2*inset, H: r.H - 2*inset}
 		drawBuiltinIcon(p, ir, name, ink)
 	}
@@ -263,7 +287,7 @@ func (t *RichEditorToolbar) A11y() A11yInfo {
 
 // Children yields the button strip's children (buttons + dividers) so a11y and
 // focus tree walkers descend into the individual buttons.
-func (t *RichEditorToolbar) Children() []Widget { return t.box.Children() }
+func (t *RichEditorToolbar) Children() []Widget { t.fit(); return t.box.Children() }
 
 // Dispose removes the editor subscriptions so a discarded toolbar stops being
 // notified. Safe to call more than once.
@@ -277,6 +301,7 @@ func (t *RichEditorToolbar) Dispose() {
 // SetBounds positions the toolbar and lays its buttons out left to right.
 func (t *RichEditorToolbar) SetBounds(r Rect) {
 	t.Base.SetBounds(r)
+	t.fit()
 	t.box.SetBounds(r)
 }
 
@@ -298,6 +323,7 @@ func (t *RichEditorToolbar) Measure(availW, availH int) (w, h int) {
 func (t *RichEditorToolbar) Draw(p painter.Painter, theme *Theme) {
 	r := t.Bounds()
 	fillRect(p, r.X, r.Y, r.W, r.H, theme.Surface)
+	t.fit()
 	t.box.Draw(p, theme)
 }
 
@@ -307,6 +333,7 @@ func (t *RichEditorToolbar) OnEvent(ev Event) {
 	if t.Disabled().Get() {
 		return
 	}
+	t.fit()
 	t.box.OnEvent(ev)
 }
 

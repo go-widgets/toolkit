@@ -60,7 +60,7 @@ func TestTreeViewNodeAtAndRemove(t *testing.T) {
 	if tv.NodeAt(5, 2) != root { // row 0
 		t.Fatal("NodeAt row0 != root")
 	}
-	if got := tv.NodeAt(5, tv.RowHeight+2); got == nil || got.Label != "a" {
+	if got := tv.NodeAt(5, tv.rowHeight()+2); got == nil || got.Label != "a" {
 		t.Fatalf("NodeAt row1 = %v, want a", got)
 	}
 	if tv.NodeAt(5, -1) != nil {
@@ -70,8 +70,8 @@ func TestTreeViewNodeAtAndRemove(t *testing.T) {
 		t.Fatal("NodeAt(past end) != nil")
 	}
 	// Windowed branch: a 1-row-tall window with more rows below it.
-	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: tv.RowHeight + 3})
-	if tv.NodeAt(5, 2*tv.RowHeight) != nil {
+	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: tv.rowHeight() + 3})
+	if tv.NodeAt(5, 2*tv.rowHeight()) != nil {
 		t.Fatal("NodeAt below the painted window should be nil")
 	}
 	tv.SetBounds(Rect{X: 0, Y: 0, W: 200, H: 400})

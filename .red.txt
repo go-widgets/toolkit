@@ -1,0 +1,23 @@
+gotest: added -v, because only -v prints which tests ran
+=== RUN   TestEveryWidgetFollowsAScaleChange
+    scalesweep_test.go:210: swept 179 widgets, skipped 0
+    scalesweep_test.go:220: 12: a live scale change draws differently from a fresh build:
+          DatabaseEditor 1x->2x
+          DatabaseEditor 2x->1x
+          DiffView 1x->2x
+          DiffView 2x->1x
+          FileChooser 1x->2x
+          FileChooser 2x->1x
+          ForgePane 1x->2x
+          ForgePane 2x->1x
+          Paned 1x->2x
+          Paned 2x->1x
+          RichEditorToolbar 1x->2x
+          RichEditorToolbar 2x->1x
+    scalesweep_test.go:223: 2: ink does not double from 1x to 2x:
+          ChatBubble ink 73x32 at 1x, 126x52 at 2x
+          Label ink 75x13 at 1x, 75x13 at 2x
+--- FAIL: TestEveryWidgetFollowsAScaleChange (1.21s)
+FAIL
+FAIL	github.com/go-widgets/toolkit	1.565s
+FAIL

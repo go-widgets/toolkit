@@ -133,7 +133,11 @@ const TreeIconGap = 4
 // NewTreeView builds a TreeView rooted at root (which may be nil for
 // an empty initial view).
 func NewTreeView(root *TreeNode) *TreeView {
-	t := &TreeView{Root: root, RowHeight: scaled(18)}
+	// RowHeight stays 0 ("the default"): rowHeight() resolves that against the
+	// scale in force when a row is drawn. Storing scaled(18) here froze the
+	// scale of the moment the tree was built, so a window dragged to the other
+	// display kept rows of the old display's height.
+	t := &TreeView{Root: root}
 	t.selected = mvvm.NewObservable[*TreeNode](nil)
 	t.scrollRow = mvvm.NewObservable(0)
 	return t

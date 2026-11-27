@@ -68,6 +68,8 @@ type DiffView struct {
 	wrapW   int
 	heights []int
 	runeW   map[rune]int
+	// cacheFont is the face runeW and heights were measured with.
+	cacheFont Font
 }
 
 // dvRow is one painted row. kind: dvEqual, dvDelete, dvInsert, dvChange
@@ -321,6 +323,7 @@ func (v *DiffView) geometry() (textX, textW int) {
 
 // width measures s rune by rune (cached): what the wrap and the marks use.
 func (v *DiffView) width(s string) int {
+	v.dropStaleFaceCaches()
 	if v.runeW == nil {
 		v.runeW = map[rune]int{}
 	}
@@ -372,8 +375,19 @@ func (v *DiffView) pieces(row dvRow, left bool, w int) [][2]int {
 	return nil
 }
 
+// dropStaleFaceCaches forgets the per-rune widths and the wrapped heights when
+// the face they were measured with is not the one in force: they are
+// measurements of a face, and a scale change (a window dragged to the other
+// display) swaps the face under a view that keeps them.
+func (v *DiffView) dropStaleFaceCaches() {
+	if f := v.EffectiveFont(); f != v.cacheFont {
+		v.cacheFont, v.runeW, v.wrapW, v.heights = f, nil, -1, nil
+	}
+}
+
 // ensureHeights wraps every row for the current width.
 func (v *DiffView) ensureHeights() {
+	v.dropStaleFaceCaches()
 	_, w := v.geometry()
 	if w == v.wrapW && len(v.heights) == len(v.rows) {
 		return

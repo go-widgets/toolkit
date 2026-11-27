@@ -108,13 +108,14 @@ func TestToolbarButtonPositionsGrouped(t *testing.T) {
 // --- icon resolution ------------------------------------------------------
 
 func TestReToolbarIconResolution(t *testing.T) {
-	if reToolbarIcon("", 4) != nil {
+	four := func() int { return 4 }
+	if reToolbarIcon("", four) != nil {
 		t.Fatal("empty name should resolve to nil (text-glyph fallback)")
 	}
-	if reToolbarIcon("definitely-not-an-iconoir-name", 4) != nil {
+	if reToolbarIcon("definitely-not-an-iconoir-name", four) != nil {
 		t.Fatal("absent icon should resolve to nil (text-glyph fallback)")
 	}
-	if reToolbarIcon("bold", 4) == nil {
+	if reToolbarIcon("bold", four) == nil {
 		t.Fatal("present icon 'bold' should resolve to a painter")
 	}
 }
