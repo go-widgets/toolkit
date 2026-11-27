@@ -454,10 +454,7 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 		// operations in the same sequence, so a recording is reproducible.
 		for _, c := range clusters {
 			id := c.ID
-			box, ok := g.clusterBox[id]
-			if !ok {
-				continue
-			}
+			box := g.clusterBox[id] // layout() boxed every cluster just above
 			g.fillBox(p, box, g.clusterRadius(), theme.Surface)
 			g.strokeBox(p, box, g.clusterRadius(), theme.Border)
 			// The title is clipped to its box: a long one never runs out of it.
