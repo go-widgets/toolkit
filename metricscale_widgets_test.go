@@ -133,8 +133,9 @@ func TestMetricScaleDoublesWidgetMetrics(t *testing.T) {
 	}
 
 	// The default row heights of ListBox and TreeView double (18 -> 36).
-	if l := NewListBox(nil); l.RowHeight != 36 {
-		t.Fatalf("ListBox default RowHeight at 2x = %d, want 36", l.RowHeight)
+	// ListBox.RowHeight is logical (18); the drawn row is what doubles.
+	if l := NewListBox(nil); l.RowHeight != 18 || l.rowHeight() != 36 {
+		t.Fatalf("ListBox default RowHeight at 2x = %d (row %d), want 18 logical, 36 drawn", l.RowHeight, l.rowHeight())
 	}
 	if tv := NewTreeView(nil); tv.rowHeight() != 36 {
 		t.Fatalf("TreeView default rowHeight at 2x = %d, want 36", tv.rowHeight())

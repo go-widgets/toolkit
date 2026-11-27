@@ -167,16 +167,16 @@ func (s *Skeleton) Animating() bool { return s.Animated }
 // fields to their defaults when left at the zero value.
 func (s *Skeleton) effLineH() int {
 	if s.LineH > 0 {
-		return s.LineH
+		return scaled(s.LineH)
 	}
-	return SkeletonLineH
+	return scaled(SkeletonLineH)
 }
 
 func (s *Skeleton) effLineGap() int {
 	if s.LineGap > 0 {
-		return s.LineGap
+		return scaled(s.LineGap)
 	}
-	return SkeletonLineGap
+	return scaled(SkeletonLineGap)
 }
 
 func (s *Skeleton) effLastFrac() float64 {
@@ -191,7 +191,7 @@ func (s *Skeleton) effLastFrac() float64 {
 // bar). Painter clamps it to half the smaller side.
 func (s *Skeleton) textBarRadius(lineH int) int {
 	if s.Radius > 0 {
-		return s.Radius
+		return scaled(s.Radius)
 	}
 	return lineH / 3
 }
@@ -200,9 +200,9 @@ func (s *Skeleton) textBarRadius(lineH int) int {
 // override, else SkeletonRectRadius.
 func (s *Skeleton) rectRadius() int {
 	if s.Radius > 0 {
-		return s.Radius
+		return scaled(s.Radius)
 	}
-	return SkeletonRectRadius
+	return scaled(SkeletonRectRadius)
 }
 
 // Draw paints the placeholder appropriate for Kind, then (when
@@ -219,8 +219,8 @@ func (s *Skeleton) Draw(p painter.Painter, theme *Theme) {
 		fillRect(p, r.X+r.W-1, r.Y+1, 1, r.H-2, base)
 		s.shimmer(p, r, base)
 	case SkeletonBlock:
-		in := Rect{X: r.X + SkeletonLinePad, Y: r.Y + SkeletonLinePad,
-			W: r.W - 2*SkeletonLinePad, H: r.H - 2*SkeletonLinePad}
+		lp := scaled(SkeletonLinePad)
+		in := Rect{X: r.X + lp, Y: r.Y + lp, W: r.W - 2*lp, H: r.H - 2*lp}
 		fillRect(p, in.X, in.Y, in.W, in.H, base)
 		s.shimmer(p, in, base)
 	case SkeletonRect:
@@ -380,10 +380,11 @@ func (g *SkeletonGroup) Draw(p painter.Painter, theme *Theme) {
 // It is a composition of the primitives, so callers can inspect / tweak
 // the children via Items().
 func NewSkeletonCard(bounds Rect) *SkeletonGroup {
-	const (
-		pad     = 8
-		avatarD = 40
-		headerH = 2*SkeletonLineH + SkeletonLineGap
+	// bounds are device pixels, so the preset's own metrics are scaled to match.
+	var (
+		pad     = scaled(8)
+		avatarD = scaled(40)
+		headerH = 2*scaled(SkeletonLineH) + scaled(SkeletonLineGap)
 	)
 	g := &SkeletonGroup{}
 	g.SetBounds(bounds)
@@ -411,12 +412,13 @@ func NewSkeletonCard(bounds Rect) *SkeletonGroup {
 // a page. It is a preset (a composition of the primitives), not a
 // bespoke widget, so it is reusable + inspectable via Items().
 func NewPageSkeleton(bounds Rect) *SkeletonGroup {
-	const (
-		pad    = 12
-		gap    = 16
-		barH   = 24
-		paraH  = 3*SkeletonLineH + 2*SkeletonLineGap
-		imageH = 90
+	// bounds are device pixels, so the preset's own metrics are scaled to match.
+	var (
+		pad    = scaled(12)
+		gap    = scaled(16)
+		barH   = scaled(24)
+		paraH  = 3*scaled(SkeletonLineH) + 2*scaled(SkeletonLineGap)
+		imageH = scaled(90)
 	)
 	g := &SkeletonGroup{}
 	g.SetBounds(bounds)
