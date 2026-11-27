@@ -122,6 +122,7 @@ var sweepTypes = []struct {
 	{"GraphCluster", func() any { return new(GraphCluster) }},
 	{"GraphEdge", func() any { return new(GraphEdge) }},
 	{"GraphNode", func() any { return new(GraphNode) }},
+	{"GraphPoint", func() any { return new(GraphPoint) }},
 	{"GraphView", func() any { return NewGraphView(nil) }},
 	{"GraphViewModel", func() any { return NewGraphViewModel() }},
 	{"Grid", func() any { return NewGrid(0, 0) }},
