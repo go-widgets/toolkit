@@ -62,6 +62,12 @@ type Label struct {
 	// Label's bounds width. The zero value false renders the full text, which
 	// may overflow the bounds (the original behaviour).
 	Ellipsis bool
+	// Wrap breaks the text over several lines so none is wider than the Label's
+	// bounds (see [WrapLines]): at spaces, at "\n", and inside a word wider than
+	// the line. A layout reads the height the wrapped text needs from
+	// [Label.HeightFor]. Wrap takes precedence over Ellipsis. The zero value
+	// false keeps the single line.
+	Wrap bool
 	// Ink overrides the text colour. The zero value (A==0) means "inherit the
 	// theme's OnSurface colour"; set a colour with a non-zero alpha to paint the
 	// label in it (e.g. a muted or accent tone).
@@ -165,6 +171,10 @@ func (l *Label) Draw(p painter.Painter, theme *Theme) {
 	gh := f.Height()
 
 	text := l.Text().Get()
+	if l.Wrap {
+		l.drawWrapped(p, theme, r, f, text)
+		return
+	}
 	if l.Ellipsis && f.Measure(text) > r.W {
 		text = ellipsize(f, text, r.W)
 	}
@@ -197,6 +207,54 @@ func (l *Label) Draw(p painter.Painter, theme *Theme) {
 		ink = l.Ink
 	}
 	f.Draw(p, x, ty, text, ink)
+}
+
+// HeightFor is the height, in device pixels, the label needs to show its whole
+// text at width pixels wide: one line unless Wrap is set, then as many as
+// [WrapLines] makes. An empty label needs one line, so a row keeps its place.
+func (l *Label) HeightFor(width int) int {
+	f := l.faceFor()
+	n := 1
+	if l.Wrap {
+		n = max(1, len(WrapLines(f, l.Text().Get(), width)))
+	}
+	return wrapBlockHeight(f, n)
+}
+
+// drawWrapped paints the text wrapped to the bounds' width, each line aligned
+// per Align and the block placed per VAlign.
+func (l *Label) drawWrapped(p painter.Painter, theme *Theme, r Rect, f Font, text string) {
+	lines := WrapLines(f, text, r.W)
+	block := wrapBlockHeight(f, len(lines))
+	ty := r.Y
+	switch l.VAlign {
+	case VAuto:
+		if r.H > block {
+			ty = r.Y + (r.H-block)/2
+		}
+	case VMiddle:
+		ty = r.Y + (r.H-block)/2
+	case VBottom:
+		ty = r.Y + r.H - block
+	}
+	ink := theme.OnSurface
+	if l.Ink.A != 0 {
+		ink = l.Ink
+	}
+	for _, line := range lines {
+		x := r.X
+		switch l.Align {
+		case AlignCenter:
+			x = r.X + (r.W-f.Measure(line))/2
+		case AlignRight:
+			x = r.X + r.W - f.Measure(line)
+		}
+		if x < r.X {
+			x = r.X
+		}
+		f.Draw(p, x, ty, line, ink)
+		ty += wrapPitch(f)
+	}
 }
 
 // ellipsize returns s trimmed to fit width in font f, with a trailing

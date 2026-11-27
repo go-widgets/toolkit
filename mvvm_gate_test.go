@@ -186,7 +186,7 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	"Inspector": {"LabelFraction": true},
 	// Label: the string is unexported behind the Text() Observable; Align/VAlign/
 	// Ellipsis/Ink/FontSize are set-once appearance config.
-	"Label": {"Align": true, "VAlign": true, "Ellipsis": true, "Ink": true, "FontSize": true},
+	"Label": {"Align": true, "VAlign": true, "Ellipsis": true, "Wrap": true, "Ink": true, "FontSize": true},
 	// Clock: the displayed instant is unexported behind the Time() Observable; the
 	// internal drawing Label is unexported; Func is a func hook (auto-allowed).
 	// Format and Align are set-once appearance config.
