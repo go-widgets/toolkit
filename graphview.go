@@ -124,6 +124,20 @@ type GraphView struct {
 	scrollY, contentH, viewH int
 	hasBar                   bool
 	sbDrag                   scrollDrag
+
+	// Zoom and pan (graphview_zoom.go). panX is the horizontal pan and, with
+	// scrollY, the offset published on pan; contentW is the clusters' width.
+	zoom      *mvvm.Observable[int]
+	pan       *mvvm.Observable[GraphPoint]
+	pushed    GraphPoint
+	panX      int
+	contentW  int
+	laidZoom  int
+	bgDrag    bool // a drag that started on the background pans
+	dragFrom  GraphPoint
+	dragPan   GraphPoint
+	mt        *MultiTouchRecognizer
+	pinchBase int
 }
 
 // NewGraphView returns a GraphView over m (a new empty model when nil).
@@ -217,6 +231,8 @@ func gTitleH() int { return scaled(graphTitleH) }
 func (g *GraphView) layout() {
 	g.bind()
 	nw := g.nodeW()
+	g.pullPan()
+	g.zoomPct()
 	// A change of node width (NodeWidth set late, or the metric scale changed)
 	// lays out again; an edge update never does.
 	if g.layoutValid && g.laidNodeW == nw {
@@ -237,7 +253,8 @@ func (g *GraphView) layout() {
 	}
 	g.contentH, g.viewH, g.hasBar = 0, 0, false
 	if len(clusters) == 0 {
-		g.scrollY = 0
+		g.scrollY, g.panX, g.contentW = 0, 0, 0
+		g.syncPan()
 		return
 	}
 	area := r
@@ -261,7 +278,13 @@ func (g *GraphView) layout() {
 		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarTrack(), nw, titleW)
 	}
 	g.contentH = h
-	g.scrollY = clampInt(g.scrollY, 0, maxInt(0, h-area.H))
+	g.contentW = 0
+	for _, b := range boxes {
+		g.contentW = maxInt(g.contentW, b.X+b.W+gGap())
+	}
+	g.scrollY = clampInt(g.scrollY, 0, g.maxScrollY())
+	g.panX = clampInt(g.panX, 0, g.maxPanX())
+	g.syncPan()
 	for i, c := range clusters {
 		b := boxes[i]
 		box := Rect{X: area.X + b.X, Y: area.Y + b.Y - g.scrollY, W: b.W, H: b.H}
@@ -318,12 +341,14 @@ const graphThumbMin = 12
 // it is live (the clusters overflow the view).
 func (g *GraphView) scrollbarGeom() (sbGeom, bool) {
 	g.layout()
-	if !g.hasBar {
+	// Live when the content, at the zoom, is taller than the view (at 100 % that
+	// is the layout's own overflow test).
+	if g.contentH*g.zoomPct() <= g.viewH*100 {
 		return sbGeom{}, false
 	}
 	r := g.Bounds()
-	maxScroll := g.contentH - g.viewH
-	thumb := maxInt(graphThumbMin, g.viewH*g.viewH/g.contentH)
+	maxScroll := g.maxScrollY()
+	thumb := maxInt(graphThumbMin, g.viewH*g.viewH*100/(g.contentH*g.zoomPct()))
 	return sbGeom{
 		cross0:     r.W - scrollbarTrack(),
 		trackStart: 0,
@@ -339,10 +364,11 @@ func (g *GraphView) scrollbarGeom() (sbGeom, bool) {
 // ScrollTo scrolls the content so px pixels of it are above the view, clamped.
 func (g *GraphView) ScrollTo(px int) {
 	g.layout()
-	px = clampInt(px, 0, maxInt(0, g.contentH-g.viewH))
+	px = clampInt(px, 0, g.maxScrollY())
 	if px != g.scrollY {
 		g.scrollY = px
 		g.layoutValid = false
+		g.syncPan()
 	}
 }
 
@@ -361,12 +387,22 @@ func (g *GraphView) revealNode(id string) {
 	if !ok {
 		return
 	}
-	top := g.Bounds().Y
+	// b is in surface pixels; the scroll and the pan are in content pixels.
+	top, left := g.Bounds().Y, g.Bounds().X
+	z := g.zoomPct()
+	inContent := func(px int) int { return rnd(float64(px) * 100 / float64(z)) }
 	switch {
 	case b.Y < top:
-		g.ScrollBy(b.Y - top - gGap())
+		g.ScrollBy(inContent(b.Y-top) - gGap())
 	case b.Y+b.H > top+g.viewH:
-		g.ScrollBy(b.Y + b.H - (top + g.viewH) + gGap())
+		g.ScrollBy(inContent(b.Y+b.H-(top+g.viewH)) + gGap())
+	}
+	b, _ = g.NodeBox(id)
+	switch {
+	case b.X < left:
+		g.PanBy(inContent(b.X-left) - gGap())
+	case b.X+b.W > left+g.Bounds().W:
+		g.PanBy(inContent(b.X+b.W-(left+g.Bounds().W)) + gGap())
 	}
 }
 
@@ -375,7 +411,7 @@ func (g *GraphView) revealNode(id string) {
 func (g *GraphView) NodeBox(id string) (Rect, bool) {
 	g.layout()
 	b, ok := g.nodeBox[id]
-	return b, ok
+	return g.screen(b), ok
 }
 
 func (g *GraphView) palette() []RGBA {
@@ -454,7 +490,7 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 		// operations in the same sequence, so a recording is reproducible.
 		for _, c := range clusters {
 			id := c.ID
-			box := g.clusterBox[id] // layout() boxed every cluster just above
+			box := g.screen(g.clusterBox[id]) // layout() boxed every cluster just above
 			g.fillBox(p, box, g.clusterRadius(), theme.Surface)
 			g.strokeBox(p, box, g.clusterRadius(), theme.Border)
 			// The title is clipped to its box: a long one never runs out of it.
@@ -472,16 +508,17 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 			g.drawEdge(p, theme, e, lanes[e.ID], sel == "edge:"+e.ID, visible[e.From] || visible[e.To])
 		}
 		for _, n := range nodes {
-			box, ok := g.nodeBox[n.ID]
+			cb, ok := g.nodeBox[n.ID]
 			if !ok {
 				continue
 			}
+			box := g.screen(cb)
 			col := g.categoryColor(n.Category)
 			if !visible[n.ID] {
 				col = blendRGBA(col, theme.Background, 0.25)
 			}
 			// Nothing of a node is drawn outside its cluster's box.
-			limit := g.clusterBox[n.Cluster]
+			limit := g.screen(g.clusterBox[n.Cluster])
 			withClip(p, limit, func() {
 				g.fillBox(p, box, g.CornerRadius, col)
 				// Label ink by the swatch's lightness, so it reads on every colour.
@@ -568,6 +605,7 @@ func (g *GraphView) drawEdge(p painter.Painter, theme *Theme, e GraphEdge, lane 
 	if !ok {
 		return
 	}
+	x0, y0, x1, y1 = g.sx(x0), g.sy(y0), g.sx(x1), g.sy(y1)
 	col := theme.OnBackground
 	switch e.State {
 	case GraphEdgeDenied:
@@ -598,7 +636,7 @@ func (g *GraphView) drawEdge(p painter.Painter, theme *Theme, e GraphEdge, lane 
 	}
 	// The arrow head: a small square at the target end.
 	fillRect(p, x1-2+(x0-x1)/8, y1-2+(y0-y1)/8, 4, 4, col)
-	if selected && e.Label != "" {
+	if selected && e.Label != "" && g.zoomPct() >= graphZoomBelowLabels {
 		g.drawText(p, (x0+x1)/2+4, (y0+y1)/2-g.glyphHeight()-2, e.Label, theme.OnBackground)
 	}
 }
@@ -696,7 +734,8 @@ func (g *GraphView) drawLegend(p painter.Painter, theme *Theme) {
 
 // edgeAt returns the edge whose segment passes within graphHitSlack of (x,y).
 func (g *GraphView) edgeAt(x, y int) (string, bool) {
-	best, bestD := "", float64(graphHitSlack)+0.5
+	// (x, y) is in content pixels; the slack is in surface pixels.
+	best, bestD := "", float64(graphHitSlack)*100/float64(g.zoomPct())+0.5
 	edges := g.Model.Edges.Slice()
 	lanes := edgeLanes(edges)
 	for _, e := range edges {
@@ -725,6 +764,7 @@ func segDist(px, py, x0, y0, x1, y1 float64) float64 {
 // Hit returns what is under a surface point: "node:<id>", "edge:<id>" or "".
 func (g *GraphView) Hit(x, y int) string {
 	g.layout()
+	x, y = g.cx(x), g.cy(y) // the point, in content pixels
 	for _, id := range g.order {
 		if g.nodeBox[id].Contains(x, y) {
 			return "node:" + id
@@ -746,14 +786,32 @@ func (g *GraphView) OnEvent(ev Event) {
 	r := g.Bounds()
 	switch ev.Kind {
 	case EventScroll:
-		g.ScrollBy(ev.Delta * graphScrollStep())
+		switch {
+		case g.zoomWheel(ev):
+		case ev.Shift:
+			g.PanBy((ev.Delta + ev.DeltaX) * graphScrollStep())
+		default:
+			if ev.DeltaX != 0 {
+				g.PanBy(ev.DeltaX * graphScrollStep())
+			}
+			g.ScrollBy(ev.Delta * graphScrollStep())
+		}
 	case EventMouseDrag:
+		if g.bgDrag {
+			z := g.zoomPct()
+			g.PanTo(g.dragPan.X + rnd(float64(g.dragFrom.X-ev.X)*100/float64(z)))
+			g.ScrollTo(g.dragPan.Y + rnd(float64(g.dragFrom.Y-ev.Y)*100/float64(z)))
+			return
+		}
 		sg, ok := g.scrollbarGeom()
 		g.sbDrag.drag(sg, ok, ev, g.ScrollTo)
 	case EventMouseUp:
+		g.bgDrag = false
 		g.sbDrag.release()
+	case EventTouchStart, EventTouchMove, EventTouchEnd:
+		g.pinchFeed(ev)
 	case EventClick:
-		if sg, ok := g.scrollbarGeom(); g.sbDrag.press(sg, ok, ev, g.viewH, g.ScrollBy) {
+		if sg, ok := g.scrollbarGeom(); g.sbDrag.press(sg, ok, ev, g.viewH*100/g.zoomPct(), g.ScrollBy) {
 			return
 		}
 		hit := g.Hit(r.X+ev.X, r.Y+ev.Y)
@@ -761,9 +819,14 @@ func (g *GraphView) OnEvent(ev Event) {
 			g.activate()
 			return
 		}
+		// A press on the background may become a pan.
+		g.bgDrag = hit == ""
+		g.dragFrom, g.dragPan = GraphPoint{ev.X, ev.Y}, GraphPoint{g.panX, g.scrollY}
 		g.Model.Selected.Set(hit)
 	case EventKeyDown:
-		g.key(ev.Code)
+		if !g.zoomKey(ev.Code) {
+			g.key(ev.Code)
+		}
 	}
 }
 
