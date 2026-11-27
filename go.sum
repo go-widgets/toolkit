@@ -5,8 +5,8 @@ github.com/coder/websocket v1.8.15/go.mod h1:NX3SzP+inril6yawo5CQXx8+fk145lPDC6p
 github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707 h1:2tV76y6Q9BB+NEBasnqvs7e49aEBFI8ejC89PSnWH+4=
 github.com/dsnet/compress v0.0.2-0.20230904184137-39efe44ab707/go.mod h1:qssHWj60/X5sZFNxpG4HBPDHVqxNm4DfnCKgrbZOT+s=
 github.com/dsnet/golib v0.0.0-20171103203638-1ea166775780/go.mod h1:Lj+Z9rebOhdfkVLjJ8T6VcRQv3SXugXy999NBtR9aFY=
-github.com/go-crdt/collab v0.83.0 h1:U51D8EIC9EaKMJ3UHYbXwfYs3Vnq7ylwUav4pa6nfK0=
-github.com/go-crdt/collab v0.83.0/go.mod h1:h3iZ9uR+tT7ghQawUM5sFtvH4Wq9qw1j7AMJBrTsM3s=
+github.com/go-crdt/collab v0.84.0 h1:JaZet/N96cyrikGzzHFfFXcl1UlXBoQ3CNnUueYAzlY=
+github.com/go-crdt/collab v0.84.0/go.mod h1:h3iZ9uR+tT7ghQawUM5sFtvH4Wq9qw1j7AMJBrTsM3s=
 github.com/go-crdt/crdt v0.59.0 h1:2gp9+qVo6zN4Y5A6fUKkHufZjJGUJQZ2R4xecDrO0xQ=
 github.com/go-crdt/crdt v0.59.0/go.mod h1:kHlReXEoryOyNeoSZv7GizHHuSZ+DmVi2AuGIRb0jNc=
 github.com/go-gfx/gfx v0.42.0 h1:6z6RlJTJrfcnJTzd/T2yZ+fAKcs6356GYq9xw1YC0hg=

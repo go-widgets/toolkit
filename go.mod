@@ -3,7 +3,7 @@ module github.com/go-widgets/toolkit
 go 1.27.4
 
 require (
-	github.com/go-crdt/collab v0.83.0
+	github.com/go-crdt/collab v0.84.0
 	github.com/go-crdt/crdt v0.59.0
 	github.com/go-gfx/gfx v0.42.0
 	github.com/go-icons/iconoir v0.3.0
