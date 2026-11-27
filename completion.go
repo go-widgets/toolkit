@@ -628,7 +628,7 @@ func (c *CodeEditor) drawCompletion(p painter.Painter, theme *Theme) {
 		labels[i] = it.Label
 	}
 	lb := NewListBox(labels)
-	lb.RowHeight = scaled(CompletionRowH)
+	lb.RowHeight = CompletionRowH // logical: ListBox scales it
 	lb.Selected().Set(c.CompletionSelection().Get())
 	lb.ScrollRow().Set(c.clampedCompScroll())
 	lb.ItemRenderer = func(pp painter.Painter, th *Theme, rc Rect, index int, _ string, selected bool, ink RGBA) {

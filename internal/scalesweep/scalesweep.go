@@ -27,9 +27,56 @@ import (
 // Type is one exported struct type; Ctor is set when the package has a
 // `func NewT() *T` taking nothing, which the sweep prefers to a zero value
 // (many widgets are unusable until their constructor ran).
+//
+// ⛔ A constructor with parameters is called with zero values when every
+// parameter has an obvious one (Args holds the call's arguments, e.g. `nil` for
+// NewListBox(items []string)); otherwise the type is NeedsArgs and the sweep
+// must be given a constructor by hand. Building such a type from its zero value
+// instead silently skips whatever the constructor sets up: NewListBox bakes its
+// RowHeight in device pixels, and the zero ListBox (RowHeight 0, no rows) never
+// showed it.
 type Type struct {
-	Name string
-	Ctor bool
+	Name      string
+	Ctor      bool
+	Args      string
+	NeedsArgs bool
+}
+
+// zeroArgs returns the argument list that calls fd with zero values, and false
+// when some parameter has no obvious one (a named type, a pointer that the
+// constructor would dereference).
+func zeroArgs(fd *ast.FuncDecl) (string, bool) {
+	var args []string
+	for _, f := range fd.Type.Params.List {
+		var z string
+		switch t := f.Type.(type) {
+		case *ast.Ellipsis:
+			continue
+		case *ast.ArrayType:
+			z = "nil"
+		case *ast.Ident:
+			switch t.Name {
+			case "string":
+				z = `""`
+			case "bool":
+				z = "false"
+			case "int", "int8", "int16", "int32", "int64", "uint", "uint8", "uint16", "uint32", "uint64", "float32", "float64":
+				z = "0"
+			default:
+				// A type of this package: its zero value, whatever it is.
+				z = "zero[" + t.Name + "]()"
+			}
+		case *ast.StarExpr, *ast.FuncType, *ast.MapType, *ast.InterfaceType, *ast.ChanType:
+			z = "nil"
+		default:
+			return "", false
+		}
+		n := max(len(f.Names), 1)
+		for range n {
+			args = append(args, z)
+		}
+	}
+	return strings.Join(args, ", "), true
 }
 
 // Types returns the sorted exported, non-generic struct types declared in the
@@ -40,7 +87,7 @@ func Types(dir string) ([]Type, error) {
 		return nil, err
 	}
 	seen := map[string]bool{}
-	ctors := map[string]bool{}
+	ctors := map[string]Type{}
 	for _, f := range files {
 		if strings.HasSuffix(f, "_test.go") {
 			continue
@@ -58,11 +105,12 @@ func Types(dir string) ([]Type, error) {
 		}
 		for _, d := range af.Decls {
 			if fd, ok := d.(*ast.FuncDecl); ok && fd.Recv == nil && strings.HasPrefix(fd.Name.Name, "New") &&
-				fd.Type.TypeParams == nil && len(fd.Type.Params.List) == 0 &&
+				fd.Type.TypeParams == nil &&
 				fd.Type.Results != nil && len(fd.Type.Results.List) == 1 {
 				if st, ok := fd.Type.Results.List[0].Type.(*ast.StarExpr); ok {
 					if id, ok := st.X.(*ast.Ident); ok && id.Name == strings.TrimPrefix(fd.Name.Name, "New") {
-						ctors[id.Name] = true
+						a, ok := zeroArgs(fd)
+						ctors[id.Name] = Type{Ctor: ok, Args: a, NeedsArgs: !ok}
 					}
 				}
 			}
@@ -80,7 +128,9 @@ func Types(dir string) ([]Type, error) {
 	}
 	names := make([]Type, 0, len(seen))
 	for n := range seen {
-		names = append(names, Type{n, ctors[n]})
+		c := ctors[n]
+		c.Name = n
+		names = append(names, c)
 	}
 	sort.Slice(names, func(i, j int) bool { return names[i].Name < names[j].Name })
 	return names, nil
@@ -94,13 +144,20 @@ func Generate(names []Type) []byte {
 	b.WriteString("// sweepTypes constructs every exported struct type of the\n")
 	b.WriteString("// package (by its no-argument constructor when it has one); the sweep keeps the ones that are widgets.\n")
 	b.WriteString("var sweepTypes = []struct {\n\tname string\n\tnew  func() any\n}{\n")
+	var open []string
 	for _, n := range names {
 		if n.Ctor {
-			fmt.Fprintf(&b, "\t{%q, func() any { return New%s() }},\n", n.Name, n.Name)
+			fmt.Fprintf(&b, "\t{%q, func() any { return New%s(%s) }},\n", n.Name, n.Name, n.Args)
 		} else {
 			fmt.Fprintf(&b, "\t{%q, func() any { return new(%s) }},\n", n.Name, n.Name)
 		}
+		if n.NeedsArgs {
+			open = append(open, fmt.Sprintf("%q", n.Name))
+		}
 	}
-	b.WriteString("}\n")
+	b.WriteString("}\n\n")
+	b.WriteString("// sweepNeedsArgs lists the types whose constructor takes something the generator\n")
+	b.WriteString("// cannot zero; the sweep must be given each one in sweepArgs, or it fails.\n")
+	fmt.Fprintf(&b, "var sweepNeedsArgs = []string{%s}\n", strings.Join(open, ", "))
 	return b.Bytes()
 }

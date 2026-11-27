@@ -12,7 +12,9 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
+	"github.com/go-crdt/crdt"
 	"github.com/go-widgets/toolkit/internal/scalesweep"
 )
 
@@ -47,6 +49,19 @@ func TestSweepTypeListIsCurrent(t *testing.T) {
 		t.Fatal("the exported types changed since scalesweep_types_gen_test.go was generated: run `go generate ./...` and commit it, so the new type is swept")
 	}
 }
+
+// tryBuild runs mk, reporting a panic instead of dying with it.
+func tryBuild(mk func() any) (v any, panicked bool) {
+	defer func() {
+		if r := recover(); r != nil {
+			v, panicked = r, true
+		}
+	}()
+	return mk(), false
+}
+
+// zero is the zero value of T, for the generated constructor calls.
+func zero[T any]() (z T) { return }
 
 // sweepSize is the logical size every widget is drawn in.
 const sweepW, sweepH = 240, 160
@@ -139,35 +154,73 @@ func ink(buf []byte, w, h int) (x0, y0, x1, y1 int) {
 // from its zero value or a no-argument constructor and is not here fails the
 // sweep, instead of being skipped.
 var sweepArgs = map[string]func() any{
-	"ClosablePane":      func() any { return NewClosablePane("Title", &Label{}) },
-	"CodeEditor":        func() any { return NewCodeEditor("x := 1") },
-	"DatabaseEditor":    func() any { return NewDatabaseEditor(newCannedSource()) },
-	"DatePicker":        func() any { return NewDatePicker(2026, 8, 16) },
-	"DateRangePicker":   func() any { return NewDateRangePicker(2026, 8) },
-	"DiffView":          func() any { return NewDiffView("a\nb", "a\nc") },
-	"EmptyState":        func() any { return NewEmptyState("No server") },
-	"FileChooser":       func() any { return NewFileChooser(&TreeNode{Label: "r"}, nil) },
-	"FileTree":          func() any { return NewFileTree(nil) },
-	"FontPicker":        func() any { return NewFontPicker([]string{"Alpha", "Beta"}) },
-	"ForgePane":         func() any { return NewForgePane(newFakeForge()) },
-	"GraphView":         func() any { return NewGraphView(NewGraphViewModel()) },
-	"IsoDiagram":        func() any { return NewIsoDiagram(nil) },
-	"IsoIconPalette":    func() any { return NewIsoIconPalette(NewIsoIconRegistry()) },
-	"PullToRefresh":     func() any { return NewPullToRefresh(&Label{}) },
+	"ClosablePane":    func() any { return NewClosablePane("Title", &Label{}) },
+	"CodeEditor":      func() any { return NewCodeEditor("x := 1") },
+	"DatabaseEditor":  func() any { return NewDatabaseEditor(newCannedSource()) },
+	"DatePicker":      func() any { return NewDatePicker(2026, 8, 16) },
+	"DateRangePicker": func() any { return NewDateRangePicker(2026, 8) },
+	"DiffView":        func() any { return NewDiffView("a\nb", "a\nc") },
+	"EmptyState":      func() any { return NewEmptyState("No server") },
+	"FileChooser":     func() any { return NewFileChooser(&TreeNode{Label: "r"}, nil) },
+	"FileTree":        func() any { return NewFileTree(nil) },
+	"FontPicker":      func() any { return NewFontPicker([]string{"Alpha", "Beta"}) },
+	"ForgePane":       func() any { return NewForgePane(newFakeForge()) },
+	"GraphView":       func() any { return NewGraphView(NewGraphViewModel()) },
+	"IsoDiagram":      func() any { return NewIsoDiagram(nil) },
+	"IsoIconPalette":  func() any { return NewIsoIconPalette(NewIsoIconRegistry()) },
+	"PullToRefresh":   func() any { return NewPullToRefresh(&Label{}) },
+	"Backdrop": func() any {
+		return NewBackdrop(RGBA{R: 10, G: 10, B: 10, A: 255}, RGBA{R: 90, G: 90, B: 90, A: 255}, 12)
+	},
+	"Clock":             func() any { return NewClock(time.Date(2026, 8, 16, 10, 9, 0, 0, time.UTC)) },
+	"CollabSheet":       func() any { return NewCollabSheet(crdt.SiteID(1)) },
+	"IsoCRDTDocument":   func() any { return NewIsoCRDTDocument(crdt.SiteID(1)) },
+	"TerminalView":      func() any { return NewTerminalView(20, 5) },
 	"RichEditorToolbar": func() any { return NewRichEditorToolbar(nil) },
 	"Spreadsheet":       func() any { return NewSpreadsheet(4, 4) },
 }
 
+// sweepBlankOK are the widgets that paint nothing at rest: containers with no
+// child, overlays and popups drawn only while open, and state-driven widgets.
+// Their metrics are exercised through their children or by their own tests.
+var sweepBlankOK = func() map[string]bool {
+	m := map[string]bool{}
+	for _, n := range strings.Fields(`Accordion ActionSheet AlignBox Base Border Carousel
+		CommandPalette Container ContextMenu Dock DockPanel FileTree FindReplace Grid HBox
+		Image Inspector Kanban LoadMask Native Notification Overlay Padding PieChart Popover
+		PopoverHost PullToRefresh SkeletonGroup Sparkline Spinner Splitter Stack StatusArea
+		StatusIcon Surface SwipeActions Toast Tooltip VBox Viewport WindowDecoration Wizard
+		WorkspacePager`) {
+		m[n] = true
+	}
+	return m
+}()
+
 func TestEveryWidgetFollowsAScaleChange(t *testing.T) {
 	var swept, skipped int
-	var live, size []string
+	var live, size, blank []string
 	t.Cleanup(sweepReset)
+	// ⛔ Fails closed: a type whose constructor the generator cannot call must be
+	// built by hand, never from its zero value, which skips what the constructor
+	// sets up (the NewListBox RowHeight that went unseen).
+	for _, n := range sweepNeedsArgs {
+		if _, ok := sweepArgs[n]; !ok {
+			t.Errorf("%s has a constructor with parameters and no entry in sweepArgs: the sweep would build it from its zero value", n)
+		}
+	}
 	for _, st := range sweepTypes {
 		mk := st.new
 		if f, ok := sweepArgs[st.name]; ok {
 			mk = f
 		}
-		if _, isWidget := mk().(Widget); !isWidget {
+		if v, panicked := tryBuild(mk); panicked {
+			// ⛔ A constructor that refuses its zero arguments is not skipped: the
+			// type goes in sweepArgs with arguments it accepts.
+			if _, ok := sweepArgs[st.name]; !ok {
+				t.Errorf("%s: its constructor panics on zero arguments (%v) and sweepArgs has no entry", st.name, v)
+			}
+			continue
+		} else if _, isWidget := v.(Widget); !isWidget {
 			continue // not a widget
 		}
 		name := st.name
@@ -200,6 +253,7 @@ func TestEveryWidgetFollowsAScaleChange(t *testing.T) {
 		ax0, ay0, ax1, ay1 := ink(one, w1, h1)
 		bx0, by0, bx1, by1 := ink(fresh2, w2, h2)
 		if ax1 < 0 {
+			blank = append(blank, name)
 			continue // paints nothing at rest; nothing to compare
 		}
 		near := func(a, b int) bool { d := b - 2*a; return d >= -4-a/16 && d <= 4+a/16 }
@@ -216,6 +270,21 @@ func TestEveryWidgetFollowsAScaleChange(t *testing.T) {
 	}
 	slices.Sort(live)
 	slices.Sort(size)
+	slices.Sort(blank)
+	// ⛔ A widget that paints nothing at rest hides every metric it owns (that is
+	// how a baked row height stays unseen), so blank is not "nothing to compare":
+	// the set must equal the documented allowlist. A new blank widget fails, and
+	// so does a listed one that starts painting (remove it from the list then).
+	for _, n := range blank {
+		if !sweepBlankOK[n] {
+			t.Errorf("%s paints nothing when freshly built and populated, so the sweep cannot see its metrics: give it content in populate, or list it in sweepBlankOK with the reason", n)
+		}
+	}
+	for n := range sweepBlankOK {
+		if !slices.Contains(blank, n) {
+			t.Errorf("%s is listed in sweepBlankOK but is not blank any more (or not swept): remove it from the list", n)
+		}
+	}
 	if len(live) > 0 {
 		t.Errorf("%d: a live scale change draws differently from a fresh build:\n  %s", len(live), strings.Join(live, "\n  "))
 	}

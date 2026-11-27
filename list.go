@@ -67,7 +67,12 @@ type ListBox struct {
 	// next SetBounds/Draw to re-lay the rows out.
 	Sections []ListSection
 
-	RowHeight int // pixels per row; default 18 via NewListBox
+	// RowHeight is the height of a row in LOGICAL pixels, multiplied by
+	// [MetricScale] when drawn and hit-tested, like every other size here;
+	// default 18 via NewListBox. It used to hold device pixels fixed at
+	// construction, which a list built at one scale kept after the window moved to
+	// a display of another.
+	RowHeight int
 	// selectedRow is the anchor/cursor row (-1 = no selection). The reactive
 	// selection is MVVM-only: it lives in an unexported Observable exposed via
 	// [ListBox.Selected]; there is no settable Selected field.
@@ -152,7 +157,7 @@ func NewListBox(items []string) *ListBox {
 		Items:         items,
 		selectedRow:   mvvm.NewObservable(-1),
 		scrollRow:     mvvm.NewObservable(0),
-		RowHeight:     scaled(18),
+		RowHeight:     18,
 		extendTo:      -1,
 		pressedRow:    -1,
 		dropIndicator: -1,
@@ -196,7 +201,7 @@ func (l *ListBox) rowHeight() int {
 	}
 	// Never under the font's own height: a RowHeight fixed at construction (at
 	// another metric scale) must not stack lines closer than their glyphs.
-	return max(TouchTarget(l.RowHeight), GlyphHeight())
+	return max(TouchTarget(scaled(l.RowHeight)), GlyphHeight())
 }
 
 // ListBox is a DragSource + DropTarget when Reorderable (see the type doc).
