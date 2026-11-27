@@ -112,7 +112,7 @@ jobs:
   # holds it; these lanes answer "do the tests pass on this platform".
   test-arm64:
     name: Test (linux/arm64, native)
-    runs-on: ubuntu-24.04-arm
+    runs-on: ubuntu-26.04-arm
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
