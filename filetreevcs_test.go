@@ -68,7 +68,9 @@ func TestSetRepositoryMarksEntries(t *testing.T) {
 	if f.Repository() != nil {
 		t.Fatal("a new tree has no repository")
 	}
+	h := newVCSHarness(f, repo)
 	f.SetRepository(repo)
+	h.settle()
 	if f.Repository() != vcs.Repository(repo) {
 		t.Error("Repository() is not the attached one")
 	}
@@ -107,7 +109,9 @@ func TestFoldersTakeTheirDescendantsMark(t *testing.T) {
 		"src/util/helper.go": vcs.Untracked,
 		"docs/guide.md":      vcs.Deleted,
 	})
+	h := newVCSHarness(f, repo)
 	f.SetRepository(repo)
+	h.settle()
 	for p, want := range map[string]FileStatus{
 		"src":      FileModified, // "any descendant has a status", untracked included
 		"src/util": FileModified,
@@ -128,7 +132,7 @@ func TestFoldersTakeTheirDescendantsMark(t *testing.T) {
 		"docs/old.md":        vcs.Deleted,
 	})
 	for range 50 {
-		if err := f.RefreshStatus(context.Background()); err != nil {
+		if err := h.refresh(context.Background()); err != nil {
 			t.Fatal(err)
 		}
 		for p, want := range map[string]FileStatus{
@@ -143,12 +147,12 @@ func TestFoldersTakeTheirDescendantsMark(t *testing.T) {
 	// A folder the repository reports itself (a submodule) keeps its own state,
 	// unless a conflict lies beneath it.
 	repo.Set(map[string]vcs.State{"vendor": vcs.Untracked, "vendor/lib.go": vcs.Modified})
-	f.RefreshStatus(context.Background())
+	h.refresh(context.Background())
 	if got := treeStatus(t, f, "vendor"); got != FileUntracked {
 		t.Errorf("a folder with its own state = %v, want FileUntracked", got)
 	}
 	repo.Set(map[string]vcs.State{"vendor": vcs.Untracked, "vendor/lib.go": vcs.Conflicted})
-	f.RefreshStatus(context.Background())
+	h.refresh(context.Background())
 	if got := treeStatus(t, f, "vendor"); got != FileConflicted {
 		t.Errorf("a conflict beneath a folder with its own state = %v, want FileConflicted", got)
 	}
@@ -159,7 +163,9 @@ func TestEntryStatusWinsOverTheRepository(t *testing.T) {
 	f := NewFileTree([]FileEntry{{Path: "a.txt", Status: FileUntracked}, {Path: "b.txt"}})
 	repo := vcstest.NewRepo("/w")
 	repo.Set(map[string]vcs.State{"a.txt": vcs.Modified, "b.txt": vcs.Modified})
+	h := newVCSHarness(f, repo)
 	f.SetRepository(repo)
+	h.settle()
 	if got := treeStatus(t, f, "a.txt"); got != FileUntracked {
 		t.Errorf("a.txt = %v, the host's FileUntracked must win", got)
 	}
@@ -171,7 +177,9 @@ func TestEntryStatusWinsOverTheRepository(t *testing.T) {
 func TestDetachClearsTheMarks(t *testing.T) {
 	f, repo := vcsFixture()
 	repo.Set(map[string]vcs.State{"README.md": vcs.Modified})
+	h := newVCSHarness(f, repo)
 	f.SetRepository(repo)
+	h.settle()
 	if treeStatus(t, f, "README.md") != FileModified {
 		t.Fatal("not marked")
 	}
@@ -179,7 +187,7 @@ func TestDetachClearsTheMarks(t *testing.T) {
 	if f.Repository() != nil || treeStatus(t, f, "README.md") != FileUnchanged || len(f.Marks().Get()) != 0 {
 		t.Error("detaching must remove every repository mark")
 	}
-	if err := f.RefreshStatus(context.Background()); err != nil {
+	if err := h.refresh(context.Background()); err != nil {
 		t.Errorf("RefreshStatus with no repository = %v, want nil", err)
 	}
 }
@@ -190,7 +198,9 @@ func TestDetachClearsTheMarks(t *testing.T) {
 func TestMarksFollowTheTreesOperations(t *testing.T) {
 	f, repo := vcsFixture()
 	repo.Set(map[string]vcs.State{"README.md": vcs.Modified})
+	h := newVCSHarness(f, repo)
 	f.SetRepository(repo)
+	h.settle()
 	calls := repo.Calls()
 
 	// The host's store and what its repository would say after each request.
@@ -203,6 +213,7 @@ func TestMarksFollowTheTreesOperations(t *testing.T) {
 	renamed := append([]FileEntry{{Path: "GUIDE.md"}}, entries[1:]...)
 	repo.Set(map[string]vcs.State{"GUIDE.md": vcs.Renamed})
 	f.Entries().Set(renamed)
+	h.settle()
 	if repo.Calls() != calls+1 {
 		t.Errorf("setting Entries asked the repository %d times, want 1", repo.Calls()-calls)
 	}
@@ -228,6 +239,7 @@ func TestMarksFollowTheTreesOperations(t *testing.T) {
 	} {
 		repo.Set(step.states)
 		f.Entries().Set(step.entries)
+		h.settle()
 		if got := treeStatus(t, f, step.path); got != step.want {
 			t.Errorf("after %s: %s = %v, want %v", step.name, step.path, got, step.want)
 		}
@@ -242,11 +254,13 @@ func slicesClone(e []FileEntry) []FileEntry { return append([]FileEntry(nil), e.
 func TestRefreshStatusErrors(t *testing.T) {
 	f, repo := vcsFixture()
 	repo.Set(map[string]vcs.State{"README.md": vcs.Modified})
+	h := newVCSHarness(f, repo)
 	f.SetRepository(repo)
+	h.settle()
 
 	boom := errors.New("repository on fire")
 	repo.Fail(boom)
-	if err := f.RefreshStatus(context.Background()); err != boom {
+	if err := h.refresh(context.Background()); err != boom {
 		t.Fatalf("RefreshStatus = %v, want the repository's error", err)
 	}
 	if f.StatusError().Get() != boom {
@@ -256,19 +270,22 @@ func TestRefreshStatusErrors(t *testing.T) {
 		t.Error("an error blanked the previous marks")
 	}
 	f.Entries().Set(append(slicesClone(f.Entries().Get()), FileEntry{Path: "z.txt"})) // auto-refresh fails too, quietly
+	h.settle()
 	if f.StatusError().Get() == nil {
 		t.Error("the error vanished")
 	}
 
 	repo.Fail(nil)
-	if err := f.RefreshStatus(context.Background()); err != nil || f.StatusError().Get() != nil {
+	if err := h.refresh(context.Background()); err != nil || f.StatusError().Get() != nil {
 		t.Errorf("after recovery: %v, %v", err, f.StatusError().Get())
 	}
 
 	// SetRepository reports a failing repository through StatusError, not a panic.
 	bad := vcstest.NewRepo("/bad")
 	bad.Fail(errors.New("nope"))
+	h.track(bad)
 	f.SetRepository(bad)
+	h.settle()
 	if f.StatusError().Get() == nil || f.Repository() != vcs.Repository(bad) {
 		t.Error("attaching a failing repository must publish its error")
 	}
@@ -280,9 +297,29 @@ func TestRefreshStatusErrors(t *testing.T) {
 
 func TestRefreshStatusPassesTheContext(t *testing.T) {
 	f, repo := vcsFixture()
+	h := newVCSHarness(f, repo)
 	f.SetRepository(repo)
+	h.settle()
 	ctx, cancel := context.WithCancel(context.Background())
 	cancel()
+	if syncStatusBlocks {
+		// js/wasm: no caller context reaches Status (the tree owns the context of
+		// its asynchronous refresh); what is asserted is that the tree cancels it
+		// when a newer refresh supersedes it, so a stale answer never lands.
+		// The first refresh answers Modified before the second is started, and its
+		// answer is held back; the second answers Deleted. They are applied newest
+		// first, so a stale answer that is not discarded ends up on top.
+		repo.Set(map[string]vcs.State{"README.md": vcs.Modified})
+		f.RefreshStatusAsync()
+		h.wait()
+		repo.Set(map[string]vcs.State{"README.md": vcs.Deleted})
+		f.RefreshStatusAsync()
+		h.drainNewestFirst()
+		if got := f.Marks().Get()["README.md"]; got != FileDeleted {
+			t.Errorf("after two refreshes README.md = %v, want the newer FileDeleted", got)
+		}
+		return
+	}
 	if err := f.RefreshStatus(ctx); !errors.Is(err, context.Canceled) {
 		t.Errorf("a cancelled context reached the repository as %v", err)
 	}
@@ -290,12 +327,14 @@ func TestRefreshStatusPassesTheContext(t *testing.T) {
 
 func TestMarksObservableNotifiesOnChangeOnly(t *testing.T) {
 	f, repo := vcsFixture()
+	h := newVCSHarness(f, repo)
 	f.SetRepository(repo)
+	h.settle()
 	n := 0
 	f.Marks().Subscribe(func(map[string]FileStatus) { n++ })
 	repo.Set(map[string]vcs.State{"README.md": vcs.Modified})
-	f.RefreshStatus(context.Background())
-	f.RefreshStatus(context.Background()) // same marks: nothing to tell
+	h.refresh(context.Background())
+	h.refresh(context.Background()) // same marks: nothing to tell
 	if n != 1 {
 		t.Errorf("subscriber told %d times, want 1", n)
 	}

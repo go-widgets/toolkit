@@ -58,6 +58,11 @@ jobs:
           CGO_ENABLED: "1"
         run: go test -race ./...
 
+      # `go build` never reads _test.go files, so the build loop below cannot see a
+      # test file that stops compiling for a platform (#408). vet does.
+      - name: Vet the test files for js/wasm
+        run: GOOS=js GOARCH=wasm go vet ./...
+
       - name: Cross-compile smoke (all 6 64-bit arches + wasm + darwin)
         run: |
           for arch in amd64 arm64 riscv64 loong64 ppc64le s390x; do
@@ -101,3 +106,78 @@ jobs:
           GOOS=js      GOARCH=wasm  go build ./...
           GOOS=darwin  GOARCH=arm64 go build ./...
           GOOS=windows GOARCH=amd64 go build ./...
+
+  # The suite RUNS on arm64 hardware (GitHub's native arm runner, no emulation)
+  # and on js/wasm under Go's node wrapper. No coverage gate here: the amd64 lane
+  # holds it; these lanes answer "do the tests pass on this platform".
+  test-arm64:
+    name: Test (linux/arm64, native)
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.4"
+          check-latest: true
+          cache: true
+      - name: go test
+        run: go test ./...
+
+  # The other four 64-bit targets run under QEMU user-mode, registered through
+  # binfmt_misc (the fleet's pattern, vcdiff's ci.yml). With the handlers
+  # installed the kernel runs a foreign test binary directly, so `go test` runs
+  # it exactly as on the native lanes: from the package directory of the
+  # checkout, which the source-reading tests (MVVM gate, module walk) need.
+  # s390x is big-endian, so it is a genuine byte-order test.
+  test-qemu:
+    name: Test (${{ matrix.goarch }}, qemu)
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - goarch: riscv64
+            qemu_cpu: "rv64,v=true,vlen=128"
+          - goarch: loong64
+            qemu_cpu: la464
+          - goarch: ppc64le
+            qemu_cpu: power9
+          - goarch: s390x
+            qemu_cpu: qemu
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.4"
+          check-latest: true
+          cache: true
+      - name: Register QEMU (binfmt)
+        # Pinned by digest (the index of tonistiigi/binfmt:qemu-v10.2.3-68, read
+        # from the registry), and only the four emulators the matrix uses.
+        run: docker run --privileged --rm tonistiigi/binfmt@sha256:400a4873b838d1b89194d982c45e5fb3cda4593fbfd7e08a02e76b03b21166f0 --install riscv64,loong64,ppc64le,s390x
+      - name: go test under QEMU
+        env:
+          GOARCH: ${{ matrix.goarch }}
+          QEMU_CPU: ${{ matrix.qemu_cpu }}
+        run: go test -timeout 100m ./...
+
+  test-wasm:
+    name: Test (js/wasm, node)
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version: "1.27.4"
+          check-latest: true
+          cache: true
+      - name: go test under the wasm exec wrapper
+        env:
+          GOOS: js
+          GOARCH: wasm
+        run: |
+          export PATH="$PATH:$(go env GOROOT)/lib/wasm"
+          go test -exec go_js_wasm_exec ./...
