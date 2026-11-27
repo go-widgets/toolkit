@@ -247,6 +247,14 @@ func (b *Button) drawContent(p painter.Painter, theme *Theme, r Rect, ink RGBA) 
 	gh := b.glyphHeight()
 	ty := r.Y + (r.H-gh)/2
 
+	pad := scaled(8)
+	// A caption wider than the face wraps onto lines inside it instead of running
+	// past the edge (a button holding a shortcut hint keeps its single line).
+	if sc == "" && label != "" && b.textWidth(label) > b.captionWidth(r.W, icon != nil) {
+		b.drawWrapped(p, r, label, icon, ink)
+		return
+	}
+
 	if icon == nil && sc == "" {
 		if label != "" {
 			tw := b.textWidth(label)
@@ -255,7 +263,6 @@ func (b *Button) drawContent(p painter.Painter, theme *Theme, r Rect, ink RGBA) 
 		return
 	}
 
-	pad := scaled(8)
 	x := r.X + pad
 	if icon != nil {
 		icon(p, Rect{X: x, Y: r.Y + (r.H-gh)/2, W: gh, H: gh}, ink)
@@ -268,6 +275,49 @@ func (b *Button) drawContent(p painter.Painter, theme *Theme, r Rect, ink RGBA) 
 		sw := b.textWidth(sc)
 		b.drawText(p, r.X+r.W-pad-sw, ty, sc, mutedInk(theme))
 	}
+}
+
+// captionWidth is the width a caption may take in a face w wide: the face less
+// its padding and, when there is one, the leading icon.
+func (b *Button) captionWidth(w int, icon bool) int {
+	cw := w - 2*scaled(8)
+	if icon {
+		cw -= b.glyphHeight() + scaled(6)
+	}
+	return max(cw, 1)
+}
+
+// drawWrapped paints a caption wrapped to the face, each line centred in the room
+// the leading icon leaves, the block centred vertically.
+func (b *Button) drawWrapped(p painter.Painter, r Rect, label string, icon IconFunc, ink RGBA) {
+	f := b.EffectiveFont()
+	gh := f.Height()
+	pad := scaled(8)
+	tx, tw := r.X+pad, r.W-2*pad
+	if icon != nil {
+		icon(p, Rect{X: r.X + pad, Y: r.Y + (r.H-gh)/2, W: gh, H: gh}, ink)
+		tx += gh + scaled(6)
+		tw -= gh + scaled(6)
+	}
+	lines := WrapLines(f, label, max(tw, 1))
+	y := r.Y + (r.H-wrapBlockHeight(f, len(lines)))/2
+	for _, line := range lines {
+		b.drawText(p, tx+(tw-f.Measure(line))/2, y, line, ink)
+		y += wrapPitch(f)
+	}
+}
+
+// HeightFor is the height the button needs to show its caption in full at width
+// pixels wide: a single line's, or the wrapped lines' plus the face's padding.
+// A layout gives a button with a long caption this much, not a fixed height.
+func (b *Button) HeightFor(width int) int {
+	f := b.EffectiveFont()
+	n := 1
+	icon := b.leadingIconFn() != nil
+	if b.Icon == nil && b.shortcutText() == "" && b.Label().Get() != "" {
+		n = max(1, len(WrapLines(f, b.Label().Get(), b.captionWidth(width, icon))))
+	}
+	return wrapBlockHeight(f, n) + 2*scaled(8)
 }
 
 // PreferredWidth is the intrinsic width the button needs to show its CURRENT

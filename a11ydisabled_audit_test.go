@@ -753,7 +753,7 @@ const (
 // in the catalogue.
 var disabledA11yExempt = exemptions(map[string][]string{
 	exemptStatic: {
-		"Alert", "AreaChart", "ArticleCard", "Avatar", "Badge", "BarChart", "Card", "CardMeta", "ChatBubble", "Clock",
+		"Alert", "AreaChart", "ArticleCard", "Avatar", "Badge", "BarChart", "Card", "CardMeta", "ChatBubble", "Clock", "Logo",
 		"ContrastBadge", "Diff", "Gauge", "GroupCard", "Image", "Kbd", "Label", "LevelBar", "LineChart",
 		"LinkCard", "LoadMask", "MarkdownView", "MediaCard", "Notification", "PieChart", "PostCard",
 		"ProgressBar", "ProgressCircle", "RadarChart", "SelectionBox",
