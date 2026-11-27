@@ -56,6 +56,19 @@ func TestWrapLinesFitAndKeepEveryRune(t *testing.T) {
 	}
 }
 
+func TestWrapBlockHeight(t *testing.T) {
+	f := CurrentFont()
+	if wrapBlockHeight(f, 0) != 0 || wrapBlockHeight(f, -3) != 0 {
+		t.Error("no lines occupy no height")
+	}
+	if got := wrapBlockHeight(f, 1); got != f.Height() {
+		t.Errorf("one line = %d, want the glyph height %d", got, f.Height())
+	}
+	if got, want := wrapBlockHeight(f, 3), wrapBlockHeight(f, 2)+wrapPitch(f); got != want {
+		t.Errorf("three lines = %d, want %d", got, want)
+	}
+}
+
 func TestLabelWrapStaysInItsBounds(t *testing.T) {
 	theme := DefaultLight()
 	const W, H = 220, 140
