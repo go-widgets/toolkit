@@ -5,6 +5,7 @@
 package toolkit
 
 import (
+	"math"
 	"unicode/utf8"
 
 	"github.com/go-widgets/painter"
@@ -40,6 +41,40 @@ type Font interface {
 	Height() int
 	Measure(text string) int
 	Draw(p painter.Painter, x, y int, text string, ink RGBA)
+}
+
+// FontScaler is implemented by a font that can give a copy of itself at another
+// size: the built-in bitmap font (whole-pixel scales) and a TrueType font (the
+// em size). A widget whose geometry zooms asks for its text to follow through
+// [ScaleFont], so the type is the size of the boxes it sits in.
+type FontScaler interface {
+	// Scaled is the font at factor times its own size, rounded to the nearest
+	// pixel size and never below one.
+	Scaled(factor float64) Font
+}
+
+// ScaleFont is f at factor times its size. A font that is not a [FontScaler], a
+// factor that is not positive, and a factor that rounds to the size f already
+// has all give f back: the text keeps its size, nothing is drawn wrong.
+func ScaleFont(f Font, factor float64) Font {
+	if s, ok := f.(FontScaler); ok && factor > 0 {
+		return s.Scaled(factor)
+	}
+	return f
+}
+
+// scaledSize is size times factor, rounded, and at least one.
+func scaledSize(size int, factor float64) int {
+	return max(1, int(math.Floor(float64(size)*factor+0.5)))
+}
+
+// Scaled is the bitmap font at factor times its scale.
+func (f *bitmapFont) Scaled(factor float64) Font {
+	n := scaledSize(f.Scale, factor)
+	if n == f.Scale {
+		return f
+	}
+	return &bitmapFont{Scale: n}
 }
 
 // baseGlyphW / baseGlyphH are the unscaled dimensions of the built-in 5x7

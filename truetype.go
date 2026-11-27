@@ -115,6 +115,11 @@ func NewTrueTypeFont(ttf []byte, sizePx int) (Font, error) {
 	if err != nil {
 		return nil, fmt.Errorf("toolkit: parse TrueType font: %w", err)
 	}
+	return newTruetypeFont(parsed, ttf, sizePx), nil
+}
+
+// newTruetypeFont builds the font for an already parsed face at sizePx.
+func newTruetypeFont(parsed *opentype.Font, ttf []byte, sizePx int) *truetypeFont {
 	face := parsed.NewFace(sizePx)
 	m := face.Metrics()
 	return &truetypeFont{
@@ -125,7 +130,17 @@ func NewTrueTypeFont(ttf []byte, sizePx int) (Font, error) {
 		advance: face.Measure(" "),
 		height:  m.Height,
 		ascent:  m.Ascent,
-	}, nil
+	}
+}
+
+// Scaled is the same face at factor times its pixel size, built from the parsed
+// font without parsing it again.
+func (f *truetypeFont) Scaled(factor float64) Font {
+	px := scaledSize(f.sizePx, factor)
+	if px == f.sizePx {
+		return f
+	}
+	return newTruetypeFont(f.parsed, f.data, px)
 }
 
 // Advance is the horizontal step of a space — a coarse monospace-ish fallback

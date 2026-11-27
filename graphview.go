@@ -138,6 +138,12 @@ type GraphView struct {
 	dragPan   GraphPoint
 	mt        *MultiTouchRecognizer
 	pinchBase int
+
+	// The labels' font at the zoom (zoomedFont): the font it was made from and
+	// the zoom, so it is built again only when one of them changes.
+	zoomFont    Font
+	zoomBase    Font
+	zoomFontPct int
 }
 
 // NewGraphView returns a GraphView over m (a new empty model when nil).
@@ -495,7 +501,7 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 			g.strokeBox(p, box, g.clusterRadius(), theme.Border)
 			// The title is clipped to its box: a long one never runs out of it.
 			withClip(p, box, func() {
-				g.drawText(p, box.X+gGap(), box.Y+scaled(2), labels[id], theme.OnSurface)
+				g.zoomedFont().Draw(p, box.X+gGap(), box.Y+scaled(2), labels[id], theme.OnSurface)
 			})
 		}
 		nodes := g.Model.Nodes.Slice()
@@ -529,7 +535,8 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 				// The label is clipped to its box: a long one must not run into the
 				// node beside it.
 				withClip(p, box, func() {
-					g.drawText(p, box.X+3, box.Y+(box.H-g.glyphHeight())/2, n.Label, ink)
+					f := g.zoomedFont()
+					f.Draw(p, box.X+3, box.Y+(box.H-f.Height())/2, n.Label, ink)
 				})
 				if sel == "node:"+n.ID {
 					g.strokeBox(p, Rect{X: box.X - 2, Y: box.Y - 2, W: box.W + 4, H: box.H + 4}, g.CornerRadius+2, theme.Accent)
@@ -637,7 +644,8 @@ func (g *GraphView) drawEdge(p painter.Painter, theme *Theme, e GraphEdge, lane 
 	// The arrow head: a small square at the target end.
 	fillRect(p, x1-2+(x0-x1)/8, y1-2+(y0-y1)/8, 4, 4, col)
 	if selected && e.Label != "" && g.zoomPct() >= graphZoomBelowLabels {
-		g.drawText(p, (x0+x1)/2+4, (y0+y1)/2-g.glyphHeight()-2, e.Label, theme.OnBackground)
+		f := g.zoomedFont()
+		f.Draw(p, (x0+x1)/2+4, (y0+y1)/2-f.Height()-2, e.Label, theme.OnBackground)
 	}
 }
 
