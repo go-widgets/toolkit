@@ -48,6 +48,21 @@ func TestForgePaneRewrapsWhenOnlyTheScaleMoves(t *testing.T) {
 	_ = page
 }
 
+// A tiny scale must never ask the rasteriser for a zero-pixel face.
+func TestLabelFontSizeNeverRoundsToZeroPixels(t *testing.T) {
+	defer SetMetricScale(1)
+	SetMetricScale(0.1)
+	l := NewLabel("x")
+	l.SetFont(newTTF(t, 14))
+	l.SetFontSize(1)
+	if l.faceFor().Height() < 1 {
+		t.Fatal("the sized face collapsed to nothing")
+	}
+	if l.sizedFor != 1 {
+		t.Fatalf("device size = %d, want the 1 px floor", l.sizedFor)
+	}
+}
+
 // Drawing at an unchanged scale must not rebuild the layouts: that would throw
 // away the controls' state on every frame.
 func TestForgePaneKeepsItsLayoutsAtAnUnchangedScale(t *testing.T) {

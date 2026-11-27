@@ -8,18 +8,28 @@ package main
 
 import (
 	"fmt"
+	"io"
 	"os"
 
 	"github.com/go-widgets/toolkit/internal/scalesweep"
 )
 
-func main() {
-	names, err := scalesweep.Types(".")
+var osExit = os.Exit
+
+func run(dir, out string, stderr io.Writer) int {
+	names, err := scalesweep.Types(dir)
 	if err == nil {
-		err = os.WriteFile("scalesweep_types_gen_test.go", scalesweep.Generate(names), 0o644)
+		err = os.WriteFile(out, scalesweep.Generate(names), 0o644)
 	}
 	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+		fmt.Fprintln(stderr, err)
+		return 1
+	}
+	return 0
+}
+
+func main() {
+	if code := run(".", "scalesweep_types_gen_test.go", os.Stderr); code != 0 {
+		osExit(code)
 	}
 }
