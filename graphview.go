@@ -25,6 +25,9 @@ type GraphCluster struct {
 // appearance from GraphView.Palette.
 type GraphNode struct {
 	ID, Label, Cluster, Category string
+	// Shape is Box (default), Hub or Gateway. A Hub or Gateway belongs to no
+	// cluster under the Bands layout, which places it in a band of its own.
+	Shape GraphNodeShape
 }
 
 // GraphEdgeState says how an edge is drawn.
@@ -103,6 +106,9 @@ type GraphView struct {
 	// cluster boxes, in logical pixels (default 0: square, as before). A
 	// set-once appearance config, like NodeWidth.
 	CornerRadius int
+	// Layout places clusters and nodes; nil is GraphLayoutFlowGrid. Set it
+	// before the first draw, or call SetLayout.
+	Layout GraphLayout
 	// ShowLegend draws the category legend along the bottom edge.
 	ShowLegend bool
 	// OnActivate is called with the selection on Enter or a double selection.
@@ -251,57 +257,38 @@ func (g *GraphView) layout() {
 	g.clusterBox = map[string]Rect{}
 	g.nodeBox = map[string]Rect{}
 	g.order = g.order[:0]
-	clusters := g.Model.Clusters.Slice()
 	nodes := g.Model.Nodes.Slice()
-	members := map[string][]GraphNode{}
-	for _, n := range nodes {
-		members[n.Cluster] = append(members[n.Cluster], n)
-	}
 	g.contentH, g.viewH, g.hasBar = 0, 0, false
-	if len(clusters) == 0 {
+	area := r
+	if g.ShowLegend {
+		area.H -= g.legendHeight()
+	}
+	// The layout (flow grid unless Layout says otherwise) places the content
+	// relative to its own origin; it is told the height the legend leaves.
+	pl := g.placer().Place(g.Model, Size{W: area.W, H: area.H}, g.metrics())
+	if len(pl.Clusters) == 0 && len(pl.Nodes) == 0 {
 		g.scrollY, g.panX, g.contentW = 0, 0, 0
 		g.syncPan()
 		return
 	}
-	area := r
 	for _, n := range nodes { // the legend's entries, in the order the nodes name them
 		g.categoryColor(n.Category)
 	}
-	if g.ShowLegend {
-		area.H -= g.legendHeight()
-	}
 	g.viewH = area.H
-	// Each cluster is sized by its OWN members and the clusters flow left to
-	// right, wrapping to a new row. When the rows need more height than the
-	// widget has, a scrollbar takes its column and the rows are flowed again in
-	// what is left of the width.
-	// A cluster is at least as wide as its title, so a long label never
-	// spills over the next cluster.
-	titleW := func(c GraphCluster) int { return g.textWidth(c.Label) + 2*gGap() }
-	boxes, perRows, h := flowClusters(clusters, members, area.W, nw, titleW)
-	if h > area.H {
-		g.hasBar = true
-		boxes, perRows, h = flowClusters(clusters, members, area.W-scrollbarTrack(), nw, titleW)
-	}
-	g.contentH = h
-	g.contentW = 0
-	for _, b := range boxes {
-		g.contentW = maxInt(g.contentW, b.X+b.W+gGap())
-	}
+	g.hasBar = pl.HasBar
+	g.contentH = pl.Height
+	g.contentW = pl.Width
 	g.scrollY = clampInt(g.scrollY, 0, g.maxScrollY())
 	g.panX = clampInt(g.panX, 0, g.maxPanX())
 	g.syncPan()
-	for i, c := range clusters {
-		b := boxes[i]
-		box := Rect{X: area.X + b.X, Y: area.Y + b.Y - g.scrollY, W: b.W, H: b.H}
-		g.clusterBox[c.ID] = box
-		for j, n := range members[c.ID] {
-			nc, nr := j%perRows[i], j/perRows[i]
-			g.nodeBox[n.ID] = Rect{X: box.X + gGap() + nc*(nw+gGap()),
-				Y: box.Y + gTitleH() + gGap() + nr*(gNodeH()+gGap()), W: min(nw, max(box.W-2*gGap(), 1)), H: gNodeH()}
-			g.order = append(g.order, n.ID)
-		}
+	off := func(b Rect) Rect { return Rect{X: area.X + b.X, Y: area.Y + b.Y - g.scrollY, W: b.W, H: b.H} }
+	for id, b := range pl.Clusters {
+		g.clusterBox[id] = off(b)
 	}
+	for id, b := range pl.Nodes {
+		g.nodeBox[id] = off(b)
+	}
+	g.order = append(g.order, pl.Order...)
 }
 
 // flowClusters sizes each cluster by its own member count and flows them left
@@ -524,9 +511,21 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 				col = blendRGBA(col, theme.Background, 0.25)
 			}
 			// Nothing of a node is drawn outside its cluster's box.
-			limit := g.screen(g.clusterBox[n.Cluster])
+			// A hub or gateway sits in no cluster: it is limited to the view.
+			limit := r
+			if n.Shape == GraphShapeBox {
+				limit = g.screen(g.clusterBox[n.Cluster])
+			}
 			withClip(p, limit, func() {
-				g.fillBox(p, box, g.CornerRadius, col)
+				switch n.Shape {
+				case GraphShapeHub:
+					g.fillBox(p, box, box.H/2, col)
+				case GraphShapeGateway:
+					g.fillBox(p, box, g.CornerRadius, col)
+					g.strokeBox(p, box, g.CornerRadius, theme.Accent)
+				default:
+					g.fillBox(p, box, g.CornerRadius, col)
+				}
 				// Label ink by the swatch's lightness, so it reads on every colour.
 				ink := RGB(0x10, 0x10, 0x10)
 				if luminance(col) < 0.4 {
