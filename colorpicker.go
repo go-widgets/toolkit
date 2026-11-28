@@ -290,13 +290,23 @@ func (c *ColorPicker) drawSVSquare(p painter.Painter, r Rect) {
 	sv := c.svRectLocal()
 	wSpan := max(sv.W-1, 1)
 	hSpan := max(sv.H-1, 1)
-	for y := 0; y < sv.H; y++ {
-		vv := 1 - float64(y)/float64(hSpan)
-		for x := 0; x < sv.W; x++ {
-			ss := float64(x) / float64(wSpan)
-			rr, gg, bb := hsvToRGB(c.h, ss, vv)
-			putPixel(p, r.X+sv.X+x, r.Y+sv.Y+y, RGBA{R: rr, G: gg, B: bb, A: 0xFF})
+	// The square is a true 2D gradient, so it is built as one block of pixels and
+	// handed over as an image: a recording back-end writes one picture instead of
+	// a rect per pixel, a raster one blits it; a back-end without the capability
+	// gets the pixel loop (blitImage), with the same result.
+	if sv.W > 0 && sv.H > 0 {
+		pix := make([]byte, sv.W*sv.H*4)
+		for y := 0; y < sv.H; y++ {
+			vv := 1 - float64(y)/float64(hSpan)
+			for x := 0; x < sv.W; x++ {
+				ss := float64(x) / float64(wSpan)
+				rr, gg, bb := hsvToRGB(c.h, ss, vv)
+				i := (y*sv.W + x) * 4
+				pix[i], pix[i+1], pix[i+2], pix[i+3] = rr, gg, bb, 0xFF
+			}
 		}
+		dst := Rect{X: r.X + sv.X, Y: r.Y + sv.Y, W: sv.W, H: sv.H}
+		blitImage(p, dst, dst, pix, sv.W, sv.H)
 	}
 	mx := r.X + sv.X + int(clamp01(c.s)*float64(wSpan))
 	my := r.Y + sv.Y + int((1-clamp01(c.v))*float64(hSpan))
@@ -312,9 +322,7 @@ func (c *ColorPicker) drawHueStrip(p painter.Painter, r Rect) {
 		h := 360 * float64(y) / float64(hSpan)
 		rr, gg, bb := hsvToRGB(h, 1, 1)
 		col := RGBA{R: rr, G: gg, B: bb, A: 0xFF}
-		for x := 0; x < hr.W; x++ {
-			putPixel(p, r.X+hr.X+x, r.Y+hr.Y+y, col)
-		}
+		fillRect(p, r.X+hr.X, r.Y+hr.Y+y, hr.W, 1, col) // a row is one colour: one rect, not hr.W pixels
 	}
 	my := r.Y + hr.Y + int(c.h/360*float64(hSpan))
 	strokeRect(p, r.X+hr.X-1, my-1, hr.W+2, 3, RGB(0, 0, 0))
@@ -331,12 +339,15 @@ func (c *ColorPicker) drawAlphaSlider(p painter.Painter, r Rect, theme *Theme) {
 	light := RGB(0xFF, 0xFF, 0xFF)
 	dark := RGB(0xC0, 0xC0, 0xC0)
 	for y := 0; y < ar.H; y++ {
-		for x := 0; x < ar.W; x++ {
+		// A run of the same checker cell on one row is one colour: one rect.
+		for x := 0; x < ar.W; {
+			run := min(cell-x%cell, ar.W-x)
 			bg := dark
 			if ((x/cell)+(y/cell))%2 == 0 {
 				bg = light
 			}
-			putPixel(p, r.X+ar.X+x, r.Y+ar.Y+y, bg)
+			fillRect(p, r.X+ar.X+x, r.Y+ar.Y+y, run, 1, bg)
+			x += run
 		}
 	}
 	rr, gg, bb := hsvToRGB(c.h, c.s, c.v)
@@ -344,9 +355,7 @@ func (c *ColorPicker) drawAlphaSlider(p painter.Painter, r Rect, theme *Theme) {
 	for x := 0; x < ar.W; x++ {
 		a := uint8(255 * x / wSpan)
 		col := RGBA{R: rr, G: gg, B: bb, A: a}
-		for y := 0; y < ar.H; y++ {
-			putPixel(p, r.X+ar.X+x, r.Y+ar.Y+y, col)
-		}
+		fillRect(p, r.X+ar.X+x, r.Y+ar.Y, 1, ar.H, col) // a column is one colour: one rect
 	}
 	strokeRect(p, r.X+ar.X, r.Y+ar.Y, ar.W, ar.H, theme.Border)
 	mx := r.X + ar.X + int(float64(c.alpha)/255*float64(wSpan))
