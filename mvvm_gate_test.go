@@ -365,6 +365,10 @@ var mvvmMigratedWidgets = map[string]map[string]bool{
 	// timer is unexported.
 	"ClosablePane": {"Title": true, "Body": true, "CloseLabel": true, "LastLabel": true, "Button": true},
 	"GraphView":    {"Model": true, "Palette": true, "MaxEdgeWidth": true, "ShowLegend": true, "NodeWidth": true, "CornerRadius": true, "Layout": true},
+	// NodeGraph: the graph's data is the NodeGraphModel (its lists are unexported
+	// behind edit methods; selection and the pan/zoom are Observables); Model is
+	// the set-once composition, OnReject a func hook.
+	"NodeGraph": {"Model": true},
 }
 
 // TestMigratedWidgetsHaveNoImperativeState is the enforcement gate. It parses the
