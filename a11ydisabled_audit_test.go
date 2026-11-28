@@ -710,10 +710,18 @@ func TestAuditA11yDisabledReportsFailures(t *testing.T) {
 	if got := auditA11yDisabled(func() Accessible { return &noObservable{} }); !strings.Contains(got, "no Disabled()") {
 		t.Errorf("widget without observable: %q", got)
 	}
-	if got := auditA11yDisabled(func() Accessible { var b *Button; return b }); !strings.Contains(got, "panicked") {
-		t.Errorf("nil widget: %q", got)
+	// The panic is raised explicitly: a nil *Button would rely on the kernel's
+	// SIGSEGV carrying a faulting address below 4096, which qemu-user ppc64le
+	// does not always deliver (the run turned into "fatal error: fault").
+	if got := auditA11yDisabled(func() Accessible { return &panicsA11y{} }); !strings.Contains(got, "panicked") {
+		t.Errorf("panicking widget: %q", got)
 	}
 }
+
+// panicsA11y is a widget whose A11y() panics, the way a nil receiver would.
+type panicsA11y struct{ Base }
+
+func (*panicsA11y) A11y() A11yInfo { panic("A11y exploded") }
 
 // stuckDisabled latches: once it has seen the flag set it never reports clear.
 type stuckDisabled struct {
