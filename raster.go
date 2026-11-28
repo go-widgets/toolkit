@@ -89,9 +89,13 @@ func fillTopRoundRect(p painter.Painter, x, y, w, h, radius int, c RGBA) {
 }
 
 // drawLine paints a 1-unit-wide line from (x0, y0) to (x1, y1) with c using
-// Bresenham's algorithm over putPixel — the only primitive both back-ends
-// share for arbitrary slopes (on a CellPainter each pixel promotes to a filled
-// cell). Chart widgets use it for polylines and axis rules.
+// Bresenham's algorithm. The pixels it lights are exactly those the
+// pixel-by-pixel walk lights (it never lights one twice), but a run of pixels
+// that share a row, on a shallow line, or a column, on a steep one, is handed
+// to the painter as ONE one-unit-thick fillRect. A pixel painter does the same
+// work, a CellPainter promotes the same cells, and a recording painter writes
+// one element where it wrote one per pixel: an axis rule is a single rectangle,
+// not a thousand. Chart widgets use it for polylines and axis rules.
 func drawLine(p painter.Painter, x0, y0, x1, y1 int, c RGBA) {
 	dx := x1 - x0
 	if dx < 0 {
@@ -109,10 +113,36 @@ func drawLine(p painter.Painter, x0, y0, x1, y1 int, c RGBA) {
 	if y0 > y1 {
 		sy = -1
 	}
+	// The pending run is the rectangle (rx, ry, rw, rh) of pixels not yet painted.
+	// A shallow line (dx >= dy) grows it along x, a steep one along y.
+	shallow := dx >= dy
+	rx, ry, rw, rh := x0, y0, 0, 0
+	flush := func() {
+		if rw > 0 {
+			fillRect(p, rx, ry, rw, rh, c)
+		}
+	}
 	err := dx - dy
 	for {
-		putPixel(p, x0, y0, c)
+		switch {
+		case rw == 0:
+			rx, ry, rw, rh = x0, y0, 1, 1
+		case shallow && y0 == ry && x0 == rx+rw:
+			rw++
+		case shallow && y0 == ry && x0 == rx-1:
+			rx--
+			rw++
+		case !shallow && x0 == rx && y0 == ry+rh:
+			rh++
+		case !shallow && x0 == rx && y0 == ry-1:
+			ry--
+			rh++
+		default:
+			flush()
+			rx, ry, rw, rh = x0, y0, 1, 1
+		}
 		if x0 == x1 && y0 == y1 {
+			flush()
 			return
 		}
 		e2 := 2 * err
