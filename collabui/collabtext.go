@@ -205,44 +205,54 @@ func (c *CollabText) syncLocal() {
 	// so the difference between the two is exactly the remote delta. ChangesFrom
 	// reduces any two texts to ONE contiguous edit, in rune offsets — so there is
 	// at most one of each and no sequence to compose.
-	var pending crdt.Change
-	for _, ch := range crdt.ChangesFrom(c.prev, c.text.String()) {
-		pending = ch
-	}
-	for _, ch := range crdt.ChangesFrom(c.prev, next) {
-		// Both are exact deltas from the same base, so a rebased offset is within
-		// the replica by construction and these calls cannot be out of range.
-		for _, op := range replay(ch, pending) {
-			c.group(op)
-			if op.Removed > 0 {
-				_ = c.text.Delete(op.Pos, op.Removed)
-			}
-			if op.Text != "" {
-				_ = c.text.Insert(op.Pos, op.Text)
-			}
-			c.lastEnd = op.Pos + utf8.RuneCountInString(op.Text)
-			if !typed(op) || isSpace(op.Text) {
-				// A word ends here: what comes next is a step of its own.
-				c.text.Commit()
-				c.grouping = false
+	//
+	// The read and the write are ONE step. A peer's edit merges into the replica
+	// from the session's own goroutine, so reading the replica and then writing at
+	// what the read gave left a gap a peer's insert could merge in: the keystroke
+	// then landed at an offset of a text it was not computed against ("XabYc" for
+	// "XabcY", on a slow runner). [collab.Text.Edit] runs the plan and the edits
+	// under the lock merges take.
+	_ = c.text.Edit(func(cur string) []collab.TextEdit {
+		if afterRead != nil {
+			afterRead()
+		}
+		var pending crdt.Change
+		for _, ch := range crdt.ChangesFrom(c.prev, cur) {
+			pending = ch
+		}
+		var edits []collab.TextEdit
+		for _, ch := range crdt.ChangesFrom(c.prev, next) {
+			// Both are exact deltas from the same base, so a rebased offset is within
+			// the replica by construction and these edits cannot be out of range.
+			for _, op := range replay(ch, pending) {
+				edits = append(edits, c.step(op))
 			}
 		}
-	}
+		return edits
+	})
 	c.prev = next
 }
 
-// group opens or continues the undo group an edit belongs to. Undo is per word,
-// not per keystroke: single characters typed one after another, each where the
-// last ended, are one step, closed by a space, a newline, a deletion, or a
+// afterRead is a test seam: it runs inside the plan, with what the replica held
+// already read, which is where a peer's edit used to be able to merge.
+var afterRead func()
+
+// step is the edit op becomes, and moves the undo bookkeeping on. Undo is per
+// word, not per keystroke: single characters typed one after another, each where
+// the last ended, are one step, closed by a space, a newline, a deletion, or a
 // keystroke somewhere else. Only this participant's edits are in the group; what
 // peers type in between is theirs and never part of it.
-func (c *CollabText) group(op crdt.Change) {
-	if c.grouping && typed(op) && op.Pos == c.lastEnd {
-		return
-	}
-	c.text.Commit()
-	c.text.Begin()
+func (c *CollabText) step(op crdt.Change) collab.TextEdit {
+	e := collab.TextEdit{Pos: op.Pos, Remove: op.Removed, Insert: op.Text}
+	e.NewGroup = !(c.grouping && typed(op) && op.Pos == c.lastEnd)
 	c.grouping = true
+	c.lastEnd = op.Pos + utf8.RuneCountInString(op.Text)
+	if !typed(op) || isSpace(op.Text) {
+		// A word ends here: what comes next is a step of its own.
+		e.EndGroup = true
+		c.grouping = false
+	}
+	return e
 }
 
 // typed reports whether op is one character typed, rather than a deletion, a

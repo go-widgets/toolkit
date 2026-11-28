@@ -627,3 +627,35 @@ func TestRebuildDecorationsSkipsSelf(t *testing.T) {
 		t.Fatalf("self peer must be skipped, got %d decoration(s): %+v", len(ed.Decorations), ed.Decorations)
 	}
 }
+
+// A peer's edit can merge into the replica AFTER syncLocal read what the replica
+// had taken on and BEFORE it wrote the keystroke. The keystroke was rebased onto
+// a replica that has since moved, so it lands at the raw offset of a text it was
+// not computed against. The seam holds that window open and lets the peer's
+// insert merge inside it: a statement, not a race.
+func TestAPeerInsertMergingBetweenTheReadAndTheWriteDoesNotMisplaceTheKeystroke(t *testing.T) {
+	url := serveCollab(t)
+	ada := newCollabPeer(t, url, "window", "ada", RGBA{R: 0xff, A: 0xff}, 1)
+	bo := newCollabPeer(t, url, "window", "bo", RGBA{B: 0xff, A: 0xff}, 2)
+	defer ada.close()
+	defer bo.close()
+
+	ada.setText("abc")
+	bo.await(t, "the base on bo", func() bool { return bo.ed.Text().Get() == "abc" })
+	bo.do(func() { bo.drainOff = true })
+
+	afterRead = func() {
+		afterRead = nil
+		ada.setText("Xabc") // sent from ada's own goroutine
+		// The plan holds the lock merges take, so the insert cannot merge until the
+		// edits are in; no client call may be made from here.
+		time.Sleep(200 * time.Millisecond)
+	}
+	defer func() { afterRead = nil }()
+	bo.do(func() { bo.ed.SetText("abcY") })
+	bo.do(func() { bo.drainOff = false })
+	bo.do(func() {})
+
+	ada.await(t, "ada to settle", func() bool { return ada.ed.Text().Get() == "XabcY" })
+	bo.await(t, "bo to settle", func() bool { return bo.ed.Text().Get() == "XabcY" })
+}
