@@ -71,6 +71,7 @@ var disabledA11yCatalogue = map[string]func() Accessible{
 	"FolderTabs":     func() Accessible { return NewFolderTabs([]string{"a", "b"}, 0) },
 	"GalleryView":    func() Accessible { return NewGalleryView() },
 	"GraphView":      func() Accessible { return NewGraphView(NewGraphViewModel()) },
+	"NodeGraph":      func() Accessible { return NewNodeGraph(NewNodeGraphModel()) },
 	"IconButton":     func() Accessible { return &IconButton{} },
 	"IconGrid":       func() Accessible { return NewIconGrid() },
 	"IsoDiagram":     func() Accessible { return NewIsoDiagram(nil) },
