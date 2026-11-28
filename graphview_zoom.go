@@ -137,6 +137,21 @@ func (g *GraphView) PanTo(x int) {
 }
 func (g *GraphView) PanBy(dx int) { g.PanTo(g.panX + dx) }
 
+// zoomedFont is the font the labels are drawn with: the widget's own, scaled by
+// the zoom, so the type is the size of the boxes it sits in. At 100 % it is the
+// font itself, and a font that cannot be sized ([FontScaler]) keeps its size.
+// The scaled font is kept until the font or the zoom changes.
+func (g *GraphView) zoomedFont() Font {
+	base, pct := g.EffectiveFont(), g.zoomPct()
+	if pct == 100 {
+		return base
+	}
+	if g.zoomFont == nil || g.zoomBase != base || g.zoomFontPct != pct {
+		g.zoomBase, g.zoomFontPct, g.zoomFont = base, pct, ScaleFont(base, float64(pct)/100)
+	}
+	return g.zoomFont
+}
+
 // rnd rounds to the nearest integer, halves up.
 func rnd(v float64) int { return int(math.Floor(v + 0.5)) }
 
