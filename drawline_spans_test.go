@@ -3,6 +3,7 @@ package toolkit
 import (
 	"math/rand"
 	"testing"
+	"time"
 
 	"github.com/go-widgets/painter"
 )
@@ -65,10 +66,29 @@ func refLine(p painter.Painter, x0, y0, x1, y1 int, c RGBA) {
 	}
 }
 
+// boundedDrawLine runs drawLine under a deadline. A line has at most
+// max(|dx|,|dy|)+1 steps, so a walk that has not returned after seconds has lost
+// its direction (a wrong step sign walks away from the end point for ever): the
+// test fails instead of hanging. The spinning goroutine is abandoned; the failed
+// test ends the process soon after.
+func boundedDrawLine(t *testing.T, p painter.Painter, x0, y0, x1, y1 int) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		drawLine(p, x0, y0, x1, y1, RGBA{R: 1, A: 255})
+	}()
+	select {
+	case <-done:
+	case <-time.After(3 * time.Second):
+		t.Fatalf("(%d,%d)-(%d,%d): drawLine did not return: the walk never reaches its end point", x0, y0, x1, y1)
+	}
+}
+
 func samePixels(t *testing.T, x0, y0, x1, y1 int) (spans, ref *pixelSet) {
 	t.Helper()
 	spans, ref = newPixelSet(), newPixelSet()
-	drawLine(spans, x0, y0, x1, y1, RGBA{R: 1, A: 255})
+	boundedDrawLine(t, spans, x0, y0, x1, y1)
 	refLine(ref, x0, y0, x1, y1, RGBA{R: 1, A: 255})
 	if len(spans.hits) != len(ref.hits) {
 		t.Fatalf("(%d,%d)-(%d,%d): %d pixels, want %d", x0, y0, x1, y1, len(spans.hits), len(ref.hits))
