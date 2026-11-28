@@ -25,6 +25,10 @@ type GraphCluster struct {
 // appearance from GraphView.Palette.
 type GraphNode struct {
 	ID, Label, Cluster, Category string
+	// Icon names a glyph drawn left of the label, resolved by GraphView.Icons
+	// (for example the Iconoir name "wifi"). Empty, or unresolved, draws none.
+	// A string, so it adds nothing non-comparable to the struct.
+	Icon string
 	// Shape is Box (default), Hub or Gateway. A Hub or Gateway belongs to no
 	// cluster under the Bands layout, which places it in a band of its own.
 	Shape GraphNodeShape
@@ -118,6 +122,12 @@ type GraphView struct {
 	// NodeColor, when set, may override a node's colour (the second result
 	// true), for a state the category cannot say. Called at every draw.
 	NodeColor func(GraphNode) (RGBA, bool)
+	// Icons resolves the Icon names of nodes, toggles and badges to a drawer;
+	// nil, or a nil result, falls back to the text Glyph. It has the shape of
+	// iconoir.Drawer, so `g.Icons = iconoir.Drawer` (package
+	// github.com/go-widgets/toolkit/iconoir) offers the whole Iconoir set. It
+	// lives on the view, not on the node: GraphNode carries only the name.
+	Icons func(name string) func(p painter.Painter, r Rect, ink RGBA)
 	// OnToggle is called with the node and toggle ids when a toggle is
 	// clicked, or Space is pressed on the selected node (its first toggle).
 	OnToggle func(nodeID, toggleID string)
@@ -562,9 +572,17 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 				if len(tr) > 0 {
 					lbl.W = max(g.screen(tr[0]).X-box.X, 0)
 				}
+				lx := box.X + 3
+				if d := g.iconDrawer(n.Icon); d != nil {
+					side := max(top-4, 0)
+					withClip(p, lbl, func() {
+						d(p, Rect{X: lx, Y: box.Y + (top-side)/2, W: side, H: side}, ink)
+					})
+					lx += side + 3
+				}
 				withClip(p, lbl, func() {
 					f := g.zoomedFont()
-					f.Draw(p, box.X+3, box.Y+(top-f.Height())/2, n.Label, ink)
+					f.Draw(p, lx, box.Y+(top-f.Height())/2, n.Label, ink)
 				})
 				g.drawToggles(p, n, tr, col, ink)
 				g.drawBadges(p, n, box, top, ink)
