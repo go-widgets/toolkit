@@ -935,5 +935,6 @@ func (g *GraphView) A11y() A11yInfo {
 	if s := g.Model.Selected.Get(); s != "" {
 		v += "; selected " + s
 	}
+	v += g.zoomNote()
 	return A11yInfo{Role: RoleGroup, Name: "network graph", Value: v, Disabled: g.isDisabled()}
 }
