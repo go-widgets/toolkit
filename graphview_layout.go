@@ -76,7 +76,7 @@ func (g *GraphView) placer() GraphLayout {
 }
 
 func (g *GraphView) metrics() GraphMetrics {
-	return GraphMetrics{NodeW: g.nodeW(), NodeH: gNodeH(), Gap: gGap(), TitleH: gTitleH(),
+	return GraphMetrics{NodeW: g.nodeW(), NodeH: g.nodeH(), Gap: gGap(), TitleH: gTitleH(),
 		TitleW: func(c GraphCluster) int { return g.textWidth(c.Label) + 2*gGap() }}
 }
 
@@ -111,10 +111,10 @@ func (flowGridLayout) Place(m *GraphViewModel, viewport Size, mt GraphMetrics) G
 	clusters := m.Clusters.Slice()
 	pl := newPlacement()
 	members := gridMembers(m.Nodes.Slice())
-	boxes, perRows, h := flowClusters(clusters, members, viewport.W, mt.NodeW, mt.TitleW)
+	boxes, perRows, h := flowClusters(clusters, members, viewport.W, mt.NodeW, mt.NodeH, mt.TitleW)
 	if h > viewport.H {
 		pl.HasBar = true
-		boxes, perRows, h = flowClusters(clusters, members, viewport.W-scrollbarTrack(), mt.NodeW, mt.TitleW)
+		boxes, perRows, h = flowClusters(clusters, members, viewport.W-scrollbarTrack(), mt.NodeW, mt.NodeH, mt.TitleW)
 	}
 	pl.Height = h
 	for i, c := range clusters {
@@ -268,7 +268,7 @@ func placeBands(m *GraphViewModel, width int, mt GraphMetrics) GraphPlacement {
 			}
 			return a.ID < b.ID
 		})
-		boxes, perRows, h := flowClusters(in.clusters, in.members, width, mt.NodeW, mt.TitleW)
+		boxes, perRows, h := flowClusters(in.clusters, in.members, width, mt.NodeW, mt.NodeH, mt.TitleW)
 		for i, c := range in.clusters {
 			b := boxes[i]
 			b.Y += y - mt.Gap // flowClusters starts one gap down

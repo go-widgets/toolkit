@@ -28,6 +28,12 @@ type GraphNode struct {
 	// Shape is Box (default), Hub or Gateway. A Hub or Gateway belongs to no
 	// cluster under the Bands layout, which places it in a band of its own.
 	Shape GraphNodeShape
+	// Badges are small chips under the label ("muted", "no egress"). When any
+	// node has one, every node is taller by one chip row, so the grid stays regular.
+	Badges []GraphBadge
+	// Toggles are glyph buttons at the right end of the node; a click calls
+	// GraphView.OnToggle. The state is the host's: it flips On in the model.
+	Toggles []GraphToggle
 }
 
 // GraphEdgeState says how an edge is drawn.
@@ -109,6 +115,12 @@ type GraphView struct {
 	// Layout places clusters and nodes; nil is GraphLayoutFlowGrid. Set it
 	// before the first draw, or call SetLayout.
 	Layout GraphLayout
+	// NodeColor, when set, may override a node's colour (the second result
+	// true), for a state the category cannot say. Called at every draw.
+	NodeColor func(GraphNode) (RGBA, bool)
+	// OnToggle is called with the node and toggle ids when a toggle is
+	// clicked, or Space is pressed on the selected node (its first toggle).
+	OnToggle func(nodeID, toggleID string)
 	// ShowLegend draws the category legend along the bottom edge.
 	ShowLegend bool
 	// OnActivate is called with the selection on Enter or a double selection.
@@ -126,7 +138,8 @@ type GraphView struct {
 	// Vertical scrolling: when the clusters need more height than the widget
 	// has, scrollY (px, >= 0) is how far the content is moved up, contentH its
 	// full height and viewH the height it shows in (the bounds minus the legend).
-	laidNodeW                int // the node width the layout was computed for
+	laidNodeW                int  // the node width the layout was computed for
+	badged                   bool // some node has a badge: all are one chip row taller
 	scrollY, contentH, viewH int
 	hasBar                   bool
 	sbDrag                   scrollDrag
@@ -258,6 +271,10 @@ func (g *GraphView) layout() {
 	g.nodeBox = map[string]Rect{}
 	g.order = g.order[:0]
 	nodes := g.Model.Nodes.Slice()
+	g.badged = false
+	for _, n := range nodes {
+		g.badged = g.badged || len(n.Badges) > 0
+	}
 	g.contentH, g.viewH, g.hasBar = 0, 0, false
 	area := r
 	if g.ShowLegend {
@@ -295,7 +312,7 @@ func (g *GraphView) layout() {
 // to right in the width, wrapping when the next one does not fit. It returns
 // the boxes relative to the content origin, each cluster's nodes per row, and
 // the content height.
-func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width, nodeW int, titleW func(GraphCluster) int) (boxes []Rect, perRows []int, height int) {
+func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width, nodeW, nodeH int, titleW func(GraphCluster) int) (boxes []Rect, perRows []int, height int) {
 	gap := gGap()
 	x, y, rowH := gap, gap, 0
 	for _, c := range clusters {
@@ -312,7 +329,7 @@ func flowClusters(clusters []GraphCluster, members map[string][]GraphNode, width
 		if capW > 0 {
 			cw = min(cw, capW)
 		}
-		ch := gTitleH() + rowsIn*(gNodeH()+gap) + gap
+		ch := gTitleH() + rowsIn*(nodeH+gap) + gap
 		if x > gap && x+cw+gap > width {
 			x, y, rowH = gap, y+rowH+gap, 0
 		}
@@ -507,6 +524,11 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 			}
 			box := g.screen(cb)
 			col := g.categoryColor(n.Category)
+			if g.NodeColor != nil {
+				if c, ok := g.NodeColor(n); ok {
+					col = c
+				}
+			}
 			if !visible[n.ID] {
 				col = blendRGBA(col, theme.Background, 0.25)
 			}
@@ -533,10 +555,19 @@ func (g *GraphView) Draw(p painter.Painter, theme *Theme) {
 				}
 				// The label is clipped to its box: a long one must not run into the
 				// node beside it.
-				withClip(p, box, func() {
+				top := g.topStrip(box) // the label's row; badges hang below it
+				lbl := box
+				lbl.H = top
+				tr := g.toggleRects(cb, len(n.Toggles))
+				if len(tr) > 0 {
+					lbl.W = max(g.screen(tr[0]).X-box.X, 0)
+				}
+				withClip(p, lbl, func() {
 					f := g.zoomedFont()
-					f.Draw(p, box.X+3, box.Y+(box.H-f.Height())/2, n.Label, ink)
+					f.Draw(p, box.X+3, box.Y+(top-f.Height())/2, n.Label, ink)
 				})
+				g.drawToggles(p, n, tr, col, ink)
+				g.drawBadges(p, n, box, top, ink)
 				if sel == "node:"+n.ID {
 					g.strokeBox(p, Rect{X: box.X - 2, Y: box.Y - 2, W: box.W + 4, H: box.H + 4}, g.CornerRadius+2, theme.Accent)
 				}
@@ -821,6 +852,12 @@ func (g *GraphView) OnEvent(ev Event) {
 		if sg, ok := g.scrollbarGeom(); g.sbDrag.press(sg, ok, ev, g.viewH*100/g.zoomPct(), g.ScrollBy) {
 			return
 		}
+		if nid, tid, ok := g.toggleAt(r.X+ev.X, r.Y+ev.Y); ok {
+			if g.OnToggle != nil {
+				g.OnToggle(nid, tid)
+			}
+			return
+		}
 		hit := g.Hit(r.X+ev.X, r.Y+ev.Y)
 		if hit != "" && hit == g.Model.Selected.Get() {
 			g.activate()
@@ -852,6 +889,9 @@ func (g *GraphView) key(code string) {
 		return
 	case "Enter":
 		g.activate()
+		return
+	case " ", "Space":
+		g.toggleSelected()
 		return
 	}
 	step := 0
